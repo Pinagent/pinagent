@@ -25,7 +25,6 @@ export function Footer() {
           Pinpoint · Next demo
         </div>
         <nav style={{ display: 'flex', gap: 16 }}>
-          <FooterLink href="https://github.com/JacksonMalloy/pinpoint">GitHub</FooterLink>
           <FooterLink href="https://github.com/JacksonMalloy/pinpoint/issues">Issues</FooterLink>
           <FooterLink href="/docs">Docs</FooterLink>
           <FooterLink href="/changelog">Changelog</FooterLink>

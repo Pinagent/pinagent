@@ -6,19 +6,17 @@ const ENDPOINT = '/__pinpoint/feedback';
 const RECONNECT_MIN_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
 
-/**
- * Top-level widget state. Tracks ONLY the picker — composers run
- * independently, each in their own iframe, so multiple can be open at
- * once (e.g. one agent fixing while you start another).
- */
+const COMPOSER_H = 220;
+const STREAM_H = 340;
+const IFRAME_W = 360;
+const BUBBLE_SIZE = 36;
+
 interface State {
   mode: 'idle' | 'picking';
 }
 
 interface AgentEvent {
   type: 'init' | 'text' | 'tool_use' | 'tool_result' | 'ask_user' | 'error' | 'result';
-  // Loose shape — discriminator handled at render time. Server-side type
-  // in packages/next/src/event-bus.ts is authoritative.
   [k: string]: unknown;
 }
 
@@ -35,20 +33,141 @@ interface FeedbackHandler {
   onError(message: string): void;
 }
 
-const COMPOSER_H = 220;
-const STREAM_H = 460;
-const IFRAME_W = 360;
+type AgentState = 'pending' | 'running' | 'done' | 'error';
+
+interface Composer {
+  feedbackId: string | null;
+  target: Element;
+  iframe: HTMLIFrameElement;
+  bubble: HTMLElement;
+  dragHandle: HTMLElement;
+  /**
+   * User-applied positional offset relative to the auto-anchored
+   * position. Updated by dragging the handle; applied on top of the
+   * target-anchored coords so the widget keeps following the target
+   * through scrolls/layout while staying where the user dropped it.
+   */
+  userOffsetX: number;
+  userOffsetY: number;
+  agentState: AgentState;
+  expanded: boolean;
+  close(): void;
+  expand(): void;
+  minimize(): void;
+}
+
+/**
+ * Document-level styles for elements that live in document.body (iframes
+ * and bubbles). They can't live in the shadow root because we want them
+ * to scroll naturally with the page — children of a `position: fixed`
+ * shadow host are pinned to the viewport regardless of their own
+ * `position: absolute`.
+ *
+ * The picker cursor rule also lives here so it can cover the whole page.
+ */
+const DOC_STYLES = `
+:root.pp-picking, :root.pp-picking * { cursor: crosshair !important; }
+
+.pp-iframe {
+  position: absolute;
+  border: 0;
+  background: transparent;
+  z-index: 2147483646;
+  color-scheme: light;
+  /* iframe is positioned relative to documentElement origin — set via JS */
+}
+.pp-iframe[hidden] { display: none; }
+
+.pp-bubble {
+  position: absolute;
+  width: ${BUBBLE_SIZE}px;
+  height: ${BUBBLE_SIZE}px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+  cursor: pointer;
+  z-index: 2147483645;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #4338ca;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+}
+.pp-bubble:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(0,0,0,0.24); }
+.pp-bubble[hidden] { display: none; }
+
+.pp-bubble.running { border-color: #2563eb; color: #2563eb; }
+.pp-bubble.running::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid #2563eb;
+  opacity: 0.5;
+  animation: pp-bubble-pulse 1.6s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes pp-bubble-pulse {
+  0%   { transform: scale(1);    opacity: 0.55; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+.pp-bubble.done  { border-color: #10b981; color: #10b981; background: #ecfdf5; }
+.pp-bubble.error { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
+.pp-bubble.pending { border-color: #94a3b8; color: #94a3b8; }
+
+.pp-bubble-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: pp-bubble-spin 0.9s linear infinite;
+}
+@keyframes pp-bubble-spin { to { transform: rotate(360deg); } }
+
+.pp-drag-handle {
+  position: absolute;
+  width: 28px;
+  height: 24px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  z-index: 2147483646;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.10);
+  user-select: none;
+  color: #6b7280;
+  font-size: 16px;
+  line-height: 1;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: background 100ms ease, color 100ms ease;
+}
+.pp-drag-handle:hover { background: #f3f4f6; color: #111827; }
+.pp-drag-handle.dragging { cursor: grabbing; background: #e0e7ff; color: #1e3a8a; }
+.pp-drag-handle[hidden] { display: none; }
+
+.pp-pointer {
+  position: absolute;
+  width: 18px;
+  height: 10px;
+  pointer-events: none;
+  z-index: 2147483646;
+  overflow: visible;
+}
+.pp-pointer[hidden] { display: none; }
+`;
 
 /**
  * Single WebSocket connection per page, multiplexed across however many
- * composer panes the user has open. Lazy-opens on the first subscribe
- * (so a page that never uses pinpoint pays no WS cost) and reconnects
- * with exponential backoff if the dev server drops.
- *
- * Routing: each `subscribe(feedbackId, handler)` registers a handler
- * keyed by feedback id; inbound `event` messages are dispatched to the
- * matching handler. The same `feedbackId` re-subscribes are idempotent
- * (used after reconnect so the server replays the bus buffer).
+ * composers exist (only one expanded at a time, but minimized bubbles
+ * keep their subscriptions live so agent events keep arriving and the
+ * bubble visual updates).
  */
 class WidgetWsClient {
   private socket: WebSocket | null = null;
@@ -89,7 +208,6 @@ class WidgetWsClient {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(payload);
     } else {
-      // Queue while reconnecting. Drained on 'open'.
       this.queue.push(payload);
       this.ensureConnected();
     }
@@ -104,17 +222,15 @@ class WidgetWsClient {
     }
     try {
       this.socket = new WebSocket(this.url);
-    } catch (err) {
+    } catch {
       this.scheduleReconnect();
       return;
     }
     this.socket.addEventListener('open', () => {
       this.reconnectDelay = RECONNECT_MIN_MS;
-      // Re-subscribe everything (the server's bus replay will catch us up).
       for (const id of this.handlers.keys()) {
         this.socket?.send(JSON.stringify({ type: 'subscribe', feedbackId: id }));
       }
-      // Drain anything queued during reconnect.
       while (this.queue.length > 0) {
         const item = this.queue.shift();
         if (item) this.socket?.send(item);
@@ -126,7 +242,7 @@ class WidgetWsClient {
       this.scheduleReconnect();
     });
     this.socket.addEventListener('error', () => {
-      // Let 'close' drive reconnect; errors alone aren't actionable.
+      // Errors are followed by 'close' which drives reconnect.
     });
   }
 
@@ -191,6 +307,17 @@ class WidgetWsClient {
 }
 
 export function mount(): void {
+  // Document-level <style> tag for elements that live in document.body
+  // (composer iframes, bubbles, picker cursor). The shadow root holds
+  // only the FAB / hint / outline — anything that needs to scroll with
+  // the page goes in the main document.
+  if (!document.getElementById('pinpoint-doc-styles')) {
+    const docStyle = document.createElement('style');
+    docStyle.id = 'pinpoint-doc-styles';
+    docStyle.textContent = DOC_STYLES;
+    document.head.appendChild(docStyle);
+  }
+
   const host = document.createElement('div');
   host.id = 'pinpoint-root';
   host.style.position = 'fixed';
@@ -220,34 +347,30 @@ export function mount(): void {
 
   const state: State = { mode: 'idle' };
   const wsClient = createWsClient();
-  // Resolved up front so per-iframe keydown listeners can share it with
-  // the host-doc handler at the bottom of mount().
   const hotkeyChar = resolveHotkey();
 
-  // Per-picker-session record of which composer iframes we suspended.
-  // Restored verbatim on exitPicking so each composer keeps whatever
-  // pointer-events value openComposer originally set.
-  let suspendedIframes: Array<[HTMLIFrameElement, string]> = [];
+  // Only one composer is expanded at a time. Opening a new one minimizes
+  // the previously-expanded one to a bubble that keeps streaming in the
+  // background.
+  const composers = new Set<Composer>();
+  let expandedComposer: Composer | null = null;
 
   function enterPicking() {
     state.mode = 'picking';
     fab.classList.add('active');
+    document.documentElement.classList.add('pp-picking');
+
     const hint = document.createElement('div');
     hint.className = 'hint';
     hint.textContent = 'Click an element. Esc to cancel.';
     hint.dataset.pp = 'hint';
     root.appendChild(hint);
 
-    // Suspend pointer-events on any open composer iframes. Without this,
-    // clicks over an iframe are dispatched to the iframe's window and
-    // never reach our document-level picker listener — so the user
-    // couldn't pick anything underneath an open composer.
-    suspendedIframes = [];
-    for (const child of Array.from(root.children)) {
-      if (child instanceof HTMLIFrameElement) {
-        suspendedIframes.push([child, child.style.pointerEvents]);
-        child.style.pointerEvents = 'none';
-      }
+    // Suspend pointer-events on the expanded composer iframe so clicks
+    // pass through to the underlying page. Bubbles stay clickable so the
+    // user can quickly swap to a minimized composer.
+    if (expandedComposer) {
+      expandedComposer.iframe.style.pointerEvents = 'none';
     }
 
     document.addEventListener('mousemove', onMove, true);
@@ -258,13 +381,13 @@ export function mount(): void {
   function exitPicking() {
     state.mode = 'idle';
     fab.classList.remove('active');
+    document.documentElement.classList.remove('pp-picking');
     outline.style.display = 'none';
     const hint = root.querySelector('[data-pp="hint"]');
     if (hint) hint.remove();
-    for (const [iframe, prev] of suspendedIframes) {
-      iframe.style.pointerEvents = prev;
+    if (expandedComposer) {
+      expandedComposer.iframe.style.pointerEvents = 'auto';
     }
-    suspendedIframes = [];
     document.removeEventListener('mousemove', onMove, true);
     document.removeEventListener('click', onPick, true);
     document.removeEventListener('keydown', onKey, true);
@@ -279,10 +402,29 @@ export function mount(): void {
   function onPick(e: MouseEvent) {
     const target = elementFromEvent(e);
     if (!target) return;
+    // Don't pick a bubble as the new target — bubbles are part of the
+    // widget's own UI. Clicking a bubble during picker = expand that
+    // composer instead.
+    if (target.classList.contains('pp-bubble')) {
+      e.preventDefault();
+      e.stopPropagation();
+      exitPicking();
+      const owner = bubbleOwner(target as HTMLElement);
+      if (owner) swapTo(owner);
+      return;
+    }
+    // Don't pick the drag handle either — silently cancel picker so the
+    // user can grab the handle they were aiming for.
+    if (target.classList.contains('pp-drag-handle')) {
+      e.preventDefault();
+      e.stopPropagation();
+      exitPicking();
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     exitPicking();
-    openComposer(target);
+    openComposer(target, { x: e.clientX, y: e.clientY });
   }
 
   function onKey(e: KeyboardEvent) {
@@ -302,78 +444,288 @@ export function mount(): void {
   }
 
   function elementFromEvent(e: MouseEvent): Element | null {
-    // pointer-events:none on the host alone isn't enough — shadow-root
-    // children (FAB, hint, open composer iframes) have their own
-    // pointer-events:auto and would be returned by elementFromPoint
-    // instead of the underlying page element. Walk + neutralize each
-    // overlay for the duration of the hit-test, then restore.
+    // Hide the FAB / hint / outline (shadow host) and the expanded
+    // composer iframe so document.elementFromPoint sees the page
+    // underneath. Bubbles stay visible — clicking one is meaningful
+    // (swap to that composer).
     const prevHost = host.style.pointerEvents;
     host.style.pointerEvents = 'none';
-    const restore: Array<[HTMLElement, string]> = [];
-    for (const child of Array.from(root.children)) {
-      if (child instanceof HTMLElement) {
-        restore.push([child, child.style.pointerEvents]);
-        child.style.pointerEvents = 'none';
-      }
+    const prevExpanded =
+      expandedComposer && expandedComposer.expanded
+        ? expandedComposer.iframe.style.pointerEvents
+        : null;
+    if (expandedComposer && expandedComposer.expanded) {
+      expandedComposer.iframe.style.pointerEvents = 'none';
     }
+
     const target = document.elementFromPoint(e.clientX, e.clientY);
-    for (const [el, prev] of restore) el.style.pointerEvents = prev;
+
     host.style.pointerEvents = prevHost;
+    if (expandedComposer && expandedComposer.expanded && prevExpanded !== null) {
+      // Inside picker mode the expanded iframe is already suspended
+      // (enterPicking sets none). Restoring here would briefly re-enable
+      // it between events. Honor the suspended state for the picker
+      // session by re-setting to 'none' if we're still picking.
+      expandedComposer.iframe.style.pointerEvents =
+        state.mode === 'picking' ? 'none' : prevExpanded;
+    }
     if (!target) return null;
     if (target === host) return null;
     return target;
   }
 
-  function openComposer(target: Element) {
-    // Composers are independent — no global mode change. Closing this
-    // one doesn't affect any other open composer, and you can open more
-    // at any time via the FAB / hotkey.
+  function bubbleOwner(el: HTMLElement): Composer | null {
+    for (const c of composers) {
+      if (c.bubble === el) return c;
+    }
+    return null;
+  }
+
+  function swapTo(composer: Composer) {
+    if (composer.expanded) return;
+    if (expandedComposer && expandedComposer !== composer) {
+      expandedComposer.minimize();
+    }
+    composer.expand();
+    expandedComposer = composer;
+  }
+
+  function openComposer(target: Element, click: { x: number; y: number }) {
+    if (expandedComposer) {
+      expandedComposer.minimize();
+    }
+    const composer = createComposer(target, click);
+    composers.add(composer);
+    expandedComposer = composer;
+  }
+
+  function createComposer(target: Element, click: { x: number; y: number }): Composer {
     const loc = findLoc(target);
     const selector = shortSelector(target);
     const metaText = loc ? `${loc.file}:${loc.line}:${loc.col}` : selector;
 
-    // We render the composer inside an iframe — not just shadow DOM — so the
-    // host page's focus traps (Radix Dialog, react-focus-lock, etc.) cannot
-    // reach into it. An iframe has its own Document and focus context.
+    // Iframe lives in document.body (not the shadow root) so it scrolls
+    // naturally with the page via absolute positioning in page coords.
     const iframe = document.createElement('iframe');
+    iframe.className = 'pp-iframe';
     iframe.title = 'Pinpoint feedback';
-    iframe.style.position = 'fixed';
-    iframe.style.border = '0';
-    iframe.style.background = 'transparent';
     iframe.style.pointerEvents = 'auto';
-    iframe.style.zIndex = '2147483646';
-    iframe.style.colorScheme = 'light';
-    iframe.style.inset = 'auto';
-    iframe.style.margin = '0';
-    iframe.style.padding = '0';
-    iframe.style.transition = 'height 160ms ease, top 160ms ease';
-    if ('popover' in HTMLElement.prototype) {
-      iframe.setAttribute('popover', 'manual');
-    }
-
-    positionIframe(iframe, target, COMPOSER_H);
     iframe.srcdoc = composerHTML(metaText);
+    iframe.style.width = `${IFRAME_W}px`;
+    iframe.style.height = `${COMPOSER_H}px`;
+    document.body.appendChild(iframe);
 
-    root.appendChild(iframe);
-    if ('showPopover' in iframe && iframe.getAttribute('popover')) {
-      try {
-        (iframe as HTMLIFrameElement & { showPopover(): void }).showPopover();
-      } catch {
-        // Older browsers — iframe renders normally, just not in top layer.
+    const bubble = document.createElement('div');
+    bubble.className = 'pp-bubble pending';
+    bubble.title = 'Pinpoint — click to expand';
+    bubble.hidden = true;
+    bubble.innerHTML = '<div class="pp-bubble-spinner"></div>';
+    document.body.appendChild(bubble);
+
+    // Drag grip — small visible handle in the top-right corner of the
+    // iframe. Lives in document.body (not inside the iframe) so we can
+    // track mousemove/mouseup on the parent document during a drag,
+    // which we couldn't do from inside the iframe.
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'pp-drag-handle';
+    dragHandle.title = 'Drag to reposition';
+    dragHandle.textContent = '⋮⋮';
+    document.body.appendChild(dragHandle);
+
+    // Pointer tail — a small SVG triangle that sits on whichever edge
+    // of the widget faces the target, so the widget visually anchors
+    // back to the picked element. The path is two strokes only (the
+    // two slanted edges) so the flat edge sits flush with the widget
+    // border without doubling it.
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const pointer = document.createElementNS(SVG_NS, 'svg');
+    pointer.setAttribute('class', 'pp-pointer');
+    pointer.setAttribute('viewBox', '0 0 18 10');
+    const pointerPath = document.createElementNS(SVG_NS, 'path');
+    pointerPath.setAttribute('fill', '#fff');
+    pointerPath.setAttribute('stroke', '#e5e7eb');
+    pointerPath.setAttribute('stroke-width', '1');
+    pointerPath.setAttribute('stroke-linejoin', 'round');
+    pointer.appendChild(pointerPath);
+    document.body.appendChild(pointer);
+
+    function setAgentState(next: AgentState) {
+      composer.agentState = next;
+      bubble.classList.remove('pending', 'running', 'done', 'error');
+      bubble.classList.add(next);
+      if (next === 'done') bubble.innerHTML = '✓';
+      else if (next === 'error') bubble.innerHTML = '✗';
+      else bubble.innerHTML = '<div class="pp-bubble-spinner"></div>';
+    }
+
+    // Click-relative-to-target offset, captured at creation time. The
+    // widget anchors at "the spot inside `target` the user clicked",
+    // which means picking a huge container (body, layout) drops the
+    // widget where the cursor actually was rather than at the target's
+    // distant edge. As `target` moves through scroll/layout, the
+    // anchor moves with it (same delta).
+    const targetRect0 = target.getBoundingClientRect();
+    const relX = click.x - targetRect0.left;
+    const relY = click.y - targetRect0.top;
+
+    // rAF loop that keeps iframe + bubble + drag handle pinned to the
+    // anchor through layout shifts. Scrolling is handled natively by
+    // absolute positioning, but layout changes (HMR, JS resize, etc.)
+    // need a manual update.
+    let rafHandle: number | null = null;
+    function positionLoop() {
+      reposition();
+      rafHandle = requestAnimationFrame(positionLoop);
+    }
+    function reposition() {
+      const r = target.getBoundingClientRect();
+      // Anchor = where the user clicked, expressed in document coords.
+      // Moves with the target as it scrolls/layout-shifts.
+      const anchorDocX = r.left + window.scrollX + relX;
+      const anchorDocY = r.top + window.scrollY + relY;
+      // Anchor in viewport coords (used to decide above/below placement).
+      const anchorViewportY = r.top + relY;
+
+      const composerH = composer.feedbackId ? STREAM_H : COMPOSER_H;
+      const spaceBelow = window.innerHeight - anchorViewportY;
+      const placeBelow = spaceBelow >= composerH + 16 || anchorViewportY < composerH + 16;
+      const baseTop = placeBelow ? anchorDocY + 12 : anchorDocY - composerH - 12;
+      const baseLeft = anchorDocX;
+      const iframeTop = Math.max(8, baseTop + composer.userOffsetY);
+      const iframeLeft = Math.max(
+        window.scrollX + 8,
+        Math.min(window.scrollX + window.innerWidth - IFRAME_W - 8, baseLeft + composer.userOffsetX),
+      );
+      iframe.style.top = `${iframeTop}px`;
+      iframe.style.left = `${iframeLeft}px`;
+
+      // Bubble: top-left of the iframe (loading-state indicator that
+      // shows where the widget is/was).
+      bubble.style.top = `${iframeTop - BUBBLE_SIZE / 2}px`;
+      bubble.style.left = `${iframeLeft - BUBBLE_SIZE / 2}px`;
+
+      // Drag handle: top-right of the iframe (only visible when expanded).
+      const handleW = 28;
+      dragHandle.style.top = `${iframeTop - 12}px`;
+      dragHandle.style.left = `${iframeLeft + IFRAME_W - handleW + 12}px`;
+      dragHandle.hidden = !composer.expanded;
+
+      // Pointer tail. Sits on whichever widget edge faces the click;
+      // horizontally aligned with the click's X, clamped so it stays
+      // on the widget (and clear of the bubble / drag handle).
+      const POINTER_W = 18;
+      const POINTER_H = 10;
+      const pointerLeft = Math.max(
+        iframeLeft + 24,
+        Math.min(iframeLeft + IFRAME_W - POINTER_W - 24, anchorDocX - POINTER_W / 2),
+      );
+      if (placeBelow) {
+        pointerPath.setAttribute('d', `M 0.5 ${POINTER_H} L 9 0.5 L ${POINTER_W - 0.5} ${POINTER_H}`);
+        pointer.style.top = `${iframeTop - POINTER_H + 1}px`;
+      } else {
+        pointerPath.setAttribute('d', `M 0.5 0.5 L ${POINTER_W - 0.5} 0.5 L 9 ${POINTER_H - 0.5}`);
+        pointer.style.top = `${iframeTop + composerH - 1}px`;
       }
+      pointer.setAttribute('width', String(POINTER_W));
+      pointer.setAttribute('height', String(POINTER_H));
+      pointer.style.left = `${pointerLeft}px`;
+      pointer.style.display = composer.expanded ? '' : 'none';
     }
 
-    let feedbackId: string | null = null;
+    const composer: Composer = {
+      feedbackId: null,
+      target,
+      iframe,
+      bubble,
+      dragHandle,
+      userOffsetX: 0,
+      userOffsetY: 0,
+      agentState: 'pending',
+      expanded: true,
+      close() {
+        if (composer.feedbackId) wsClient.unsubscribe(composer.feedbackId);
+        if (rafHandle != null) cancelAnimationFrame(rafHandle);
+        iframe.remove();
+        bubble.remove();
+        dragHandle.remove();
+        pointer.remove();
+        composers.delete(composer);
+        if (expandedComposer === composer) expandedComposer = null;
+      },
+      expand() {
+        composer.expanded = true;
+        iframe.style.height = `${composer.feedbackId ? STREAM_H : COMPOSER_H}px`;
+        iframe.hidden = false;
+        bubble.hidden = true;
+        reposition();
+      },
+      minimize() {
+        composer.expanded = false;
+        iframe.hidden = true;
+        bubble.hidden = false;
+        reposition();
+        // Keep the outer registry honest: there's no expanded composer
+        // now. swapTo and openComposer reassign expandedComposer right
+        // after this returns, so the clear is mainly load-bearing for
+        // direct minimize() callers (e.g. Esc) where no replacement
+        // composer is taking over.
+        if (expandedComposer === composer) expandedComposer = null;
+      },
+    };
 
-    function close() {
-      if (feedbackId) wsClient.unsubscribe(feedbackId);
-      iframe.remove();
-      // Don't touch picker state or the outline — they belong to the
-      // picker lifecycle, not this composer's. Another composer may
-      // still be open and rely on neither being reset.
-    }
+    // Drag: mousedown on handle starts tracking; iframe pointer-events
+    // disabled mid-drag so a mousemove that crosses into the iframe
+    // doesn't get swallowed; restored on mouseup.
+    dragHandle.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startOffsetX = composer.userOffsetX;
+      const startOffsetY = composer.userOffsetY;
+      const prevIframePE = iframe.style.pointerEvents;
+      iframe.style.pointerEvents = 'none';
+      dragHandle.classList.add('dragging');
+      document.documentElement.style.cursor = 'grabbing';
+
+      function onMouseMove(ev: MouseEvent) {
+        composer.userOffsetX = startOffsetX + (ev.clientX - startX);
+        composer.userOffsetY = startOffsetY + (ev.clientY - startY);
+        reposition();
+      }
+      function onMouseUp() {
+        iframe.style.pointerEvents = prevIframePE;
+        dragHandle.classList.remove('dragging');
+        document.documentElement.style.cursor = '';
+        document.removeEventListener('mousemove', onMouseMove, true);
+        document.removeEventListener('mouseup', onMouseUp, true);
+      }
+      document.addEventListener('mousemove', onMouseMove, true);
+      document.addEventListener('mouseup', onMouseUp, true);
+    });
+
+    bubble.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      swapTo(composer);
+    });
+
+    reposition();
+    positionLoop();
 
     iframe.addEventListener('load', () => {
+      wireComposerIframe(composer, loc, selector, setAgentState);
+    });
+
+    return composer;
+
+    function wireComposerIframe(
+      c: Composer,
+      loc2: ReturnType<typeof findLoc>,
+      selector2: string,
+      setAgentState2: (s: AgentState) => void,
+    ): void {
       const idoc = iframe.contentDocument;
       const iwin = iframe.contentWindow;
       if (!idoc || !iwin) return;
@@ -409,16 +761,16 @@ export function mount(): void {
         return;
       }
 
-      if (loc) {
+      if (loc2) {
         metaEl.classList.add('clickable');
         metaEl.title = 'Open in editor';
         metaEl.addEventListener('click', async () => {
           metaEl.classList.add('loading');
           try {
             const qs = new URLSearchParams({
-              file: loc.file,
-              line: String(loc.line),
-              col: String(loc.col),
+              file: loc2.file,
+              line: String(loc2.line),
+              col: String(loc2.col),
             });
             const res = await fetch(`/__pinpoint/open?${qs.toString()}`, { method: 'POST' });
             if (!res.ok) {
@@ -446,16 +798,30 @@ export function mount(): void {
       ta.addEventListener('input', () => {
         submit.disabled = ta.value.trim().length === 0;
       });
+      ta.addEventListener('keydown', (e) => {
+        // Enter submits; Shift+Enter inserts a newline (standard chat
+        // UX). Submit button's existing click handler does the work.
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          if (!submit.disabled) submit.click();
+        }
+      });
 
       iwin.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
           e.preventDefault();
-          close();
+          // Three cases:
+          // - Pre-submit (composer pane): close — there's nothing alive
+          //   to preserve.
+          // - Post-submit, agent loading/running: minimize so the agent
+          //   keeps working in the background; bubble shows progress.
+          // - Post-submit, agent done/errored: close — nothing's
+          //   happening anymore, no point keeping it around.
+          const loading = c.agentState === 'pending' || c.agentState === 'running';
+          if (c.feedbackId && loading) c.minimize();
+          else c.close();
           return;
         }
-        // Mirror the host-doc hotkey so the user can open a new picker
-        // without first defocusing this iframe. shouldIgnoreHotkey skips
-        // when the user is typing in an input/textarea inside the iframe.
         if (
           hotkeyChar &&
           e.key.toLowerCase() === hotkeyChar &&
@@ -467,22 +833,22 @@ export function mount(): void {
         }
       });
 
-      cancel.addEventListener('click', () => close());
-      // Dismiss is wired inside attachStreamHandler so it can send an
-      // interrupt first when a turn is still running. Before stream pane
-      // opens, dismiss is hidden behind the composer pane anyway.
+      cancel.addEventListener('click', () => c.close());
 
       submit.addEventListener('click', async () => {
         submit.disabled = true;
         submit.textContent = 'Sending…';
         try {
           const screenshot = await capturePageScreenshot(
-            (node) => node !== host && node !== (iframe as unknown as HTMLElement),
+            (node) =>
+              node !== host &&
+              node !== (c.iframe as unknown as HTMLElement) &&
+              node !== (c.bubble as unknown as HTMLElement),
           );
           const payload = {
             comment: ta.value.trim(),
-            loc,
-            selector,
+            loc: loc2,
+            selector: selector2,
             url: window.location.href,
             viewport: { w: window.innerWidth, h: window.innerHeight },
             userAgent: navigator.userAgent,
@@ -503,16 +869,18 @@ export function mount(): void {
             | null;
 
           if (result?.id && result.agentSpawned) {
-            feedbackId = result.id;
+            c.feedbackId = result.id;
             composerPane.hidden = true;
             streamPane.hidden = false;
             streamHeader.textContent = '✓ Submitted — agent starting…';
             streamFooter.textContent = '';
-            growIframe(iframe, target, STREAM_H);
+            if (c.expanded) iframe.style.height = `${STREAM_H}px`;
+            setAgentState2('running');
             attachStreamHandler(
               wsClient,
               idoc,
-              feedbackId,
+              c,
+              setAgentState2,
               streamHeader,
               streamLog,
               streamFooter,
@@ -520,11 +888,10 @@ export function mount(): void {
               stopBtn,
               followInput,
               followSend,
-              close,
             );
           } else {
             toast('Sent', 'success');
-            close();
+            c.close();
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -533,21 +900,7 @@ export function mount(): void {
           submit.textContent = 'Submit';
         }
       });
-    });
-  }
-
-  function positionIframe(iframe: HTMLIFrameElement, target: Element, height: number) {
-    const r = target.getBoundingClientRect();
-    const top = Math.min(window.innerHeight - height - 8, Math.max(8, r.bottom + 8));
-    const left = Math.min(window.innerWidth - IFRAME_W - 8, Math.max(8, r.left));
-    iframe.style.top = `${top}px`;
-    iframe.style.left = `${left}px`;
-    iframe.style.width = `${IFRAME_W}px`;
-    iframe.style.height = `${height}px`;
-  }
-
-  function growIframe(iframe: HTMLIFrameElement, target: Element, height: number) {
-    positionIframe(iframe, target, height);
+    }
   }
 
   function toast(text: string, kind: 'success' | 'error') {
@@ -558,7 +911,84 @@ export function mount(): void {
     setTimeout(() => el.remove(), 2500);
   }
 
+  // FAB drag + snap-to-corner. mousedown starts tracking; movement past
+  // a small threshold turns it into a real drag (free-positioning).
+  // mouseup snaps to whichever viewport corner is closest. A click that
+  // didn't cross the threshold falls through to the normal toggle.
+  const DRAG_THRESHOLD_PX = 4;
+  const FAB_PADDING = 20;
+  type Corner = 'tl' | 'tr' | 'bl' | 'br';
+  let suppressNextFabClick = false;
+
+  function snapFabToCorner(corner: Corner) {
+    const isTop = corner === 'tl' || corner === 'tr';
+    const isLeft = corner === 'tl' || corner === 'bl';
+    fab.style.top = isTop ? `${FAB_PADDING}px` : 'auto';
+    fab.style.bottom = isTop ? 'auto' : `${FAB_PADDING}px`;
+    fab.style.left = isLeft ? `${FAB_PADDING}px` : 'auto';
+    fab.style.right = isLeft ? 'auto' : `${FAB_PADDING}px`;
+  }
+
+  function nearestCorner(cx: number, cy: number): Corner {
+    const top = cy < window.innerHeight / 2;
+    const left = cx < window.innerWidth / 2;
+    if (top && left) return 'tl';
+    if (top) return 'tr';
+    if (left) return 'bl';
+    return 'br';
+  }
+
+  fab.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    // Picking mode owns the FAB click (toggle off). Don't intercept.
+    if (state.mode === 'picking') return;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const fabRect = fab.getBoundingClientRect();
+    const grabX = startX - fabRect.left;
+    const grabY = startY - fabRect.top;
+    let dragging = false;
+
+    function onMove(ev: MouseEvent) {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      if (!dragging) {
+        if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+        dragging = true;
+        fab.classList.add('dragging');
+      }
+      // Free-position from the cursor, preserving where the user
+      // grabbed it (so the FAB doesn't jump under the cursor).
+      const x = Math.max(0, Math.min(window.innerWidth - fabRect.width, ev.clientX - grabX));
+      const y = Math.max(0, Math.min(window.innerHeight - fabRect.height, ev.clientY - grabY));
+      fab.style.left = `${x}px`;
+      fab.style.top = `${y}px`;
+      fab.style.right = 'auto';
+      fab.style.bottom = 'auto';
+    }
+
+    function onUp() {
+      document.removeEventListener('mousemove', onMove, true);
+      document.removeEventListener('mouseup', onUp, true);
+      if (!dragging) return;
+      fab.classList.remove('dragging');
+      const r = fab.getBoundingClientRect();
+      snapFabToCorner(nearestCorner(r.left + r.width / 2, r.top + r.height / 2));
+      // Suppress the click event that fires after this mouseup so the
+      // drag doesn't accidentally toggle picker mode.
+      suppressNextFabClick = true;
+    }
+
+    document.addEventListener('mousemove', onMove, true);
+    document.addEventListener('mouseup', onUp, true);
+  });
+
   fab.addEventListener('click', () => {
+    if (suppressNextFabClick) {
+      suppressNextFabClick = false;
+      return;
+    }
     if (state.mode === 'picking') exitPicking();
     else if (state.mode === 'idle') enterPicking();
   });
@@ -584,22 +1014,15 @@ function createWsClient(): WidgetWsClient {
     .__pinpointConfig;
   const url =
     cfg?.wsUrl ??
-    // Best-effort fallback: standard port on the same host. Useful if a
-    // consumer serves the widget themselves without the config prelude.
     `ws://${window.location.hostname || '127.0.0.1'}:53636/__pinpoint/ws`;
   return new WidgetWsClient(url);
 }
 
-/**
- * Wire a freshly-opened stream pane to the WS client. Owns all the
- * rendering for one feedback id's transcript and one ask_user form at a
- * time (the agent can only ask one question at once — the SDK doesn't
- * allow concurrent tool calls within a turn).
- */
 function attachStreamHandler(
   client: WidgetWsClient,
   idoc: Document,
-  feedbackId: string,
+  composer: Composer,
+  setAgentState: (s: AgentState) => void,
   header: HTMLElement,
   log: HTMLElement,
   footer: HTMLElement,
@@ -607,8 +1030,9 @@ function attachStreamHandler(
   stopBtn: HTMLButtonElement,
   followInput: HTMLTextAreaElement,
   followSend: HTMLButtonElement,
-  close: () => void,
 ): void {
+  if (!composer.feedbackId) return;
+  const feedbackId = composer.feedbackId;
   let activeTextBlock: HTMLElement | null = null;
   let lastToolChip: HTMLElement | null = null;
   let pendingAskId: string | null = null;
@@ -616,7 +1040,6 @@ function attachStreamHandler(
   let apiKeySource: string | null = null;
   let turnRunning = true;
 
-  // Visible only while a turn is in flight; hidden on done/result/error.
   function setStopVisible(visible: boolean) {
     stopBtn.hidden = !visible;
   }
@@ -627,19 +1050,13 @@ function attachStreamHandler(
     client.sendInterrupt(feedbackId);
     stopBtn.disabled = true;
     stopBtn.textContent = 'Stopping…';
-    // Server emits an error event + a result message (subtype likely
-    // 'error_during_execution'). turnRunning + UI clear up on those.
   });
 
   dismissBtn.addEventListener('click', () => {
-    // If the user dismisses mid-turn (or mid-ask), abort the agent so it
-    // doesn't keep running with no UI to receive its events — and so any
-    // pending ask_user doesn't hang until TTL waiting for an answer that
-    // will never come.
     if (turnRunning || pendingAskId) {
       client.sendInterrupt(feedbackId);
     }
-    close();
+    composer.close();
   });
 
   function el(tag: string, className?: string, text?: string): HTMLElement {
@@ -665,13 +1082,11 @@ function attachStreamHandler(
   }
 
   function renderAskUserForm(askId: string, question: string, options?: string[]) {
-    // Clear any prior ask form (defensive — shouldn't happen in normal SDK flow).
     if (pendingAskFormRoot) pendingAskFormRoot.remove();
     pendingAskId = askId;
 
     const wrap = el('div', 'ask-form');
-    const q = el('div', 'ask-question', question);
-    wrap.appendChild(q);
+    wrap.appendChild(el('div', 'ask-question', question));
 
     if (options && options.length > 0) {
       const opts = el('div', 'ask-options');
@@ -679,7 +1094,7 @@ function attachStreamHandler(
         const btn = el('button', 'ask-option') as HTMLButtonElement;
         btn.type = 'button';
         btn.textContent = o;
-        btn.addEventListener('click', () => submit(o));
+        btn.addEventListener('click', () => submitAnswer(o));
         opts.appendChild(btn);
       }
       wrap.appendChild(opts);
@@ -705,7 +1120,7 @@ function attachStreamHandler(
     sendBtn.addEventListener('click', () => {
       const answer = ta.value.trim();
       if (!answer) return;
-      submit(answer);
+      submitAnswer(answer);
     });
     row.appendChild(ta);
     row.appendChild(sendBtn);
@@ -716,10 +1131,8 @@ function attachStreamHandler(
     setTimeout(() => ta.focus(), 0);
     setFollowEnabled(false);
 
-    function submit(answer: string) {
+    function submitAnswer(answer: string) {
       client.sendAskResponse(askId, answer);
-      // Replace the form with a static record of the exchange so the
-      // transcript stays coherent on scrollback.
       const replaced = el('div', 'ask-resolved');
       replaced.appendChild(el('div', 'ask-question', question));
       replaced.appendChild(el('div', 'ask-answer', answer));
@@ -743,7 +1156,6 @@ function attachStreamHandler(
     const content = followInput.value.trim();
     if (!content) return;
     client.sendUserMessage(feedbackId, content);
-    // Optimistic render so the user sees their message immediately.
     append(el('div', 'user-msg', content));
     followInput.value = '';
     turnRunning = true;
@@ -753,6 +1165,7 @@ function attachStreamHandler(
     setFollowEnabled(false);
     header.textContent = 'Working…';
     footer.textContent = '';
+    setAgentState('running');
   });
   setFollowEnabled(false);
 
@@ -769,6 +1182,7 @@ function attachStreamHandler(
           stopBtn.textContent = 'Stop';
           setStopVisible(true);
           setFollowEnabled(false);
+          setAgentState('running');
           break;
         }
         case 'text': {
@@ -825,6 +1239,7 @@ function attachStreamHandler(
           activeTextBlock = null;
           lastToolChip = null;
           append(el('div', 'err-line', String(event.message ?? 'error')));
+          setAgentState('error');
           break;
         }
         case 'result': {
@@ -845,18 +1260,13 @@ function attachStreamHandler(
           }
           turnRunning = false;
           setStopVisible(false);
-          // Once the initial turn ends, enable follow-up unless an ask is
-          // still pending (shouldn't happen — ask resolution precedes
-          // result — but defensive).
+          setAgentState(ok ? 'done' : 'error');
           if (!pendingAskId) setFollowEnabled(true);
           break;
         }
       }
     },
     onDone() {
-      // The server only sends `done` if the bus is explicitly closed.
-      // With per-conversation buses, this fires only on dev-server
-      // shutdown or programmatic eviction. Treat as best-effort cleanup.
       turnRunning = false;
       setStopVisible(false);
       if (!pendingAskId) setFollowEnabled(true);
@@ -930,10 +1340,11 @@ function composerHTML(metaText: string): string {
   .btn.primary { background: #2563eb; color: #fff; }
   .btn.primary:disabled { background: #93c5fd; cursor: not-allowed; }
   .btn.ghost { background: transparent; color: #374151; }
-  .btn.ghost.stop { color: #b91c1c; }
-  .btn.ghost.stop:hover { background: #fef2f2; }
+  .btn.ghost.stop,
+  .btn.ghost.cancel { color: #b91c1c; }
+  .btn.ghost.stop:hover,
+  .btn.ghost.cancel:hover { background: #fef2f2; }
 
-  /* Streaming pane */
   .header {
     font-size: 12px;
     font-weight: 500;
@@ -995,7 +1406,6 @@ function composerHTML(metaText: string): string {
   .err-line { color: #b91c1c; font-size: 12px; white-space: pre-wrap; }
   .footer-note { font-size: 11px; color: #6b7280; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
-  /* ask_user inline form */
   .ask-form {
     background: #fffbeb;
     border: 1px solid #fde68a;
@@ -1032,7 +1442,6 @@ function composerHTML(metaText: string): string {
   .ask-resolved .ask-question { color: #6b7280; font-size: 11px; font-weight: 500; }
   .ask-answer { color: #111827; font-size: 12px; white-space: pre-wrap; }
 
-  /* Follow-up input row */
   .follow {
     display: flex;
     gap: 6px;
@@ -1065,7 +1474,7 @@ function composerHTML(metaText: string): string {
         <span class="footer-note" id="pp-stream-footer"></span>
         <div class="row" style="gap:6px;">
           <button class="btn ghost stop" id="pp-stop" type="button" hidden>Stop</button>
-          <button class="btn ghost" id="pp-dismiss" type="button">Close</button>
+          <button class="btn ghost cancel" id="pp-dismiss" type="button">Cancel</button>
         </div>
       </div>
     </div>

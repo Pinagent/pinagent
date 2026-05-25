@@ -27,7 +27,19 @@ export const STYLES = `
   /* Sit above any composer iframe (those use 2147483646) so the FAB stays
      clickable even when an open composer overlaps the bottom-right. */
   z-index: 2147483647;
-  transition: transform 120ms ease, background 120ms ease;
+  /* Smooth corner-snap animation. Disabled mid-drag via .dragging so the
+     position tracks the cursor 1:1 without interpolation lag. */
+  transition: top 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+              bottom 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+              left 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+              right 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+              transform 120ms ease,
+              background 120ms ease;
+}
+.fab.dragging {
+  transition: none;
+  cursor: grabbing;
+  transform: scale(1.08);
 }
 .fab:hover { transform: scale(1.06); background: #1f2937; }
 .fab.active { background: #2563eb; }

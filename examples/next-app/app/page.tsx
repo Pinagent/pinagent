@@ -12,19 +12,16 @@ export default function Page() {
       }}
     >
       <h1 style={{ fontSize: '2.75rem' }}>Pinpoint · Next.js demo</h1>
-      <p>
+      <p style={{ fontWeight: 'bold' }}>
         Open the 💬 button in the bottom-right, pick an element, and leave a comment.
       </p>
       <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
-        Leave feedback right on the UI. Every comment records a screenshot, the selected
-        element, and the exact source file and line that produced it — sending your request
-        straight to the code that needs changing. Try it on anything here, including the
-        counters and the footer.
+        Click. Comment. Ship. Try it below.
       </p>
       <section
         style={{
           marginTop: 24,
-          maxHeight: 420,
+          maxHeight: 280,
           overflowY: 'auto',
           border: '1px solid #e5e7eb',
           borderRadius: 8,
