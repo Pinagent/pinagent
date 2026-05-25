@@ -165,8 +165,14 @@ export default function pinagent(
       ...(config.turbopack ?? {}),
       rules: {
         ...(config.turbopack?.rules ?? {}),
+        // Pass the loader as a package specifier (not the absolute path used
+        // for webpack). Turbopack resolves loader strings from the project
+        // root; an absolute path that lives outside the root (e.g. in a pnpm
+        // workspace's `packages/`) breaks `get_next_server_import_map` with
+        // "Next.js package not found" because Turbopack walks `node_modules`
+        // from the loader file's directory, not the project root.
         '*.{ts,tsx,js,jsx}': {
-          loaders: [loaderPath],
+          loaders: ['@pinagent/next/loader'],
         },
       },
     };
