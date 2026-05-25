@@ -1,5 +1,6 @@
 import { CounterList } from './CounterList';
 import { Footer } from './Footer';
+import { Logo } from './_components/Logo';
 
 export default function Page() {
   return (
@@ -13,8 +14,13 @@ export default function Page() {
     >
       <h1 style={{ fontSize: '2.75rem' }}>Pinpoint · Next.js demo</h1>
       <p style={{ fontWeight: 'bold' }}>
-        Click the 💬 button, pick an element, and leave a comment — an agent picks it up
-        and edits the code directly.
+        Click the{' '}
+        <Logo
+          size={16}
+          style={{ verticalAlign: '-3px', borderRadius: 3 }}
+        />{' '}
+        button, pick an element, and leave a comment — an agent picks it up and edits the
+        code directly.
       </p>
       <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
         Click. Comment. Ship. Try it below.

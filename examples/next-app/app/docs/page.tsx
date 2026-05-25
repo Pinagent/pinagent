@@ -1,3 +1,5 @@
+import { Logo } from '../_components/Logo';
+
 export default function DocsPage() {
   return (
     <main
@@ -34,7 +36,11 @@ export default function DocsPage() {
         >
           <h2 style={{ fontSize: '1.25rem', margin: 0 }}>How it works</h2>
           <ol style={{ color: '#374151', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
-            <li>Click the 💬 button in the bottom-right of any page.</li>
+            <li>
+              Click the{' '}
+              <Logo size={14} style={{ verticalAlign: '-2px', borderRadius: 3 }} />{' '}
+              button in the bottom-right of any page.
+            </li>
             <li>Pick the element you want to change — the overlay highlights what's under your cursor.</li>
             <li>Type a short comment describing what you want (e.g. &quot;make this button red&quot; or &quot;add a subtitle&quot;).</li>
             <li>

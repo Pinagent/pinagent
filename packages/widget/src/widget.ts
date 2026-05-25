@@ -398,9 +398,9 @@ export function mount(): void {
   const fab = document.createElement('button');
   fab.className = 'fab';
   fab.type = 'button';
-  fab.textContent = '💬';
   fab.title = 'Pinpoint — pick an element';
   fab.style.pointerEvents = 'auto';
+  fab.appendChild(buildPinIcon(26, '#FCF9E8'));
   root.appendChild(fab);
 
   const outline = document.createElement('div');
@@ -1864,6 +1864,29 @@ function composerHTML(metaText: string): string {
     </div>
   </div>
 </body></html>`;
+}
+
+/**
+ * Pinpoint pin-shape path (teardrop). 93x93 viewBox. Single shape on
+ * a transparent background — caller picks fill via the path's fill
+ * attribute. The full-logo version sits on a cream `#FCF9E8` square,
+ * but the FAB uses just the pin in cream against the dark button.
+ */
+const PIN_PATH =
+  'M38.0761 27C24.2046 27 16.7486 43.8193 26.2852 53.7027L26.4587 53.8761L47.2659 74.6834L68.0732 53.8761L68.2466 53.7027C77.9567 43.8193 70.3273 27 56.4558 27L38.0761 27Z';
+
+function buildPinIcon(size: number, fill: string): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('viewBox', '0 0 93 93');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', PIN_PATH);
+  path.setAttribute('fill', fill);
+  svg.appendChild(path);
+  return svg;
 }
 
 function resolveHotkey(): string | null {

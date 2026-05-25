@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Pinpoint } from '@pinpoint/next';
+import { Logo } from './_components/Logo';
 import { SideNav } from './_components/SideNav';
 
 export const metadata = {
@@ -15,7 +16,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             style={{
               width: 240,
               flexShrink: 0,
-              background: '#eff6ff',
+              background: '#ffffff',
               borderRight: '1px solid #d1d5db',
               padding: '24px 20px',
               boxSizing: 'border-box',
@@ -26,12 +27,22 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               overflowY: 'auto',
             }}
           >
-            <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: 20 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontWeight: 700,
+                fontSize: '1.05rem',
+                marginBottom: 20,
+              }}
+            >
+              <Logo size={22} />
               Pinpoint
             </div>
             <SideNav />
           </aside>
-          <div style={{ flex: 1, minWidth: 0, background: '#f0f9ff' }}>{children}</div>
+          <div style={{ flex: 1, minWidth: 0, background: '#ffffff' }}>{children}</div>
         </div>
         <div
           aria-label="Pinpoint logo"
@@ -53,12 +64,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             zIndex: 1000,
           }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"
-              fill="#f9fafb"
-            />
-          </svg>
+          <Logo size={16} variant="mono" style={{ color: '#f9fafb' }} />
           Pinpoint
         </div>
         <Pinpoint />

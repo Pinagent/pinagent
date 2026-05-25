@@ -9,6 +9,7 @@ const items = [
   { href: '/changelog', label: 'Changelog' },
   { href: '/roadmap', label: 'Roadmap' },
   { href: '/issues', label: 'Issues' },
+  { href: '/contact', label: 'Contact' },
 ];
 
 export function SideNav() {
