@@ -13,7 +13,8 @@ export default function Page() {
     >
       <h1 style={{ fontSize: '2.75rem' }}>Pinpoint · Next.js demo</h1>
       <p style={{ fontWeight: 'bold' }}>
-        Open the 💬 button in the bottom-right, pick an element, and leave a comment.
+        Click the 💬 button, pick an element, and leave a comment — an agent picks it up
+        and edits the code directly.
       </p>
       <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
         Click. Comment. Ship. Try it below.
