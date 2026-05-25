@@ -11,22 +11,30 @@ const common = {
 };
 
 export default defineConfig([
-  // Server-only entries: config, route handlers, webpack loader
+  // Server-only entries: config, route handlers, webpack loader.
+  // The `-noop` variants are production stubs resolved via the `"default"`
+  // condition in package.json exports — they ship zero claude-agent-sdk,
+  // zero @babel/*, zero `ws`, and no node:child_process / node:fs.
   {
     ...common,
     entry: {
       config: 'src/config.ts',
+      'config-noop': 'src/config-noop.ts',
       route: 'src/route.ts',
+      'route-noop': 'src/route-noop.ts',
       loader: 'src/loader.ts',
     },
     clean: true,
   },
-  // Client-only entry: the <Pinpoint /> component.
+  // Client-only entries: the <Pinpoint /> component (dev) and its prod stub.
   // The 'use client' banner is required — esbuild strips the source directive
   // when bundling, so we re-inject it as the first line of the output.
   {
     ...common,
-    entry: { index: 'src/index.ts' },
+    entry: {
+      index: 'src/index.ts',
+      'index-noop': 'src/component-noop.tsx',
+    },
     clean: false,
     banner: { js: "'use client';" },
   },

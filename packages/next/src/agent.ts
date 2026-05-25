@@ -4,7 +4,8 @@ import { mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { query, type Options, type PermissionMode, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { renderInitFooter, renderMessage, renderResultFooter, summariseToolInput } from './agent-render';
-import { type AgentEvent, finishBus, getOrCreateBus } from './event-bus';
+import { ASK_USER_TOOL_NAME, createAskUserMcpServer, rejectAsk } from './ask-user';
+import { type AgentEvent, getOrCreateBus } from './event-bus';
 import { Storage, type FeedbackRecord } from './storage';
 
 export type SpawnAgentMode = 'worktree' | 'inline' | false;
@@ -29,26 +30,24 @@ interface AgentContext {
   mode: SpawnAgentMode;
 }
 
+interface ActiveRun {
+  abort: AbortController;
+}
+
 /**
- * Run an isolated Claude Agent SDK query for a single feedback record.
+ * One in-flight SDK run per feedback id. The WS interrupt handler reads
+ * this; the multi-turn handler rejects a `user_message` if a run is
+ * already going (no queueing yet — phase F if we need it).
+ */
+const activeRuns = new Map<string, ActiveRun>();
+
+/**
+ * Run an isolated Claude Agent SDK query for a single freshly-submitted
+ * feedback record. Kicks off in the background; the route handler resolves
+ * its POST as soon as this returns "started", not when the agent finishes.
  *
- * Returns once the agent loop has been kicked off in the background. The
- * stream is consumed asynchronously and rendered to a markdown report at
- * `.pinpoint/logs/<id>.md`:
- *
- *   ---
- *   # Pinpoint feedback <id>
- *   <header: target, comment, branch, started_at>
- *
- *   ## Agent output
- *   <SDK-rendered transcript: text, tool chips, errors>
- *
- *   ## Resolution            ← appended once the result message arrives
- *   <status, note, finished_at, tokens, cost>
- *
- * Unlike the v1 detached `claude -p` model, the SDK runs in-process. If the
- * dev server exits mid-fix, the agent loop dies and the log ends mid-stream;
- * the feedback record stays `pending` so the next launch can re-pick it up.
+ * Log file at `.pinpoint/logs/<id>.md` accumulates the transcript across
+ * the initial run plus any follow-up turns the user sends over WS.
  */
 export async function spawnAgent(ctx: AgentContext): Promise<void> {
   if (ctx.mode === false) return;
@@ -75,85 +74,200 @@ export async function spawnAgent(ctx: AgentContext): Promise<void> {
 
   await appendLog(logPath, renderHeader(ctx, cwd, startedAt, /* worktreeReady */ true));
 
-  const prompt = buildPrompt(ctx.feedback, ctx.mode, cwd);
-  const permissionMode = resolvePermissionMode(process.env);
+  const prompt = buildInitialPrompt(ctx.feedback, ctx.mode, cwd);
 
-  // The MCP server resolves PINPOINT_PROJECT_ROOT for storage. In worktree
-  // mode, cwd is a sibling of the main repo, so the env var must explicitly
-  // pin it back to the real project root. `env` REPLACES the SDK subprocess
-  // environment (per SDK docs), so spread process.env to keep PATH, HOME,
-  // ANTHROPIC_API_KEY, etc.
-  const env: Record<string, string | undefined> = {
-    ...process.env,
-    PINPOINT_PROJECT_ROOT: ctx.projectRoot,
-  };
-
-  const options: Options = {
+  // Fire and forget. The route handler awaits spawnAgent only for the
+  // worktree-creation + header-write phase — once we hand off to runQuery
+  // the SDK loop owns the rest.
+  void runQuery({
+    projectRoot: ctx.projectRoot,
+    feedbackId: ctx.feedback.id,
     cwd,
-    permissionMode,
-    env,
-    // Load .mcp.json (and settings) from the worktree / project. The widget
-    // depends on the pinpoint MCP server being reachable.
-    settingSources: ['user', 'project', 'local'],
-  };
-
-  // Fire the stream consumer in the background so spawnAgent resolves with
-  // "kicked off" semantics, matching the v1 fire-and-forget contract.
-  void consumeStream(ctx, logPath, prompt, options);
+    logPath,
+    prompt,
+    isInitial: true,
+  });
 }
 
-async function consumeStream(
-  ctx: AgentContext,
-  logPath: string,
-  prompt: string,
-  options: Options,
-): Promise<void> {
+/**
+ * Send a follow-up message into the existing conversation for `feedbackId`.
+ * Resumes the prior SDK session so the agent keeps full context. Resolves
+ * once the new turn has been started, not when it finishes.
+ *
+ * Refuses if there's no prior session (the feedback was never spawn-mode)
+ * or a turn is already in flight (no input queueing yet).
+ */
+export async function runFollowUpTurn(feedbackId: string, content: string): Promise<void> {
+  if (activeRuns.has(feedbackId)) {
+    throw new Error('a turn is already in progress for this feedback');
+  }
+
+  const projectRoot = process.env.PINPOINT_PROJECT_ROOT ?? process.cwd();
+  const storage = new Storage(projectRoot);
+  const rec = await storage.read(feedbackId);
+  if (!rec) throw new Error(`feedback not found: ${feedbackId}`);
+  if (!rec.agentSessionId) {
+    throw new Error('no prior agent session — only spawn-mode submissions support follow-ups');
+  }
+
+  // If the original run used a worktree and it's still there, resume in
+  // it. Otherwise fall back to the project root. This is robust to the
+  // user flipping `spawnAgent: 'worktree' ↔ 'inline'` between runs.
+  const worktreePath = join(projectRoot, '.pinpoint', 'worktrees', feedbackId);
+  const cwd = existsSync(worktreePath) ? worktreePath : projectRoot;
+
+  const logsDir = join(projectRoot, '.pinpoint', 'logs');
+  await mkdir(logsDir, { recursive: true });
+  const logPath = join(logsDir, `${feedbackId}.md`);
+
+  await appendLog(
+    logPath,
+    `\n## Follow-up turn · ${new Date().toISOString()}\n\n> **User**\n> \n> ${content
+      .split('\n')
+      .join('\n> ')}\n\n`,
+  );
+
+  void runQuery({
+    projectRoot,
+    feedbackId,
+    cwd,
+    logPath,
+    prompt: content,
+    isInitial: false,
+    resume: rec.agentSessionId,
+  });
+}
+
+/**
+ * Abort an in-flight run for `feedbackId`. Returns false if nothing is
+ * running. The SDK should propagate the abort through its tool loop and
+ * exit the iterator; consumeStream catches the abort error and writes a
+ * minimal footer.
+ */
+export function interruptRun(feedbackId: string): boolean {
+  const run = activeRuns.get(feedbackId);
+  if (!run) return false;
+  run.abort.abort();
+  return true;
+}
+
+interface RunQueryOpts {
+  projectRoot: string;
+  feedbackId: string;
+  cwd: string;
+  logPath: string;
+  prompt: string;
+  isInitial: boolean;
+  resume?: string;
+}
+
+async function runQuery(opts: RunQueryOpts): Promise<void> {
+  const permissionMode = resolvePermissionMode(process.env);
+  const abort = new AbortController();
+  activeRuns.set(opts.feedbackId, { abort });
+
+  // The `ask_user` tool can block for up to 10 min waiting for a human
+  // response. SDK MCP tool calls time out at 60s by default; bump it to
+  // ~12 min to cover the full ASK_TTL window in ask-user.ts.
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    PINPOINT_PROJECT_ROOT: opts.projectRoot,
+    CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '720000',
+  };
+
+  const sdkOptions: Options = {
+    cwd: opts.cwd,
+    permissionMode,
+    env,
+    settingSources: ['user', 'project', 'local'],
+    abortController: abort,
+    mcpServers: {
+      'pinpoint-ask-user': createAskUserMcpServer(opts.feedbackId),
+    },
+    allowedTools: [ASK_USER_TOOL_NAME],
+    systemPrompt: {
+      type: 'preset',
+      preset: 'claude_code',
+      append: [
+        '',
+        'You are running inside Pinpoint, a tool that lets developers click a UI',
+        'element in the browser and leave a comment for you to act on. The user',
+        'is watching your output stream into a small widget pane next to the',
+        'element they clicked.',
+        '',
+        `If you need clarification mid-task, call the \`${ASK_USER_TOOL_NAME}\``,
+        'tool with a clear question (and optional `options` for closed-ended',
+        'answers). Prefer asking over guessing on ambiguous requirements.',
+      ].join('\n'),
+    },
+  };
+  if (opts.resume) sdkOptions.resume = opts.resume;
+
+  try {
+    await consumeStream(opts, sdkOptions);
+  } finally {
+    activeRuns.delete(opts.feedbackId);
+    // Any ask_user calls still hanging die with the run; otherwise the
+    // SDK Promise would wait until ASK_TTL with no UI to answer.
+    rejectAsk(opts.feedbackId, 'agent run ended');
+    // NOTE: we intentionally do NOT call finishBus here. The bus persists
+    // across turns within a single feedback conversation so follow-up
+    // events keep flowing to the same WS subscribers. The widget knows
+    // each turn ended from the `result` event it emits.
+  }
+}
+
+async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<void> {
   let sessionId: string | null = null;
   let sessionRecorded = false;
   let resultRendered = false;
-  const bus = getOrCreateBus(ctx.feedback.id);
+  const bus = getOrCreateBus(opts.feedbackId);
 
   try {
-    for await (const message of query({ prompt, options }) as AsyncIterable<SDKMessage>) {
+    for await (const message of query({
+      prompt: opts.prompt,
+      options: sdkOptions,
+    }) as AsyncIterable<SDKMessage>) {
       if (!sessionId && 'session_id' in message && typeof message.session_id === 'string') {
         sessionId = message.session_id;
       }
       if (!sessionRecorded && sessionId) {
         sessionRecorded = true;
-        await persistSessionId(ctx.projectRoot, ctx.feedback.id, sessionId);
+        await persistSessionId(opts.projectRoot, opts.feedbackId, sessionId);
       }
 
-      // Fan out to SSE subscribers. The bus translator is intentionally
-      // lossy — it drops thinking blocks, status pings, partial deltas,
-      // etc. that the widget doesn't render.
       for (const ev of toAgentEvents(message)) bus.publish(ev);
 
       if (message.type === 'system' && message.subtype === 'init') {
-        await appendLog(logPath, renderInitFooter(message));
+        await appendLog(opts.logPath, renderInitFooter(message));
         continue;
       }
 
       if (message.type === 'result') {
         resultRendered = true;
-        await appendLog(logPath, renderMessage(message));
-        await appendResolution(ctx.projectRoot, ctx.feedback.id, logPath, message);
+        await appendLog(opts.logPath, renderMessage(message));
+        if (opts.isInitial) {
+          await appendResolution(opts.projectRoot, opts.feedbackId, opts.logPath, message);
+        } else {
+          await appendLog(opts.logPath, `\n${renderResultFooter(message)}\n`);
+        }
         continue;
       }
 
       const chunk = renderMessage(message);
-      if (chunk) await appendLog(logPath, chunk);
+      if (chunk) await appendLog(opts.logPath, chunk);
     }
   } catch (err) {
     const msg = stringifyErr(err);
     bus.publish({ type: 'error', message: msg });
-    await appendLog(logPath, `\n> [pinpoint] agent stream errored: ${msg}\n`);
+    await appendLog(opts.logPath, `\n> [pinpoint] agent stream errored: ${msg}\n`);
   } finally {
-    if (!resultRendered) {
-      // Stream ended without a `result` message — write a minimal footer
-      // so the log isn't open-ended.
-      await appendResolution(ctx.projectRoot, ctx.feedback.id, logPath, null);
+    if (!resultRendered && opts.isInitial) {
+      // Initial runs always get a resolution block, even on abort, so the
+      // log doesn't end mid-stream. Follow-ups don't (the initial block
+      // was already written).
+      await appendResolution(opts.projectRoot, opts.feedbackId, opts.logPath, null);
     }
-    finishBus(ctx.feedback.id);
   }
 }
 
@@ -180,6 +294,11 @@ function toAgentEvents(message: SDKMessage): AgentEvent[] {
         if (block.type === 'text' && block.text.trim()) {
           out.push({ type: 'text', text: block.text });
         } else if (block.type === 'tool_use') {
+          // ask_user calls are surfaced by the tool handler itself (it
+          // publishes an 'ask_user' event with the question). Suppress
+          // the bare tool_use chip so the widget doesn't render a
+          // duplicate "[ask_user]" line alongside the form.
+          if (block.name === ASK_USER_TOOL_NAME) continue;
           out.push({
             type: 'tool_use',
             name: block.name,
@@ -243,7 +362,6 @@ async function createWorktree(
   feedbackId: string,
   logPath: string,
 ): Promise<string> {
-  // Verify projectRoot is a git repo before doing anything destructive.
   if (!existsSync(join(projectRoot, '.git'))) {
     throw new Error('project root is not a git repository');
   }
@@ -253,9 +371,6 @@ async function createWorktree(
   const worktreePath = join(worktreeDir, feedbackId);
   const branch = `pinpoint/${feedbackId}`;
 
-  // `git worktree add -b <branch> <path>` creates the branch from current HEAD
-  // and checks it out at <path>. If the directory already exists, git refuses;
-  // we don't try to recover (caller should clean up first).
   await runGit(projectRoot, ['worktree', 'add', '-b', branch, worktreePath], logPath);
   return worktreePath;
 }
@@ -406,7 +521,7 @@ async function appendResolution(
   await appendLog(logPath, lines.join('\n'));
 }
 
-function buildPrompt(rec: FeedbackRecord, mode: SpawnAgentMode, cwd: string): string {
+function buildInitialPrompt(rec: FeedbackRecord, mode: SpawnAgentMode, cwd: string): string {
   const where = rec.file
     ? `${rec.file}:${rec.line ?? '?'}${rec.col != null ? `:${rec.col}` : ''}`
     : rec.selector;

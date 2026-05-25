@@ -10,8 +10,9 @@ Pinpoint is a localhost feedback loop: a build-time plugin tags JSX with `data-p
 > **Architecture status.** v1 (the shipped base loop) and v2 (the persistent chat-surface-per-widget redesign covered by `pinpoint-v2-plan.md`) coexist during the migration. Install steps are stable across both. What's shipped so far:
 >
 > - **Phase A (done).** Per-comment agents and the Vite auto-trigger run the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) in-process. Log files contain SDK-rendered transcripts; each run's `sessionId` is persisted on the feedback record.
-> - **Phase B (done, in-process SSE form).** Per-feedback in-memory event bus (`packages/next/src/event-bus.ts`) fans SDK events to subscribers; `GET /__pinpoint/feedback/<id>/stream` exposes them as Server-Sent Events. WebSocket is deferred until `ask_user` needs duplex.
-> - **Phase E (done, minimal form).** The widget composer iframe now swaps into a streaming pane on Submit and renders text + tool chips + final cost/turns inline. No follow-up turns from the UI yet — Dismiss closes the pane (the agent keeps running in the background and its log file always reflects the final state).
+> - **Phase B (done, WebSocket).** Per-feedback in-memory event bus (`packages/next/src/event-bus.ts`) fans SDK events to subscribers. A dedicated WebSocket server (`packages/next/src/ws-server.ts`, default port 53636 — env override `PINPOINT_WS_PORT`) handles all widget ↔ dev bidirectional traffic: event subscriptions, follow-up `user_message`s, `ask_response` replies, and `interrupt`. The widget bundle's prelude inlines the WS URL at serve time.
+> - **Phase E (done, bi-directional).** The widget composer iframe swaps into a streaming pane on Submit and renders text + tool chips + final cost/turns inline. Persistent follow-up input lets you send additional turns over WS (resumes the prior session). `ask_user` events render as inline forms with optional one-click options; submitting POSTs an `ask_response` back over WS and the agent continues.
+> - **Phase F (done).** `ask_user` custom SDK tool (`packages/next/src/ask-user.ts`) registered on every spawn. Per-process pending-asks map with 10-min TTL. System prompt instructs the agent to prefer asking over guessing.
 > - **V2 default in Next.** `spawnAgent` defaults to `'inline'` so the streaming-into-widget flow is on out of the box. Worktree mode is opt-in (`spawnAgent: 'worktree'`); `'off'` / `false` disables per-submit spawn entirely.
 > - **Not yet shipped (Phases C/D/F/G/H/I/J).** SQLite layer, host-script + iframe-per-widget architecture, `ask_user` clarification, HMR re-anchoring, Land/Discard worktree lifecycle, post-edit verification, per-turn process spawn.
 
@@ -75,6 +76,7 @@ If pinpoint moves, every consumer's `.mcp.json` (absolute path to `@pinpoint/mcp
 | `PINPOINT_SPAWN_AGENT` | `worktree` / `inline` / unset — agent spawn mode for the Next adapter | Next route handler |
 | `PINPOINT_AGENT_PERMISSION_MODE` | `permissionMode` passed to the Agent SDK (default `acceptEdits`) | Next + Vite agent spawners |
 | `ANTHROPIC_API_KEY` | Optional API key. If set, the SDK bills the API account instead of the OAuth subscription. Unset to use `claude login` credentials. | Next + Vite agent spawners |
+| `PINPOINT_WS_PORT` | Port the dev-side WebSocket server binds (Next only). Widget connects to this port. | `53636` |
 | `PINPOINT_EDITOR` | Editor command for the "click file:line:col to open" feature | Route handler `/open` endpoint |
 | `EDITOR` / `VISUAL` | Fallback for `PINPOINT_EDITOR` (standard *nix conventions) | Route handler `/open` endpoint |
 

@@ -11,7 +11,7 @@ export default function Page() {
         margin: '0 auto',
       }}
     >
-      <h1>Pinpoint Next demo</h1>
+      <h1 style={{ fontSize: '2.75rem' }}>Pinpoint Next demo</h1>
       <p>
         Open the 💬 button in the bottom-right, pick an element, and leave a comment.
       </p>
@@ -22,9 +22,10 @@ export default function Page() {
         counters and the footer.
       </p>
       <section style={{ marginTop: 24 }}>
-        <Counter label="Apples" />
-        <Counter label="Bananas" />
-        <Counter label="Oranges" />
+        <Counter label="Apples" description="Crisp and sweet — great for snacking." />
+        <Counter label="Bananas" description="Soft, potassium-rich, perfect for smoothies." />
+        <Counter label="Oranges" description="Juicy citrus packed with vitamin C." />
+        <Counter label="Grapes" description="Bite-sized bursts of sweetness." />
       </section>
       <Footer />
     </main>

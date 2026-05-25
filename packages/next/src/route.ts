@@ -3,8 +3,28 @@ import { nanoid } from 'nanoid';
 import { WIDGET_SOURCE } from './__generated__/widget';
 import { resolveAgentMode, spawnAgent } from './agent';
 import { openInEditor } from './editor';
-import { getBus } from './event-bus';
 import { FeedbackInputSchema, ID_RE, PatchSchema, Storage } from './storage';
+import { startWsServer } from './ws-server';
+
+// Boot the WebSocket server in this module — same process as spawnAgent and
+// the event bus. Starting it from next.config.ts would put it in a different
+// process, so the bus that the route handler publishes to would not be the
+// bus that WS subscribers read from.
+//
+// Singleton-guarded inside startWsServer so HMR / multiple route imports
+// don't try to bind the same port twice.
+if (
+  process.env.NODE_ENV !== 'production' &&
+  resolveAgentMode(process.env) !== false
+) {
+  if (!process.env.PINPOINT_WS_PORT) process.env.PINPOINT_WS_PORT = '53636';
+  try {
+    startWsServer();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[pinpoint] failed to start WebSocket server:', err);
+  }
+}
 
 // These exports exist here for type clarity, but consumers MUST re-declare them
 // inline in their own route file — Next 16 statically parses route-segment
@@ -35,12 +55,12 @@ async function readSlug(ctx: RouteCtx): Promise<string[]> {
   return p.slug ?? [];
 }
 
-export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
+export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
   const slug = await readSlug(ctx);
 
   // /__pinpoint/widget.js
   if (slug.length === 1 && slug[0] === 'widget.js') {
-    return new Response(WIDGET_SOURCE, {
+    return new Response(buildWidgetBundle(), {
       status: 200,
       headers: {
         'Content-Type': 'application/javascript; charset=utf-8',
@@ -79,88 +99,7 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
     return json(200, { ...rec, screenshot });
   }
 
-  // /__pinpoint/feedback/:id/stream — Server-Sent Events for live agent
-  // output. The widget opens this on Submit (when agentSpawned=true) and
-  // renders text + tool-use chips as they arrive. The bus replays its
-  // buffer so a late or reconnecting client still gets the transcript so
-  // far, then closes the stream when the agent finishes.
-  if (slug.length === 3 && slug[0] === 'feedback' && slug[2] === 'stream') {
-    const id = slug[1] ?? '';
-    if (!ID_RE.test(id)) return json(400, { error: 'invalid id' });
-    return streamFeedback(id, req.signal);
-  }
-
   return json(404, { error: 'not found' });
-}
-
-function streamFeedback(id: string, signal: AbortSignal): Response {
-  const bus = getBus(id);
-  const encoder = new TextEncoder();
-
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      if (!bus) {
-        // Nothing in flight — either the agent never ran (spawn off) or it
-        // finished and its bus was evicted. Send a single done event so
-        // the client closes cleanly instead of hanging.
-        controller.enqueue(encoder.encode(`event: done\ndata: {}\n\n`));
-        controller.close();
-        return;
-      }
-
-      const heartbeat = setInterval(() => {
-        try {
-          controller.enqueue(encoder.encode(`: ping\n\n`));
-        } catch {
-          // Controller already closed.
-        }
-      }, 15_000);
-
-      const unsub = bus.subscribe({
-        onEvent(event) {
-          try {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-          } catch {
-            // Client disconnected mid-write; cleanup happens via abort.
-          }
-        },
-        onClose() {
-          try {
-            controller.enqueue(encoder.encode(`event: done\ndata: {}\n\n`));
-            controller.close();
-          } catch {
-            // Already closed.
-          }
-          clearInterval(heartbeat);
-        },
-      });
-
-      signal.addEventListener(
-        'abort',
-        () => {
-          unsub();
-          clearInterval(heartbeat);
-          try {
-            controller.close();
-          } catch {
-            // Already closed.
-          }
-        },
-        { once: true },
-      );
-    },
-  });
-
-  return new Response(stream, {
-    status: 200,
-    headers: {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-store, no-transform',
-      Connection: 'keep-alive',
-      // Disable Nginx/buffer proxies. Not relevant in dev but cheap to set.
-      'X-Accel-Buffering': 'no',
-    },
-  });
 }
 
 export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
@@ -233,6 +172,31 @@ export async function PATCH(req: Request, ctx: RouteCtx): Promise<Response> {
   const rec = await getStorage().patch(id, parsed.data);
   if (!rec) return json(404, { error: 'not found' });
   return json(200, rec);
+}
+
+/**
+ * Build the widget IIFE plus a small prelude that hands the widget the
+ * dynamic config it needs at runtime (currently just the WebSocket URL).
+ *
+ * The widget reads `window.__pinpointConfig` on mount. If unset, it falls
+ * back to a default port — but that fallback only succeeds when running
+ * against the same machine on the standard port, so we always inject.
+ */
+function buildWidgetBundle(): string {
+  const wsPort = process.env.PINPOINT_WS_PORT;
+  const config = wsPort
+    ? { wsUrl: `ws://${defaultWsHost()}:${wsPort}/__pinpoint/ws` }
+    : { wsUrl: null };
+  const prelude = `;(function(){try{window.__pinpointConfig=${JSON.stringify(config)};}catch(e){}})();\n`;
+  return prelude + WIDGET_SOURCE;
+}
+
+function defaultWsHost(): string {
+  // 127.0.0.1 is safer than `localhost` (avoids IPv6/IPv4 resolution
+  // mismatches that can cause silent connect failures on some setups).
+  // Consumers running pinpoint behind a tunnel/proxy can override the
+  // bundle by handling the route themselves; that's a v3 concern.
+  return '127.0.0.1';
 }
 
 async function readJsonBody(req: Request): Promise<unknown> {

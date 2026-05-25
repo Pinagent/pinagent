@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 
-export function Counter({ label }: { label: string }) {
+export function Counter({ label, description }: { label: string; description?: string }) {
   const [count, setCount] = useState(0);
   const [hovered, setHovered] = useState(false);
   return (
@@ -20,7 +20,12 @@ export function Counter({ label }: { label: string }) {
         transition: 'background 120ms ease, border-color 120ms ease',
       }}
     >
-      <span style={{ fontWeight: 700 }}>{label}</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ fontWeight: 600 }}>{label}</span>
+        {description && (
+          <span style={{ color: '#6b7280', fontSize: 13 }}>{description}</span>
+        )}
+      </div>
       <button
         type="button"
         onClick={() => setCount((c) => c + 1)}

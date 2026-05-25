@@ -38,6 +38,19 @@ export type AgentEvent =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; name: string; summary: string }
   | { type: 'tool_result'; ok: boolean }
+  | {
+      /**
+       * Agent paused on an `ask_user` tool call. The widget renders a form
+       * for the user to answer; the answer comes back over WS as an
+       * `ask_response { askId, answer }`. The tool's Promise resolves and
+       * the agent continues. `askId` is the per-process correlation id.
+       */
+      type: 'ask_user';
+      askId: string;
+      question: string;
+      context?: string;
+      options?: string[];
+    }
   | { type: 'error'; message: string }
   | {
       type: 'result';

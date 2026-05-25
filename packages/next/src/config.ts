@@ -76,6 +76,20 @@ export default function pinpoint(
   config: NextConfig = {},
   options: PinpointOptions = {},
 ): NextConfig {
+  // Short-circuit in production: return the user's config object unchanged
+  // so neither the webpack wrapper, the rewrites wrapper, nor any turbopack
+  // rule appears on the returned config. Anything downstream (Sentry's
+  // withSentryConfig, Vercel's build output tracing) sees exactly what the
+  // user wrote.
+  //
+  // The package.json `exports` map also resolves this module to a noop in
+  // production. Either path alone is sufficient; both together guarantee
+  // pinpoint cannot perturb prod builds even if a bundler ignores
+  // condition-based resolution.
+  if (process.env.NODE_ENV === 'production') {
+    return config;
+  }
+
   const userWebpack = config.webpack;
   const userRewrites = config.rewrites;
   const isDev = process.env.NODE_ENV !== 'production';
@@ -95,6 +109,17 @@ export default function pinpoint(
           ? 'off'
           : options.spawnAgent;
     process.env.PINPOINT_SPAWN_AGENT = effective;
+
+    // Pick a WS port at config-load time and propagate via env var. The
+    // actual `ws.WebSocketServer` is started by the route module (see
+    // `route.ts`), NOT here — Next 16 runs `next.config.ts` and route
+    // handlers in separate processes, so a server started here would
+    // never see the event bus that the route's spawnAgent publishes to.
+    // Keeping the server in the route module keeps WS, bus, and agent
+    // co-located in the same process.
+    if (effective !== 'off' && !process.env.PINPOINT_WS_PORT) {
+      process.env.PINPOINT_WS_PORT = '53636';
+    }
   }
 
   const next: NextConfig = {
