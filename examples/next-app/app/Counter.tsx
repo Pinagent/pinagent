@@ -30,8 +30,8 @@ export function Counter({ label, description }: { label: string; description?: s
         type="button"
         onClick={() => setCount((c) => c + 1)}
         style={{
-          background: '#4f46e5',
-          color: '#fff',
+          background: '#4ade80',
+          color: '#020617',
           border: 0,
           padding: '6px 12px',
           borderRadius: 6,

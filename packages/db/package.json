@@ -1,0 +1,36 @@
+{
+  "name": "@pinpoint/db",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Shared Drizzle schema for Pinpoint — used by the server (better-sqlite3) and the browser (sqlite-wasm) so they stay in lockstep.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "import": "./dist/schema.js",
+      "require": "./dist/schema.cjs"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "drizzle-orm": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "drizzle-orm": "^0.38.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3"
+  }
+}

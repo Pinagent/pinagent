@@ -12,6 +12,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@pinpoint/db": "workspace:*",
+    "@sqlite.org/sqlite-wasm": "^3.50.0-build1",
+    "drizzle-orm": "^0.38.0",
     "html-to-image": "^1.11.13"
   },
   "devDependencies": {

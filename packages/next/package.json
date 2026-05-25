@@ -43,13 +43,16 @@
     "./loader": "./dist/loader.cjs"
   },
   "files": [
-    "dist"
+    "dist",
+    "drizzle"
   ],
   "scripts": {
     "prebuild": "node scripts/embed-widget.mjs",
     "build": "tsup",
     "dev": "tsup --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "drizzle:gen": "drizzle-kit generate",
+    "drizzle:check": "drizzle-kit check"
   },
   "peerDependencies": {
     "next": ">=14",
@@ -60,6 +63,10 @@
     "@babel/parser": "^7.26.2",
     "@babel/traverse": "^7.26.4",
     "@babel/types": "^7.26.3",
+    "@pinpoint/db": "workspace:*",
+    "@sqlite.org/sqlite-wasm": "^3.50.0-build1",
+    "better-sqlite3": "^11.8.1",
+    "drizzle-orm": "^0.38.0",
     "nanoid": "^5.0.9",
     "ws": "^8.21.0",
     "zod": "^3.23.8"
@@ -67,9 +74,11 @@
   "devDependencies": {
     "@pinpoint/widget": "workspace:*",
     "@types/babel__traverse": "^7.20.6",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.1",
     "@types/react": "^18.3.12",
     "@types/ws": "^8.18.1",
+    "drizzle-kit": "^0.31.10",
     "next": "^15.0.3",
     "react": "^18.3.1",
     "tsup": "^8.3.5",

@@ -32,9 +32,11 @@ export function Footer() {
         </nav>
       </div>
       <p style={{ margin: 0, maxWidth: 560 }}>
-        A smoke-test playground for Pinpoint — the click-to-comment tool that turns in-browser
-        feedback into agent-actionable tasks tied to the exact file and line of the element you
-        selected.
+        A demo for Pinpoint — click any element on the page, leave a comment, and a
+        coding agent picks it up with the exact file, line, and a screenshot of what
+        you selected. The agent edits the source directly, so feedback turns into a
+        diff instead of a ticket. Built to show the click-to-fix loop end to end in a
+        real Next.js app.
       </p>
       <div style={{ fontSize: 12, color: '#9ca3af' }}>
         © {new Date().getFullYear()} Pinpoint. Built for demos and smoke tests.

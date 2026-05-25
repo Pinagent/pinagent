@@ -19,6 +19,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               borderRight: '1px solid #d1d5db',
               padding: '24px 20px',
               boxSizing: 'border-box',
+              position: 'sticky',
+              top: 0,
+              alignSelf: 'flex-start',
+              height: '100vh',
+              overflowY: 'auto',
             }}
           >
             <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: 20 }}>
@@ -26,7 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </div>
             <SideNav />
           </aside>
-          <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+          <div style={{ flex: 1, minWidth: 0, background: '#ffffff' }}>{children}</div>
         </div>
         <Pinpoint />
       </body>

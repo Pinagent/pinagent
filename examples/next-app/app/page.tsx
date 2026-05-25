@@ -30,16 +30,13 @@ export default function Page() {
           background: '#f9fafb',
         }}
       >
-        <Counter label="Bananas" description="Soft, potassium-rich, perfect for smoothies." />
-        <Counter label="Oranges" description="Juicy citrus packed with vitamin C." />
-        <Counter label="Grapes" description="Bite-sized bursts of sweetness." />
         <Counter label="Apples" description="Crisp and sweet, an everyday classic." />
-        <Counter label="Strawberries" description="Bright, fragrant, and bursting with flavor." />
-        <Counter label="Blueberries" description="Tiny antioxidant powerhouses." />
-        <Counter label="Mangoes" description="Tropical, sweet, and golden." />
-        <Counter label="Pineapples" description="Tangy and refreshing with a tropical bite." />
-        <Counter label="Watermelons" description="Hydrating summer staple, juicy and cool." />
-        <Counter label="Peaches" description="Fuzzy, fragrant, and irresistibly juicy." />
+        <Counter label="Bananas" description="Soft, sweet, and full of potassium." />
+        <Counter label="Oranges" description="Juicy citrus packed with vitamin C." />
+        <Counter label="Strawberries" description="Bright red berries bursting with flavor." />
+        <Counter label="Blueberries" description="Tiny antioxidant-rich gems." />
+        <Counter label="Grapes" description="Bite-sized clusters of refreshing sweetness." />
+        <Counter label="Pineapples" description="Tropical, tangy, and unmistakable." />
       </section>
       <Footer />
     </main>

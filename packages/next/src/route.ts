@@ -1,7 +1,12 @@
 import { Buffer } from 'node:buffer';
+import { readFile, readdir } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { nanoid } from 'nanoid';
 import { WIDGET_SOURCE } from './__generated__/widget';
 import { resolveAgentMode, spawnAgent } from './agent';
+import { DB_WORKER_SOURCE } from './db-worker-source';
 import { openInEditor } from './editor';
 import { FeedbackInputSchema, ID_RE, PatchSchema, Storage } from './storage';
 import { startWsServer } from './ws-server';
@@ -61,6 +66,32 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
   // /__pinpoint/widget.js
   if (slug.length === 1 && slug[0] === 'widget.js') {
     return new Response(buildWidgetBundle(), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+
+  // /__pinpoint/sqlite-wasm/<file> — proxies the sqlite-wasm jswasm
+  // directory so the browser can spawn the Worker + load the WASM. We
+  // serve directly out of node_modules rather than copying into dist
+  // because the files are big (~1.5MB total) and only used in dev.
+  if (slug.length === 2 && slug[0] === 'sqlite-wasm') {
+    return serveSqliteWasm(slug[1] ?? '');
+  }
+
+  // /__pinpoint/db-migrations — concatenated migration SQL for the
+  // browser cache. Same DDL the server runs on .pinpoint/db.sqlite.
+  if (slug.length === 1 && slug[0] === 'db-migrations') {
+    return serveDbMigrations();
+  }
+
+  // /__pinpoint/db-worker.js — our own sqlite-wasm worker. Installs
+  // the OPFS SAH Pool VFS so persistence works without COOP/COEP.
+  if (slug.length === 1 && slug[0] === 'db-worker.js') {
+    return new Response(DB_WORKER_SOURCE, {
       status: 200,
       headers: {
         'Content-Type': 'application/javascript; charset=utf-8',
@@ -189,6 +220,89 @@ function buildWidgetBundle(): string {
     : { wsUrl: null };
   const prelude = `;(function(){try{window.__pinpointConfig=${JSON.stringify(config)};}catch(e){}})();\n`;
   return prelude + WIDGET_SOURCE;
+}
+
+/**
+ * Whitelist of sqlite-wasm files we expose. Locked-down so a path
+ * traversal can't read arbitrary files out of node_modules.
+ */
+const SQLITE_WASM_FILES: Record<string, string> = {
+  'sqlite3-bundler-friendly.mjs': 'application/javascript; charset=utf-8',
+  'sqlite3-worker1-bundler-friendly.mjs': 'application/javascript; charset=utf-8',
+  'sqlite3-opfs-async-proxy.js': 'application/javascript; charset=utf-8',
+  'sqlite3.mjs': 'application/javascript; charset=utf-8',
+  'sqlite3.js': 'application/javascript; charset=utf-8',
+  'sqlite3.wasm': 'application/wasm',
+};
+
+let sqliteWasmDirCache: string | null = null;
+function sqliteWasmDir(): string {
+  if (sqliteWasmDirCache) return sqliteWasmDirCache;
+  // createRequire so we resolve from this module's own location,
+  // independent of cwd, and let pnpm's symlinks find the real path.
+  const req = createRequire(import.meta.url ?? `file://${process.cwd()}/__pinpoint__.js`);
+  const pkgJson = req.resolve('@sqlite.org/sqlite-wasm/package.json');
+  sqliteWasmDirCache = join(dirname(pkgJson), 'sqlite-wasm', 'jswasm');
+  return sqliteWasmDirCache;
+}
+
+async function serveSqliteWasm(file: string): Promise<Response> {
+  const mime = SQLITE_WASM_FILES[file];
+  if (!mime) return new Response(null, { status: 404 });
+  try {
+    const bytes = await readFile(join(sqliteWasmDir(), file));
+    // The bundler-friendly worker references its sibling files via
+    // import.meta.url, so cross-origin isolation isn't strictly needed
+    // — but COOP/COEP helps if a user later switches to the basic
+    // OpfsDb VFS. Cheap to set, so we set it.
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        'Content-Type': mime,
+        'Cache-Control': 'no-store',
+        // Allow this Worker to be loaded as a module from the page.
+        'Cross-Origin-Resource-Policy': 'same-origin',
+      },
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error(`[pinpoint] failed to serve sqlite-wasm/${file}:`, e);
+    return new Response(null, { status: 500 });
+  }
+}
+
+async function serveDbMigrations(): Promise<Response> {
+  // Migrations ship inside @pinpoint/next at `packages/next/drizzle/`.
+  // At runtime we're at `dist/route.{js,cjs}`; walk up one directory.
+  // We use fileURLToPath + path.join (instead of `new URL(literal, ...)`)
+  // because Turbopack treats the latter as a bundleable asset reference
+  // and tries to resolve it at build time.
+  const moduleUrl: string | undefined = import.meta.url;
+  const dir = moduleUrl
+    ? join(dirname(fileURLToPath(moduleUrl)), '..', 'drizzle')
+    : join(process.cwd(), 'drizzle');
+  try {
+    const entries = (await readdir(dir))
+      .filter((n) => n.endsWith('.sql'))
+      .sort();
+    const parts = await Promise.all(
+      entries.map((name) => readFile(join(dir, name), 'utf8')),
+    );
+    return new Response(JSON.stringify({ migrations: parts }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[pinpoint] failed to serve db-migrations:', e);
+    return new Response(JSON.stringify({ migrations: [] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    });
+  }
 }
 
 function defaultWsHost(): string {

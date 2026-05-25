@@ -1,3 +1,16 @@
+import { flushBrowserDb, getBrowserDb, initBrowserDb } from './db/client';
+import {
+  type PendingRow,
+  getConversationMessages,
+  listPendingForCurrentPage,
+} from './db/reads';
+import {
+  deleteConversation,
+  markConversationResolved,
+  recordConversationStart,
+  recordEvent,
+  recordUserMessage,
+} from './db/writes';
 import { capturePageScreenshot } from './screenshot';
 import { findLoc, shortSelector } from './selector';
 import { STYLES } from './styles';
@@ -49,6 +62,14 @@ interface Composer {
    */
   userOffsetX: number;
   userOffsetY: number;
+  /**
+   * Current agent turn number. Bumps on initial submit (0 → 1) and on
+   * every user-typed follow-up before the WS send. All events that
+   * arrive after a bump until the next bump get stamped with the
+   * current turn, which is what the browser DB writes use to group
+   * the transcript.
+   */
+  turn: number;
   agentState: AgentState;
   expanded: boolean;
   close(): void;
@@ -307,6 +328,40 @@ class WidgetWsClient {
 }
 
 export function mount(): void {
+  // Best-effort flush of outstanding worker writes on navigation.
+  // Browsers don't await async work in these handlers, so guarantees
+  // are weak — but the postMessages already in flight get a brief
+  // window to land in OPFS before the worker is terminated. Pagehide
+  // is more reliable than beforeunload for bfcache-restored pages,
+  // so we register both.
+  function flushOnUnload() {
+    void flushBrowserDb();
+  }
+  window.addEventListener('beforeunload', flushOnUnload);
+  window.addEventListener('pagehide', flushOnUnload);
+
+  // Fire-and-forget OPFS-in-Worker DB init. Once ready, walk the
+  // cache for any conversations that were still `pending` when the
+  // page last unloaded and restore each as a minimized bubble.
+  void initBrowserDb()
+    .then(async (db) => {
+      // eslint-disable-next-line no-console
+      console.log('[pinpoint:db] browser cache ready');
+      try {
+        const pending = await listPendingForCurrentPage(db, window.location.href);
+        for (const row of pending) {
+          restorePending(row);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[pinpoint:db] restore scan failed:', err);
+      }
+    })
+    .catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[pinpoint:db] init failed (cache disabled):', err);
+    });
+
   // Document-level <style> tag for elements that live in document.body
   // (composer iframes, bubbles, picker cursor). The shadow root holds
   // only the FAB / hint / outline — anything that needs to scroll with
@@ -499,6 +554,49 @@ export function mount(): void {
     expandedComposer = composer;
   }
 
+  /**
+   * Restoration entry — pull a pending conversation from the cache
+   * back into the UI as a minimized bubble. If the target element
+   * can't be located (DOM changed since the conversation was
+   * created), we skip it. The user can still find the agent run on
+   * the server via the markdown log; we just don't surface a bubble
+   * with no anchor.
+   */
+  function restorePending(row: PendingRow): void {
+    const sel = row.anchor?.selector;
+    if (!sel) return;
+    let target: Element | null = null;
+    try {
+      target = document.querySelector(sel);
+    } catch {
+      // Invalid selector (could happen if the page's element naming
+      // scheme changed). Skip silently.
+      return;
+    }
+    if (!target) {
+      // eslint-disable-next-line no-console
+      console.log(`[pinpoint] anchor lost for ${row.conversation.id} (selector: ${sel})`);
+      return;
+    }
+
+    // Avoid double-restoring if the user opened a fresh composer
+    // pointing at this same conversation before init finished.
+    for (const c of composers) {
+      if (c.feedbackId === row.conversation.id) return;
+    }
+
+    const click = {
+      x: row.anchor?.clickX ?? 0,
+      y: row.anchor?.clickY ?? 0,
+    };
+    const composer = createComposer(target, click);
+    // Setting feedbackId BEFORE the iframe's async load handler fires
+    // is what flips it into restored mode (see wireComposerIframe).
+    composer.feedbackId = row.conversation.id;
+    composer.minimize();
+    composers.add(composer);
+  }
+
   function createComposer(target: Element, click: { x: number; y: number }): Composer {
     const loc = findLoc(target);
     const selector = shortSelector(target);
@@ -640,10 +738,21 @@ export function mount(): void {
       dragHandle,
       userOffsetX: 0,
       userOffsetY: 0,
+      turn: 0,
       agentState: 'pending',
       expanded: true,
       close() {
-        if (composer.feedbackId) wsClient.unsubscribe(composer.feedbackId);
+        // User-initiated dismissal — drop from cache so it doesn't
+        // come back on the next reload. Markers (status='fixed') would
+        // also suppress restoration, but the user explicitly said
+        // "go away" so we don't keep their transcript around either.
+        if (composer.feedbackId) {
+          wsClient.unsubscribe(composer.feedbackId);
+          const db = getBrowserDb();
+          if (db) {
+            void deleteConversation(db, composer.feedbackId).catch(() => {});
+          }
+        }
         if (rafHandle != null) cancelAnimationFrame(rafHandle);
         iframe.remove();
         bubble.remove();
@@ -793,20 +902,6 @@ export function mount(): void {
         });
       }
 
-      setTimeout(() => ta.focus(), 0);
-
-      ta.addEventListener('input', () => {
-        submit.disabled = ta.value.trim().length === 0;
-      });
-      ta.addEventListener('keydown', (e) => {
-        // Enter submits; Shift+Enter inserts a newline (standard chat
-        // UX). Submit button's existing click handler does the work.
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          if (!submit.disabled) submit.click();
-        }
-      });
-
       iwin.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
           e.preventDefault();
@@ -830,6 +925,66 @@ export function mount(): void {
           e.preventDefault();
           if (state.mode === 'picking') exitPicking();
           else enterPicking();
+        }
+      });
+
+      // Restored composer: fresh page load found a pending conversation
+      // in the DB cache. Skip the composer-pane plumbing (textarea,
+      // submit, cancel) and jump straight to the stream pane, replaying
+      // the historical transcript from cache before attaching live WS.
+      if (c.feedbackId) {
+        composerPane.hidden = true;
+        streamPane.hidden = false;
+        if (c.expanded) iframe.style.height = `${STREAM_H}px`;
+        void (async () => {
+          const db = getBrowserDb();
+          let replayed: ReplayMessage[] = [];
+          if (db) {
+            try {
+              const msgs = await getConversationMessages(db, c.feedbackId as string);
+              // eslint-disable-next-line no-console
+              console.log(
+                `[pinpoint:db] replay ${c.feedbackId}: ${msgs.length} messages`,
+                msgs.length > 0 ? { first: msgs[0], last: msgs[msgs.length - 1] } : null,
+              );
+              replayed = msgs.map((m) => ({
+                turn: m.turn,
+                role: m.role,
+                content: m.content,
+              }));
+            } catch (err) {
+              // eslint-disable-next-line no-console
+              console.warn('[pinpoint:db] replay fetch failed:', err);
+            }
+          }
+          attachStreamHandler(
+            wsClient,
+            idoc,
+            c,
+            setAgentState2,
+            streamHeader,
+            streamLog,
+            streamFooter,
+            dismissBtn,
+            stopBtn,
+            followInput,
+            followSend,
+            replayed,
+          );
+        })();
+        return;
+      }
+
+      // Fresh composer: wire the composer-pane (textarea + submit/cancel).
+      setTimeout(() => ta.focus(), 0);
+
+      ta.addEventListener('input', () => {
+        submit.disabled = ta.value.trim().length === 0;
+      });
+      ta.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          if (!submit.disabled) submit.click();
         }
       });
 
@@ -870,12 +1025,41 @@ export function mount(): void {
 
           if (result?.id && result.agentSpawned) {
             c.feedbackId = result.id;
+            // First turn starts at 1. All events from this run get
+            // stamped with c.turn until the next user follow-up bumps it.
+            c.turn = 1;
             composerPane.hidden = true;
             streamPane.hidden = false;
             streamHeader.textContent = '✓ Submitted — agent starting…';
             streamFooter.textContent = '';
             if (c.expanded) iframe.style.height = `${STREAM_H}px`;
             setAgentState2('running');
+
+            // Browser DB write-through. Skips silently if the cache
+            // hasn't initialised yet — the conversation is still safe
+            // on the server, the cache just won't have it.
+            const db = getBrowserDb();
+            if (db) {
+              void recordConversationStart(db, {
+                feedbackId: result.id,
+                comment: payload.comment,
+                anchor: {
+                  url: payload.url,
+                  file: loc2?.file ?? null,
+                  line: loc2?.line ?? null,
+                  col: loc2?.col ?? null,
+                  selector: selector2,
+                  clickX: click.x,
+                  clickY: click.y,
+                  viewportW: payload.viewport.w,
+                  viewportH: payload.viewport.h,
+                },
+              }).catch((err) =>
+                // eslint-disable-next-line no-console
+                console.warn('[pinpoint:db] recordConversationStart failed:', err),
+              );
+            }
+
             attachStreamHandler(
               wsClient,
               idoc,
@@ -1018,6 +1202,12 @@ function createWsClient(): WidgetWsClient {
   return new WidgetWsClient(url);
 }
 
+interface ReplayMessage {
+  turn: number;
+  role: string;
+  content: unknown;
+}
+
 function attachStreamHandler(
   client: WidgetWsClient,
   idoc: Document,
@@ -1030,6 +1220,13 @@ function attachStreamHandler(
   stopBtn: HTMLButtonElement,
   followInput: HTMLTextAreaElement,
   followSend: HTMLButtonElement,
+  /**
+   * Historical messages to replay before going live. Restoration on
+   * reload uses this to repopulate the stream pane from the browser
+   * cache. Replayed events are NOT re-persisted (they're already in
+   * the DB).
+   */
+  replayed?: ReplayMessage[],
 ): void {
   if (!composer.feedbackId) return;
   const feedbackId = composer.feedbackId;
@@ -1155,6 +1352,16 @@ function attachStreamHandler(
   followSend.addEventListener('click', () => {
     const content = followInput.value.trim();
     if (!content) return;
+    // Bump turn BEFORE recording — every event from this point until
+    // the next user message belongs to the new turn.
+    composer.turn += 1;
+    const db = getBrowserDb();
+    if (db) {
+      void recordUserMessage(db, feedbackId, composer.turn, content).catch((err) =>
+        // eslint-disable-next-line no-console
+        console.warn('[pinpoint:db] recordUserMessage failed:', err),
+      );
+    }
     client.sendUserMessage(feedbackId, content);
     append(el('div', 'user-msg', content));
     followInput.value = '';
@@ -1169,10 +1376,9 @@ function attachStreamHandler(
   });
   setFollowEnabled(false);
 
-  client.subscribe(feedbackId, {
-    onEvent(event) {
-      switch (event.type) {
-        case 'init': {
+  function processEvent(event: AgentEvent) {
+    switch (event.type) {
+      case 'init': {
           const session = String(event.sessionId ?? '').slice(0, 8);
           const model = String(event.model ?? 'claude');
           apiKeySource = typeof event.apiKeySource === 'string' ? event.apiKeySource : null;
@@ -1240,6 +1446,13 @@ function attachStreamHandler(
           lastToolChip = null;
           append(el('div', 'err-line', String(event.message ?? 'error')));
           setAgentState('error');
+          // Terminal: stop the conversation from restoring on next
+          // reload. The transcript stays in the cache (it's still
+          // useful for review) — only the status flips.
+          const db = getBrowserDb();
+          if (db) {
+            void markConversationResolved(db, feedbackId, 'wontfix').catch(() => {});
+          }
           break;
         }
         case 'result': {
@@ -1262,9 +1475,63 @@ function attachStreamHandler(
           setStopVisible(false);
           setAgentState(ok ? 'done' : 'error');
           if (!pendingAskId) setFollowEnabled(true);
+          // Terminal: flip status so restoration scans skip this.
+          const db = getBrowserDb();
+          if (db) {
+            void markConversationResolved(db, feedbackId, ok ? 'fixed' : 'wontfix').catch(
+              () => {},
+            );
+          }
           break;
         }
       }
+  }
+
+  // Replay history before going live. User-typed follow-ups stored
+  // with role='user' render as the same user-msg bubble the live
+  // path emits at send time.
+  if (replayed !== undefined) {
+    if (replayed.length > 0) {
+      for (const m of replayed) {
+        composer.turn = m.turn;
+        if (m.role === 'user') {
+          const content = m.content as { text?: string } | null;
+          const text = content?.text ?? '';
+          if (text) append(el('div', 'user-msg', text));
+        } else {
+          const event = m.content as AgentEvent;
+          if (event && typeof event === 'object' && typeof event.type === 'string') {
+            processEvent(event);
+          }
+        }
+      }
+    } else {
+      // Restored widget with no recorded transcript — typically a
+      // pre-writes orphan or a conversation whose agent finished
+      // before we tracked events. Whatever it was, the server has no
+      // live run for it. Bail out of the default "Working..." state
+      // so the user isn't stuck staring at a spinner.
+      turnRunning = false;
+      setStopVisible(false);
+      header.textContent = '(no transcript saved)';
+      setFollowEnabled(true);
+      setAgentState('done');
+    }
+  }
+
+  client.subscribe(feedbackId, {
+    onEvent(event) {
+      // Persist before rendering so a render error doesn't lose the
+      // event from the cache. Best-effort — DB unreachable doesn't
+      // break the live UI.
+      const db = getBrowserDb();
+      if (db) {
+        void recordEvent(db, feedbackId, composer.turn, event).catch((err) =>
+          // eslint-disable-next-line no-console
+          console.warn('[pinpoint:db] recordEvent failed:', err),
+        );
+      }
+      processEvent(event);
     },
     onDone() {
       turnRunning = false;
@@ -1273,6 +1540,19 @@ function attachStreamHandler(
     },
     onError(message) {
       append(el('div', 'err-line', message));
+      // Server-side "no in-flight run to interrupt" — the agent
+      // already ended (likely while we were offline, or before
+      // restore). Reset the UI so the user can dismiss without the
+      // Stop button staying stuck at "Stopping…".
+      if (message.includes('no in-flight run')) {
+        turnRunning = false;
+        setStopVisible(false);
+        stopBtn.disabled = false;
+        stopBtn.textContent = 'Stop';
+        header.textContent = '(agent run not active)';
+        setAgentState('done');
+        if (!pendingAskId) setFollowEnabled(true);
+      }
     },
   });
 }

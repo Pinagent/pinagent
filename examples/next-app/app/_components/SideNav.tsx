@@ -29,6 +29,7 @@ export function SideNav() {
               textDecoration: 'none',
               background: isActive ? '#f3f4f6' : 'transparent',
               fontWeight: isActive ? 500 : 400,
+              fontSize: 13,
             }}
           >
             {item.label}
