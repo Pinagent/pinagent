@@ -11,7 +11,7 @@ export default function Page() {
         margin: '0 auto',
       }}
     >
-      <h1 style={{ fontSize: '2.75rem' }}>Pinpoint Next demo</h1>
+      <h1 style={{ fontSize: '2.75rem' }}>Pinpoint · Next.js demo</h1>
       <p>
         Open the 💬 button in the bottom-right, pick an element, and leave a comment.
       </p>
@@ -21,11 +21,27 @@ export default function Page() {
         straight to the code that needs changing. Try it on anything here, including the
         counters and the footer.
       </p>
-      <section style={{ marginTop: 24 }}>
-        <Counter label="Apples" description="Crisp and sweet — great for snacking." />
+      <section
+        style={{
+          marginTop: 24,
+          maxHeight: 420,
+          overflowY: 'auto',
+          border: '1px solid #e5e7eb',
+          borderRadius: 8,
+          padding: 12,
+          background: '#f9fafb',
+        }}
+      >
         <Counter label="Bananas" description="Soft, potassium-rich, perfect for smoothies." />
         <Counter label="Oranges" description="Juicy citrus packed with vitamin C." />
         <Counter label="Grapes" description="Bite-sized bursts of sweetness." />
+        <Counter label="Apples" description="Crisp and sweet, an everyday classic." />
+        <Counter label="Strawberries" description="Bright, fragrant, and bursting with flavor." />
+        <Counter label="Blueberries" description="Tiny antioxidant powerhouses." />
+        <Counter label="Mangoes" description="Tropical, sweet, and golden." />
+        <Counter label="Pineapples" description="Tangy and refreshing with a tropical bite." />
+        <Counter label="Watermelons" description="Hydrating summer staple, juicy and cool." />
+        <Counter label="Peaches" description="Fuzzy, fragrant, and irresistibly juicy." />
       </section>
       <Footer />
     </main>

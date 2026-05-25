@@ -24,6 +24,9 @@ export const STYLES = `
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Sit above any composer iframe (those use 2147483646) so the FAB stays
+     clickable even when an open composer overlaps the bottom-right. */
+  z-index: 2147483647;
   transition: transform 120ms ease, background 120ms ease;
 }
 .fab:hover { transform: scale(1.06); background: #1f2937; }

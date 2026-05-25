@@ -220,6 +220,14 @@ export function mount(): void {
 
   const state: State = { mode: 'idle' };
   const wsClient = createWsClient();
+  // Resolved up front so per-iframe keydown listeners can share it with
+  // the host-doc handler at the bottom of mount().
+  const hotkeyChar = resolveHotkey();
+
+  // Per-picker-session record of which composer iframes we suspended.
+  // Restored verbatim on exitPicking so each composer keeps whatever
+  // pointer-events value openComposer originally set.
+  let suspendedIframes: Array<[HTMLIFrameElement, string]> = [];
 
   function enterPicking() {
     state.mode = 'picking';
@@ -229,6 +237,18 @@ export function mount(): void {
     hint.textContent = 'Click an element. Esc to cancel.';
     hint.dataset.pp = 'hint';
     root.appendChild(hint);
+
+    // Suspend pointer-events on any open composer iframes. Without this,
+    // clicks over an iframe are dispatched to the iframe's window and
+    // never reach our document-level picker listener — so the user
+    // couldn't pick anything underneath an open composer.
+    suspendedIframes = [];
+    for (const child of Array.from(root.children)) {
+      if (child instanceof HTMLIFrameElement) {
+        suspendedIframes.push([child, child.style.pointerEvents]);
+        child.style.pointerEvents = 'none';
+      }
+    }
 
     document.addEventListener('mousemove', onMove, true);
     document.addEventListener('click', onPick, true);
@@ -241,6 +261,10 @@ export function mount(): void {
     outline.style.display = 'none';
     const hint = root.querySelector('[data-pp="hint"]');
     if (hint) hint.remove();
+    for (const [iframe, prev] of suspendedIframes) {
+      iframe.style.pointerEvents = prev;
+    }
+    suspendedIframes = [];
     document.removeEventListener('mousemove', onMove, true);
     document.removeEventListener('click', onPick, true);
     document.removeEventListener('keydown', onKey, true);
@@ -278,10 +302,23 @@ export function mount(): void {
   }
 
   function elementFromEvent(e: MouseEvent): Element | null {
-    const prev = host.style.pointerEvents;
+    // pointer-events:none on the host alone isn't enough — shadow-root
+    // children (FAB, hint, open composer iframes) have their own
+    // pointer-events:auto and would be returned by elementFromPoint
+    // instead of the underlying page element. Walk + neutralize each
+    // overlay for the duration of the hit-test, then restore.
+    const prevHost = host.style.pointerEvents;
     host.style.pointerEvents = 'none';
+    const restore: Array<[HTMLElement, string]> = [];
+    for (const child of Array.from(root.children)) {
+      if (child instanceof HTMLElement) {
+        restore.push([child, child.style.pointerEvents]);
+        child.style.pointerEvents = 'none';
+      }
+    }
     const target = document.elementFromPoint(e.clientX, e.clientY);
-    host.style.pointerEvents = prev;
+    for (const [el, prev] of restore) el.style.pointerEvents = prev;
+    host.style.pointerEvents = prevHost;
     if (!target) return null;
     if (target === host) return null;
     return target;
@@ -414,6 +451,19 @@ export function mount(): void {
         if (e.key === 'Escape') {
           e.preventDefault();
           close();
+          return;
+        }
+        // Mirror the host-doc hotkey so the user can open a new picker
+        // without first defocusing this iframe. shouldIgnoreHotkey skips
+        // when the user is typing in an input/textarea inside the iframe.
+        if (
+          hotkeyChar &&
+          e.key.toLowerCase() === hotkeyChar &&
+          !shouldIgnoreHotkey(e)
+        ) {
+          e.preventDefault();
+          if (state.mode === 'picking') exitPicking();
+          else enterPicking();
         }
       });
 
@@ -513,14 +563,13 @@ export function mount(): void {
     else if (state.mode === 'idle') enterPicking();
   });
 
-  const hotkey = resolveHotkey();
-  if (hotkey) {
-    fab.title = `Pinpoint — press ${hotkey.toUpperCase()} or click to pick`;
+  if (hotkeyChar) {
+    fab.title = `Pinpoint — press ${hotkeyChar.toUpperCase()} or click to pick`;
     document.addEventListener(
       'keydown',
       (e) => {
         if (shouldIgnoreHotkey(e)) return;
-        if (e.key.toLowerCase() !== hotkey) return;
+        if (e.key.toLowerCase() !== hotkeyChar) return;
         e.preventDefault();
         if (state.mode === 'picking') exitPicking();
         else enterPicking();
