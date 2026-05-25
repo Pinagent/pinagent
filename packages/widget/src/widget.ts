@@ -116,6 +116,15 @@ export function mount(): void {
     const composer = document.createElement('div');
     composer.className = 'composer';
     composer.style.pointerEvents = 'auto';
+    // Promote to the browser's top layer via the Popover API. Top-layer
+    // elements render above any other DOM and — critically — are immune to
+    // focus traps applied by host-page modals (Radix Dialog, Headless UI,
+    // etc.). Without this, typing in the textarea fails when the user
+    // picked an element inside a modal: the modal's focusin handler keeps
+    // snapping focus back to itself.
+    if ('popover' in HTMLElement.prototype) {
+      composer.setAttribute('popover', 'manual');
+    }
 
     const r = target.getBoundingClientRect();
     const top = Math.min(window.innerHeight - 240, Math.max(8, r.bottom + 8));
@@ -148,6 +157,14 @@ export function mount(): void {
     composer.appendChild(row);
 
     root.appendChild(composer);
+    // Activate top-layer rendering. Must come after the element is in the DOM.
+    if ('showPopover' in composer && composer.getAttribute('popover')) {
+      try {
+        (composer as HTMLElement & { showPopover(): void }).showPopover();
+      } catch {
+        // Older browsers — element still renders normally, just not in top layer.
+      }
+    }
     setTimeout(() => ta.focus(), 0);
 
     ta.addEventListener('input', () => {
@@ -155,11 +172,22 @@ export function mount(): void {
     });
 
     function close() {
+      document.removeEventListener('keydown', onComposerKey, { capture: true });
       composer.remove();
       state.mode = 'idle';
       state.selected = null;
       outline.style.display = 'none';
     }
+
+    function onComposerKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      // Capture + stopPropagation so an outer modal (Radix Dialog, etc.)
+      // doesn't also close on the same Escape press.
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    }
+    document.addEventListener('keydown', onComposerKey, { capture: true });
 
     cancel.addEventListener('click', close);
 
@@ -210,4 +238,47 @@ export function mount(): void {
     if (state.mode === 'picking') exitPicking();
     else if (state.mode === 'idle') enterPicking();
   });
+
+  // Global hotkey. Default 'c'; override with `window.__pinpointHotkey = 'x'`,
+  // or disable with `window.__pinpointHotkey = false`.
+  const hotkey = resolveHotkey();
+  if (hotkey) {
+    fab.title = `Pinpoint — press ${hotkey.toUpperCase()} or click to pick`;
+    document.addEventListener(
+      'keydown',
+      (e) => {
+        if (shouldIgnoreHotkey(e)) return;
+        if (e.key.toLowerCase() !== hotkey) return;
+        // Don't toggle while composing — user is probably typing in our textarea.
+        if (state.mode === 'composing') return;
+        e.preventDefault();
+        if (state.mode === 'picking') exitPicking();
+        else enterPicking();
+      },
+      // Capture phase so we see the event even if the host page calls
+      // stopPropagation() on it. Trade-off: we may shadow a page shortcut
+      // that uses the same key — set window.__pinpointHotkey to override.
+      { capture: true },
+    );
+  }
+}
+
+function resolveHotkey(): string | null {
+  const w = window as unknown as { __pinpointHotkey?: string | false | null };
+  if (w.__pinpointHotkey === false || w.__pinpointHotkey === null) return null;
+  const k = w.__pinpointHotkey;
+  if (typeof k === 'string' && k.length === 1) return k.toLowerCase();
+  return 'c';
+}
+
+function shouldIgnoreHotkey(e: KeyboardEvent): boolean {
+  // Modifier combos belong to the page or the OS.
+  if (e.metaKey || e.ctrlKey || e.altKey) return true;
+  // The hotkey is a printable character — never intercept when typing.
+  const t = e.target as (Element & { isContentEditable?: boolean }) | null;
+  if (!t) return false;
+  if (t.isContentEditable) return true;
+  const tag = t.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  return false;
 }

@@ -63,7 +63,14 @@ export const STYLES = `
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* Override UA popover defaults so our inline top/left win. The UA sheet
+     for [popover] sets inset:0 + margin:auto which would center us. */
+  inset: auto;
+  margin: 0;
+  color: #111827;
+  overflow: visible;
 }
+.composer::backdrop { background: transparent; }
 .composer .meta {
   font-size: 11px;
   color: #6b7280;

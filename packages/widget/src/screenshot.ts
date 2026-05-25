@@ -1,11 +1,10 @@
-import { toPng } from 'html-to-image';
+import { toBlob } from 'html-to-image';
 
 const MAX_WIDTH = 1280;
 const TARGET_MAX_BYTES = 1_000_000; // ~1MB
 
-// 1x1 transparent PNG — used as:
-//  - imagePlaceholder for individual images we can't fetch (CSP / CORS / 404)
-//  - final fallback if the whole screenshot fails
+// Per-image placeholder when html-to-image can't fetch an image
+// (cross-origin, CSP, 404). The whole-capture fallback also uses this.
 const TRANSPARENT_PNG_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 const TRANSPARENT_PNG_BASE64 = TRANSPARENT_PNG_DATA_URL.split(',')[1] ?? '';
@@ -17,92 +16,99 @@ function isCrossOriginImage(node: HTMLElement): boolean {
   try {
     return new URL(src, window.location.href).origin !== window.location.origin;
   } catch {
-    return true; // can't parse → treat as foreign
+    return true;
   }
 }
 
-async function pngBlobFromDataUrl(dataUrl: string): Promise<Blob> {
-  const res = await fetch(dataUrl);
-  return res.blob();
-}
-
-async function downscale(dataUrl: string, targetWidth: number): Promise<string> {
-  const img = await loadImage(dataUrl);
-  const ratio = targetWidth / img.naturalWidth;
-  const canvas = document.createElement('canvas');
-  canvas.width = targetWidth;
-  canvas.height = Math.round(img.naturalHeight * ratio);
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return dataUrl;
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/png');
-}
-
-function loadImage(src: string): Promise<HTMLImageElement> {
+function canvasToBlob(canvas: HTMLCanvasElement, type = 'image/png'): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
+    canvas.toBlob((b) => {
+      if (b) resolve(b);
+      else reject(new Error('canvas.toBlob returned null'));
+    }, type);
   });
 }
 
-function stripDataPrefix(dataUrl: string): string {
-  const comma = dataUrl.indexOf(',');
-  return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buf = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  // Chunk to avoid "max call stack" on large arrays passed to fromCharCode.
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const slice = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, Array.from(slice));
+  }
+  return btoa(binary);
 }
 
-export async function capturePageScreenshot(filter?: (node: HTMLElement) => boolean): Promise<string> {
-  // Compose user filter with our defaults:
-  //  - exclude the pinpoint host (filter passed in)
-  //  - exclude cross-origin <img> nodes so html-to-image doesn't try to
-  //    inline them (CSP/CORS will block the fetch and the whole capture
-  //    fails). The image shows up as blank in the screenshot but the rest
-  //    of the page renders fine.
+async function downscaleBlob(bitmap: ImageBitmap, targetWidth: number): Promise<Blob> {
+  const ratio = targetWidth / bitmap.width;
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = Math.round(bitmap.height * ratio);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('no 2d context');
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return canvasToBlob(canvas, 'image/png');
+}
+
+export async function capturePageScreenshot(
+  filter?: (node: HTMLElement) => boolean,
+): Promise<string> {
+  // Compose user filter with our defaults — skip the pinpoint host (passed
+  // in) and any cross-origin <img> nodes so html-to-image doesn't try to
+  // inline them (CSP/CORS would fail the fetch).
   const composedFilter = (node: HTMLElement): boolean => {
     if (filter && !filter(node)) return false;
     if (isCrossOriginImage(node)) return false;
     return true;
   };
 
-  let dataUrl: string;
+  let blob: Blob | null;
   try {
-    dataUrl = await toPng(document.body, {
+    // toBlob (not toPng) returns a Blob directly — no data: URL, no fetch
+    // through CSP connect-src.
+    blob = await toBlob(document.body, {
       pixelRatio: 1,
       cacheBust: false,
       filter: composedFilter,
-      // Per-image fallback for anything else that fails to fetch.
       imagePlaceholder: TRANSPARENT_PNG_DATA_URL,
-      // Webfonts often live on third-party CDNs with no CORS / blocked by CSP.
-      // Skip them — the screenshot uses fallback fonts, but it still renders.
       skipFonts: true,
     });
   } catch (err) {
-    // Whole capture failed (some browsers throw on tainted canvas even when
-    // we filtered cross-origin images). Submit anyway with a placeholder so
-    // the comment + file:line still reach the agent.
     console.warn('[pinpoint] screenshot capture failed, submitting without image:', err);
     return TRANSPARENT_PNG_BASE64;
   }
+  if (!blob) {
+    console.warn('[pinpoint] screenshot capture returned no blob, submitting without image');
+    return TRANSPARENT_PNG_BASE64;
+  }
 
-  // Downscale if very wide.
+  // Downscale path uses createImageBitmap + canvas.toBlob — both
+  // operate on already-loaded data, no network involvement.
   try {
-    const img = await loadImage(dataUrl);
-    if (img.naturalWidth > MAX_WIDTH) {
-      dataUrl = await downscale(dataUrl, MAX_WIDTH);
+    let bitmap = await createImageBitmap(blob);
+
+    if (bitmap.width > MAX_WIDTH) {
+      const next = await downscaleBlob(bitmap, MAX_WIDTH);
+      bitmap.close?.();
+      blob = next;
+      bitmap = await createImageBitmap(blob);
     }
 
-    // If still very large, downscale more aggressively.
-    let blob = await pngBlobFromDataUrl(dataUrl);
-    let width = (await loadImage(dataUrl)).naturalWidth;
+    let width = bitmap.width;
     while (blob.size > TARGET_MAX_BYTES && width > 480) {
       width = Math.round(width * 0.8);
-      dataUrl = await downscale(dataUrl, width);
-      blob = await pngBlobFromDataUrl(dataUrl);
+      const next = await downscaleBlob(bitmap, width);
+      bitmap.close?.();
+      blob = next;
+      bitmap = await createImageBitmap(blob);
     }
+    bitmap.close?.();
   } catch (err) {
     console.warn('[pinpoint] downscale step failed; using full-size capture:', err);
   }
 
-  return stripDataPrefix(dataUrl);
+  return blobToBase64(blob);
 }
