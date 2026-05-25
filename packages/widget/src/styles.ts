@@ -1,5 +1,11 @@
 export const STYLES = `
-:host { all: initial; }
+:host {
+  all: initial;
+  /* color-scheme is one of the few properties that pierces shadow DOM —
+     force light so the host page's dark scheme doesn't paint our form
+     controls (textarea, button) with dark browser defaults. */
+  color-scheme: light;
+}
 * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif; }
 
 .fab {
@@ -74,7 +80,10 @@ export const STYLES = `
   border-radius: 6px;
   outline: none;
   font-family: inherit;
+  background: #fff;
+  color: #111827;
 }
+.composer textarea::placeholder { color: #9ca3af; }
 .composer textarea:focus { border-color: #2563eb; }
 
 .row { display: flex; justify-content: flex-end; gap: 8px; }
