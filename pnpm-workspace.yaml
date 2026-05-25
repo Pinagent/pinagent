@@ -4,6 +4,8 @@ packages:
 allowBuilds:
   '@biomejs/biome': true
   esbuild: true
+  sharp: true
 onlyBuiltDependencies:
   - '@biomejs/biome'
   - esbuild
+  - sharp
