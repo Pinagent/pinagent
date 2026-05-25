@@ -1,5 +1,6 @@
 import { drizzle, type SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy';
 import * as schema from '@pinpoint/db/schema';
+import { type MigrationEntry, applyMigrations } from './migrations';
 import { pruneOldConversations } from './writes';
 
 /**
@@ -158,30 +159,20 @@ async function doInit(): Promise<BrowserDb> {
   // Fetch + apply migrations. Refetched from the dev server rather
   // than bundled so the schema can't drift between server and browser
   // — they read the exact same DDL files.
+  //
+  // Applied migrations are tracked in a `__drizzle_migrations` table
+  // (mirroring drizzle-kit's server-side convention) so we only run
+  // each migration once. Without this, ALTER TABLE ADD COLUMN
+  // re-runs would fail with "duplicate column name" — SQLite has no
+  // `IF NOT EXISTS` for that statement.
   try {
     const res = await fetch('/__pinpoint/db-migrations');
     if (res.ok) {
-      const body = (await res.json()) as { migrations: string[] };
-      for (const sql of body.migrations) {
-        // Splitting on the drizzle-kit `--> statement-breakpoint` keeps
-        // each CREATE TABLE in its own exec so a single bad statement
-        // doesn't tank everything silently.
-        const statements = sql
-          .split('--> statement-breakpoint')
-          .map((s) => s.trim())
-          .filter(Boolean);
-        for (const stmt of statements) {
-          try {
-            await call('exec', { sql: stmt });
-          } catch (e) {
-            // CREATE TABLE IF NOT EXISTS would be nice, but drizzle-kit
-            // emits bare CREATE TABLE. Tolerate "already exists" for
-            // re-runs (page reload with persistent OPFS).
-            const msg = e instanceof Error ? e.message : String(e);
-            if (!msg.includes('already exists')) throw e;
-          }
-        }
-      }
+      const body = (await res.json()) as { migrations: MigrationEntry[] };
+      await applyMigrations(
+        (type, args) => call(type, args as object),
+        body.migrations,
+      );
     }
   } catch (err) {
     // eslint-disable-next-line no-console

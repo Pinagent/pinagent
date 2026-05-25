@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             style={{
               width: 240,
               flexShrink: 0,
-              background: '#f5f5f5',
+              background: '#eff6ff',
               borderRight: '1px solid #d1d5db',
               padding: '24px 20px',
               boxSizing: 'border-box',
@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </div>
             <SideNav />
           </aside>
-          <div style={{ flex: 1, minWidth: 0, background: '#ffffff' }}>{children}</div>
+          <div style={{ flex: 1, minWidth: 0, background: '#f0f9ff' }}>{children}</div>
         </div>
         <div
           aria-label="Pinpoint logo"
@@ -43,20 +43,20 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             alignItems: 'center',
             gap: 8,
             padding: '6px 12px',
-            background: '#ffffff',
-            border: '1px solid #d1d5db',
+            background: '#111827',
+            border: '1px solid #374151',
             borderRadius: 999,
-            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.4)',
             fontWeight: 600,
             fontSize: '0.875rem',
-            color: '#111827',
+            color: '#f9fafb',
             zIndex: 1000,
           }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
               d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"
-              fill="#111827"
+              fill="#f9fafb"
             />
           </svg>
           Pinpoint

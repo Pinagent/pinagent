@@ -32,13 +32,7 @@ export default function Page() {
       >
         <CounterList
           items={[
-            { label: 'Apples', description: 'Crisp and sweet, an everyday classic.' },
-            { label: 'Bananas', description: 'Soft, sweet, and full of potassium.' },
-            { label: 'Oranges', description: 'Juicy citrus packed with vitamin C.' },
-            { label: 'Strawberries', description: 'Bright red berries bursting with flavor.' },
             { label: 'Blueberries', description: 'Tiny antioxidant-rich gems.' },
-            { label: 'Grapes', description: 'Bite-sized clusters of refreshing sweetness.' },
-            { label: 'Pineapples', description: 'Tropical, tangy, and unmistakable.' },
           ]}
         />
       </section>

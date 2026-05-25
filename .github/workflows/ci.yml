@@ -1,0 +1,78 @@
+name: CI
+
+# Run on every PR and on direct pushes to main. We don't run on tags
+# or other branches — those exist for release tooling, not validation.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-progress runs when a new commit lands on the same branch
+# (PRs only — keep main runs around for the audit log).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# Read-only checkout is all we need; explicit so a compromised dep
+# can't accidentally push to the repo.
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: typecheck · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # pnpm comes BEFORE Node so setup-node's `cache: 'pnpm'` can find
+      # the pnpm CLI. Version pinned to match packageManager in
+      # package.json — otherwise corepack/setup-node may resolve a
+      # different version than the developer uses locally.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # `--frozen-lockfile` fails the run if pnpm-lock.yaml is out of
+      # date with package.json — catches PRs that bump a dep but forget
+      # to commit the lockfile.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `pnpm -r typecheck` runs tsc --noEmit across every package in
+      # the workspace. The widget IIFE, the Next adapter, the MCP
+      # server, and the shared db schema all go through their own
+      # tsconfigs.
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # ~180 unit + integration tests via Vitest. better-sqlite3's
+      # native binding gets compiled at `pnpm install` time (allowed
+      # by pnpm-workspace.yaml's `onlyBuiltDependencies`); the WS
+      # server tests bind 127.0.0.1:53700 which is unused on Actions
+      # runners.
+      - name: Test
+        run: pnpm test
+
+      # Build last so a green test run still catches packaging
+      # regressions (tsup config, embed-widget script, exports map).
+      - name: Build
+        run: pnpm build
+
+      # Lint is not yet a gate — the repo currently has ~77 unrelated
+      # formatting/style errors. Surfaced as a soft check so we can
+      # see the count drift without blocking PRs.
+      - name: Lint (non-blocking)
+        if: always()
+        continue-on-error: true
+        run: pnpm lint

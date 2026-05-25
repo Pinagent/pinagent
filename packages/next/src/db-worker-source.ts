@@ -28,11 +28,24 @@
  *     { id, ok: false, error: string }               // any failure
  */
 export const DB_WORKER_SOURCE = `
-// Drop sqlite-wasm's noisy "Ignoring inability to install OPFS
-// sqlite3_vfs: Missing SharedArrayBuffer..." warning. That warning
-// is about the BASIC opfs VFS (which needs COOP/COEP); we
-// deliberately use the SAH Pool VFS instead, which has neither
-// requirement.
+// Filter sqlite-wasm's internal logging. Two streams of noise we
+// want to drop:
+//
+//  1. console.warn "Ignoring inability to install OPFS sqlite3_vfs:
+//     Missing SharedArrayBuffer..." — about the BASIC opfs VFS
+//     (needs COOP/COEP). We use the SAH Pool VFS instead, which
+//     doesn't, so this is expected and we route around it.
+//
+//  2. console.error "pinpoint: NoModificationAllowedError: Failed
+//     to execute 'createSyncAccessHandle'..." — fires when another
+//     tab (or a stale worker) is already holding the OPFS access
+//     handle on our DB file. Our caller handles it (we fall back to
+//     :memory: and log a clear "[pinpoint:sqlite-worker] backend:
+//     :memory:" line). The raw SQLite logger output is just noise.
+//
+// Both internal log lines from sqlite-wasm's OPFS VFS implementation
+// are prefixed with the VFS name we passed to installOpfsSAHPoolVfs
+// ('pinpoint'), so we filter by that prefix.
 {
   const origWarn = console.warn;
   console.warn = (...args) => {
@@ -43,6 +56,15 @@ export const DB_WORKER_SOURCE = `
       return;
     }
     origWarn.apply(console, args);
+  };
+  const origError = console.error;
+  console.error = (...args) => {
+    if (typeof args[0] === 'string' && args[0].startsWith('pinpoint')) {
+      // sqlite-wasm's OPFS logger output. Caller produces a clean
+      // single line on actual failure; drop the verbose trace.
+      return;
+    }
+    origError.apply(console, args);
   };
 }
 

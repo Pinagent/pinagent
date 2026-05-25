@@ -39,7 +39,16 @@ interface ActiveRun {
  * this; the multi-turn handler rejects a `user_message` if a run is
  * already going (no queueing yet — phase F if we need it).
  */
-const activeRuns = new Map<string, ActiveRun>();
+// Singleton across module re-evaluations (see event-bus.ts). The
+// WS interrupt handler and the multi-turn user_message handler both
+// look up activeRuns; if the route module re-evaluates between an
+// agent run starting and a user clicking Stop, a fresh activeRuns
+// Map would lose the entry and interrupt would no-op.
+const ACTIVE_RUNS_SYMBOL = Symbol.for('pinpoint.agent.activeRuns');
+const activeRuns: Map<string, ActiveRun> = ((globalThis as Record<symbol, unknown>)[
+  ACTIVE_RUNS_SYMBOL
+] as Map<string, ActiveRun> | undefined) ?? new Map<string, ActiveRun>();
+(globalThis as Record<symbol, unknown>)[ACTIVE_RUNS_SYMBOL] = activeRuns;
 
 /**
  * Run an isolated Claude Agent SDK query for a single freshly-submitted

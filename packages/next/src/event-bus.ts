@@ -135,7 +135,20 @@ class EventBus {
   }
 }
 
-const buses = new Map<string, EventBus>();
+// Singleton across module re-evaluations. Next 16 / Turbopack can
+// re-evaluate route.ts (and its dependency chain — including this
+// module) when files in the chain change, creating fresh `buses`
+// Maps each time. Meanwhile the WS server is singleton on globalThis
+// and outlives module evals. If the buses Map weren't shared, the WS
+// handler would subscribe against one Map while the agent (in a
+// later module instance) publishes to a different Map — same
+// feedbackId, two separate stores, silent UI. A globalThis-keyed
+// Symbol pins the Map across all instances.
+const BUSES_SYMBOL = Symbol.for('pinpoint.event-bus.buses');
+const buses: Map<string, EventBus> = ((globalThis as Record<symbol, unknown>)[
+  BUSES_SYMBOL
+] as Map<string, EventBus> | undefined) ?? new Map<string, EventBus>();
+(globalThis as Record<symbol, unknown>)[BUSES_SYMBOL] = buses;
 
 export function getOrCreateBus(id: string): EventBus {
   let bus = buses.get(id);

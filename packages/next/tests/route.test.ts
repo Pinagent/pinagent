@@ -130,17 +130,26 @@ describe('GET /db-worker.js', () => {
 });
 
 describe('GET /db-migrations', () => {
-  it('returns a JSON array of migration SQL strings', async () => {
+  it('returns drizzle-format migration entries (tag, when, hash, sql)', async () => {
     const res = await route.GET(
       makeRequest('/__pinpoint/db-migrations'),
       ctx(['db-migrations']),
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { migrations: string[] };
+    const body = (await res.json()) as {
+      migrations: { tag: string; when: number; hash: string; sql: string }[];
+    };
     expect(Array.isArray(body.migrations)).toBe(true);
     expect(body.migrations.length).toBeGreaterThan(0);
+    for (const m of body.migrations) {
+      expect(typeof m.tag).toBe('string');
+      expect(typeof m.when).toBe('number');
+      // sha256 hex = 64 chars.
+      expect(m.hash).toMatch(/^[0-9a-f]{64}$/);
+      expect(typeof m.sql).toBe('string');
+    }
     // Every migration ships at least one CREATE TABLE.
-    expect(body.migrations.join('\n')).toMatch(/CREATE TABLE/);
+    expect(body.migrations.map((m) => m.sql).join('\n')).toMatch(/CREATE TABLE/);
   });
 });
 

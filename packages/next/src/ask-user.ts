@@ -32,7 +32,16 @@ interface PendingAsk {
   timeout: NodeJS.Timeout;
 }
 
-const pending = new Map<string, PendingAsk>();
+// Singleton across module re-evaluations — same reason as the event
+// bus. Without this, an ask published by an agent (running in one
+// route-module instance) would never resolve when the WS handler
+// (singleton on globalThis, bound to an earlier instance) tries to
+// look up the askId. See event-bus.ts for the longer note.
+const ASKS_SYMBOL = Symbol.for('pinpoint.ask-user.pending');
+const pending: Map<string, PendingAsk> = ((globalThis as Record<symbol, unknown>)[
+  ASKS_SYMBOL
+] as Map<string, PendingAsk> | undefined) ?? new Map<string, PendingAsk>();
+(globalThis as Record<symbol, unknown>)[ASKS_SYMBOL] = pending;
 
 const inputSchema = {
   question: z

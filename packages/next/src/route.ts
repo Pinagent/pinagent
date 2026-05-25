@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
-import { readFile, readdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -271,24 +272,38 @@ async function serveSqliteWasm(file: string): Promise<Response> {
   }
 }
 
+/**
+ * Read drizzle-kit migrations + journal and emit a payload that's
+ * byte-compatible with drizzle's own `readMigrationFiles`:
+ *   - tag: journal entry's `tag` (filename without `.sql`)
+ *   - when: journal entry's `when` (folderMillis)
+ *   - hash: sha256 of the raw .sql file content (hex)
+ *   - sql:  the raw .sql file
+ *
+ * Drizzle's server migrator uses (hash, when) as the row written to
+ * `__drizzle_migrations` and decides "already applied" by comparing
+ * the highest `created_at` against `when`. Matching here means the
+ * browser's tracking table is interchangeable with what a server-side
+ * `migrate()` would write.
+ */
 async function serveDbMigrations(): Promise<Response> {
-  // Migrations ship inside @pinpoint/next at `packages/next/drizzle/`.
-  // At runtime we're at `dist/route.{js,cjs}`; walk up one directory.
-  // We use fileURLToPath + path.join (instead of `new URL(literal, ...)`)
-  // because Turbopack treats the latter as a bundleable asset reference
-  // and tries to resolve it at build time.
   const moduleUrl: string | undefined = import.meta.url;
   const dir = moduleUrl
     ? join(dirname(fileURLToPath(moduleUrl)), '..', 'drizzle')
     : join(process.cwd(), 'drizzle');
   try {
-    const entries = (await readdir(dir))
-      .filter((n) => n.endsWith('.sql'))
-      .sort();
-    const parts = await Promise.all(
-      entries.map((name) => readFile(join(dir, name), 'utf8')),
+    const journalText = await readFile(join(dir, 'meta', '_journal.json'), 'utf8');
+    const journal = JSON.parse(journalText) as {
+      entries: { idx: number; when: number; tag: string }[];
+    };
+    const migrations = await Promise.all(
+      journal.entries.map(async (entry) => {
+        const sql = await readFile(join(dir, `${entry.tag}.sql`), 'utf8');
+        const hash = createHash('sha256').update(sql).digest('hex');
+        return { tag: entry.tag, when: entry.when, hash, sql };
+      }),
     );
-    return new Response(JSON.stringify({ migrations: parts }), {
+    return new Response(JSON.stringify({ migrations }), {
       status: 200,
       headers: {
         'Content-Type': 'application/json; charset=utf-8',

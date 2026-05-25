@@ -48,14 +48,19 @@ export function transformJsx(code: string, opts: TransformOptions): string | nul
     JSXOpeningElement(path) {
       const node = path.node;
 
-      // Skip fragments — they don't have an opening name here normally, but be safe.
+      // Skip fragments — they don't accept arbitrary props and React
+      // logs a console warning if you give them any. `<>...</>` uses a
+      // separate JSXFragment node and never enters this visitor, but
+      // `<Fragment>`, `<React.Fragment>`, and similarly-named imports
+      // do. Match by property name to cover all three forms.
       const name = node.name;
-      if (t.isJSXMemberExpression(name)) {
-        // ok — composite, still tag
-      } else if (t.isJSXIdentifier(name)) {
+      if (t.isJSXIdentifier(name)) {
         if (name.name === 'Fragment') return;
+      } else if (t.isJSXMemberExpression(name)) {
+        const prop = name.property;
+        if (t.isJSXIdentifier(prop) && prop.name === 'Fragment') return;
       } else if (t.isJSXNamespacedName(name)) {
-        // skip namespaced (uncommon)
+        // Skip namespaced (uncommon).
         return;
       }
 

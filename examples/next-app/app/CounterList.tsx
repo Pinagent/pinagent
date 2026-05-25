@@ -30,6 +30,7 @@ export function CounterList({ items: initial }: { items: Item[] }) {
     setItems((prev) => {
       const next = [...prev];
       const [moved] = next.splice(dragIndex, 1);
+      if (!moved) return prev;
       next.splice(i, 0, moved);
       return next;
     });

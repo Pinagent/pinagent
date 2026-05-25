@@ -553,6 +553,20 @@ export function mount(): void {
     expandedComposer = composer;
   }
 
+  /**
+   * Cycle to the next composer with an in-flight agent run. Lets the
+   * user keep tabs on multiple concurrent agents without hunting
+   * bubbles by hand. Iteration order is insertion-order (the Set
+   * preserves it). Wraps around. No-op if there's 0 or 1 active.
+   */
+  function hopToNextActive() {
+    const active = Array.from(composers).filter(
+      (c) => c.agentState === 'running' || c.agentState === 'pending',
+    );
+    const next = pickNextActive(active, expandedComposer);
+    if (next) swapTo(next);
+  }
+
   function openComposer(target: Element, click: { x: number; y: number }) {
     if (expandedComposer) {
       expandedComposer.minimize();
@@ -933,6 +947,15 @@ export function mount(): void {
           e.preventDefault();
           if (state.mode === 'picking') exitPicking();
           else enterPicking();
+          return;
+        }
+        // Shift+N from inside an iframe — same hop as on the host
+        // doc. Keystrokes inside an iframe don't bubble to the
+        // parent, so without this the hop wouldn't work while the
+        // user has focus inside the expanded composer.
+        if (isHopKey(e) && !shouldIgnoreHotkey(e)) {
+          e.preventDefault();
+          hopToNextActive();
         }
       });
 
@@ -1186,7 +1209,7 @@ export function mount(): void {
   });
 
   if (hotkeyChar) {
-    fab.title = `Pinpoint — press ${hotkeyChar.toUpperCase()} or click to pick`;
+    fab.title = `Pinpoint — press ${hotkeyChar.toUpperCase()} or click to pick · Shift+N to hop between active widgets`;
     document.addEventListener(
       'keydown',
       (e) => {
@@ -1199,6 +1222,17 @@ export function mount(): void {
       { capture: true },
     );
   }
+
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (!isHopKey(e)) return;
+      if (shouldIgnoreHotkey(e)) return;
+      e.preventDefault();
+      hopToNextActive();
+    },
+    { capture: true },
+  );
 }
 
 function createWsClient(): WidgetWsClient {
@@ -1249,6 +1283,16 @@ function attachStreamHandler(
     stopBtn.hidden = !visible;
   }
   setStopVisible(true);
+
+  // Header "thinking" spinner — visible whenever a turn is in flight,
+  // including the gap between submit and the first event. CSS picks
+  // it up from the `.running` class via a ::before pseudo-element,
+  // which survives `header.textContent = ...` updates.
+  function setHeaderRunning(running: boolean) {
+    if (running) header.classList.add('running');
+    else header.classList.remove('running');
+  }
+  setHeaderRunning(true);
 
   stopBtn.addEventListener('click', () => {
     if (!turnRunning) return;
@@ -1374,6 +1418,7 @@ function attachStreamHandler(
     append(el('div', 'user-msg', content));
     followInput.value = '';
     turnRunning = true;
+    setHeaderRunning(true);
     stopBtn.disabled = false;
     stopBtn.textContent = 'Stop';
     setStopVisible(true);
@@ -1392,6 +1437,7 @@ function attachStreamHandler(
           apiKeySource = typeof event.apiKeySource === 'string' ? event.apiKeySource : null;
           header.textContent = `Working · ${model}${session ? ` · ${session}` : ''}`;
           turnRunning = true;
+          setHeaderRunning(true);
           stopBtn.disabled = false;
           stopBtn.textContent = 'Stop';
           setStopVisible(true);
@@ -1454,6 +1500,10 @@ function attachStreamHandler(
           lastToolChip = null;
           append(el('div', 'err-line', String(event.message ?? 'error')));
           setAgentState('error');
+          turnRunning = false;
+          setHeaderRunning(false);
+          setStopVisible(false);
+          if (!pendingAskId) setFollowEnabled(true);
           // Terminal: stop the conversation from restoring on next
           // reload. The transcript stays in the cache (it's still
           // useful for review) — only the status flips.
@@ -1507,6 +1557,7 @@ function attachStreamHandler(
             footer.title = '';
           }
           turnRunning = false;
+          setHeaderRunning(false);
           setStopVisible(false);
           setAgentState(ok ? 'done' : 'error');
           if (!pendingAskId) setFollowEnabled(true);
@@ -1547,6 +1598,7 @@ function attachStreamHandler(
       // live run for it. Bail out of the default "Working..." state
       // so the user isn't stuck staring at a spinner.
       turnRunning = false;
+      setHeaderRunning(false);
       setStopVisible(false);
       header.textContent = '(no transcript saved)';
       setFollowEnabled(true);
@@ -1570,6 +1622,7 @@ function attachStreamHandler(
     },
     onDone() {
       turnRunning = false;
+      setHeaderRunning(false);
       setStopVisible(false);
       if (!pendingAskId) setFollowEnabled(true);
     },
@@ -1581,6 +1634,7 @@ function attachStreamHandler(
       // Stop button staying stuck at "Stopping…".
       if (message.includes('no in-flight run')) {
         turnRunning = false;
+        setHeaderRunning(false);
         setStopVisible(false);
         stopBtn.disabled = false;
         stopBtn.textContent = 'Stop';
@@ -1669,6 +1723,21 @@ function composerHTML(metaText: string): string {
     gap: 6px;
     padding: 2px 0;
   }
+  /* Spinner shown while a turn is in flight. The pseudo-element
+     survives textContent updates so we don't have to re-insert
+     the spinner each time the header copy changes. */
+  .header.running::before {
+    content: '';
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 2px solid #2563eb;
+    border-top-color: transparent;
+    border-radius: 50%;
+    flex-shrink: 0;
+    animation: pp-header-spin 0.9s linear infinite;
+  }
+  @keyframes pp-header-spin { to { transform: rotate(360deg); } }
   .log {
     flex: 1;
     overflow-y: auto;
@@ -1813,4 +1882,34 @@ function shouldIgnoreHotkey(e: KeyboardEvent): boolean {
   const tag = t.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
   return false;
+}
+
+/**
+ * Hotkey for "hop to next in-flight agent." Shift+N. Picked
+ * deliberately: `n` alone is too easy to hit while typing, and the
+ * obvious chord candidates (Cmd+N / Ctrl+N) are owned by the browser
+ * for opening new windows.
+ */
+export function isHopKey(e: KeyboardEvent): boolean {
+  return e.key === 'N' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+}
+
+/**
+ * Pick the next composer to expand from a list of currently-active
+ * (running or pending) composers, given the currently-expanded one.
+ * Pure: no DOM, no side effects — the caller does the swap.
+ *
+ * Returns null in the no-op cases:
+ *  - empty list (nothing to hop to)
+ *  - single item AND it's already expanded
+ *
+ * Otherwise rotates insertion-order with wrap-around; the current is
+ * 0-relative so the first hop from "nothing expanded" lands on
+ * active[0].
+ */
+export function pickNextActive<T>(active: readonly T[], current: T | null): T | null {
+  if (active.length === 0) return null;
+  if (active.length === 1) return active[0] === current ? null : (active[0] ?? null);
+  const idx = current ? active.indexOf(current) : -1;
+  return active[(idx + 1) % active.length] ?? null;
 }
