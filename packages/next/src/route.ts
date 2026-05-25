@@ -1,6 +1,8 @@
 import { Buffer } from 'node:buffer';
 import { nanoid } from 'nanoid';
 import { WIDGET_SOURCE } from './__generated__/widget';
+import { resolveAgentMode, spawnAgent } from './agent';
+import { openInEditor } from './editor';
 import { FeedbackInputSchema, ID_RE, PatchSchema, Storage } from './storage';
 
 // These exports exist here for type clarity, but consumers MUST re-declare them
@@ -82,6 +84,27 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
 export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
   const slug = await readSlug(ctx);
 
+  // /__pinpoint/open — spawn the developer's editor at file:line:col.
+  if (slug.length === 1 && slug[0] === 'open') {
+    const url = new URL(req.url);
+    const file = url.searchParams.get('file');
+    const lineRaw = url.searchParams.get('line');
+    const colRaw = url.searchParams.get('col');
+    if (!file) return json(400, { error: 'file required' });
+    try {
+      const root = process.env.PINPOINT_PROJECT_ROOT ?? process.cwd();
+      const result = await openInEditor(
+        root,
+        file,
+        lineRaw ? Number(lineRaw) : undefined,
+        colRaw ? Number(colRaw) : undefined,
+      );
+      return json(200, result);
+    } catch (e) {
+      return json(500, { error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   if (slug.length !== 1 || slug[0] !== 'feedback') {
     return json(404, { error: 'not found' });
   }
@@ -96,7 +119,19 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
   }
 
   const id = nanoid(10);
-  const rec = await getStorage().create(id, parsed.data);
+  const storage = getStorage();
+  const rec = await storage.create(id, parsed.data);
+
+  // Optionally spawn an isolated agent (worktree or inline). Fires and forgets;
+  // the agent runs detached and writes its own log file. If env var isn't set,
+  // this is a cheap no-op.
+  const mode = resolveAgentMode(process.env);
+  if (mode !== false) {
+    spawnAgent({ projectRoot: storage.root, feedback: rec, mode }).catch(() => {
+      // Swallow — errors land in the per-feedback log.
+    });
+  }
+
   return json(200, { id: rec.id });
 }
 

@@ -178,7 +178,43 @@ export function mount(): void {
       const ta = idoc.getElementById('pp-ta') as HTMLTextAreaElement | null;
       const cancel = idoc.getElementById('pp-cancel') as HTMLButtonElement | null;
       const submit = idoc.getElementById('pp-submit') as HTMLButtonElement | null;
-      if (!ta || !cancel || !submit) return;
+      const metaEl = idoc.getElementById('pp-meta') as HTMLElement | null;
+      if (!ta || !cancel || !submit || !metaEl) return;
+
+      // Click the file:line:col to open it in the developer's editor via
+      // the server-side /__pinpoint/open endpoint. Only enabled when we
+      // have a real source location (not just a CSS selector fallback).
+      if (loc) {
+        metaEl.classList.add('clickable');
+        metaEl.title = 'Open in editor';
+        metaEl.addEventListener('click', async () => {
+          metaEl.classList.add('loading');
+          try {
+            const qs = new URLSearchParams({
+              file: loc.file,
+              line: String(loc.line),
+              col: String(loc.col),
+            });
+            const res = await fetch(`/__pinpoint/open?${qs.toString()}`, { method: 'POST' });
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}));
+              throw new Error(body.error || `HTTP ${res.status}`);
+            }
+            metaEl.classList.remove('loading');
+            metaEl.classList.add('ok');
+            setTimeout(() => metaEl.classList.remove('ok'), 1000);
+          } catch (err) {
+            metaEl.classList.remove('loading');
+            metaEl.classList.add('err');
+            const msg = err instanceof Error ? err.message : String(err);
+            metaEl.title = `Failed to open: ${msg}`;
+            setTimeout(() => {
+              metaEl.classList.remove('err');
+              metaEl.title = 'Open in editor';
+            }, 2000);
+          }
+        });
+      }
 
       // Focus is now inside the iframe's document — out of reach of any
       // parent-page focus trap.
@@ -267,7 +303,17 @@ export function mount(): void {
     color: #6b7280;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     word-break: break-all;
+    padding: 2px 4px;
+    margin: -2px -4px;
+    border-radius: 4px;
+    transition: background 100ms ease, color 100ms ease;
+    user-select: none;
   }
+  .meta.clickable { cursor: pointer; }
+  .meta.clickable:hover { background: #f3f4f6; color: #111827; }
+  .meta.loading { opacity: 0.5; }
+  .meta.ok { background: #d1fae5; color: #065f46; }
+  .meta.err { background: #fee2e2; color: #991b1b; }
   textarea {
     flex: 1;
     min-height: 80px;
@@ -290,7 +336,7 @@ export function mount(): void {
   .btn.ghost { background: transparent; color: #374151; }
 </style></head><body>
   <div class="card">
-    <div class="meta">${esc(metaText)}</div>
+    <div class="meta" id="pp-meta">${esc(metaText)}</div>
     <textarea id="pp-ta" placeholder="Describe the change you want…"></textarea>
     <div class="row">
       <button class="btn ghost" id="pp-cancel" type="button">Cancel</button>

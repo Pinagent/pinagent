@@ -3,6 +3,26 @@ import { createRequire } from 'node:module';
 // biome-ignore lint/suspicious/noExplicitAny: NextConfig isn't easily importable as a type-only dep
 type NextConfig = any;
 
+export interface PinpointOptions {
+  /**
+   * When a feedback is submitted, automatically spawn an isolated `claude -p`
+   * agent to address it.
+   *
+   * - `false` (default): no spawn. Use channel mode (`claude --dangerously-load-development-channels`)
+   *   or pull mode (ask the agent yourself) instead.
+   * - `'worktree'`: each submit creates a fresh git worktree at
+   *   `.pinpoint/worktrees/<id>` on a `pinpoint/<id>` branch, then spawns
+   *   `claude -p` inside it. Agents run in true parallel without trampling
+   *   each other. Review each branch like a PR. Requires a git repo.
+   * - `'inline'`: spawn `claude -p` in the main project directory (no
+   *   worktree). Cheaper but parallel agents may race on the same files.
+   *
+   * Communicated to the route handler via PINPOINT_SPAWN_AGENT env var.
+   * Set PINPOINT_AGENT_PERMISSION_MODE to override the default `acceptEdits`.
+   */
+  spawnAgent?: 'worktree' | 'inline' | false;
+}
+
 const loaderPath = (() => {
   const req = createRequire(import.meta.url);
   try {
@@ -44,10 +64,22 @@ const PINPOINT_REWRITE = {
  * Note: `dynamic` and `runtime` must be declared inline. Next 16 statically
  * parses route-segment config and rejects re-exports of those fields.
  */
-export default function pinpoint(config: NextConfig = {}): NextConfig {
+export default function pinpoint(
+  config: NextConfig = {},
+  options: PinpointOptions = {},
+): NextConfig {
   const userWebpack = config.webpack;
   const userRewrites = config.rewrites;
   const isDev = process.env.NODE_ENV !== 'production';
+
+  // Communicate spawn-agent preference to the route handler via env var.
+  // The route reads it on each POST. Set at config-load time (dev startup).
+  if (isDev && options.spawnAgent) {
+    process.env.PINPOINT_SPAWN_AGENT = options.spawnAgent;
+  } else if (isDev) {
+    // Make sure we don't inherit a stale value from a previous launch.
+    delete process.env.PINPOINT_SPAWN_AGENT;
+  }
 
   const next: NextConfig = {
     ...config,
