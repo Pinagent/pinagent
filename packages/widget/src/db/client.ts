@@ -139,8 +139,16 @@ async function doInit(): Promise<BrowserDb> {
     );
     // Track for beforeunload flush. Reads + writes both — reads are
     // fast (SAH is synchronous) and Promise.allSettled doesn't care.
+    //
+    // Use .then(fn, fn) (not .finally) so the cleanup chain is fully
+    // settled — a `.finally` chain re-throws on rejection and shows
+    // up as "Uncaught (in promise)" even though the caller is
+    // handling the original promise.
     outstandingCalls.add(promise);
-    promise.finally(() => outstandingCalls.delete(promise));
+    promise.then(
+      () => outstandingCalls.delete(promise),
+      () => outstandingCalls.delete(promise),
+    );
     return promise;
   }
 
