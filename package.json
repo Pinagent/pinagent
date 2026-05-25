@@ -1,0 +1,22 @@
+{
+  "name": "pinpoint",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r --filter=./packages/* build",
+    "dev": "pnpm -r --parallel --filter=./packages/* dev",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "pnpm -r typecheck",
+    "example": "pnpm --filter=react-vite-example dev"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.2.2"
+}

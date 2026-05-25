@@ -1,0 +1,21 @@
+{
+  "name": "@pinpoint/widget",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Pinpoint browser widget (shadow-root pick + composer). Built as IIFE and consumed by @pinpoint/vite-plugin.",
+  "main": "dist/widget.js",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "html-to-image": "^1.11.13"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3"
+  }
+}

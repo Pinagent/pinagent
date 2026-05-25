@@ -1,0 +1,8 @@
+node_modules
+dist
+.pinpoint
+.DS_Store
+*.log
+.turbo
+coverage
+.cache
