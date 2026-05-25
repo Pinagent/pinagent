@@ -125,7 +125,7 @@ function renderToolResult(block: {
   return `${status} _tool result_`;
 }
 
-function summariseToolInput(name: string, input: unknown): string {
+export function summariseToolInput(name: string, input: unknown): string {
   if (input == null || typeof input !== 'object') return '';
   const obj = input as Record<string, unknown>;
   // Use a small allow-list of fields that are useful at a glance — file

@@ -8,19 +8,22 @@ export interface PinpointOptions {
    * When a feedback is submitted, automatically spawn an isolated `claude -p`
    * agent to address it.
    *
-   * - `false` (default): no spawn. Use channel mode (`claude --dangerously-load-development-channels`)
-   *   or pull mode (ask the agent yourself) instead.
+   * - `'inline'` (default): each submit runs a Claude Agent SDK query in the
+   *   main project directory, streaming events back to the widget. Cheaper
+   *   than worktree mode; parallel agents may race on the same files.
    * - `'worktree'`: each submit creates a fresh git worktree at
-   *   `.pinpoint/worktrees/<id>` on a `pinpoint/<id>` branch, then spawns
-   *   `claude -p` inside it. Agents run in true parallel without trampling
-   *   each other. Review each branch like a PR. Requires a git repo.
-   * - `'inline'`: spawn `claude -p` in the main project directory (no
-   *   worktree). Cheaper but parallel agents may race on the same files.
+   *   `.pinpoint/worktrees/<id>` on a `pinpoint/<id>` branch, then runs the
+   *   SDK with `cwd` set to that worktree. True parallel agents, no edit
+   *   races. Review each branch like a PR. Requires a git repo.
+   * - `false` (or `'off'`): no spawn. Use this for channel mode
+   *   (`claude --dangerously-load-development-channels`) or pull mode (you
+   *   ask your agent yourself) — the comment lands on disk and nothing else
+   *   happens automatically.
    *
    * Communicated to the route handler via PINPOINT_SPAWN_AGENT env var.
    * Set PINPOINT_AGENT_PERMISSION_MODE to override the default `acceptEdits`.
    */
-  spawnAgent?: 'worktree' | 'inline' | false;
+  spawnAgent?: 'worktree' | 'inline' | 'off' | false;
 }
 
 const loaderPath = (() => {
@@ -79,11 +82,19 @@ export default function pinpoint(
 
   // Communicate spawn-agent preference to the route handler via env var.
   // The route reads it on each POST. Set at config-load time (dev startup).
-  if (isDev && options.spawnAgent) {
-    process.env.PINPOINT_SPAWN_AGENT = options.spawnAgent;
-  } else if (isDev) {
-    // Make sure we don't inherit a stale value from a previous launch.
-    delete process.env.PINPOINT_SPAWN_AGENT;
+  //
+  // Default is 'inline' so the V2 streaming-into-widget flow kicks in
+  // without ceremony. Users can opt into 'worktree' for parallel isolated
+  // branches, or 'off' / `false` to disable the SDK spawn entirely (for
+  // channel-mode or pull-mode workflows).
+  if (isDev) {
+    const effective =
+      options.spawnAgent === undefined
+        ? 'inline'
+        : options.spawnAgent === false
+          ? 'off'
+          : options.spawnAgent;
+    process.env.PINPOINT_SPAWN_AGENT = effective;
   }
 
   const next: NextConfig = {

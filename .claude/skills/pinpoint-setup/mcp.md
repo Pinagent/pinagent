@@ -158,20 +158,21 @@ pinpoint({ autoTrigger: true })
 pinpoint({ autoTrigger: { permissionMode: 'bypassPermissions' } })
 ```
 
-### Pull mode (default everywhere)
+### Pull mode
 
 Feedback lands on disk. The developer asks their agent "what pinpoint feedback is pending?" — it calls `list_pending_feedback`, then `get_feedback`, then resolves.
 
-No setup beyond steps 1-4. Works without any special launch flags. Combine with any of the above for fallback (the file is always on disk regardless of mode).
+No setup beyond steps 1-4. Use this when you want comments to bookmark issues for later rather than triggering a per-submit agent. Combine with `spawnAgent: 'off'` in your `next.config.ts` so submits don't ALSO kick off an inline agent.
 
 ### When to pick what
 
 | Need | Use |
 | --- | --- |
-| Live session, working alongside agent, small edits | Channel mode |
-| Async work, review each fix, parallelism | Worktree mode (Next) |
+| **Default Next setup — submit, watch streaming output in the widget** | Inline spawn (V2 default — `spawnAgent: 'inline'` or just leave unset) |
+| Async work, review each fix, parallelism | Worktree spawn (`spawnAgent: 'worktree'`) |
+| Live session, working alongside agent in your existing terminal | Channel mode + `spawnAgent: 'off'` so submits don't double up |
 | Hands-off CI-like loop on one repo, Vite stack | Auto-trigger (Vite) |
-| Just clicking and bookmarking issues for later | Pull mode |
+| Just clicking and bookmarking issues for later | Pull mode + `spawnAgent: 'off'` |
 
 ## Trying the loop
 

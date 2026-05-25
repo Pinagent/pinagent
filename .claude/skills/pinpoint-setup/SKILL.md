@@ -7,10 +7,13 @@ description: Wire Pinpoint into a target project so the developer can click UI e
 
 Pinpoint is a localhost feedback loop: a build-time plugin tags JSX with `data-pp-loc`, a browser widget lets the developer pick an element and submit a comment + screenshot, and one of several delivery modes hands the comment to an agent — either MCP-into-running-session, or a per-comment Claude Agent SDK run inside an isolated git worktree.
 
-> **Architecture status.** v1 (the shipped base loop covered by this skill) and v2 (the persistent chat-surface-per-widget redesign covered by `pinpoint-v2-plan.md`) coexist during the migration. The install steps below are stable across both. What's changing under the hood:
+> **Architecture status.** v1 (the shipped base loop) and v2 (the persistent chat-surface-per-widget redesign covered by `pinpoint-v2-plan.md`) coexist during the migration. Install steps are stable across both. What's shipped so far:
 >
-> - **Phase A (in progress).** Per-comment agents and the Vite auto-trigger have moved from `child_process.spawn('claude', ['-p', ...])` to the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) running in-process. The end-user behavior is unchanged; the log files now contain SDK-rendered transcripts (text + tool chips) and a usage/cost footer per turn. Each spawned agent persists a `sessionId` on the feedback record so future turns can resume the conversation.
-> - **Phases B–H (not yet shipped).** WebSocket streaming to the browser, iframe-per-widget chat UI, `ask_user` clarification tool, HMR re-anchoring, and a Land/Discard worktree lifecycle. Until those land, treat the widget as a one-shot composer per the v1 description.
+> - **Phase A (done).** Per-comment agents and the Vite auto-trigger run the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) in-process. Log files contain SDK-rendered transcripts; each run's `sessionId` is persisted on the feedback record.
+> - **Phase B (done, in-process SSE form).** Per-feedback in-memory event bus (`packages/next/src/event-bus.ts`) fans SDK events to subscribers; `GET /__pinpoint/feedback/<id>/stream` exposes them as Server-Sent Events. WebSocket is deferred until `ask_user` needs duplex.
+> - **Phase E (done, minimal form).** The widget composer iframe now swaps into a streaming pane on Submit and renders text + tool chips + final cost/turns inline. No follow-up turns from the UI yet — Dismiss closes the pane (the agent keeps running in the background and its log file always reflects the final state).
+> - **V2 default in Next.** `spawnAgent` defaults to `'inline'` so the streaming-into-widget flow is on out of the box. Worktree mode is opt-in (`spawnAgent: 'worktree'`); `'off'` / `false` disables per-submit spawn entirely.
+> - **Not yet shipped (Phases C/D/F/G/H/I/J).** SQLite layer, host-script + iframe-per-widget architecture, `ask_user` clarification, HMR re-anchoring, Land/Discard worktree lifecycle, post-edit verification, per-turn process spawn.
 
 ## Detect the runtime
 

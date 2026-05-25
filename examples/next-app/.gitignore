@@ -1,0 +1,4 @@
+.next
+.pinpoint
+node_modules
+*.tsbuildinfo

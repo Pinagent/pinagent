@@ -137,21 +137,23 @@ If you ever need to inspect the composer in DevTools, drill into the iframe elem
 ```ts
 pinpoint(coreConfig, {
   /**
-   * If set, each Submit runs an isolated Claude Agent SDK query.
+   * Each Submit runs a Claude Agent SDK query.
    *
-   *  - 'worktree' (recommended): creates `.pinpoint/worktrees/<id>` on
-   *    branch `pinpoint/<id>` from current HEAD, then runs the SDK with
-   *    `cwd` set to that worktree. True parallel agents, no edit races.
+   *  - 'inline' (default, V2): runs the SDK with cwd = main project dir.
+   *    Streams events back to the widget's iframe pane in real time.
+   *    Parallel agents may race on the same files.
+   *  - 'worktree': creates `.pinpoint/worktrees/<id>` on branch
+   *    `pinpoint/<id>` from current HEAD, then runs the SDK with `cwd`
+   *    set to that worktree. True parallel agents, no edit races.
    *    Requires a git repo. Review each branch like a PR.
-   *  - 'inline': runs the SDK with cwd = main project dir. Cheaper but
-   *    parallel agents may race on the same files.
-   *  - false (default): no spawn. Use channel mode or pull mode instead.
+   *  - 'off' (or `false`): no spawn. Use channel mode or pull mode
+   *    instead — the comment lands on disk, nothing else happens.
    *
    * Auth: by default uses the OAuth session from `claude login` (billed
    * against your subscription). Set ANTHROPIC_API_KEY to bill the API
    * account, or CLAUDE_CODE_USE_BEDROCK/_VERTEX/_FOUNDRY for provider auth.
    */
-  spawnAgent: false,
+  spawnAgent: 'inline',
 });
 ```
 
@@ -160,7 +162,7 @@ pinpoint(coreConfig, {
 | Var | Purpose | Default |
 | --- | --- | --- |
 | `PINPOINT_PROJECT_ROOT` | Project root for `.pinpoint/` storage. Set in `.mcp.json` env block. | `process.cwd()` |
-| `PINPOINT_SPAWN_AGENT` | `worktree` / `inline` / unset. Set by the `spawnAgent` option or manually. | unset |
+| `PINPOINT_SPAWN_AGENT` | `inline` (V2 default) / `worktree` / `off`. Set by the `spawnAgent` option or manually. | `inline` |
 | `PINPOINT_AGENT_PERMISSION_MODE` | Passed to the Agent SDK as `permissionMode`. | `acceptEdits` |
 | `ANTHROPIC_API_KEY` | Optional. If set, the Agent SDK bills the API account instead of the OAuth subscription from `claude login`. Alternatives: `CLAUDE_CODE_USE_BEDROCK`/`_VERTEX`/`_FOUNDRY` + their respective provider credentials. | unset (use OAuth) |
 | `PINPOINT_EDITOR` | Editor for the "click file:line:col to open" feature. Honored before `EDITOR` and `VISUAL`. | unset; falls back to `EDITOR`, `VISUAL`, then `code` |

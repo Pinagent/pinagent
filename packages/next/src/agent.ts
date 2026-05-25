@@ -3,15 +3,24 @@ import { existsSync } from 'node:fs';
 import { mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { query, type Options, type PermissionMode, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { renderInitFooter, renderMessage, renderResultFooter } from './agent-render';
+import { renderInitFooter, renderMessage, renderResultFooter, summariseToolInput } from './agent-render';
+import { type AgentEvent, finishBus, getOrCreateBus } from './event-bus';
 import { Storage, type FeedbackRecord } from './storage';
 
 export type SpawnAgentMode = 'worktree' | 'inline' | false;
 
+/**
+ * Resolve the spawn mode from env. The new default (V2) is `'inline'` —
+ * SDK-backed per-submit agent with streaming back to the widget. Worktree
+ * mode is opt-in; `'off'` (or the legacy `'false'`) disables spawning so
+ * channel-mode / pull-mode setups don't get a redundant agent per submit.
+ */
 export function resolveAgentMode(env: NodeJS.ProcessEnv): SpawnAgentMode {
   const v = env.PINPOINT_SPAWN_AGENT;
-  if (v === 'worktree' || v === 'inline') return v;
-  return false;
+  if (v === 'worktree') return 'worktree';
+  if (v === 'off' || v === 'false') return false;
+  // 'inline', unset, or any unrecognised value falls through to the V2 default.
+  return 'inline';
 }
 
 interface AgentContext {
@@ -102,6 +111,7 @@ async function consumeStream(
   let sessionId: string | null = null;
   let sessionRecorded = false;
   let resultRendered = false;
+  const bus = getOrCreateBus(ctx.feedback.id);
 
   try {
     for await (const message of query({ prompt, options }) as AsyncIterable<SDKMessage>) {
@@ -112,6 +122,11 @@ async function consumeStream(
         sessionRecorded = true;
         await persistSessionId(ctx.projectRoot, ctx.feedback.id, sessionId);
       }
+
+      // Fan out to SSE subscribers. The bus translator is intentionally
+      // lossy — it drops thinking blocks, status pings, partial deltas,
+      // etc. that the widget doesn't render.
+      for (const ev of toAgentEvents(message)) bus.publish(ev);
 
       if (message.type === 'system' && message.subtype === 'init') {
         await appendLog(logPath, renderInitFooter(message));
@@ -129,16 +144,84 @@ async function consumeStream(
       if (chunk) await appendLog(logPath, chunk);
     }
   } catch (err) {
-    await appendLog(
-      logPath,
-      `\n> [pinpoint] agent stream errored: ${stringifyErr(err)}\n`,
-    );
+    const msg = stringifyErr(err);
+    bus.publish({ type: 'error', message: msg });
+    await appendLog(logPath, `\n> [pinpoint] agent stream errored: ${msg}\n`);
+  } finally {
+    if (!resultRendered) {
+      // Stream ended without a `result` message — write a minimal footer
+      // so the log isn't open-ended.
+      await appendResolution(ctx.projectRoot, ctx.feedback.id, logPath, null);
+    }
+    finishBus(ctx.feedback.id);
   }
+}
 
-  if (!resultRendered) {
-    // Stream ended without a `result` message — write a minimal footer so
-    // the log isn't open-ended.
-    await appendResolution(ctx.projectRoot, ctx.feedback.id, logPath, null);
+function toAgentEvents(message: SDKMessage): AgentEvent[] {
+  switch (message.type) {
+    case 'system':
+      if (message.subtype === 'init') {
+        return [
+          {
+            type: 'init',
+            sessionId: message.session_id,
+            model: message.model,
+            permissionMode: message.permissionMode,
+            apiKeySource: message.apiKeySource,
+          },
+        ];
+      }
+      return [];
+    case 'assistant': {
+      const out: AgentEvent[] = [];
+      const blocks = message.message?.content;
+      if (!Array.isArray(blocks)) return out;
+      for (const block of blocks) {
+        if (block.type === 'text' && block.text.trim()) {
+          out.push({ type: 'text', text: block.text });
+        } else if (block.type === 'tool_use') {
+          out.push({
+            type: 'tool_use',
+            name: block.name,
+            summary: summariseToolInput(block.name, block.input),
+          });
+        }
+      }
+      if (message.error) {
+        out.push({ type: 'error', message: `assistant error: ${message.error}` });
+      }
+      return out;
+    }
+    case 'user': {
+      const out: AgentEvent[] = [];
+      const blocks = message.message?.content;
+      if (!Array.isArray(blocks)) return out;
+      for (const block of blocks) {
+        if (
+          typeof block === 'object' &&
+          block !== null &&
+          (block as { type?: string }).type === 'tool_result'
+        ) {
+          out.push({ type: 'tool_result', ok: !(block as { is_error?: boolean }).is_error });
+        }
+      }
+      return out;
+    }
+    case 'result': {
+      const event: AgentEvent = {
+        type: 'result',
+        subtype: message.subtype,
+        numTurns: message.num_turns,
+        totalCostUsd: message.total_cost_usd,
+        durationMs: message.duration_ms,
+      };
+      if (message.subtype !== 'success' && Array.isArray(message.errors)) {
+        event.errors = message.errors;
+      }
+      return [event];
+    }
+    default:
+      return [];
   }
 }
 

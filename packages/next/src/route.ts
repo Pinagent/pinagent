@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import { WIDGET_SOURCE } from './__generated__/widget';
 import { resolveAgentMode, spawnAgent } from './agent';
 import { openInEditor } from './editor';
+import { getBus } from './event-bus';
 import { FeedbackInputSchema, ID_RE, PatchSchema, Storage } from './storage';
 
 // These exports exist here for type clarity, but consumers MUST re-declare them
@@ -34,7 +35,7 @@ async function readSlug(ctx: RouteCtx): Promise<string[]> {
   return p.slug ?? [];
 }
 
-export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
+export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
   const slug = await readSlug(ctx);
 
   // /__pinpoint/widget.js
@@ -78,7 +79,88 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
     return json(200, { ...rec, screenshot });
   }
 
+  // /__pinpoint/feedback/:id/stream — Server-Sent Events for live agent
+  // output. The widget opens this on Submit (when agentSpawned=true) and
+  // renders text + tool-use chips as they arrive. The bus replays its
+  // buffer so a late or reconnecting client still gets the transcript so
+  // far, then closes the stream when the agent finishes.
+  if (slug.length === 3 && slug[0] === 'feedback' && slug[2] === 'stream') {
+    const id = slug[1] ?? '';
+    if (!ID_RE.test(id)) return json(400, { error: 'invalid id' });
+    return streamFeedback(id, req.signal);
+  }
+
   return json(404, { error: 'not found' });
+}
+
+function streamFeedback(id: string, signal: AbortSignal): Response {
+  const bus = getBus(id);
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      if (!bus) {
+        // Nothing in flight — either the agent never ran (spawn off) or it
+        // finished and its bus was evicted. Send a single done event so
+        // the client closes cleanly instead of hanging.
+        controller.enqueue(encoder.encode(`event: done\ndata: {}\n\n`));
+        controller.close();
+        return;
+      }
+
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(`: ping\n\n`));
+        } catch {
+          // Controller already closed.
+        }
+      }, 15_000);
+
+      const unsub = bus.subscribe({
+        onEvent(event) {
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          } catch {
+            // Client disconnected mid-write; cleanup happens via abort.
+          }
+        },
+        onClose() {
+          try {
+            controller.enqueue(encoder.encode(`event: done\ndata: {}\n\n`));
+            controller.close();
+          } catch {
+            // Already closed.
+          }
+          clearInterval(heartbeat);
+        },
+      });
+
+      signal.addEventListener(
+        'abort',
+        () => {
+          unsub();
+          clearInterval(heartbeat);
+          try {
+            controller.close();
+          } catch {
+            // Already closed.
+          }
+        },
+        { once: true },
+      );
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-store, no-transform',
+      Connection: 'keep-alive',
+      // Disable Nginx/buffer proxies. Not relevant in dev but cheap to set.
+      'X-Accel-Buffering': 'no',
+    },
+  });
 }
 
 export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {

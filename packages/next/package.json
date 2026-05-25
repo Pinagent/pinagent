@@ -1,6 +1,6 @@
 {
   "name": "@pinpoint/next",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "description": "Next.js adapter for Pinpoint: webpack loader for JSX tagging, route handlers for /__pinpoint/*, and a <Pinpoint /> widget component.",
   "type": "module",
   "main": "dist/index.js",
