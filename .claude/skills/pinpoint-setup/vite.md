@@ -88,4 +88,16 @@ pinpoint({
 });
 ```
 
+The Vite plugin's `autoTrigger` serializes submits — if multiple comments arrive while a `claude -p` is running, they're batched into one followup invocation. No risk of parallel agents racing on the same files.
+
 If neither autoTrigger nor channel mode is on, feedback sits on disk and the developer manually asks the agent ("what's pending?") — that's the spec-default pull mode.
+
+## Features available in @pinpoint/next but NOT yet in @pinpoint/vite-plugin
+
+These are roadmap items. If a user explicitly needs one of these in a Vite project, that's a real porting task:
+
+- **Worktree spawn mode** (`spawnAgent: 'worktree'`) — true parallel agents in isolated git worktrees.
+- **Click-to-open editor** — the `/__pinpoint/open` endpoint that spawns the developer's editor at file:line:col.
+- **Hotkey customization via `window.__pinpointHotkey`** — actually this IS in the widget, so works for both, but only documented for Next currently.
+
+Everything else (screenshot pipeline, hotkey defaults, Esc-to-close, focus-isolated iframe composer, file:line attribution) is identical across both runtimes because they share the same widget IIFE.

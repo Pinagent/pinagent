@@ -24,7 +24,12 @@ export interface PinpointOptions {
 }
 
 const loaderPath = (() => {
-  const req = createRequire(import.meta.url);
+  // Next.js 16 loads next.config.ts in a way that can leave import.meta.url
+  // undefined for imported modules. Fall back to a cwd-anchored URL so
+  // createRequire still produces a usable resolver.
+  const baseUrl =
+    import.meta.url ?? `file://${process.cwd()}/__pinpoint_config__.js`;
+  const req = createRequire(baseUrl);
   try {
     return req.resolve('@pinpoint/next/loader');
   } catch {

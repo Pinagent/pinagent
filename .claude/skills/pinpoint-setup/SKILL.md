@@ -49,8 +49,22 @@ If pinpoint moves, every consumer's `.mcp.json` (absolute path to `@pinpoint/mcp
 
 ## Common pitfalls (skim before you start)
 
-- **Don't put `.pinpoint/` in version control.** Always add it to `.gitignore` of the target repo (monorepo root, not just the app).
+- **Don't put `.pinpoint/` in version control.** Always add it to `.gitignore` of the target repo (monorepo root, not just the app). This includes `.pinpoint/feedback/`, `.pinpoint/screenshots/`, `.pinpoint/logs/`, AND `.pinpoint/worktrees/` (for worktree mode).
 - **Project root matters in monorepos.** Storage lives at `<wherever Next/Vite runs from>/.pinpoint/`. The MCP server must point at that same directory via `PINPOINT_PROJECT_ROOT`.
-- **Hard-refresh the browser** after rebuilding the widget — the IIFE is cached.
-- **Auto mode blocks MCP tools by default.** The agent will say "tools were denied" unless the project's `.claude/settings.local.json` allow-lists `mcp__pinpoint__*`.
-- **The MCP server must be running in a session.** If you want the channel-push experience, launch with `--dangerously-load-development-channels server:pinpoint`. Otherwise it's pull-mode (the user asks "what feedback is pending?").
+- **Hard-refresh the browser** after rebuilding the widget — the IIFE is cached. (Chrome DevTools → Network tab → "Disable cache" while DevTools is open helps during development.)
+- **Bump the version when re-packing.** `pnpm pack` uses the version in `package.json`; if you re-pack without bumping, pnpm caches by filename and consumer installs won't pick up your changes. Bump even for tiny fixes.
+- **Auto mode blocks MCP tools by default.** The agent will say "tools were denied" unless the project's `.claude/settings.local.json` allow-lists `mcp__pinpoint__*`. Use the `/permissions` slash command inside Claude Code to set this up.
+- **The MCP server must be running in a session.** If you want the channel-push experience, launch with `--dangerously-load-development-channels server:pinpoint`. Otherwise it's pull-mode (the user asks "what feedback is pending?") or spawn mode (each submit fires a fresh `claude -p`).
+- **The composer is rendered in an iframe**, not just shadow DOM. This is intentional — iframes have their own focus context so modal focus traps (Radix Dialog, react-focus-lock, etc.) can't reach in. If you're debugging the composer in DevTools, drill into the iframe element.
+
+## Environment variables (handy reference)
+
+| Var | Purpose | Read by |
+| --- | --- | --- |
+| `PINPOINT_PROJECT_ROOT` | Absolute path to project root (where `.pinpoint/` lives) | MCP server, route handler, agent spawn |
+| `PINPOINT_SPAWN_AGENT` | `worktree` / `inline` / unset — agent spawn mode for the Next adapter | Next route handler |
+| `PINPOINT_AGENT_PERMISSION_MODE` | `--permission-mode` passed to spawned `claude -p` (default `acceptEdits`) | Next agent spawner |
+| `PINPOINT_EDITOR` | Editor command for the "click file:line:col to open" feature | Route handler `/open` endpoint |
+| `EDITOR` / `VISUAL` | Fallback for `PINPOINT_EDITOR` (standard *nix conventions) | Route handler `/open` endpoint |
+
+Set these in `.mcp.json`'s `env` block (for the MCP server) or in your shell where you run `pnpm dev` (for the route handler / spawner). The plugin's `pinpoint(config, { spawnAgent: ... })` option sets `PINPOINT_SPAWN_AGENT` for you.

@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, open } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import type { FeedbackRecord } from './storage';
+import { join } from 'node:path';
+import { Storage, type FeedbackRecord } from './storage';
 
 export type SpawnAgentMode = 'worktree' | 'inline' | false;
 
@@ -20,34 +20,47 @@ interface AgentContext {
 
 /**
  * Spawn an isolated agent for a single feedback record.
- * Returns immediately — the child process is detached and runs to completion
- * in the background. Errors/output land in .pinpoint/logs/<id>.log.
+ *
+ * Returns once the child has been spawned — the process is detached and
+ * runs to completion in the background. Output is written as a markdown
+ * report at `.pinpoint/logs/<id>.md`:
+ *
+ *   ---
+ *   # Pinpoint feedback <id>
+ *   <header: target, comment, branch, started_at>
+ *
+ *   ## Agent output
+ *   <claude -p stdout/stderr>
+ *
+ *   ## Resolution            ← appended once agent exits
+ *   <status, note, finished_at>
  */
 export async function spawnAgent(ctx: AgentContext): Promise<void> {
   if (ctx.mode === false) return;
 
   const logsDir = join(ctx.projectRoot, '.pinpoint', 'logs');
   await mkdir(logsDir, { recursive: true });
-  const logPath = join(logsDir, `${ctx.feedback.id}.log`);
+  const logPath = join(logsDir, `${ctx.feedback.id}.md`);
 
   let cwd = ctx.projectRoot;
+  const startedAt = new Date().toISOString();
+
   if (ctx.mode === 'worktree') {
     try {
       cwd = await createWorktree(ctx.projectRoot, ctx.feedback.id, logPath);
     } catch (err) {
-      await appendLog(logPath, `[pinpoint] worktree creation failed: ${stringifyErr(err)}\n`);
+      await appendLog(
+        logPath,
+        renderHeader(ctx, cwd, startedAt, /* worktreeReady */ false) +
+          `\n> [pinpoint] worktree creation failed: ${stringifyErr(err)}\n`,
+      );
       return;
     }
   }
 
-  const prompt = buildPrompt(ctx.feedback, ctx.mode, cwd);
-  await appendLog(
-    logPath,
-    `[pinpoint] spawning agent for ${ctx.feedback.id} (mode=${ctx.mode})\n` +
-      `[pinpoint] cwd: ${cwd}\n` +
-      `[pinpoint] PINPOINT_PROJECT_ROOT: ${ctx.projectRoot}\n\n`,
-  );
+  await appendLog(logPath, renderHeader(ctx, cwd, startedAt, /* worktreeReady */ true));
 
+  const prompt = buildPrompt(ctx.feedback, ctx.mode, cwd);
   const logHandle = await open(logPath, 'a');
   const child = spawn(
     'claude',
@@ -70,8 +83,20 @@ export async function spawnAgent(ctx: AgentContext): Promise<void> {
       },
     },
   );
-  // Close our handle so it's owned by the child only.
+  // Close our handle so the child owns the fd.
   await logHandle.close();
+
+  // When the agent exits, re-read the feedback record (the agent may have
+  // resolved it) and append a footer summarizing the outcome.
+  child.on('exit', async (code) => {
+    try {
+      await appendResolution(ctx.projectRoot, ctx.feedback.id, logPath, code);
+    } catch {
+      // Best-effort: if the parent dev server is shutting down, just skip.
+    }
+  });
+
+  // Don't keep the parent dev server alive on the child's behalf.
   child.unref();
 }
 
@@ -129,6 +154,94 @@ async function appendLog(path: string, text: string): Promise<void> {
 
 function stringifyErr(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+function renderHeader(
+  ctx: AgentContext,
+  cwd: string,
+  startedAt: string,
+  worktreeReady: boolean,
+): string {
+  const rec = ctx.feedback;
+  const where = rec.file
+    ? `${rec.file}:${rec.line ?? '?'}${rec.col != null ? `:${rec.col}` : ''}`
+    : rec.selector;
+  const branchLine =
+    ctx.mode === 'worktree' && worktreeReady ? `branch: pinpoint/${rec.id}\n` : '';
+
+  return [
+    '---',
+    `id: ${rec.id}`,
+    `mode: ${ctx.mode}`,
+    `target: ${where}`,
+    `url: ${rec.url}`,
+    `started: ${startedAt}`,
+    `cwd: ${cwd}`,
+    branchLine.trimEnd(),
+    '---',
+    '',
+    `# Pinpoint feedback \`${rec.id}\``,
+    '',
+    `**Target:** \`${where}\`  `,
+    `**URL:** ${rec.url}  `,
+    `**Mode:** ${ctx.mode}${ctx.mode === 'worktree' && worktreeReady ? `  ·  **Branch:** \`pinpoint/${rec.id}\`` : ''}`,
+    '',
+    '> **Comment**',
+    '> ',
+    `> ${rec.comment.split('\n').join('\n> ')}`,
+    '',
+    '## Agent output',
+    '',
+    '',
+  ]
+    .filter((l) => l !== null)
+    .join('\n');
+}
+
+async function appendResolution(
+  projectRoot: string,
+  feedbackId: string,
+  logPath: string,
+  exitCode: number | null,
+): Promise<void> {
+  const storage = new Storage(projectRoot);
+  const updated = await storage.read(feedbackId);
+  const finishedAt = new Date().toISOString();
+
+  const lines: string[] = [];
+  lines.push('');
+  lines.push('## Resolution');
+  lines.push('');
+  lines.push(`**Finished:** ${finishedAt}  `);
+  lines.push(`**Exit code:** ${exitCode ?? 'null (signal)'}`);
+
+  if (!updated) {
+    lines.push('');
+    lines.push('> Feedback record disappeared between spawn and exit.');
+  } else {
+    lines.push(`**Status:** \`${updated.status}\``);
+    if (updated.resolvedAt) {
+      lines.push(`**Resolved at:** ${updated.resolvedAt}`);
+    }
+    if (updated.commitSha) {
+      lines.push(`**Commit:** \`${updated.commitSha}\``);
+    }
+    if (updated.note) {
+      lines.push('');
+      lines.push('### Note from agent');
+      lines.push('');
+      lines.push(updated.note);
+    }
+    if (updated.status === 'pending') {
+      lines.push('');
+      lines.push(
+        '> ⚠️  Agent exited without calling `resolve_feedback`. The record is still pending.',
+      );
+    }
+  }
+  lines.push('');
+
+  await appendLog(logPath, lines.join('\n'));
 }
 
 function buildPrompt(rec: FeedbackRecord, mode: SpawnAgentMode, cwd: string): string {

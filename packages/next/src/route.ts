@@ -126,13 +126,14 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
   // the agent runs detached and writes its own log file. If env var isn't set,
   // this is a cheap no-op.
   const mode = resolveAgentMode(process.env);
-  if (mode !== false) {
+  const agentSpawned = mode !== false;
+  if (agentSpawned) {
     spawnAgent({ projectRoot: storage.root, feedback: rec, mode }).catch(() => {
       // Swallow — errors land in the per-feedback log.
     });
   }
 
-  return json(200, { id: rec.id });
+  return json(200, { id: rec.id, agentSpawned });
 }
 
 export async function PATCH(req: Request, ctx: RouteCtx): Promise<Response> {

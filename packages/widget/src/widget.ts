@@ -37,7 +37,54 @@ export function mount(): void {
   outline.style.display = 'none';
   root.appendChild(outline);
 
+  // Status pill above the FAB. Shows # of running agents.
+  // Hidden until an agent is actually tracked.
+  const statusPill = document.createElement('div');
+  statusPill.className = 'status-pill';
+  statusPill.style.pointerEvents = 'auto';
+  statusPill.style.display = 'none';
+  root.appendChild(statusPill);
+
   const state: State = { mode: 'idle', selected: null };
+  const running = new Set<string>();
+
+  function updateStatusPill() {
+    if (running.size === 0) {
+      statusPill.style.display = 'none';
+      return;
+    }
+    statusPill.style.display = 'flex';
+    const label = running.size === 1 ? '1 agent running' : `${running.size} agents running`;
+    statusPill.innerHTML = `<span class="spinner"></span><span>${label}</span>`;
+    statusPill.title = Array.from(running).join('\n');
+  }
+
+  async function trackAgent(id: string) {
+    if (running.has(id)) return;
+    running.add(id);
+    updateStatusPill();
+
+    const deadline = Date.now() + 10 * 60 * 1000; // give up after 10 min
+    let delay = 2000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, delay));
+      if (delay < 5000) delay = Math.min(5000, delay + 500);
+      try {
+        const res = await fetch(`/__pinpoint/feedback/${id}`);
+        if (!res.ok) break;
+        const rec = await res.json();
+        if (rec.status && rec.status !== 'pending') {
+          const label = rec.status === 'fixed' ? '✓ Fixed' : `Agent: ${rec.status}`;
+          toast(`${label} (${id})`, rec.status === 'fixed' ? 'success' : 'error');
+          break;
+        }
+      } catch {
+        // Network blip or dev-server reload — keep retrying.
+      }
+    }
+    running.delete(id);
+    updateStatusPill();
+  }
 
   function enterPicking() {
     state.mode = 'picking';
@@ -261,6 +308,14 @@ export function mount(): void {
           if (!res.ok) {
             const body = await res.text().catch(() => '');
             throw new Error(`HTTP ${res.status}: ${body || res.statusText}`);
+          }
+          const result = (await res.json().catch(() => null)) as
+            | { id: string; agentSpawned?: boolean }
+            | null;
+          if (result?.id && result.agentSpawned) {
+            // Don't await — the poll runs until the agent resolves or
+            // gives up. Toast on completion.
+            void trackAgent(result.id);
           }
           toast('Sent', 'success');
           close();

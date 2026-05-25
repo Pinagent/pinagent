@@ -117,4 +117,32 @@ export const STYLES = `
   box-shadow: 0 6px 16px rgba(0,0,0,0.25);
 }
 .toast.error { background: #b91c1c; }
+
+.status-pill {
+  position: fixed;
+  bottom: 78px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #111827;
+  color: #fff;
+  padding: 6px 12px 6px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  cursor: default;
+  user-select: none;
+}
+.status-pill .spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: pp-spin 0.8s linear infinite;
+}
+@keyframes pp-spin {
+  to { transform: rotate(360deg); }
+}
 `;

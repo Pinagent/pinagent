@@ -35,18 +35,24 @@ const coreConfig = {
   // ...existing config
 };
 
+// pinpoint(config, options?) takes an optional second arg:
+const wrapped = pinpoint(coreConfig, {
+  spawnAgent: false,   // 'worktree' | 'inline' | false — see "Configuration" below
+});
+
 // If wrapping with Sentry or others, put pinpoint() on the INSIDE:
-export default withSentryConfig(pinpoint(coreConfig), { /* sentry opts */ });
+export default withSentryConfig(wrapped, { /* sentry opts */ });
 
 // Otherwise:
-export default pinpoint(coreConfig);
+export default wrapped;
 ```
 
-What `pinpoint(config)` does:
+What `pinpoint(config, options?)` does:
 
 - Adds a JSX-tagging loader to both webpack (Next ≤15 default) and Turbopack (Next 16 default). Dev-only — production builds are untouched.
 - Adds a rewrite from `/__pinpoint/*` → `/pinpoint/*`. **Required** because Next treats folders starting with `_` as private (not routable), so we can't mount the route at `app/__pinpoint/`.
 - Merges with existing `rewrites()` (function or array form). Won't clobber.
+- Sets `PINPOINT_SPAWN_AGENT` env var so the route handler knows whether to spawn an agent per submit. See "Configuration" below.
 
 ## 4. Mount `<Pinpoint />` in the root layout
 
@@ -108,13 +114,68 @@ Then open the browser and confirm:
 3. No hydration warnings in DevTools console
 4. Submit a comment → file lands at `<project root>/.pinpoint/feedback/`
 
+## Widget architecture (so you don't get confused debugging)
+
+The composer (textarea + Submit/Cancel) renders inside an **iframe** mounted from the widget's shadow root. The 💬 FAB and the picker outline are in shadow DOM only. The iframe is needed because focus traps from modal libraries (Radix Dialog, react-focus-lock, etc.) reach across shadow-root boundaries — they cannot reach into an iframe document.
+
+When the developer clicks the textarea: focus moves into the iframe's document, the parent-doc focus moves to the iframe element. Even if the host modal's focus trap fires and refocuses Cancel, keyboard input is still routed by the browser to the iframe (where the actual active element lives).
+
+If you ever need to inspect the composer in DevTools, drill into the iframe element inside `<div id="pinpoint-root">` in the parent DOM tree.
+
 ## Known gotchas
 
 - **Turbopack first compile is slow.** Expect 30-60s the first time the loader runs — Turbopack recompiles every `.tsx` to add `data-pp-loc`. HMR is fast after that.
-- **`color-scheme: dark` on the host page** styles form controls inside the widget's shadow root with dark browser defaults. The widget IIFE already counters this with `color-scheme: light` on the shadow host — no action needed, but if you see a dark textarea, the installed IIFE is stale and the consumer needs to bump and reinstall.
-- **CSP `connect-src` blocking the widget's image inlining.** The widget skips cross-origin `<img>` elements during screenshot capture to avoid CSP/CORS fetch errors. Those images appear as blank slots in the agent's screenshot. To get them captured, either (a) add the CDN to `connect-src`, or (b) proxy them through a same-origin Next rewrite (like you might already do for analytics).
-- **Custom middleware (`proxy.ts`).** `/__pinpoint/*` runs through every middleware just like other routes. If your middleware rejects unknown paths, add an exclusion.
+- **`color-scheme: dark` on the host page** styles form controls inside the widget with dark browser defaults. The widget IIFE counters this with explicit `color-scheme: light` and explicit backgrounds — no action needed, but if you see a dark textarea, the installed IIFE is stale (bump version and reinstall).
+- **CSP `connect-src` blocking the widget's image inlining.** The widget uses `html-to-image.toBlob()` + `createImageBitmap()` + `canvas.toBlob()` — no `fetch()` calls. It also skips cross-origin `<img>` elements before they're inlined (CSP would block those fetches). Cross-origin images appear as blank slots in the captured screenshot. To get them captured, either (a) add the CDN to `connect-src`, or (b) proxy them through a same-origin Next rewrite (like you might do for analytics).
+- **Custom middleware (`proxy.ts` in Next 16, `middleware.ts` before that).** `/__pinpoint/*` runs through every middleware just like other routes. If your middleware rejects unknown paths, add an exclusion. Most setups passthrough by default and don't need changes.
+- **Sherif / monorepo postinstall.** `pnpm add` may roll back due to unrelated workspace lint failures. Use `--ignore-scripts` to skip the postinstall hook on installs of pinpoint-only.
 
 ## Configuration
 
-The Next adapter doesn't accept options yet — auto-trigger is a Vite-plugin-only feature. For Next, use channel mode (see [mcp.md](./mcp.md)).
+### Plugin options (`pinpoint(config, options)`)
+
+```ts
+pinpoint(coreConfig, {
+  /**
+   * If set, each Submit spawns an isolated `claude -p` agent.
+   *
+   *  - 'worktree' (recommended): creates `.pinpoint/worktrees/<id>` on
+   *    branch `pinpoint/<id>` from current HEAD, then spawns `claude -p`
+   *    inside it. True parallel agents, no edit races. Requires a git
+   *    repo. Review each branch like a PR.
+   *  - 'inline': spawns `claude -p` in the main project dir. Cheaper but
+   *    parallel agents may race on the same files.
+   *  - false (default): no spawn. Use channel mode or pull mode instead.
+   */
+  spawnAgent: false,
+});
+```
+
+### Environment variables
+
+| Var | Purpose | Default |
+| --- | --- | --- |
+| `PINPOINT_PROJECT_ROOT` | Project root for `.pinpoint/` storage. Set in `.mcp.json` env block. | `process.cwd()` |
+| `PINPOINT_SPAWN_AGENT` | `worktree` / `inline` / unset. Set by the `spawnAgent` option or manually. | unset |
+| `PINPOINT_AGENT_PERMISSION_MODE` | Passed to spawned `claude -p --permission-mode`. | `acceptEdits` |
+| `PINPOINT_EDITOR` | Editor for the "click file:line:col to open" feature. Honored before `EDITOR` and `VISUAL`. | unset; falls back to `EDITOR`, `VISUAL`, then `code` |
+
+### Hotkey customization (browser-side)
+
+Default hotkey is `c` to toggle pick mode. To change or disable, set a global before the widget script loads:
+
+```tsx
+// app/layout.tsx — inline script before <Pinpoint />
+{process.env.NODE_ENV === 'development' && (
+  <script
+    dangerouslySetInnerHTML={{ __html: 'window.__pinpointHotkey="p"' }}
+  />
+)}
+<Pinpoint />
+```
+
+`window.__pinpointHotkey = false` disables the hotkey entirely (only the 💬 FAB works). The hotkey ignores keypresses while typing in any input/textarea/contenteditable.
+
+### Click-to-open editor
+
+Each composer has a clickable `file:line:col` line at the top. Click it → server spawns the editor via `/__pinpoint/open`. Supports VSCode (`code`, `code-insiders`), Cursor, Windsurf, VSCodium, Zed, Sublime, JetBrains family (IDEA, WebStorm, PyCharm, etc.), Atom, TextMate. CLI must be on PATH (in VSCode, "Shell Command: Install 'code' command in PATH" if needed).

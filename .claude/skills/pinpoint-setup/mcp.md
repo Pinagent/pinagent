@@ -81,9 +81,9 @@ The developer must apply this themselves — Claude Code's auto mode blocks self
 
 ## 5. Pick a feedback-delivery mode
 
-Three options, in order of usefulness:
+Four options. Match the mode to what kind of feedback flow you want.
 
-### Channel mode (recommended)
+### Channel mode (recommended for live, single-session work)
 
 The MCP server watches `.pinpoint/feedback/` and pushes a `notifications/claude/channel` event into the running Claude Code session each time a new comment lands. The agent reacts immediately in the same session — no spawn cost, no context reset.
 
@@ -98,9 +98,51 @@ The `server:pinpoint` token must match the key in `.mcp.json`. The `--dangerousl
 
 If you see `no MCP server configured with that name`, you're launching from the wrong directory. Either `cd` to where `.mcp.json` lives, or pass `--mcp-config /absolute/path/to/.mcp.json` explicitly.
 
+Trade-off: only ONE session at a time. Submits are processed serially in that session.
+
+### Worktree-per-feedback (recommended for parallel / async work) — Next only
+
+Each Submit creates a fresh git worktree at `.pinpoint/worktrees/<id>` on branch `pinpoint/<id>` from current HEAD, then spawns `claude -p` inside it. True parallel agents — they edit different working copies so they can't race.
+
+Opt in via the plugin option in `next.config.js`:
+
+```js
+import pinpoint from '@pinpoint/next/config';
+export default pinpoint(coreConfig, { spawnAgent: 'worktree' });
+```
+
+Each agent's output streams to `.pinpoint/logs/<id>.log` (`tail -f` to watch). After it finishes you review the branch like a PR:
+
+```bash
+cd .pinpoint/worktrees/<id>
+git diff main
+# decide: rebase, cherry-pick, or discard
+```
+
+Cleanup when done:
+
+```bash
+git worktree remove .pinpoint/worktrees/<id>
+git branch -D pinpoint/<id>
+```
+
+Trade-offs: each submit is one billed `claude -p` invocation; agents have no prior conversation context; you have N branches to review. Best for explicit review workflows or production-grade async loops.
+
+Requires the consumer repo to be a git repo. `PINPOINT_AGENT_PERMISSION_MODE` controls `--permission-mode` (default `acceptEdits`).
+
+### Inline spawn mode (Next only)
+
+Same as worktree mode but in the main project directory — no worktree. Use this only when you don't have a git repo or don't want branches.
+
+```js
+pinpoint(coreConfig, { spawnAgent: 'inline' });
+```
+
+⚠️ Parallel agents will edit the same files. If you submit two comments in the same minute, they may race. Channel mode + worktree mode are safer for any real workflow.
+
 ### Auto-trigger mode (Vite only)
 
-Vite plugin can spawn `claude -p` per submit. Each submit costs a separate billed session, and the agent has no prior conversation context. Not available in the Next adapter yet.
+Vite plugin can spawn `claude -p` per submit, with internal serialization (submits while another agent is running get batched into one followup invocation). Equivalent to "inline" mode but with the race-prevention built in. Worktree mode is not in the Vite plugin yet.
 
 ```ts
 pinpoint({ autoTrigger: true })
@@ -108,13 +150,20 @@ pinpoint({ autoTrigger: true })
 pinpoint({ autoTrigger: { permissionMode: 'bypassPermissions' } })
 ```
 
-Multiple submits while a `claude -p` is running get batched into one followup invocation — no risk of parallel agents trampling each other's edits.
-
-### Pull mode (default)
+### Pull mode (default everywhere)
 
 Feedback lands on disk. The developer asks their agent "what pinpoint feedback is pending?" — it calls `list_pending_feedback`, then `get_feedback`, then resolves.
 
-No setup beyond steps 1-4. Works without any special launch flags.
+No setup beyond steps 1-4. Works without any special launch flags. Combine with any of the above for fallback (the file is always on disk regardless of mode).
+
+### When to pick what
+
+| Need | Use |
+| --- | --- |
+| Live session, working alongside agent, small edits | Channel mode |
+| Async work, review each fix, parallelism | Worktree mode (Next) |
+| Hands-off CI-like loop on one repo, Vite stack | Auto-trigger (Vite) |
+| Just clicking and bookmarking issues for later | Pull mode |
 
 ## Trying the loop
 
