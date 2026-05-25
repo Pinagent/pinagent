@@ -44,6 +44,13 @@ export interface FeedbackRecord {
   status: Status;
   note: string | null;
   commitSha: string | null;
+  /**
+   * Claude Agent SDK session id, set the first time an SDK-backed agent
+   * runs against this feedback. Lets follow-up turns resume the same
+   * conversation rather than starting fresh. Older records may lack this
+   * field — readers should treat missing/null as "no prior session".
+   */
+  agentSessionId: string | null;
   createdAt: string;
   resolvedAt: string | null;
 }
@@ -52,6 +59,7 @@ export const PatchSchema = z.object({
   status: StatusSchema.optional(),
   note: z.string().max(8000).nullable().optional(),
   commitSha: z.string().max(64).nullable().optional(),
+  agentSessionId: z.string().max(128).nullable().optional(),
 });
 export type Patch = z.infer<typeof PatchSchema>;
 
@@ -93,6 +101,7 @@ export class Storage {
       status: 'pending',
       note: null,
       commitSha: null,
+      agentSessionId: null,
       createdAt: input.createdAt,
       resolvedAt: null,
     };
@@ -125,7 +134,10 @@ export class Storage {
     const p = this.recordPath(id);
     if (!existsSync(p)) return null;
     const raw = await readFile(p, 'utf8');
-    return JSON.parse(raw) as FeedbackRecord;
+    const parsed = JSON.parse(raw) as Partial<FeedbackRecord>;
+    // agentSessionId was added in v0.0.17; default to null for older records.
+    if (parsed.agentSessionId === undefined) parsed.agentSessionId = null;
+    return parsed as FeedbackRecord;
   }
 
   async readScreenshotBase64(rec: FeedbackRecord): Promise<string | null> {
@@ -150,6 +162,7 @@ export class Storage {
     }
     if (patch.note !== undefined) next.note = patch.note;
     if (patch.commitSha !== undefined) next.commitSha = patch.commitSha;
+    if (patch.agentSessionId !== undefined) next.agentSessionId = patch.agentSessionId;
 
     await this.atomicWriteJson(this.recordPath(id), next);
     return next;

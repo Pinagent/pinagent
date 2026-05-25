@@ -61,7 +61,7 @@ export default function pinpoint(options: PinpointOptions = {}): Plugin {
           typeof options.autoTrigger === 'object' ? options.autoTrigger : {};
         autoTrigger = new AutoTrigger(triggerOpts, root, server.config.logger);
         server.config.logger.info(
-          `[pinpoint] auto-trigger ON — '${triggerOpts.command ?? 'claude'}' will run on each submit`,
+          `[pinpoint] auto-trigger ON — Claude Agent SDK (${triggerOpts.permissionMode ?? 'acceptEdits'}) will run on each submit`,
         );
       }
 

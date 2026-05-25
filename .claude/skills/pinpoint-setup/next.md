@@ -137,15 +137,19 @@ If you ever need to inspect the composer in DevTools, drill into the iframe elem
 ```ts
 pinpoint(coreConfig, {
   /**
-   * If set, each Submit spawns an isolated `claude -p` agent.
+   * If set, each Submit runs an isolated Claude Agent SDK query.
    *
    *  - 'worktree' (recommended): creates `.pinpoint/worktrees/<id>` on
-   *    branch `pinpoint/<id>` from current HEAD, then spawns `claude -p`
-   *    inside it. True parallel agents, no edit races. Requires a git
-   *    repo. Review each branch like a PR.
-   *  - 'inline': spawns `claude -p` in the main project dir. Cheaper but
+   *    branch `pinpoint/<id>` from current HEAD, then runs the SDK with
+   *    `cwd` set to that worktree. True parallel agents, no edit races.
+   *    Requires a git repo. Review each branch like a PR.
+   *  - 'inline': runs the SDK with cwd = main project dir. Cheaper but
    *    parallel agents may race on the same files.
    *  - false (default): no spawn. Use channel mode or pull mode instead.
+   *
+   * Auth: by default uses the OAuth session from `claude login` (billed
+   * against your subscription). Set ANTHROPIC_API_KEY to bill the API
+   * account, or CLAUDE_CODE_USE_BEDROCK/_VERTEX/_FOUNDRY for provider auth.
    */
   spawnAgent: false,
 });
@@ -157,7 +161,8 @@ pinpoint(coreConfig, {
 | --- | --- | --- |
 | `PINPOINT_PROJECT_ROOT` | Project root for `.pinpoint/` storage. Set in `.mcp.json` env block. | `process.cwd()` |
 | `PINPOINT_SPAWN_AGENT` | `worktree` / `inline` / unset. Set by the `spawnAgent` option or manually. | unset |
-| `PINPOINT_AGENT_PERMISSION_MODE` | Passed to spawned `claude -p --permission-mode`. | `acceptEdits` |
+| `PINPOINT_AGENT_PERMISSION_MODE` | Passed to the Agent SDK as `permissionMode`. | `acceptEdits` |
+| `ANTHROPIC_API_KEY` | Optional. If set, the Agent SDK bills the API account instead of the OAuth subscription from `claude login`. Alternatives: `CLAUDE_CODE_USE_BEDROCK`/`_VERTEX`/`_FOUNDRY` + their respective provider credentials. | unset (use OAuth) |
 | `PINPOINT_EDITOR` | Editor for the "click file:line:col to open" feature. Honored before `EDITOR` and `VISUAL`. | unset; falls back to `EDITOR`, `VISUAL`, then `code` |
 
 ### Hotkey customization (browser-side)

@@ -1,11 +1,16 @@
 ---
 name: pinpoint-setup
-description: Wire Pinpoint into a target project so the developer can click UI elements, leave comments, and have the running Claude Code session pick them up over MCP. Use when the user asks to "set up pinpoint", "install pinpoint", "add pinpoint to <repo>", or wants the click-to-fix loop in a new app. Detects whether the target is a Vite+React or Next.js app and follows the matching runtime guide.
+description: Wire Pinpoint into a target project so the developer can click UI elements, leave comments, and have agents pick them up — either over MCP into the developer's main Claude Code session, or via the Claude Agent SDK as parallel per-comment agents in isolated worktrees. Use when the user asks to "set up pinpoint", "install pinpoint", "add pinpoint to <repo>", or wants the click-to-fix loop in a new app. Detects whether the target is a Vite+React or Next.js app and follows the matching runtime guide.
 ---
 
 # Pinpoint setup
 
-Pinpoint is a localhost-only feedback loop: a build-time plugin tags JSX with `data-pp-loc`, a browser widget lets the developer pick an element and submit a comment + screenshot, and an MCP server (optionally with a channel) surfaces those comments to the coding agent.
+Pinpoint is a localhost feedback loop: a build-time plugin tags JSX with `data-pp-loc`, a browser widget lets the developer pick an element and submit a comment + screenshot, and one of several delivery modes hands the comment to an agent — either MCP-into-running-session, or a per-comment Claude Agent SDK run inside an isolated git worktree.
+
+> **Architecture status.** v1 (the shipped base loop covered by this skill) and v2 (the persistent chat-surface-per-widget redesign covered by `pinpoint-v2-plan.md`) coexist during the migration. The install steps below are stable across both. What's changing under the hood:
+>
+> - **Phase A (in progress).** Per-comment agents and the Vite auto-trigger have moved from `child_process.spawn('claude', ['-p', ...])` to the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) running in-process. The end-user behavior is unchanged; the log files now contain SDK-rendered transcripts (text + tool chips) and a usage/cost footer per turn. Each spawned agent persists a `sessionId` on the feedback record so future turns can resume the conversation.
+> - **Phases B–H (not yet shipped).** WebSocket streaming to the browser, iframe-per-widget chat UI, `ask_user` clarification tool, HMR re-anchoring, and a Land/Discard worktree lifecycle. Until those land, treat the widget as a one-shot composer per the v1 description.
 
 ## Detect the runtime
 
@@ -54,7 +59,9 @@ If pinpoint moves, every consumer's `.mcp.json` (absolute path to `@pinpoint/mcp
 - **Hard-refresh the browser** after rebuilding the widget — the IIFE is cached. (Chrome DevTools → Network tab → "Disable cache" while DevTools is open helps during development.)
 - **Bump the version when re-packing.** `pnpm pack` uses the version in `package.json`; if you re-pack without bumping, pnpm caches by filename and consumer installs won't pick up your changes. Bump even for tiny fixes.
 - **Auto mode blocks MCP tools by default.** The agent will say "tools were denied" unless the project's `.claude/settings.local.json` allow-lists `mcp__pinpoint__*`. Use the `/permissions` slash command inside Claude Code to set this up.
-- **The MCP server must be running in a session.** If you want the channel-push experience, launch with `--dangerously-load-development-channels server:pinpoint`. Otherwise it's pull-mode (the user asks "what feedback is pending?") or spawn mode (each submit fires a fresh `claude -p`).
+- **Auth for SDK-backed spawn modes: OAuth (subscription) by default, env key only if you want to bill the API account.** The SDK bundles the Claude Code binary and respects the same auth as the CLI. If the developer is logged in (`claude login`, or via the Claude desktop app), spawn modes use that OAuth session — billed against the subscription. If `ANTHROPIC_API_KEY` is exported, the binary prefers it and bills the API account instead. Bedrock/Vertex/Foundry work too via `CLAUDE_CODE_USE_BEDROCK` / `_VERTEX` / `_FOUNDRY` env vars. Channel mode is unaffected (it pushes into the developer's existing `claude` session).
+- **The MCP server must be running in a session for channel mode.** Launch with `--dangerously-load-development-channels server:pinpoint`. Otherwise it's pull-mode (the user asks "what feedback is pending?") or SDK-spawn mode (each submit runs a per-feedback SDK agent in the background).
+- **SDK agents die with the dev server.** Unlike the v1 detached `claude -p` processes, SDK-spawned agents run in-process. Restarting the dev server mid-fix kills any in-flight agent — the log file will end mid-stream. The feedback record stays `pending` so the next agent run picks it up. (This will become a non-issue once Phase H lands per-turn process spawn from the v2 plan.)
 - **The composer is rendered in an iframe**, not just shadow DOM. This is intentional — iframes have their own focus context so modal focus traps (Radix Dialog, react-focus-lock, etc.) can't reach in. If you're debugging the composer in DevTools, drill into the iframe element.
 
 ## Environment variables (handy reference)
@@ -63,7 +70,8 @@ If pinpoint moves, every consumer's `.mcp.json` (absolute path to `@pinpoint/mcp
 | --- | --- | --- |
 | `PINPOINT_PROJECT_ROOT` | Absolute path to project root (where `.pinpoint/` lives) | MCP server, route handler, agent spawn |
 | `PINPOINT_SPAWN_AGENT` | `worktree` / `inline` / unset — agent spawn mode for the Next adapter | Next route handler |
-| `PINPOINT_AGENT_PERMISSION_MODE` | `--permission-mode` passed to spawned `claude -p` (default `acceptEdits`) | Next agent spawner |
+| `PINPOINT_AGENT_PERMISSION_MODE` | `permissionMode` passed to the Agent SDK (default `acceptEdits`) | Next + Vite agent spawners |
+| `ANTHROPIC_API_KEY` | Optional API key. If set, the SDK bills the API account instead of the OAuth subscription. Unset to use `claude login` credentials. | Next + Vite agent spawners |
 | `PINPOINT_EDITOR` | Editor command for the "click file:line:col to open" feature | Route handler `/open` endpoint |
 | `EDITOR` / `VISUAL` | Fallback for `PINPOINT_EDITOR` (standard *nix conventions) | Route handler `/open` endpoint |
 

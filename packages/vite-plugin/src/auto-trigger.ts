@@ -1,20 +1,21 @@
-import { spawn } from 'node:child_process';
+import { query, type Options, type PermissionMode, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { Logger } from 'vite';
 
 export interface AutoTriggerOptions {
-  /** Command to invoke. Default: 'claude'. */
-  command?: string;
   /** Working directory. Default: the resolved project root. */
   cwd?: string;
   /**
-   * Permission mode passed to claude. Default: 'acceptEdits'.
+   * Permission mode passed to the Agent SDK. Default: 'acceptEdits'.
    * - 'acceptEdits': allow file edits without prompting; risky ops still prompt.
    * - 'bypassPermissions': YOLO — no prompts at all.
    * - 'default': prompt for everything (probably useless in non-interactive mode).
+   * - 'plan': read-only — agent plans without editing.
    */
-  permissionMode?: 'acceptEdits' | 'bypassPermissions' | 'default' | 'dontAsk' | 'auto';
-  /** Extra args passed to the command. */
-  extraArgs?: string[];
+  permissionMode?: PermissionMode;
+  /** Override the model. Defaults to whatever the SDK picks. */
+  model?: string;
+  /** Cap on agent turns per batch. Defaults to the SDK's default. */
+  maxTurns?: number;
 }
 
 interface QueueItem {
@@ -23,20 +24,30 @@ interface QueueItem {
   file: string | null;
 }
 
+/**
+ * Per-submit Claude Agent SDK runner with batching.
+ *
+ * Serialises runs so that two submits never race on the same files. While
+ * a run is in flight, additional submits queue up; when the run completes,
+ * the whole queued batch is addressed in one follow-up run.
+ *
+ * Requires ANTHROPIC_API_KEY (or a CLAUDE_CODE_USE_* provider env var) in
+ * the dev server's environment — the SDK does not pick up CLI credentials.
+ */
 export class AutoTrigger {
-  private readonly cmd: string;
   private readonly cwd: string;
-  private readonly permissionMode: string;
-  private readonly extraArgs: string[];
+  private readonly permissionMode: PermissionMode;
+  private readonly model?: string;
+  private readonly maxTurns?: number;
   private readonly logger: Logger;
   private readonly queue: QueueItem[] = [];
   private busy = false;
 
   constructor(opts: AutoTriggerOptions, cwd: string, logger: Logger) {
-    this.cmd = opts.command ?? 'claude';
     this.cwd = opts.cwd ?? cwd;
     this.permissionMode = opts.permissionMode ?? 'acceptEdits';
-    this.extraArgs = opts.extraArgs ?? [];
+    this.model = opts.model;
+    this.maxTurns = opts.maxTurns;
     this.logger = logger;
   }
 
@@ -62,51 +73,90 @@ export class AutoTrigger {
     }
   }
 
-  private runBatch(batch: QueueItem[]): Promise<void> {
+  private async runBatch(batch: QueueItem[]): Promise<void> {
     const prompt = buildPrompt(batch);
-    // extraArgs go FIRST so flags like ['--model', 'sonnet'] precede the
-    // positional `-p PROMPT`.
-    const args = [...this.extraArgs, '-p', prompt, '--permission-mode', this.permissionMode];
-
     this.logger.info(
-      `[pinpoint] auto-fix: spawning ${this.cmd} for ${batch.length} item(s): ${batch
+      `[pinpoint] auto-fix: running Agent SDK for ${batch.length} item(s): ${batch
         .map((b) => b.id)
         .join(', ')}`,
     );
 
-    return new Promise((resolve) => {
-      const child = spawn(this.cmd, args, {
-        cwd: this.cwd,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: process.env,
-      });
+    const options: Options = {
+      cwd: this.cwd,
+      permissionMode: this.permissionMode,
+      settingSources: ['user', 'project', 'local'],
+    };
+    if (this.model) options.model = this.model;
+    if (this.maxTurns != null) options.maxTurns = this.maxTurns;
 
-      child.stdout.on('data', (chunk: Buffer) => {
-        const text = chunk.toString('utf8').trimEnd();
-        if (text) this.logger.info(`[pinpoint:claude] ${text}`);
-      });
-      child.stderr.on('data', (chunk: Buffer) => {
-        const text = chunk.toString('utf8').trimEnd();
-        if (text) this.logger.warn(`[pinpoint:claude!] ${text}`);
-      });
+    try {
+      for await (const message of query({ prompt, options }) as AsyncIterable<SDKMessage>) {
+        const line = renderForLogger(message);
+        if (line) this.logger.info(`[pinpoint:agent] ${line}`);
 
-      child.on('error', (err) => {
-        this.logger.warn(
-          `[pinpoint] auto-fix failed to spawn '${this.cmd}': ${err.message}. ` +
-            'Is the claude CLI on PATH?',
-        );
-        resolve();
-      });
-      child.on('exit', (code) => {
-        if (code === 0) {
-          this.logger.info(`[pinpoint] auto-fix done (${batch.length} item(s))`);
-        } else {
-          this.logger.warn(`[pinpoint] auto-fix exited with code ${code}`);
+        if (message.type === 'result') {
+          if (message.subtype === 'success') {
+            this.logger.info(
+              `[pinpoint] auto-fix done (${batch.length} item(s), ${message.num_turns} turn${
+                message.num_turns === 1 ? '' : 's'
+              }, $${message.total_cost_usd.toFixed(4)})`,
+            );
+          } else {
+            this.logger.warn(
+              `[pinpoint] auto-fix ended with ${message.subtype}` +
+                (message.errors?.length ? `: ${message.errors.join('; ')}` : ''),
+            );
+          }
         }
-        resolve();
-      });
-    });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`[pinpoint] auto-fix errored: ${msg}`);
+    }
   }
+}
+
+function renderForLogger(message: SDKMessage): string {
+  switch (message.type) {
+    case 'system':
+      if (message.subtype === 'init') {
+        return `session ${message.session_id} · model ${message.model} · ${message.permissionMode}`;
+      }
+      return '';
+    case 'assistant': {
+      const blocks = message.message.content;
+      if (!Array.isArray(blocks)) return '';
+      const parts: string[] = [];
+      for (const block of blocks) {
+        if (block.type === 'text' && block.text.trim()) {
+          parts.push(truncate(block.text.trim().replace(/\s+/g, ' '), 200));
+        } else if (block.type === 'tool_use') {
+          parts.push(`[${block.name}]${summariseInput(block.input)}`);
+        }
+      }
+      return parts.join(' ');
+    }
+    case 'result':
+      // The runBatch loop logs its own summary line; suppress duplication here.
+      return '';
+    default:
+      return '';
+  }
+}
+
+function summariseInput(input: unknown): string {
+  if (input == null || typeof input !== 'object') return '';
+  const obj = input as Record<string, unknown>;
+  for (const f of ['file_path', 'path', 'filePath']) {
+    if (typeof obj[f] === 'string') return ` ${obj[f]}`;
+  }
+  if (typeof obj.command === 'string') return ` ${truncate(obj.command, 60)}`;
+  return '';
+}
+
+function truncate(s: string, n: number): string {
+  if (s.length <= n) return s;
+  return `${s.slice(0, n - 1)}…`;
 }
 
 function buildPrompt(batch: QueueItem[]): string {

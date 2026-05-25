@@ -76,19 +76,21 @@ pinpoint({
   // Vite's `server.config.root`.
   root: '/explicit/path',
 
-  // Optional: spawn `claude -p` on each submit (alternative to channel mode).
-  // Don't combine with channel mode — pick one.
+  // Optional: run a Claude Agent SDK query() on each submit (alternative to
+  // channel mode). Don't combine with channel mode — pick one.
   autoTrigger: true,
   // or fine-grained:
   autoTrigger: {
-    command: 'claude',
-    permissionMode: 'acceptEdits',  // | 'bypassPermissions' | 'default'
-    extraArgs: ['--model', 'sonnet'],
+    permissionMode: 'acceptEdits',  // | 'bypassPermissions' | 'default' | 'plan'
+    model: 'claude-sonnet-4-6',     // any model the SDK accepts; optional
+    maxTurns: 30,                   // optional cap
   },
 });
 ```
 
-The Vite plugin's `autoTrigger` serializes submits — if multiple comments arrive while a `claude -p` is running, they're batched into one followup invocation. No risk of parallel agents racing on the same files.
+Auth: by default uses the OAuth session from `claude login` (billed against your subscription). Set `ANTHROPIC_API_KEY` to bill the API account instead, or `CLAUDE_CODE_USE_BEDROCK` / `_VERTEX` / `_FOUNDRY` for provider-backed auth.
+
+The Vite plugin's `autoTrigger` serializes submits — if multiple comments arrive while a query is running, they're batched into one follow-up turn. No risk of parallel agents racing on the same files.
 
 If neither autoTrigger nor channel mode is on, feedback sits on disk and the developer manually asks the agent ("what's pending?") — that's the spec-default pull mode.
 

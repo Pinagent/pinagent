@@ -1,6 +1,6 @@
 {
   "name": "@pinpoint/next",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "description": "Next.js adapter for Pinpoint: webpack loader for JSX tagging, route handlers for /__pinpoint/*, and a <Pinpoint /> widget component.",
   "type": "module",
   "main": "dist/index.js",
@@ -23,7 +23,9 @@
     },
     "./loader": "./dist/loader.cjs"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "prebuild": "node scripts/embed-widget.mjs",
     "build": "tsup",
@@ -35,6 +37,7 @@
     "react": ">=18"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.150",
     "@babel/parser": "^7.26.2",
     "@babel/traverse": "^7.26.4",
     "@babel/types": "^7.26.3",

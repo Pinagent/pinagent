@@ -2,6 +2,8 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
+import { query, type Options, type PermissionMode, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { renderInitFooter, renderMessage, renderResultFooter } from './agent-render';
 import { Storage, type FeedbackRecord } from './storage';
 
 export type SpawnAgentMode = 'worktree' | 'inline' | false;
@@ -19,21 +21,25 @@ interface AgentContext {
 }
 
 /**
- * Spawn an isolated agent for a single feedback record.
+ * Run an isolated Claude Agent SDK query for a single feedback record.
  *
- * Returns once the child has been spawned — the process is detached and
- * runs to completion in the background. Output is written as a markdown
- * report at `.pinpoint/logs/<id>.md`:
+ * Returns once the agent loop has been kicked off in the background. The
+ * stream is consumed asynchronously and rendered to a markdown report at
+ * `.pinpoint/logs/<id>.md`:
  *
  *   ---
  *   # Pinpoint feedback <id>
  *   <header: target, comment, branch, started_at>
  *
  *   ## Agent output
- *   <claude -p stdout/stderr>
+ *   <SDK-rendered transcript: text, tool chips, errors>
  *
- *   ## Resolution            ← appended once agent exits
- *   <status, note, finished_at>
+ *   ## Resolution            ← appended once the result message arrives
+ *   <status, note, finished_at, tokens, cost>
+ *
+ * Unlike the v1 detached `claude -p` model, the SDK runs in-process. If the
+ * dev server exits mid-fix, the agent loop dies and the log ends mid-stream;
+ * the feedback record stays `pending` so the next launch can re-pick it up.
  */
 export async function spawnAgent(ctx: AgentContext): Promise<void> {
   if (ctx.mode === false) return;
@@ -61,43 +67,92 @@ export async function spawnAgent(ctx: AgentContext): Promise<void> {
   await appendLog(logPath, renderHeader(ctx, cwd, startedAt, /* worktreeReady */ true));
 
   const prompt = buildPrompt(ctx.feedback, ctx.mode, cwd);
-  const logHandle = await open(logPath, 'a');
-  const child = spawn(
-    'claude',
-    [
-      '-p',
-      prompt,
-      '--permission-mode',
-      process.env.PINPOINT_AGENT_PERMISSION_MODE ?? 'acceptEdits',
-    ],
-    {
-      cwd,
-      detached: true,
-      stdio: ['ignore', logHandle.fd, logHandle.fd],
-      // The agent MUST talk to the main project's MCP server so all agents
-      // share one feedback store. PINPOINT_PROJECT_ROOT pins this even when
-      // the agent's cwd is a worktree.
-      env: {
-        ...process.env,
-        PINPOINT_PROJECT_ROOT: ctx.projectRoot,
-      },
-    },
-  );
-  // Close our handle so the child owns the fd.
-  await logHandle.close();
+  const permissionMode = resolvePermissionMode(process.env);
 
-  // When the agent exits, re-read the feedback record (the agent may have
-  // resolved it) and append a footer summarizing the outcome.
-  child.on('exit', async (code) => {
-    try {
-      await appendResolution(ctx.projectRoot, ctx.feedback.id, logPath, code);
-    } catch {
-      // Best-effort: if the parent dev server is shutting down, just skip.
+  // The MCP server resolves PINPOINT_PROJECT_ROOT for storage. In worktree
+  // mode, cwd is a sibling of the main repo, so the env var must explicitly
+  // pin it back to the real project root. `env` REPLACES the SDK subprocess
+  // environment (per SDK docs), so spread process.env to keep PATH, HOME,
+  // ANTHROPIC_API_KEY, etc.
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    PINPOINT_PROJECT_ROOT: ctx.projectRoot,
+  };
+
+  const options: Options = {
+    cwd,
+    permissionMode,
+    env,
+    // Load .mcp.json (and settings) from the worktree / project. The widget
+    // depends on the pinpoint MCP server being reachable.
+    settingSources: ['user', 'project', 'local'],
+  };
+
+  // Fire the stream consumer in the background so spawnAgent resolves with
+  // "kicked off" semantics, matching the v1 fire-and-forget contract.
+  void consumeStream(ctx, logPath, prompt, options);
+}
+
+async function consumeStream(
+  ctx: AgentContext,
+  logPath: string,
+  prompt: string,
+  options: Options,
+): Promise<void> {
+  let sessionId: string | null = null;
+  let sessionRecorded = false;
+  let resultRendered = false;
+
+  try {
+    for await (const message of query({ prompt, options }) as AsyncIterable<SDKMessage>) {
+      if (!sessionId && 'session_id' in message && typeof message.session_id === 'string') {
+        sessionId = message.session_id;
+      }
+      if (!sessionRecorded && sessionId) {
+        sessionRecorded = true;
+        await persistSessionId(ctx.projectRoot, ctx.feedback.id, sessionId);
+      }
+
+      if (message.type === 'system' && message.subtype === 'init') {
+        await appendLog(logPath, renderInitFooter(message));
+        continue;
+      }
+
+      if (message.type === 'result') {
+        resultRendered = true;
+        await appendLog(logPath, renderMessage(message));
+        await appendResolution(ctx.projectRoot, ctx.feedback.id, logPath, message);
+        continue;
+      }
+
+      const chunk = renderMessage(message);
+      if (chunk) await appendLog(logPath, chunk);
     }
-  });
+  } catch (err) {
+    await appendLog(
+      logPath,
+      `\n> [pinpoint] agent stream errored: ${stringifyErr(err)}\n`,
+    );
+  }
 
-  // Don't keep the parent dev server alive on the child's behalf.
-  child.unref();
+  if (!resultRendered) {
+    // Stream ended without a `result` message — write a minimal footer so
+    // the log isn't open-ended.
+    await appendResolution(ctx.projectRoot, ctx.feedback.id, logPath, null);
+  }
+}
+
+async function persistSessionId(
+  projectRoot: string,
+  feedbackId: string,
+  sessionId: string,
+): Promise<void> {
+  try {
+    const storage = new Storage(projectRoot);
+    await storage.patch(feedbackId, { agentSessionId: sessionId });
+  } catch {
+    // Best-effort; the feedback record may have been deleted.
+  }
 }
 
 async function createWorktree(
@@ -144,6 +199,7 @@ function runGit(cwd: string, args: string[], logPath: string): Promise<void> {
 }
 
 async function appendLog(path: string, text: string): Promise<void> {
+  if (!text) return;
   const h = await open(path, 'a');
   try {
     await h.write(text);
@@ -154,6 +210,21 @@ async function appendLog(path: string, text: string): Promise<void> {
 
 function stringifyErr(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+function resolvePermissionMode(env: NodeJS.ProcessEnv): PermissionMode {
+  const v = env.PINPOINT_AGENT_PERMISSION_MODE;
+  if (
+    v === 'default' ||
+    v === 'acceptEdits' ||
+    v === 'bypassPermissions' ||
+    v === 'plan' ||
+    v === 'dontAsk' ||
+    v === 'auto'
+  ) {
+    return v;
+  }
+  return 'acceptEdits';
 }
 
 function renderHeader(
@@ -202,7 +273,7 @@ async function appendResolution(
   projectRoot: string,
   feedbackId: string,
   logPath: string,
-  exitCode: number | null,
+  result: Extract<SDKMessage, { type: 'result' }> | null,
 ): Promise<void> {
   const storage = new Storage(projectRoot);
   const updated = await storage.read(feedbackId);
@@ -213,7 +284,12 @@ async function appendResolution(
   lines.push('## Resolution');
   lines.push('');
   lines.push(`**Finished:** ${finishedAt}  `);
-  lines.push(`**Exit code:** ${exitCode ?? 'null (signal)'}`);
+
+  if (result) {
+    lines.push(renderResultFooter(result));
+  } else {
+    lines.push('> Stream ended without a `result` message.');
+  }
 
   if (!updated) {
     lines.push('');
@@ -225,6 +301,9 @@ async function appendResolution(
     }
     if (updated.commitSha) {
       lines.push(`**Commit:** \`${updated.commitSha}\``);
+    }
+    if (updated.agentSessionId) {
+      lines.push(`**Session:** \`${updated.agentSessionId}\``);
     }
     if (updated.note) {
       lines.push('');

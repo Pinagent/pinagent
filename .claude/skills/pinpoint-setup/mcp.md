@@ -102,7 +102,9 @@ Trade-off: only ONE session at a time. Submits are processed serially in that se
 
 ### Worktree-per-feedback (recommended for parallel / async work) — Next only
 
-Each Submit creates a fresh git worktree at `.pinpoint/worktrees/<id>` on branch `pinpoint/<id>` from current HEAD, then spawns `claude -p` inside it. True parallel agents — they edit different working copies so they can't race.
+Each Submit creates a fresh git worktree at `.pinpoint/worktrees/<id>` on branch `pinpoint/<id>` from current HEAD, then runs a Claude Agent SDK `query()` with `cwd` set to the worktree. True parallel agents — they edit different working copies so they can't race.
+
+The first turn's `sessionId` is persisted on the feedback record (`agent.sessionId`) so future turns can resume the same conversation rather than restarting from scratch. This is what the v2 chat-surface UI will use; for now you can resume manually if needed.
 
 Opt in via the plugin option in `next.config.js`:
 
@@ -111,7 +113,7 @@ import pinpoint from '@pinpoint/next/config';
 export default pinpoint(coreConfig, { spawnAgent: 'worktree' });
 ```
 
-Each agent's output streams to `.pinpoint/logs/<id>.log` (`tail -f` to watch). After it finishes you review the branch like a PR:
+Each agent's output streams to `.pinpoint/logs/<id>.md` as a structured markdown transcript — text deltas inline, tool calls as collapsed chips with file paths, a usage/cost footer per turn (`tail -f` to watch). After it finishes you review the branch like a PR:
 
 ```bash
 cd .pinpoint/worktrees/<id>
@@ -126,13 +128,17 @@ git worktree remove .pinpoint/worktrees/<id>
 git branch -D pinpoint/<id>
 ```
 
-Trade-offs: each submit is one billed `claude -p` invocation; agents have no prior conversation context; you have N branches to review. Best for explicit review workflows or production-grade async loops.
+Trade-offs: each submit is one billed Agent SDK run; first turn starts cold (no prior context); you have N branches to review. Best for explicit review workflows or production-grade async loops.
 
-Requires the consumer repo to be a git repo. `PINPOINT_AGENT_PERMISSION_MODE` controls `--permission-mode` (default `acceptEdits`).
+Requires:
+- The consumer repo is a git repo.
+- Either `claude login` (uses the OAuth subscription, default — billed against the developer's Claude account), an exported `ANTHROPIC_API_KEY` (bills the API account), or a `CLAUDE_CODE_USE_BEDROCK` / `_VERTEX` / `_FOUNDRY` provider env var. The SDK bundles the Claude Code binary and respects the same auth as the CLI.
+
+`PINPOINT_AGENT_PERMISSION_MODE` is passed as the SDK's `permissionMode` (default `acceptEdits`).
 
 ### Inline spawn mode (Next only)
 
-Same as worktree mode but in the main project directory — no worktree. Use this only when you don't have a git repo or don't want branches.
+Same as worktree mode (Agent SDK in-process) but `cwd` is the main project directory — no worktree. Use this only when you don't have a git repo or don't want branches.
 
 ```js
 pinpoint(coreConfig, { spawnAgent: 'inline' });
@@ -142,7 +148,9 @@ pinpoint(coreConfig, { spawnAgent: 'inline' });
 
 ### Auto-trigger mode (Vite only)
 
-Vite plugin can spawn `claude -p` per submit, with internal serialization (submits while another agent is running get batched into one followup invocation). Equivalent to "inline" mode but with the race-prevention built in. Worktree mode is not in the Vite plugin yet.
+Vite plugin runs a Claude Agent SDK `query()` per submit, with internal serialization (submits while another agent is running get batched into one follow-up turn). Equivalent to "inline" mode but with race-prevention built in. Worktree mode is not in the Vite plugin yet.
+
+Same auth options as the Next spawn modes: `claude login` (subscription, default), `ANTHROPIC_API_KEY` (API account), or a `CLAUDE_CODE_USE_*` provider env var.
 
 ```ts
 pinpoint({ autoTrigger: true })
