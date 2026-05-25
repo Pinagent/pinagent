@@ -112,118 +112,192 @@ export function mount(): void {
     state.mode = 'composing';
     const loc = findLoc(target);
     const selector = shortSelector(target);
+    const metaText = loc ? `${loc.file}:${loc.line}:${loc.col}` : selector;
 
-    const composer = document.createElement('div');
-    composer.className = 'composer';
-    composer.style.pointerEvents = 'auto';
-    // Promote to the browser's top layer via the Popover API. Top-layer
-    // elements render above any other DOM and — critically — are immune to
-    // focus traps applied by host-page modals (Radix Dialog, Headless UI,
-    // etc.). Without this, typing in the textarea fails when the user
-    // picked an element inside a modal: the modal's focusin handler keeps
-    // snapping focus back to itself.
+    // We render the composer inside an iframe — not just shadow DOM — so the
+    // host page's focus traps (Radix Dialog, react-focus-lock, etc.) cannot
+    // reach into it. An iframe has its own Document and focus context;
+    // parent-document JS literally cannot redirect focus inside it.
+    const iframe = document.createElement('iframe');
+    iframe.title = 'Pinpoint feedback';
+    iframe.style.position = 'fixed';
+    iframe.style.border = '0';
+    iframe.style.background = 'transparent';
+    iframe.style.pointerEvents = 'auto';
+    iframe.style.zIndex = '2147483646';
+    iframe.style.colorScheme = 'light';
+    // Override UA popover defaults — without these, `[popover]` UA styles
+    // (inset: 0; margin: auto) would center the iframe in the viewport
+    // regardless of our top/left.
+    iframe.style.inset = 'auto';
+    iframe.style.margin = '0';
+    iframe.style.padding = '0';
+    // The iframe itself is the popover, putting it in the browser's top
+    // layer above any other DOM. The popover render isolates it visually;
+    // the iframe document isolates it functionally (focus).
     if ('popover' in HTMLElement.prototype) {
-      composer.setAttribute('popover', 'manual');
+      iframe.setAttribute('popover', 'manual');
     }
 
     const r = target.getBoundingClientRect();
-    const top = Math.min(window.innerHeight - 240, Math.max(8, r.bottom + 8));
-    const left = Math.min(window.innerWidth - 332, Math.max(8, r.left));
-    composer.style.top = `${top}px`;
-    composer.style.left = `${left}px`;
+    const IFRAME_W = 344;
+    const IFRAME_H = 220;
+    const top = Math.min(window.innerHeight - IFRAME_H - 8, Math.max(8, r.bottom + 8));
+    const left = Math.min(window.innerWidth - IFRAME_W - 8, Math.max(8, r.left));
+    iframe.style.top = `${top}px`;
+    iframe.style.left = `${left}px`;
+    iframe.style.width = `${IFRAME_W}px`;
+    iframe.style.height = `${IFRAME_H}px`;
 
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = loc ? `${loc.file}:${loc.line}:${loc.col}` : selector;
-    composer.appendChild(meta);
+    // We pre-fill srcdoc with the composer HTML + styles. Using srcdoc keeps
+    // the iframe same-origin with the parent (so we can reach into
+    // contentDocument), and synchronously available after load.
+    iframe.srcdoc = composerHTML(metaText);
 
-    const ta = document.createElement('textarea');
-    ta.placeholder = 'Describe the change you want…';
-    composer.appendChild(ta);
-
-    const row = document.createElement('div');
-    row.className = 'row';
-    const cancel = document.createElement('button');
-    cancel.className = 'btn ghost';
-    cancel.type = 'button';
-    cancel.textContent = 'Cancel';
-    const submit = document.createElement('button');
-    submit.className = 'btn primary';
-    submit.type = 'button';
-    submit.textContent = 'Submit';
-    submit.disabled = true;
-    row.appendChild(cancel);
-    row.appendChild(submit);
-    composer.appendChild(row);
-
-    root.appendChild(composer);
-    // Activate top-layer rendering. Must come after the element is in the DOM.
-    if ('showPopover' in composer && composer.getAttribute('popover')) {
+    root.appendChild(iframe);
+    if ('showPopover' in iframe && iframe.getAttribute('popover')) {
       try {
-        (composer as HTMLElement & { showPopover(): void }).showPopover();
+        (iframe as HTMLIFrameElement & { showPopover(): void }).showPopover();
       } catch {
-        // Older browsers — element still renders normally, just not in top layer.
+        // Older browsers — iframe renders normally, just not in top layer.
       }
     }
-    setTimeout(() => ta.focus(), 0);
-
-    ta.addEventListener('input', () => {
-      submit.disabled = ta.value.trim().length === 0;
-    });
 
     function close() {
-      document.removeEventListener('keydown', onComposerKey, { capture: true });
-      composer.remove();
+      iframe.remove();
       state.mode = 'idle';
       state.selected = null;
       outline.style.display = 'none';
     }
 
-    function onComposerKey(e: KeyboardEvent) {
-      if (e.key !== 'Escape') return;
-      // Capture + stopPropagation so an outer modal (Radix Dialog, etc.)
-      // doesn't also close on the same Escape press.
-      e.preventDefault();
-      e.stopPropagation();
-      close();
-    }
-    document.addEventListener('keydown', onComposerKey, { capture: true });
+    iframe.addEventListener('load', () => {
+      const idoc = iframe.contentDocument;
+      const iwin = iframe.contentWindow;
+      if (!idoc || !iwin) return;
 
-    cancel.addEventListener('click', close);
+      const ta = idoc.getElementById('pp-ta') as HTMLTextAreaElement | null;
+      const cancel = idoc.getElementById('pp-cancel') as HTMLButtonElement | null;
+      const submit = idoc.getElementById('pp-submit') as HTMLButtonElement | null;
+      if (!ta || !cancel || !submit) return;
 
-    submit.addEventListener('click', async () => {
-      submit.disabled = true;
-      submit.textContent = 'Sending…';
-      try {
-        const screenshot = await capturePageScreenshot((node) => node !== host);
-        const payload = {
-          comment: ta.value.trim(),
-          loc,
-          selector,
-          url: window.location.href,
-          viewport: { w: window.innerWidth, h: window.innerHeight },
-          userAgent: navigator.userAgent,
-          screenshot,
-          createdAt: new Date().toISOString(),
-        };
-        const res = await fetch(ENDPOINT, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const body = await res.text().catch(() => '');
-          throw new Error(`HTTP ${res.status}: ${body || res.statusText}`);
+      // Focus is now inside the iframe's document — out of reach of any
+      // parent-page focus trap.
+      setTimeout(() => ta.focus(), 0);
+
+      ta.addEventListener('input', () => {
+        submit.disabled = ta.value.trim().length === 0;
+      });
+
+      iwin.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          close();
         }
-        toast('Sent', 'success');
-        close();
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        toast(`Error: ${msg}`, 'error');
-        submit.disabled = false;
-        submit.textContent = 'Submit';
-      }
+      });
+
+      cancel.addEventListener('click', () => close());
+
+      submit.addEventListener('click', async () => {
+        submit.disabled = true;
+        submit.textContent = 'Sending…';
+        try {
+          // Screenshot is captured from the PARENT document — that's where
+          // the page content lives. Filter excludes our shadow host AND the
+          // iframe itself so neither appears in the capture.
+          const screenshot = await capturePageScreenshot(
+            (node) => node !== host && node !== (iframe as unknown as HTMLElement),
+          );
+          const payload = {
+            comment: ta.value.trim(),
+            loc,
+            selector,
+            url: window.location.href,
+            viewport: { w: window.innerWidth, h: window.innerHeight },
+            userAgent: navigator.userAgent,
+            screenshot,
+            createdAt: new Date().toISOString(),
+          };
+          const res = await fetch(ENDPOINT, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) {
+            const body = await res.text().catch(() => '');
+            throw new Error(`HTTP ${res.status}: ${body || res.statusText}`);
+          }
+          toast('Sent', 'success');
+          close();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          toast(`Error: ${msg}`, 'error');
+          submit.disabled = false;
+          submit.textContent = 'Submit';
+        }
+      });
     });
+  }
+
+  function composerHTML(metaText: string): string {
+    // Escape the metaText so it can't break out of the HTML/attribute context.
+    const esc = (s: string) =>
+      s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    return `<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  html, body { margin: 0; padding: 0; background: transparent; }
+  * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif; }
+  .card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    color: #111827;
+    height: calc(100% - 2px);
+  }
+  .meta {
+    font-size: 11px;
+    color: #6b7280;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    word-break: break-all;
+  }
+  textarea {
+    flex: 1;
+    min-height: 80px;
+    resize: none;
+    padding: 8px;
+    font-size: 13px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    outline: none;
+    font-family: inherit;
+    background: #fff;
+    color: #111827;
+  }
+  textarea::placeholder { color: #9ca3af; }
+  textarea:focus { border-color: #2563eb; }
+  .row { display: flex; justify-content: flex-end; gap: 8px; }
+  .btn { border: 0; padding: 6px 12px; font-size: 13px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+  .btn.primary { background: #2563eb; color: #fff; }
+  .btn.primary:disabled { background: #93c5fd; cursor: not-allowed; }
+  .btn.ghost { background: transparent; color: #374151; }
+</style></head><body>
+  <div class="card">
+    <div class="meta">${esc(metaText)}</div>
+    <textarea id="pp-ta" placeholder="Describe the change you want…"></textarea>
+    <div class="row">
+      <button class="btn ghost" id="pp-cancel" type="button">Cancel</button>
+      <button class="btn primary" id="pp-submit" type="button" disabled>Submit</button>
+    </div>
+  </div>
+</body></html>`;
   }
 
   function toast(text: string, kind: 'success' | 'error') {
