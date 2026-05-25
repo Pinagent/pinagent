@@ -59,6 +59,19 @@ export type AgentEvent =
       totalCostUsd: number;
       durationMs: number;
       errors?: string[];
+    }
+  | {
+      /**
+       * Server-side authoritative status change. Emitted after the
+       * agent's `resolve_feedback` MCP call lands in `Storage`, so
+       * subscribed widgets can flip their cached row out of `pending`
+       * without polling. Mirrors `FeedbackRecord.status`.
+       */
+      type: 'status_changed';
+      status: 'pending' | 'fixed' | 'wontfix' | 'deferred';
+      note: string | null;
+      commitSha: string | null;
+      resolvedAt: string | null;
     };
 
 export interface BusSubscriber {

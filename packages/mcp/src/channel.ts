@@ -1,56 +1,53 @@
-import { existsSync, mkdirSync } from 'node:fs';
-import { watch } from 'node:fs/promises';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { ID_RE, type Storage } from './storage';
+import type { Storage } from './storage';
+
+const POLL_MS = 500;
 
 /**
- * Watch the feedback directory and push a `notifications/claude/channel` event
- * to the Claude Code session each time a new feedback record lands on disk.
+ * Push a `notifications/claude/channel` event to the Claude Code
+ * session for each new pending feedback that lands in the SQLite
+ * store.
  *
- * The channel notification is silently dropped if Claude Code wasn't started
- * with `--dangerously-load-development-channels server:pinpoint`, so this is
- * safe to enable unconditionally.
+ * v1 used `fs.watch` on `.pinpoint/feedback/`. v2 uses SQLite as the
+ * source of truth, and there's no portable cross-process change
+ * notification for SQLite — so this is a half-second poll. Cheap
+ * (one SELECT per tick) and good enough for interactive feedback.
+ *
+ * Silently no-ops if Claude Code wasn't started with
+ * `--dangerously-load-development-channels server:pinpoint`.
  */
 export async function startFeedbackWatcher(
   storage: Storage,
   mcp: Server,
   log: (msg: string) => void,
 ): Promise<void> {
-  if (!existsSync(storage.feedbackDir)) {
-    mkdirSync(storage.feedbackDir, { recursive: true });
-  }
-
-  // Seed the "already seen" set with whatever's on disk at startup. We only
-  // want to push events for items that arrive AFTER the session is running.
+  // Seed the "already seen" set so we only push events for items
+  // that arrive AFTER the session starts.
   const seen = new Set<string>();
   try {
-    for (const rec of await storage.list()) {
-      seen.add(rec.id);
-    }
+    for (const rec of await storage.list()) seen.add(rec.id);
   } catch {
-    // ignore — empty dir is fine
+    // Empty / not-yet-migrated DB is fine — we'll discover items on
+    // the first poll.
   }
 
-  log(
-    `channel watcher started on ${storage.feedbackDir} (${seen.size} pre-existing item(s) ignored)`,
-  );
+  log(`channel watcher started (polling SQLite, ${seen.size} pre-existing item(s) ignored)`);
 
-  // Fire-and-forget: this async loop runs for the life of the process.
+  // Fire-and-forget poll loop for the life of the process.
   void (async () => {
-    try {
-      for await (const event of watch(storage.feedbackDir)) {
-        const name = event.filename;
-        if (!name || !name.endsWith('.json') || name.endsWith('.tmp.json')) continue;
-        const id = name.slice(0, -'.json'.length);
-        if (!ID_RE.test(id)) continue;
-        if (seen.has(id)) continue;
-
-        // Atomic rename should make this unnecessary, but if the writer is
-        // mid-rename, a tiny delay avoids a partial read.
-        await new Promise((r) => setTimeout(r, 25));
-        const rec = await storage.read(id);
-        if (!rec) continue;
-        seen.add(id);
+    while (true) {
+      await new Promise((r) => setTimeout(r, POLL_MS));
+      let items: Awaited<ReturnType<typeof storage.list>>;
+      try {
+        items = await storage.list();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        log(`watcher poll failed: ${msg}`);
+        continue;
+      }
+      for (const rec of items) {
+        if (seen.has(rec.id)) continue;
+        seen.add(rec.id);
         if (rec.status !== 'pending') continue;
 
         try {
@@ -74,9 +71,6 @@ export async function startFeedbackWatcher(
           log(`channel notify failed for ${rec.id}: ${msg}`);
         }
       }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      log(`watcher exited: ${msg}`);
     }
   })();
 }

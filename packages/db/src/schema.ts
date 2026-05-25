@@ -79,6 +79,8 @@ export const widgetAnchors = sqliteTable('widget_anchors', {
   clickY: integer('click_y'),
   viewportW: integer('viewport_w'),
   viewportH: integer('viewport_h'),
+  /** From `navigator.userAgent` at pick time. Mostly for debugging. */
+  userAgent: text('user_agent'),
 });
 
 /**

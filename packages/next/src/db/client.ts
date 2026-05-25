@@ -25,16 +25,22 @@ interface GlobalHolder {
 
 // Migrations live at `packages/next/drizzle/` (drizzle-kit's default
 // `out` directory) and ship with the package via the `files` array in
-// package.json. At runtime tsup-bundled output sits in `dist/`; walking
-// up one directory from the bundled module lands at the package root.
-// fileURLToPath + path.join (not `new URL(literal, ...)`) so Turbopack
-// doesn't try to resolve the path as a bundleable asset at build time.
+// package.json.
+//
+// At runtime tsup-bundled output sits in `packages/next/dist/`, so the
+// folder is one level up. But when running the source directly (vitest,
+// ts-node, etc.) the module is at `packages/next/src/db/`, two levels
+// up. Probe both and use the first that exists, so the same module
+// works in both contexts without each caller knowing which one it's in.
 const moduleUrl: string | undefined = import.meta.url;
-const MIGRATIONS_DIR = resolve(
-  moduleUrl
-    ? join(dirname(fileURLToPath(moduleUrl)), '..', 'drizzle')
-    : join(__dirname, '..', 'drizzle'),
-);
+const MIGRATIONS_DIR = (() => {
+  const base = moduleUrl ? dirname(fileURLToPath(moduleUrl)) : __dirname;
+  const candidates = [
+    resolve(base, '..', 'drizzle'), // dist/route.{js,cjs} → packages/next/drizzle
+    resolve(base, '..', '..', 'drizzle'), // src/db/client.ts → packages/next/drizzle
+  ];
+  return candidates.find((p) => existsSync(p)) ?? candidates[0]!;
+})();
 
 export function getDb(projectRoot: string): Db {
   const g = globalThis as GlobalHolder;

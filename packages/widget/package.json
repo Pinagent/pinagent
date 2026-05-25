@@ -5,7 +5,9 @@
   "type": "module",
   "description": "Pinpoint browser widget (shadow-root pick + composer). Built as IIFE and consumed by @pinpoint/vite-plugin.",
   "main": "dist/widget.js",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -18,6 +20,8 @@
     "html-to-image": "^1.11.13"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^11.10.0",
     "tsup": "^8.3.5",
     "typescript": "^5.6.3"
   }

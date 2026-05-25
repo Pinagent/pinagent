@@ -108,13 +108,14 @@ async function touchConversation(db: BrowserDb, feedbackId: string): Promise<voi
 export async function markConversationResolved(
   db: BrowserDb,
   feedbackId: string,
-  status: 'fixed' | 'wontfix',
+  status: 'fixed' | 'wontfix' | 'deferred',
+  resolvedAt?: Date | null,
 ): Promise<void> {
   await db
     .update(conversations)
     .set({
       status,
-      resolvedAt: new Date(),
+      resolvedAt: resolvedAt ?? new Date(),
       updatedAt: new Date(),
     })
     .where(eq(conversations.id, feedbackId));

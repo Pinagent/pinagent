@@ -29,7 +29,15 @@ interface State {
 }
 
 interface AgentEvent {
-  type: 'init' | 'text' | 'tool_use' | 'tool_result' | 'ask_user' | 'error' | 'result';
+  type:
+    | 'init'
+    | 'text'
+    | 'tool_use'
+    | 'tool_result'
+    | 'ask_user'
+    | 'error'
+    | 'result'
+    | 'status_changed';
   [k: string]: unknown;
 }
 
@@ -1452,6 +1460,33 @@ function attachStreamHandler(
           const db = getBrowserDb();
           if (db) {
             void markConversationResolved(db, feedbackId, 'wontfix').catch(() => {});
+          }
+          break;
+        }
+        case 'status_changed': {
+          // Server-authoritative status flip — the agent called
+          // resolve_feedback (or similar) and the server's Storage
+          // wrote the new status. Mirror that into the browser cache
+          // so this conversation stops showing as pending on reload.
+          const status = String(event.status ?? '');
+          if (status === 'fixed' || status === 'wontfix' || status === 'deferred') {
+            const db = getBrowserDb();
+            if (db) {
+              const resolvedRaw = event.resolvedAt;
+              const resolvedAt =
+                typeof resolvedRaw === 'string' ? new Date(resolvedRaw) : null;
+              void markConversationResolved(db, feedbackId, status, resolvedAt).catch(
+                () => {},
+              );
+            }
+            // Surface the resolution in the live UI too.
+            const noteRaw = event.note;
+            if (typeof noteRaw === 'string' && noteRaw) {
+              append(el('div', 'msg', `Resolved (${status}): ${noteRaw}`));
+            } else {
+              append(el('div', 'msg', `Resolved (${status}).`));
+            }
+            setAgentState(status === 'fixed' ? 'done' : 'error');
           }
           break;
         }

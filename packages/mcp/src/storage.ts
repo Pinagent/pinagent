@@ -1,8 +1,16 @@
-// Mirror of @pinpoint/vite-plugin/src/storage.ts but read-focused.
-// Duplicated to keep mcp deploy-independent from the plugin package.
+// SQLite-backed mirror of @pinpoint/next/src/storage.ts. The MCP
+// server runs in a separate Node process from the dev server but
+// opens the same `.pinpoint/db.sqlite` file (SQLite WAL mode handles
+// concurrent readers/writers across processes).
+//
+// Screenshots stay on disk under `.pinpoint/screenshots/<id>.png`.
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
+import Database from 'better-sqlite3';
+import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import { asc, conversations, eq, widgetAnchors } from '@pinpoint/db';
+import * as schema from '@pinpoint/db/schema';
 import { z } from 'zod';
 
 export const ID_RE = /^[A-Za-z0-9_-]{8,16}$/;
@@ -24,44 +32,129 @@ export interface FeedbackRecord {
   status: Status;
   note: string | null;
   commitSha: string | null;
+  agentSessionId: string | null;
   createdAt: string;
   resolvedAt: string | null;
 }
 
+type Db = BetterSQLite3Database<typeof schema>;
+
 export class Storage {
   readonly root: string;
+  /**
+   * Legacy directory we still expose for the channel watcher path
+   * comparison and any consumer that scans it. The new source of
+   * truth is SQLite, but `.pinpoint/feedback/` may still contain
+   * pre-migration JSON files which the import step folds in.
+   */
   readonly feedbackDir: string;
+  private dbHandle: Db | null = null;
+  private legacyImportDone = false;
 
   constructor(root: string) {
     this.root = root;
     this.feedbackDir = join(root, '.pinpoint', 'feedback');
   }
 
-  async list(): Promise<FeedbackRecord[]> {
-    if (!existsSync(this.feedbackDir)) return [];
-    const names = await readdir(this.feedbackDir);
-    const out: FeedbackRecord[] = [];
-    for (const n of names) {
-      if (!n.endsWith('.json') || n.endsWith('.tmp')) continue;
-      const id = n.slice(0, -'.json'.length);
-      if (!ID_RE.test(id)) continue;
-      try {
-        const r = await this.read(id);
-        if (r) out.push(r);
-      } catch {
-        // skip malformed
+  private db(): Db {
+    if (this.dbHandle) return this.dbHandle;
+    const dbPath = join(this.root, '.pinpoint', 'db.sqlite');
+    const raw = new Database(dbPath, { fileMustExist: false });
+    raw.pragma('journal_mode = WAL');
+    raw.pragma('foreign_keys = ON');
+    // The route process owns migrations. MCP may start before the
+    // route, in which case the DB file might not have the schema yet.
+    // We only READ + occasionally UPDATE, and the route applies
+    // migrations on its first connect — but if MCP is alone in the
+    // wild (no dev server yet), we won't have tables. That's fine:
+    // queries return empty results until the route runs.
+    this.dbHandle = drizzle(raw, { schema });
+    return this.dbHandle;
+  }
+
+  private async maybeImportLegacy(): Promise<void> {
+    if (this.legacyImportDone) return;
+    this.legacyImportDone = true;
+    if (!existsSync(this.feedbackDir)) return;
+    try {
+      const names = await readdir(this.feedbackDir);
+      const db = this.db();
+      for (const n of names) {
+        if (!n.endsWith('.json') || n.endsWith('.tmp')) continue;
+        const id = n.slice(0, -'.json'.length);
+        if (!ID_RE.test(id)) continue;
+        try {
+          const raw = await readFile(join(this.feedbackDir, n), 'utf8');
+          const rec = JSON.parse(raw) as Partial<FeedbackRecord>;
+          if (!rec.id || !rec.comment) continue;
+          await db
+            .insert(conversations)
+            .values({
+              id: rec.id,
+              comment: rec.comment,
+              agentSessionId: rec.agentSessionId ?? null,
+              status: rec.status ?? 'pending',
+              note: rec.note ?? null,
+              commitSha: rec.commitSha ?? null,
+              createdAt: parseDate(rec.createdAt ?? new Date().toISOString()),
+              updatedAt: parseDate(rec.createdAt ?? new Date().toISOString()),
+              resolvedAt: rec.resolvedAt ? parseDate(rec.resolvedAt) : null,
+            })
+            .onConflictDoNothing();
+          await db
+            .insert(widgetAnchors)
+            .values({
+              conversationId: rec.id,
+              url: rec.url ?? '',
+              file: rec.file ?? null,
+              line: rec.line ?? null,
+              col: rec.col ?? null,
+              selector: rec.selector ?? '',
+              viewportW: rec.viewport?.w ?? null,
+              viewportH: rec.viewport?.h ?? null,
+              userAgent: rec.userAgent ?? null,
+            })
+            .onConflictDoNothing();
+        } catch {
+          // Skip malformed; original stays on disk.
+        }
       }
+    } catch {
+      // No feedback dir / permission issue — not fatal.
     }
-    out.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-    return out;
+  }
+
+  async list(): Promise<FeedbackRecord[]> {
+    await this.maybeImportLegacy();
+    try {
+      const rows = await this.db()
+        .select()
+        .from(conversations)
+        .leftJoin(widgetAnchors, eq(conversations.id, widgetAnchors.conversationId))
+        .orderBy(asc(conversations.createdAt));
+      return rows.map(rowToRecord);
+    } catch {
+      // Schema might not be applied yet (MCP started before route).
+      return [];
+    }
   }
 
   async read(id: string): Promise<FeedbackRecord | null> {
     if (!ID_RE.test(id)) return null;
-    const p = this.recordPath(id);
-    if (!existsSync(p)) return null;
-    const raw = await readFile(p, 'utf8');
-    return JSON.parse(raw) as FeedbackRecord;
+    await this.maybeImportLegacy();
+    try {
+      const rows = await this.db()
+        .select()
+        .from(conversations)
+        .leftJoin(widgetAnchors, eq(conversations.id, widgetAnchors.conversationId))
+        .where(eq(conversations.id, id))
+        .limit(1);
+      const row = rows[0];
+      if (!row) return null;
+      return rowToRecord(row);
+    } catch {
+      return null;
+    }
   }
 
   async readScreenshot(rec: FeedbackRecord): Promise<Buffer | null> {
@@ -70,17 +163,57 @@ export class Storage {
     return readFile(abs);
   }
 
+  /**
+   * Write back a (potentially-mutated) record. The MCP `resolve_feedback`
+   * tool uses this. We only touch the `conversations` columns that can
+   * change at runtime — anchor data is immutable after creation.
+   */
   async write(rec: FeedbackRecord): Promise<void> {
-    await mkdir(this.feedbackDir, { recursive: true });
-    const p = this.recordPath(rec.id);
-    const tmp = `${p}.tmp`;
-    await writeFile(tmp, `${JSON.stringify(rec, null, 2)}\n`, 'utf8');
-    await rename(tmp, p);
+    const db = this.db();
+    await db
+      .update(conversations)
+      .set({
+        status: rec.status,
+        note: rec.note,
+        commitSha: rec.commitSha,
+        agentSessionId: rec.agentSessionId,
+        updatedAt: new Date(),
+        resolvedAt: rec.resolvedAt ? parseDate(rec.resolvedAt) : null,
+      })
+      .where(eq(conversations.id, rec.id));
   }
+}
 
-  private recordPath(id: string): string {
-    return join(this.feedbackDir, `${id}.json`);
-  }
+function parseDate(iso: string): Date {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return new Date();
+  return d;
+}
+
+function rowToRecord(row: {
+  conversations: typeof conversations.$inferSelect;
+  widget_anchors: typeof widgetAnchors.$inferSelect | null;
+}): FeedbackRecord {
+  const c = row.conversations;
+  const a = row.widget_anchors;
+  return {
+    id: c.id,
+    comment: c.comment,
+    file: a?.file ?? null,
+    line: a?.line ?? null,
+    col: a?.col ?? null,
+    selector: a?.selector ?? '',
+    url: a?.url ?? '',
+    viewport: { w: a?.viewportW ?? 0, h: a?.viewportH ?? 0 },
+    userAgent: a?.userAgent ?? '',
+    screenshot: join('screenshots', `${c.id}.png`),
+    status: c.status,
+    note: c.note,
+    commitSha: c.commitSha,
+    agentSessionId: c.agentSessionId,
+    createdAt: c.createdAt.toISOString(),
+    resolvedAt: c.resolvedAt ? c.resolvedAt.toISOString() : null,
+  };
 }
 
 export function isInsideRoot(root: string, target: string): boolean {

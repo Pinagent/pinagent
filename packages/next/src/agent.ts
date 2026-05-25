@@ -139,6 +139,15 @@ export async function runFollowUpTurn(feedbackId: string, content: string): Prom
 }
 
 /**
+ * True iff an SDK run is currently in flight for this feedback id.
+ * Lightweight read for code that needs to know without mutating
+ * anything (tests, status pings, future health endpoints).
+ */
+export function hasActiveRun(feedbackId: string): boolean {
+  return activeRuns.has(feedbackId);
+}
+
+/**
  * Abort an in-flight run for `feedbackId`. Returns false if nothing is
  * running. The SDK should propagate the abort through its tool loop and
  * exit the iterator; consumeStream catches the abort error and writes a
@@ -250,6 +259,26 @@ async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<v
           await appendResolution(opts.projectRoot, opts.feedbackId, opts.logPath, message);
         } else {
           await appendLog(opts.logPath, `\n${renderResultFooter(message)}\n`);
+        }
+        // If the agent flipped this feedback out of `pending` via the
+        // MCP `resolve_feedback` tool, fan that out to the widget so
+        // its cache catches up immediately instead of waiting on a
+        // reload-time scan.
+        try {
+          const storage = new Storage(opts.projectRoot);
+          const rec = await storage.read(opts.feedbackId);
+          if (rec && rec.status !== 'pending') {
+            bus.publish({
+              type: 'status_changed',
+              status: rec.status,
+              note: rec.note,
+              commitSha: rec.commitSha,
+              resolvedAt: rec.resolvedAt,
+            });
+          }
+        } catch {
+          // Status sync is best-effort — the widget's terminal-event
+          // handler (on 'result') already covers the common cases.
         }
         continue;
       }
@@ -410,7 +439,7 @@ function stringifyErr(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-function resolvePermissionMode(env: NodeJS.ProcessEnv): PermissionMode {
+export function resolvePermissionMode(env: NodeJS.ProcessEnv): PermissionMode {
   const v = env.PINPOINT_AGENT_PERMISSION_MODE;
   if (
     v === 'default' ||

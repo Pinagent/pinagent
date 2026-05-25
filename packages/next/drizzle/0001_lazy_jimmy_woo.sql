@@ -1,0 +1,1 @@
+ALTER TABLE `widget_anchors` ADD `user_agent` text;

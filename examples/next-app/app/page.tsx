@@ -1,4 +1,4 @@
-import { Counter } from './Counter';
+import { CounterList } from './CounterList';
 import { Footer } from './Footer';
 
 export default function Page() {
@@ -30,13 +30,17 @@ export default function Page() {
           background: '#f9fafb',
         }}
       >
-        <Counter label="Apples" description="Crisp and sweet, an everyday classic." />
-        <Counter label="Bananas" description="Soft, sweet, and full of potassium." />
-        <Counter label="Oranges" description="Juicy citrus packed with vitamin C." />
-        <Counter label="Strawberries" description="Bright red berries bursting with flavor." />
-        <Counter label="Blueberries" description="Tiny antioxidant-rich gems." />
-        <Counter label="Grapes" description="Bite-sized clusters of refreshing sweetness." />
-        <Counter label="Pineapples" description="Tropical, tangy, and unmistakable." />
+        <CounterList
+          items={[
+            { label: 'Apples', description: 'Crisp and sweet, an everyday classic.' },
+            { label: 'Bananas', description: 'Soft, sweet, and full of potassium.' },
+            { label: 'Oranges', description: 'Juicy citrus packed with vitamin C.' },
+            { label: 'Strawberries', description: 'Bright red berries bursting with flavor.' },
+            { label: 'Blueberries', description: 'Tiny antioxidant-rich gems.' },
+            { label: 'Grapes', description: 'Bite-sized clusters of refreshing sweetness.' },
+            { label: 'Pineapples', description: 'Tropical, tangy, and unmistakable.' },
+          ]}
+        />
       </section>
       <Footer />
     </main>
