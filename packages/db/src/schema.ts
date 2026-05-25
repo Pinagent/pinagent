@@ -1,15 +1,15 @@
 /**
- * Pinpoint persistent state. Shared between the dev-side server
- * (`better-sqlite3` via `@pinpoint/next/db/client`) and the browser
- * cache (`@sqlite.org/sqlite-wasm` via `@pinpoint/widget/db/client`).
+ * Pinagent persistent state. Shared between the dev-side server
+ * (`better-sqlite3` via `@pinagent/next/db/client`) and the browser
+ * cache (`@sqlite.org/sqlite-wasm` via `@pinagent/widget/db/client`).
  *
  * Server-side is the source of truth: it owns the agent runs, log
  * files, and worktrees. The browser store mirrors only the
  * conversations the current page cares about and is rebuilt from
  * server state if it ever diverges.
  *
- * Naming follows the v2 plan (`pinpoint-v2-plan.md` §4.2). When you
- * change a column here, run `pnpm --filter @pinpoint/next drizzle:gen`
+ * Naming follows the v2 plan (`pinagent-v2-plan.md` §4.2). When you
+ * change a column here, run `pnpm --filter @pinagent/next drizzle:gen`
  * to produce a new migration; the server applies migrations on
  * connect.
  */
@@ -17,7 +17,7 @@ import { sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 /**
- * One row per pinpoint comment a developer submits. id is the nanoid
+ * One row per pinagent comment a developer submits. id is the nanoid
  * (matches the existing flat-file feedback id) so we can migrate
  * piecemeal without rewriting IDs.
  *
@@ -69,11 +69,11 @@ export const widgetAnchors = sqliteTable('widget_anchors', {
     .primaryKey()
     .references(() => conversations.id, { onDelete: 'cascade' }),
   url: text('url').notNull(),
-  /** From the `data-pp-loc` build-time attribute. */
+  /** From the `data-pa-loc` build-time attribute. */
   file: text('file'),
   line: integer('line'),
   col: integer('col'),
-  /** CSS-selector fallback for when `data-pp-loc` isn't available. */
+  /** CSS-selector fallback for when `data-pa-loc` isn't available. */
   selector: text('selector').notNull(),
   clickX: integer('click_x'),
   clickY: integer('click_y'),

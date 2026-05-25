@@ -1,6 +1,6 @@
 /**
  * Source for the browser-side sqlite worker. Served verbatim at
- * `/__pinpoint/db-worker.js`; the widget spawns it with
+ * `/__pinagent/db-worker.js`; the widget spawns it with
  * `new Worker(url, { type: 'module' })`.
  *
  * Architecture choice: we install the **OPFS SAH Pool VFS**, not the
@@ -36,16 +36,16 @@ export const DB_WORKER_SOURCE = `
 //     (needs COOP/COEP). We use the SAH Pool VFS instead, which
 //     doesn't, so this is expected and we route around it.
 //
-//  2. console.error "pinpoint: NoModificationAllowedError: Failed
+//  2. console.error "pinagent: NoModificationAllowedError: Failed
 //     to execute 'createSyncAccessHandle'..." — fires when another
 //     tab (or a stale worker) is already holding the OPFS access
 //     handle on our DB file. Our caller handles it (we fall back to
-//     :memory: and log a clear "[pinpoint:sqlite-worker] backend:
+//     :memory: and log a clear "[pinagent:sqlite-worker] backend:
 //     :memory:" line). The raw SQLite logger output is just noise.
 //
 // Both internal log lines from sqlite-wasm's OPFS VFS implementation
 // are prefixed with the VFS name we passed to installOpfsSAHPoolVfs
-// ('pinpoint'), so we filter by that prefix.
+// ('pinagent'), so we filter by that prefix.
 {
   const origWarn = console.warn;
   console.warn = (...args) => {
@@ -59,7 +59,7 @@ export const DB_WORKER_SOURCE = `
   };
   const origError = console.error;
   console.error = (...args) => {
-    if (typeof args[0] === 'string' && args[0].startsWith('pinpoint')) {
+    if (typeof args[0] === 'string' && args[0].startsWith('pinagent')) {
       // sqlite-wasm's OPFS logger output. Caller produces a clean
       // single line on actual failure; drop the verbose trace.
       return;
@@ -68,14 +68,14 @@ export const DB_WORKER_SOURCE = `
   };
 }
 
-import sqlite3InitModule from '/__pinpoint/sqlite-wasm/sqlite3-bundler-friendly.mjs';
+import sqlite3InitModule from '/__pinagent/sqlite-wasm/sqlite3-bundler-friendly.mjs';
 
 let db = null;
 
 async function init(args) {
   const sqlite3 = await sqlite3InitModule({
     print: () => {},
-    printErr: (...a) => console.error('[pinpoint:sqlite-worker]', ...a),
+    printErr: (...a) => console.error('[pinagent:sqlite-worker]', ...a),
   });
 
   // SAH Pool: persistent OPFS without COOP/COEP. initialCapacity 4
@@ -83,13 +83,13 @@ async function init(args) {
   // growing the pool on every open.
   try {
     const pool = await sqlite3.installOpfsSAHPoolVfs({
-      name: 'pinpoint',
+      name: 'pinagent',
       initialCapacity: 4,
     });
-    db = new pool.OpfsSAHPoolDb(args && args.dbName ? args.dbName : 'pinpoint.sqlite');
-    console.log('[pinpoint:sqlite-worker] backend: OPFS SAH Pool (persistent)');
+    db = new pool.OpfsSAHPoolDb(args && args.dbName ? args.dbName : 'pinagent.sqlite');
+    console.log('[pinagent:sqlite-worker] backend: OPFS SAH Pool (persistent)');
   } catch (err) {
-    console.warn('[pinpoint:sqlite-worker] backend: :memory: (no persistence) — SAH install failed:', err);
+    console.warn('[pinagent:sqlite-worker] backend: :memory: (no persistence) — SAH install failed:', err);
     db = new sqlite3.oo1.DB(':memory:');
   }
 }

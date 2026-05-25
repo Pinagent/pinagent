@@ -15,7 +15,7 @@ const TOOL_LIST = [
   {
     name: 'list_pending_feedback',
     description:
-      'List Pinpoint feedback items the developer has captured in the running Vite dev server. Returns only items with status=pending. Use this first to see what work is queued.',
+      'List Pinagent feedback items the developer has captured in the running Vite dev server. Returns only items with status=pending. Use this first to see what work is queued.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -103,16 +103,16 @@ const SourceInput = z.object({
 async function main() {
   const root = resolveRoot(process.env, process.cwd());
   // eslint-disable-next-line no-console
-  console.error(`[pinpoint-mcp] project root: ${root}`);
+  console.error(`[pinagent-mcp] project root: ${root}`);
   const storage = new Storage(root);
 
   const server = new Server(
-    { name: 'pinpoint', version: '0.0.1' },
+    { name: 'pinagent', version: '0.0.1' },
     {
       capabilities: {
         tools: {},
         // Channel capability — only takes effect when Claude Code is launched
-        // with `--dangerously-load-development-channels server:pinpoint`.
+        // with `--dangerously-load-development-channels server:pinagent`.
         // Without that flag, the notifications are silently dropped and the
         // tools below still work in pull mode.
         experimental: { 'claude/channel': {} },
@@ -240,13 +240,13 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // eslint-disable-next-line no-console
-  console.error('[pinpoint-mcp] ready on stdio');
+  console.error('[pinagent-mcp] ready on stdio');
 
   // Start the channel watcher after the server is connected so notifications
   // have a transport to write to.
   await startFeedbackWatcher(storage, server, (msg) => {
     // eslint-disable-next-line no-console
-    console.error(`[pinpoint-mcp:channel] ${msg}`);
+    console.error(`[pinagent-mcp:channel] ${msg}`);
   });
 }
 
@@ -287,6 +287,6 @@ function formatFeedback(r: {
 
 main().catch((err) => {
   // eslint-disable-next-line no-console
-  console.error('[pinpoint-mcp] fatal:', err);
+  console.error('[pinagent-mcp] fatal:', err);
   process.exit(1);
 });

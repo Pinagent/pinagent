@@ -12,7 +12,7 @@ function transform(code: string, ts = true): string | null {
  * Babel's `loc.column` is 0-indexed; transform.ts adds +1, so columns
  * match what an editor's "go to line:col" feature would expect.
  */
-const tagPattern = new RegExp(`data-pp-loc="${RELPATH}:\\d+:\\d+"`);
+const tagPattern = new RegExp(`data-pa-loc="${RELPATH}:\\d+:\\d+"`);
 
 describe('transformJsx', () => {
   it('returns null for files with no JSX', () => {
@@ -30,7 +30,7 @@ describe('transformJsx', () => {
     const out = transform(`const X = <Foo />;`);
     expect(out).not.toBeNull();
     expect(out).toMatch(tagPattern);
-    expect(out).toContain('<Foo data-pp-loc=');
+    expect(out).toContain('<Foo data-pa-loc=');
   });
 
   it('tags an element with existing attributes', () => {
@@ -52,7 +52,7 @@ describe('transformJsx', () => {
     `);
     expect(out).not.toBeNull();
     // Two opening elements -> two tags.
-    const matches = out!.match(/data-pp-loc=/g) ?? [];
+    const matches = out!.match(/data-pa-loc=/g) ?? [];
     expect(matches.length).toBe(2);
   });
 
@@ -61,9 +61,9 @@ describe('transformJsx', () => {
     expect(out).not.toBeNull();
     // The <span> gets tagged. The fragment itself doesn't have a name
     // to attach an attribute to.
-    const matches = out!.match(/data-pp-loc=/g) ?? [];
+    const matches = out!.match(/data-pa-loc=/g) ?? [];
     expect(matches.length).toBe(1);
-    expect(out).toContain('<span data-pp-loc=');
+    expect(out).toContain('<span data-pa-loc=');
   });
 
   it('is idempotent — running twice does not double-tag', () => {
@@ -81,8 +81,8 @@ describe('transformJsx', () => {
       }
     `);
     expect(out).not.toBeNull();
-    expect(out).toContain('<Yes data-pp-loc=');
-    expect(out).toContain('<No data-pp-loc=');
+    expect(out).toContain('<Yes data-pa-loc=');
+    expect(out).toContain('<No data-pa-loc=');
   });
 
   it('tags member-expression names (e.g. <Foo.Bar />)', () => {
@@ -100,7 +100,7 @@ describe('transformJsx', () => {
   it('preserves source line/column relationship to the inserted attribute', () => {
     // <Foo on line 1 col 11 (0-indexed col 10, +1 → 11)
     const out = transform(`const X = <Foo />;`);
-    expect(out).toContain(`data-pp-loc="${RELPATH}:1:11"`);
+    expect(out).toContain(`data-pa-loc="${RELPATH}:1:11"`);
   });
 
   it('uses ts:false when given a plain .jsx file', () => {
@@ -119,7 +119,7 @@ describe('transformJsx', () => {
       </>;
     `);
     expect(out).not.toBeNull();
-    const matches = out!.match(/data-pp-loc=/g) ?? [];
+    const matches = out!.match(/data-pa-loc=/g) ?? [];
     expect(matches.length).toBe(3);
   });
 });

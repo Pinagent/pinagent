@@ -3,7 +3,7 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: { widget: 'src/index.ts' },
   format: ['iife'],
-  globalName: 'PinpointWidget',
+  globalName: 'PinagentWidget',
   outDir: 'dist',
   platform: 'browser',
   target: 'es2020',

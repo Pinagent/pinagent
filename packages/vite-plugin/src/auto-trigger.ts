@@ -54,7 +54,7 @@ export class AutoTrigger {
   enqueue(item: QueueItem): void {
     this.queue.push(item);
     this.logger.info(
-      `[pinpoint] queued feedback ${item.id} for auto-fix (queue depth: ${this.queue.length})`,
+      `[pinagent] queued feedback ${item.id} for auto-fix (queue depth: ${this.queue.length})`,
     );
     this.drain();
   }
@@ -76,7 +76,7 @@ export class AutoTrigger {
   private async runBatch(batch: QueueItem[]): Promise<void> {
     const prompt = buildPrompt(batch);
     this.logger.info(
-      `[pinpoint] auto-fix: running Agent SDK for ${batch.length} item(s): ${batch
+      `[pinagent] auto-fix: running Agent SDK for ${batch.length} item(s): ${batch
         .map((b) => b.id)
         .join(', ')}`,
     );
@@ -92,18 +92,18 @@ export class AutoTrigger {
     try {
       for await (const message of query({ prompt, options }) as AsyncIterable<SDKMessage>) {
         const line = renderForLogger(message);
-        if (line) this.logger.info(`[pinpoint:agent] ${line}`);
+        if (line) this.logger.info(`[pinagent:agent] ${line}`);
 
         if (message.type === 'result') {
           if (message.subtype === 'success') {
             this.logger.info(
-              `[pinpoint] auto-fix done (${batch.length} item(s), ${message.num_turns} turn${
+              `[pinagent] auto-fix done (${batch.length} item(s), ${message.num_turns} turn${
                 message.num_turns === 1 ? '' : 's'
               }, $${message.total_cost_usd.toFixed(4)})`,
             );
           } else {
             this.logger.warn(
-              `[pinpoint] auto-fix ended with ${message.subtype}` +
+              `[pinagent] auto-fix ended with ${message.subtype}` +
                 (message.errors?.length ? `: ${message.errors.join('; ')}` : ''),
             );
           }
@@ -111,7 +111,7 @@ export class AutoTrigger {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`[pinpoint] auto-fix errored: ${msg}`);
+      this.logger.warn(`[pinagent] auto-fix errored: ${msg}`);
     }
   }
 }
@@ -162,9 +162,9 @@ function truncate(s: string, n: number): string {
 function buildPrompt(batch: QueueItem[]): string {
   const lines: string[] = [];
   lines.push(
-    'A user just submitted Pinpoint feedback in their running Vite dev server. Address each item by:',
+    'A user just submitted Pinagent feedback in their running Vite dev server. Address each item by:',
   );
-  lines.push('  1) Calling the pinpoint MCP tool `get_feedback` to read the comment + screenshot.');
+  lines.push('  1) Calling the pinagent MCP tool `get_feedback` to read the comment + screenshot.');
   lines.push(
     '  2) Optionally calling `get_source_context` to view the surrounding code.',
   );

@@ -1,7 +1,7 @@
 {
-  "name": "@pinpoint/next",
+  "name": "@pinagent/next",
   "version": "0.0.20",
-  "description": "Next.js adapter for Pinpoint: webpack loader for JSX tagging, route handlers for /__pinpoint/*, and a <Pinpoint /> widget component.",
+  "description": "Next.js adapter for Pinagent: webpack loader for JSX tagging, route handlers for /__pinagent/*, and a <Pinagent /> widget component.",
   "type": "module",
   "sideEffects": false,
   "main": "dist/index.js",
@@ -63,7 +63,7 @@
     "@babel/parser": "^7.26.2",
     "@babel/traverse": "^7.26.4",
     "@babel/types": "^7.26.3",
-    "@pinpoint/db": "workspace:*",
+    "@pinagent/db": "workspace:*",
     "@sqlite.org/sqlite-wasm": "^3.50.0-build1",
     "better-sqlite3": "^11.8.1",
     "drizzle-orm": "^0.38.0",
@@ -72,7 +72,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@pinpoint/widget": "workspace:*",
+    "@pinagent/widget": "workspace:*",
     "@types/babel__traverse": "^7.20.6",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.1",

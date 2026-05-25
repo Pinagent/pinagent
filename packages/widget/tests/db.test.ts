@@ -3,7 +3,7 @@ import {
   conversations,
   messages,
   widgetAnchors,
-} from '@pinpoint/db/schema';
+} from '@pinagent/db/schema';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   getConversationMessages,

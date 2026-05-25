@@ -1,11 +1,11 @@
-// Production stub for `@pinpoint/next/route`.
+// Production stub for `@pinagent/next/route`.
 //
 // Resolved by the `"default"` condition in package.json exports when the
 // bundler is not running in `"development"`. Keeps the dev route's heavy
 // transitive dependencies (`@anthropic-ai/claude-agent-sdk`, `@babel/*`,
 // `ws`, node:child_process, node:fs) out of production function bundles.
 //
-// Consumers still mount `app/pinpoint/[[...slug]]/route.ts` with the
+// Consumers still mount `app/pinagent/[[...slug]]/route.ts` with the
 // inline `dynamic` / `runtime` route-segment config required by Next 16.
 // In prod the handler responds 404 so the path is inert.
 

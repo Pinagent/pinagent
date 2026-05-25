@@ -15,7 +15,7 @@ import { capturePageScreenshot } from './screenshot';
 import { findLoc, shortSelector } from './selector';
 import { STYLES } from './styles';
 
-const ENDPOINT = '/__pinpoint/feedback';
+const ENDPOINT = '/__pinagent/feedback';
 const RECONNECT_MIN_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
 
@@ -95,9 +95,18 @@ interface Composer {
  * The picker cursor rule also lives here so it can cover the whole page.
  */
 const DOC_STYLES = `
-:root.pp-picking, :root.pp-picking * { cursor: crosshair !important; }
+/* Custom pin cursor while picking. The pin is rotated 135° around
+   the viewBox centre so the tip points to roughly 10:30 (upper-left
+   diagonal), lining up with how browser arrow cursors normally aim.
+   Cream stroke + dark fill so it stays legible on both light and
+   dark backgrounds. Hotspot (~9, 9) lands on the rotated tip in
+   32x32 cursor space. The crosshair fallback covers browsers that
+   won't render SVG cursors. */
+:root.pa-picking, :root.pa-picking * {
+  cursor: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 93 93'%3E%3Cg transform='rotate(135 46.5 46.5)'%3E%3Cpath d='M38.0761 27C24.2046 27 16.7486 43.8193 26.2852 53.7027L26.4587 53.8761L47.2659 74.6834L68.0732 53.8761L68.2466 53.7027C77.9567 43.8193 70.3273 27 56.4558 27L38.0761 27Z' fill='%23201B21' stroke='%23FCF9E8' stroke-width='4' stroke-linejoin='round'/%3E%3C/g%3E%3C/svg%3E") 9 9, crosshair !important;
+}
 
-.pp-iframe {
+.pa-iframe {
   position: absolute;
   border: 0;
   background: transparent;
@@ -105,9 +114,9 @@ const DOC_STYLES = `
   color-scheme: light;
   /* iframe is positioned relative to documentElement origin — set via JS */
 }
-.pp-iframe[hidden] { display: none; }
+.pa-iframe[hidden] { display: none; }
 
-.pp-bubble {
+.pa-bubble {
   position: absolute;
   width: ${BUBBLE_SIZE}px;
   height: ${BUBBLE_SIZE}px;
@@ -125,39 +134,39 @@ const DOC_STYLES = `
   transition: transform 120ms ease, box-shadow 120ms ease;
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
 }
-.pp-bubble:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(0,0,0,0.24); }
-.pp-bubble[hidden] { display: none; }
+.pa-bubble:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(0,0,0,0.24); }
+.pa-bubble[hidden] { display: none; }
 
-.pp-bubble.running { border-color: #2563eb; color: #2563eb; }
-.pp-bubble.running::after {
+.pa-bubble.running { border-color: #2563eb; color: #2563eb; }
+.pa-bubble.running::after {
   content: '';
   position: absolute;
   inset: -3px;
   border-radius: 50%;
   border: 2px solid #2563eb;
   opacity: 0.5;
-  animation: pp-bubble-pulse 1.6s ease-out infinite;
+  animation: pa-bubble-pulse 1.6s ease-out infinite;
   pointer-events: none;
 }
-@keyframes pp-bubble-pulse {
+@keyframes pa-bubble-pulse {
   0%   { transform: scale(1);    opacity: 0.55; }
   100% { transform: scale(1.55); opacity: 0; }
 }
-.pp-bubble.done  { border-color: #10b981; color: #10b981; background: #ecfdf5; }
-.pp-bubble.error { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
-.pp-bubble.pending { border-color: #94a3b8; color: #94a3b8; }
+.pa-bubble.done  { border-color: #10b981; color: #10b981; background: #ecfdf5; }
+.pa-bubble.error { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
+.pa-bubble.pending { border-color: #94a3b8; color: #94a3b8; }
 
-.pp-bubble-spinner {
+.pa-bubble-spinner {
   width: 14px;
   height: 14px;
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: 50%;
-  animation: pp-bubble-spin 0.9s linear infinite;
+  animation: pa-bubble-spin 0.9s linear infinite;
 }
-@keyframes pp-bubble-spin { to { transform: rotate(360deg); } }
+@keyframes pa-bubble-spin { to { transform: rotate(360deg); } }
 
-.pp-drag-handle {
+.pa-drag-handle {
   position: absolute;
   width: 28px;
   height: 24px;
@@ -177,11 +186,11 @@ const DOC_STYLES = `
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   transition: background 100ms ease, color 100ms ease;
 }
-.pp-drag-handle:hover { background: #f3f4f6; color: #111827; }
-.pp-drag-handle.dragging { cursor: grabbing; background: #e0e7ff; color: #1e3a8a; }
-.pp-drag-handle[hidden] { display: none; }
+.pa-drag-handle:hover { background: #f3f4f6; color: #111827; }
+.pa-drag-handle.dragging { cursor: grabbing; background: #e0e7ff; color: #1e3a8a; }
+.pa-drag-handle[hidden] { display: none; }
 
-.pp-pointer {
+.pa-pointer {
   position: absolute;
   width: 18px;
   height: 10px;
@@ -189,7 +198,7 @@ const DOC_STYLES = `
   z-index: 2147483646;
   overflow: visible;
 }
-.pp-pointer[hidden] { display: none; }
+.pa-pointer[hidden] { display: none; }
 `;
 
 /**
@@ -354,7 +363,7 @@ export function mount(): void {
   void initBrowserDb()
     .then(async (db) => {
       // eslint-disable-next-line no-console
-      console.log('[pinpoint:db] browser cache ready');
+      console.log('[pinagent:db] browser cache ready');
       try {
         const pending = await listPendingForCurrentPage(db, window.location.href);
         for (const row of pending) {
@@ -362,27 +371,27 @@ export function mount(): void {
         }
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.warn('[pinpoint:db] restore scan failed:', err);
+        console.warn('[pinagent:db] restore scan failed:', err);
       }
     })
     .catch((err) => {
       // eslint-disable-next-line no-console
-      console.warn('[pinpoint:db] init failed (cache disabled):', err);
+      console.warn('[pinagent:db] init failed (cache disabled):', err);
     });
 
   // Document-level <style> tag for elements that live in document.body
   // (composer iframes, bubbles, picker cursor). The shadow root holds
   // only the FAB / hint / outline — anything that needs to scroll with
   // the page goes in the main document.
-  if (!document.getElementById('pinpoint-doc-styles')) {
+  if (!document.getElementById('pinagent-doc-styles')) {
     const docStyle = document.createElement('style');
-    docStyle.id = 'pinpoint-doc-styles';
+    docStyle.id = 'pinagent-doc-styles';
     docStyle.textContent = DOC_STYLES;
     document.head.appendChild(docStyle);
   }
 
   const host = document.createElement('div');
-  host.id = 'pinpoint-root';
+  host.id = 'pinagent-root';
   host.style.position = 'fixed';
   host.style.inset = '0';
   host.style.pointerEvents = 'none';
@@ -398,7 +407,7 @@ export function mount(): void {
   const fab = document.createElement('button');
   fab.className = 'fab';
   fab.type = 'button';
-  fab.title = 'Pinpoint — pick an element';
+  fab.title = 'Pinagent — pick an element';
   fab.style.pointerEvents = 'auto';
   fab.appendChild(buildPinIcon(26, '#FCF9E8'));
   root.appendChild(fab);
@@ -421,7 +430,7 @@ export function mount(): void {
   function enterPicking() {
     state.mode = 'picking';
     fab.classList.add('active');
-    document.documentElement.classList.add('pp-picking');
+    document.documentElement.classList.add('pa-picking');
 
     const hint = document.createElement('div');
     hint.className = 'hint';
@@ -444,7 +453,7 @@ export function mount(): void {
   function exitPicking() {
     state.mode = 'idle';
     fab.classList.remove('active');
-    document.documentElement.classList.remove('pp-picking');
+    document.documentElement.classList.remove('pa-picking');
     outline.style.display = 'none';
     const hint = root.querySelector('[data-pp="hint"]');
     if (hint) hint.remove();
@@ -468,7 +477,7 @@ export function mount(): void {
     // Don't pick a bubble as the new target — bubbles are part of the
     // widget's own UI. Clicking a bubble during picker = expand that
     // composer instead.
-    if (target.classList.contains('pp-bubble')) {
+    if (target.classList.contains('pa-bubble')) {
       e.preventDefault();
       e.stopPropagation();
       exitPicking();
@@ -478,7 +487,7 @@ export function mount(): void {
     }
     // Don't pick the drag handle either — silently cancel picker so the
     // user can grab the handle they were aiming for.
-    if (target.classList.contains('pp-drag-handle')) {
+    if (target.classList.contains('pa-drag-handle')) {
       e.preventDefault();
       e.stopPropagation();
       exitPicking();
@@ -597,7 +606,7 @@ export function mount(): void {
     }
     if (!target) {
       // eslint-disable-next-line no-console
-      console.log(`[pinpoint] anchor lost for ${row.conversation.id} (selector: ${sel})`);
+      console.log(`[pinagent] anchor lost for ${row.conversation.id} (selector: ${sel})`);
       return;
     }
 
@@ -627,8 +636,8 @@ export function mount(): void {
     // Iframe lives in document.body (not the shadow root) so it scrolls
     // naturally with the page via absolute positioning in page coords.
     const iframe = document.createElement('iframe');
-    iframe.className = 'pp-iframe';
-    iframe.title = 'Pinpoint feedback';
+    iframe.className = 'pa-iframe';
+    iframe.title = 'Pinagent feedback';
     iframe.style.pointerEvents = 'auto';
     iframe.srcdoc = composerHTML(metaText);
     iframe.style.width = `${IFRAME_W}px`;
@@ -636,10 +645,10 @@ export function mount(): void {
     document.body.appendChild(iframe);
 
     const bubble = document.createElement('div');
-    bubble.className = 'pp-bubble pending';
-    bubble.title = 'Pinpoint — click to expand';
+    bubble.className = 'pa-bubble pending';
+    bubble.title = 'Pinagent — click to expand';
     bubble.hidden = true;
-    bubble.innerHTML = '<div class="pp-bubble-spinner"></div>';
+    bubble.innerHTML = '<div class="pa-bubble-spinner"></div>';
     document.body.appendChild(bubble);
 
     // Drag grip — small visible handle in the top-right corner of the
@@ -647,7 +656,7 @@ export function mount(): void {
     // track mousemove/mouseup on the parent document during a drag,
     // which we couldn't do from inside the iframe.
     const dragHandle = document.createElement('div');
-    dragHandle.className = 'pp-drag-handle';
+    dragHandle.className = 'pa-drag-handle';
     dragHandle.title = 'Drag to reposition';
     dragHandle.textContent = '⋮⋮';
     document.body.appendChild(dragHandle);
@@ -659,7 +668,7 @@ export function mount(): void {
     // border without doubling it.
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const pointer = document.createElementNS(SVG_NS, 'svg');
-    pointer.setAttribute('class', 'pp-pointer');
+    pointer.setAttribute('class', 'pa-pointer');
     pointer.setAttribute('viewBox', '0 0 18 10');
     const pointerPath = document.createElementNS(SVG_NS, 'path');
     pointerPath.setAttribute('fill', '#fff');
@@ -675,7 +684,7 @@ export function mount(): void {
       bubble.classList.add(next);
       if (next === 'done') bubble.innerHTML = '✓';
       else if (next === 'error') bubble.innerHTML = '✗';
-      else bubble.innerHTML = '<div class="pp-bubble-spinner"></div>';
+      else bubble.innerHTML = '<div class="pa-bubble-spinner"></div>';
     }
 
     // Click-relative-to-target offset, captured at creation time. The
@@ -861,19 +870,19 @@ export function mount(): void {
       const iwin = iframe.contentWindow;
       if (!idoc || !iwin) return;
 
-      const ta = idoc.getElementById('pp-ta') as HTMLTextAreaElement | null;
-      const cancel = idoc.getElementById('pp-cancel') as HTMLButtonElement | null;
-      const submit = idoc.getElementById('pp-submit') as HTMLButtonElement | null;
-      const metaEl = idoc.getElementById('pp-meta') as HTMLElement | null;
-      const composerPane = idoc.getElementById('pp-composer-pane');
-      const streamPane = idoc.getElementById('pp-stream-pane');
-      const streamHeader = idoc.getElementById('pp-stream-header');
-      const streamLog = idoc.getElementById('pp-stream-log');
-      const streamFooter = idoc.getElementById('pp-stream-footer');
-      const dismissBtn = idoc.getElementById('pp-dismiss') as HTMLButtonElement | null;
-      const stopBtn = idoc.getElementById('pp-stop') as HTMLButtonElement | null;
-      const followInput = idoc.getElementById('pp-follow-input') as HTMLTextAreaElement | null;
-      const followSend = idoc.getElementById('pp-follow-send') as HTMLButtonElement | null;
+      const ta = idoc.getElementById('pa-ta') as HTMLTextAreaElement | null;
+      const cancel = idoc.getElementById('pa-cancel') as HTMLButtonElement | null;
+      const submit = idoc.getElementById('pa-submit') as HTMLButtonElement | null;
+      const metaEl = idoc.getElementById('pa-meta') as HTMLElement | null;
+      const composerPane = idoc.getElementById('pa-composer-pane');
+      const streamPane = idoc.getElementById('pa-stream-pane');
+      const streamHeader = idoc.getElementById('pa-stream-header');
+      const streamLog = idoc.getElementById('pa-stream-log');
+      const streamFooter = idoc.getElementById('pa-stream-footer');
+      const dismissBtn = idoc.getElementById('pa-dismiss') as HTMLButtonElement | null;
+      const stopBtn = idoc.getElementById('pa-stop') as HTMLButtonElement | null;
+      const followInput = idoc.getElementById('pa-follow-input') as HTMLTextAreaElement | null;
+      const followSend = idoc.getElementById('pa-follow-send') as HTMLButtonElement | null;
       if (
         !ta ||
         !cancel ||
@@ -903,7 +912,7 @@ export function mount(): void {
               line: String(loc2.line),
               col: String(loc2.col),
             });
-            const res = await fetch(`/__pinpoint/open?${qs.toString()}`, { method: 'POST' });
+            const res = await fetch(`/__pinagent/open?${qs.toString()}`, { method: 'POST' });
             if (!res.ok) {
               const body = await res.json().catch(() => ({}));
               throw new Error(body.error || `HTTP ${res.status}`);
@@ -975,7 +984,7 @@ export function mount(): void {
               const msgs = await getConversationMessages(db, c.feedbackId as string);
               // eslint-disable-next-line no-console
               console.log(
-                `[pinpoint:db] replay ${c.feedbackId}: ${msgs.length} messages`,
+                `[pinagent:db] replay ${c.feedbackId}: ${msgs.length} messages`,
                 msgs.length > 0 ? { first: msgs[0], last: msgs[msgs.length - 1] } : null,
               );
               replayed = msgs.map((m) => ({
@@ -985,7 +994,7 @@ export function mount(): void {
               }));
             } catch (err) {
               // eslint-disable-next-line no-console
-              console.warn('[pinpoint:db] replay fetch failed:', err);
+              console.warn('[pinagent:db] replay fetch failed:', err);
             }
           }
           attachStreamHandler(
@@ -1087,7 +1096,7 @@ export function mount(): void {
                 },
               }).catch((err) =>
                 // eslint-disable-next-line no-console
-                console.warn('[pinpoint:db] recordConversationStart failed:', err),
+                console.warn('[pinagent:db] recordConversationStart failed:', err),
               );
             }
 
@@ -1209,7 +1218,7 @@ export function mount(): void {
   });
 
   if (hotkeyChar) {
-    fab.title = `Pinpoint — press ${hotkeyChar.toUpperCase()} or click to pick · Shift+N to hop between active widgets`;
+    fab.title = `Pinagent — press ${hotkeyChar.toUpperCase()} or click to pick · Shift+N to hop between active widgets`;
     document.addEventListener(
       'keydown',
       (e) => {
@@ -1236,11 +1245,11 @@ export function mount(): void {
 }
 
 function createWsClient(): WidgetWsClient {
-  const cfg = (window as unknown as { __pinpointConfig?: { wsUrl?: string | null } })
-    .__pinpointConfig;
+  const cfg = (window as unknown as { __pinagentConfig?: { wsUrl?: string | null } })
+    .__pinagentConfig;
   const url =
     cfg?.wsUrl ??
-    `ws://${window.location.hostname || '127.0.0.1'}:53636/__pinpoint/ws`;
+    `ws://${window.location.hostname || '127.0.0.1'}:53636/__pinagent/ws`;
   return new WidgetWsClient(url);
 }
 
@@ -1411,7 +1420,7 @@ function attachStreamHandler(
     if (db) {
       void recordUserMessage(db, feedbackId, composer.turn, content).catch((err) =>
         // eslint-disable-next-line no-console
-        console.warn('[pinpoint:db] recordUserMessage failed:', err),
+        console.warn('[pinagent:db] recordUserMessage failed:', err),
       );
     }
     client.sendUserMessage(feedbackId, content);
@@ -1615,7 +1624,7 @@ function attachStreamHandler(
       if (db) {
         void recordEvent(db, feedbackId, composer.turn, event).catch((err) =>
           // eslint-disable-next-line no-console
-          console.warn('[pinpoint:db] recordEvent failed:', err),
+          console.warn('[pinagent:db] recordEvent failed:', err),
         );
       }
       processEvent(event);
@@ -1702,7 +1711,7 @@ function composerHTML(metaText: string): string {
   textarea::placeholder { color: #9ca3af; }
   textarea:focus { border-color: #2563eb; }
   textarea:disabled { background: #f9fafb; color: #6b7280; }
-  #pp-ta { flex: 1; min-height: 80px; }
+  #pa-ta { flex: 1; min-height: 80px; }
   .row { display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
   .row.spread { justify-content: space-between; }
   .btn { border: 0; padding: 6px 12px; font-size: 13px; border-radius: 6px; cursor: pointer; font-family: inherit; }
@@ -1735,9 +1744,9 @@ function composerHTML(metaText: string): string {
     border-top-color: transparent;
     border-radius: 50%;
     flex-shrink: 0;
-    animation: pp-header-spin 0.9s linear infinite;
+    animation: pa-header-spin 0.9s linear infinite;
   }
-  @keyframes pp-header-spin { to { transform: rotate(360deg); } }
+  @keyframes pa-header-spin { to { transform: rotate(360deg); } }
   .log {
     flex: 1;
     overflow-y: auto;
@@ -1833,32 +1842,32 @@ function composerHTML(metaText: string): string {
     border-top: 1px solid #f3f4f6;
     padding-top: 8px;
   }
-  #pp-follow-input { font-size: 12px; min-height: 0; }
-  #pp-follow-send { white-space: nowrap; }
+  #pa-follow-input { font-size: 12px; min-height: 0; }
+  #pa-follow-send { white-space: nowrap; }
 </style></head><body>
   <div class="card">
-    <div class="meta" id="pp-meta">${esc(metaText)}</div>
+    <div class="meta" id="pa-meta">${esc(metaText)}</div>
 
-    <div class="pane" id="pp-composer-pane">
-      <textarea id="pp-ta" placeholder="Describe the change you want…"></textarea>
+    <div class="pane" id="pa-composer-pane">
+      <textarea id="pa-ta" placeholder="Describe the change you want…"></textarea>
       <div class="row">
-        <button class="btn ghost" id="pp-cancel" type="button">Cancel</button>
-        <button class="btn primary" id="pp-submit" type="button" disabled>Submit</button>
+        <button class="btn ghost" id="pa-cancel" type="button">Cancel</button>
+        <button class="btn primary" id="pa-submit" type="button" disabled>Submit</button>
       </div>
     </div>
 
-    <div class="pane" id="pp-stream-pane" hidden>
-      <div class="header" id="pp-stream-header">Working…</div>
-      <div class="log" id="pp-stream-log"></div>
+    <div class="pane" id="pa-stream-pane" hidden>
+      <div class="header" id="pa-stream-header">Working…</div>
+      <div class="log" id="pa-stream-log"></div>
       <div class="follow">
-        <textarea id="pp-follow-input" rows="2" placeholder="Working…" disabled></textarea>
-        <button class="btn primary" id="pp-follow-send" type="button" disabled>Send</button>
+        <textarea id="pa-follow-input" rows="2" placeholder="Working…" disabled></textarea>
+        <button class="btn primary" id="pa-follow-send" type="button" disabled>Send</button>
       </div>
       <div class="row spread">
-        <span class="footer-note" id="pp-stream-footer"></span>
+        <span class="footer-note" id="pa-stream-footer"></span>
         <div class="row" style="gap:6px;">
-          <button class="btn ghost stop" id="pp-stop" type="button" hidden>Stop</button>
-          <button class="btn ghost cancel" id="pp-dismiss" type="button">Cancel</button>
+          <button class="btn ghost stop" id="pa-stop" type="button" hidden>Stop</button>
+          <button class="btn ghost cancel" id="pa-dismiss" type="button">Cancel</button>
         </div>
       </div>
     </div>
@@ -1867,7 +1876,7 @@ function composerHTML(metaText: string): string {
 }
 
 /**
- * Pinpoint pin-shape path (teardrop). 93x93 viewBox. Single shape on
+ * Pinagent pin-shape path (teardrop). 93x93 viewBox. Single shape on
  * a transparent background — caller picks fill via the path's fill
  * attribute. The full-logo version sits on a cream `#FCF9E8` square,
  * but the FAB uses just the pin in cream against the dark button.
@@ -1890,9 +1899,9 @@ function buildPinIcon(size: number, fill: string): SVGSVGElement {
 }
 
 function resolveHotkey(): string | null {
-  const w = window as unknown as { __pinpointHotkey?: string | false | null };
-  if (w.__pinpointHotkey === false || w.__pinpointHotkey === null) return null;
-  const k = w.__pinpointHotkey;
+  const w = window as unknown as { __pinagentHotkey?: string | false | null };
+  if (w.__pinagentHotkey === false || w.__pinagentHotkey === null) return null;
+  const k = w.__pinagentHotkey;
   if (typeof k === 'string' && k.length === 1) return k.toLowerCase();
   return 'c';
 }

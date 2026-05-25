@@ -12,7 +12,7 @@ export default function Page() {
         margin: '0 auto',
       }}
     >
-      <h1 style={{ fontSize: '2.75rem' }}>Pinpoint · Next.js demo</h1>
+      <h1 style={{ fontSize: '2.75rem' }}>Pinagent · Next.js demo</h1>
       <p style={{ fontWeight: 'bold' }}>
         Click the{' '}
         <Logo

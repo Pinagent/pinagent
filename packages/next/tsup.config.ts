@@ -26,7 +26,7 @@ export default defineConfig([
     },
     clean: true,
   },
-  // Client-only entries: the <Pinpoint /> component (dev) and its prod stub.
+  // Client-only entries: the <Pinagent /> component (dev) and its prod stub.
   // The 'use client' banner is required — esbuild strips the source directive
   // when bundling, so we re-inject it as the first line of the output.
   {

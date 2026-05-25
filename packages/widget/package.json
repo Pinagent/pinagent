@@ -1,9 +1,9 @@
 {
-  "name": "@pinpoint/widget",
+  "name": "@pinagent/widget",
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "Pinpoint browser widget (shadow-root pick + composer). Built as IIFE and consumed by @pinpoint/vite-plugin.",
+  "description": "Pinagent browser widget (shadow-root pick + composer). Built as IIFE and consumed by @pinagent/vite-plugin.",
   "main": "dist/widget.js",
   "files": [
     "dist"
@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@pinpoint/db": "workspace:*",
+    "@pinagent/db": "workspace:*",
     "@sqlite.org/sqlite-wasm": "^3.50.0-build1",
     "drizzle-orm": "^0.38.0",
     "html-to-image": "^1.11.13"

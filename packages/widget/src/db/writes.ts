@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
-import { conversations, messages, widgetAnchors } from '@pinpoint/db/schema';
+import { conversations, messages, widgetAnchors } from '@pinagent/db/schema';
 import type { BrowserDb } from './client';
 
 /**
@@ -63,7 +63,7 @@ export async function recordEvent(
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn(
-      `[pinpoint:db] recordEvent insert failed (${feedbackId} turn ${turn} ${event.type}):`,
+      `[pinagent:db] recordEvent insert failed (${feedbackId} turn ${turn} ${event.type}):`,
       err,
     );
     throw err;
@@ -137,7 +137,7 @@ export async function deleteConversation(
 /**
  * Drop conversations (and their cascaded messages + anchors) that
  * have been resolved for more than 30 days. Keeps the OPFS file from
- * growing forever in a project that gets steady pinpoint use.
+ * growing forever in a project that gets steady pinagent use.
  *
  * Pending conversations are spared even if they're old — they may
  * still resolve someday, and the user can always dismiss them

@@ -11,13 +11,13 @@ export function createMiddleware(
   storage: Storage,
   autoTrigger: AutoTrigger | null,
 ): Connect.NextHandleFunction {
-  return async function pinpointMiddleware(req, res, next) {
+  return async function pinagentMiddleware(req, res, next) {
     const url = req.url ?? '';
-    if (!url.startsWith('/__pinpoint')) return next();
+    if (!url.startsWith('/__pinagent')) return next();
 
     try {
-      // GET /__pinpoint/widget.js
-      if (req.method === 'GET' && url === '/__pinpoint/widget.js') {
+      // GET /__pinagent/widget.js
+      if (req.method === 'GET' && url === '/__pinagent/widget.js') {
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');
@@ -25,8 +25,8 @@ export function createMiddleware(
         return;
       }
 
-      // POST /__pinpoint/feedback
-      if (req.method === 'POST' && url === '/__pinpoint/feedback') {
+      // POST /__pinagent/feedback
+      if (req.method === 'POST' && url === '/__pinagent/feedback') {
         const raw = await readJsonBody(req);
         const parsed = FeedbackInputSchema.safeParse(raw);
         if (!parsed.success) {
@@ -44,8 +44,8 @@ export function createMiddleware(
         return json(res, 200, { id: rec.id });
       }
 
-      // GET /__pinpoint/feedback
-      if (req.method === 'GET' && url === '/__pinpoint/feedback') {
+      // GET /__pinagent/feedback
+      if (req.method === 'GET' && url === '/__pinagent/feedback') {
         const items = await storage.list();
         const shallow = items.map((r) => ({
           id: r.id,
@@ -62,8 +62,8 @@ export function createMiddleware(
         return json(res, 200, shallow);
       }
 
-      // GET /__pinpoint/feedback/:id
-      const getMatch = req.method === 'GET' && /^\/__pinpoint\/feedback\/([^/]+)$/.exec(url);
+      // GET /__pinagent/feedback/:id
+      const getMatch = req.method === 'GET' && /^\/__pinagent\/feedback\/([^/]+)$/.exec(url);
       if (getMatch) {
         const id = getMatch[1] ?? '';
         if (!ID_RE.test(id)) return badRequest(res, 'invalid id');
@@ -73,9 +73,9 @@ export function createMiddleware(
         return json(res, 200, { ...rec, screenshot });
       }
 
-      // PATCH /__pinpoint/feedback/:id
+      // PATCH /__pinagent/feedback/:id
       const patchMatch =
-        req.method === 'PATCH' && /^\/__pinpoint\/feedback\/([^/]+)$/.exec(url);
+        req.method === 'PATCH' && /^\/__pinagent\/feedback\/([^/]+)$/.exec(url);
       if (patchMatch) {
         const id = patchMatch[1] ?? '';
         if (!ID_RE.test(id)) return badRequest(res, 'invalid id');

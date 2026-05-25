@@ -30,7 +30,7 @@
 
 /**
  * Drizzle-format migration entry — what the dev-server hands us at
- * `/__pinpoint/db-migrations` after reading `meta/_journal.json` +
+ * `/__pinagent/db-migrations` after reading `meta/_journal.json` +
  * the per-entry `.sql` files.
  */
 export interface MigrationEntry {

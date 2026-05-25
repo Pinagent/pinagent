@@ -1,5 +1,5 @@
 import { drizzle, type SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy';
-import * as schema from '@pinpoint/db/schema';
+import * as schema from '@pinagent/db/schema';
 import { type MigrationEntry, applyMigrations } from './migrations';
 import { pruneOldConversations } from './writes';
 
@@ -29,7 +29,7 @@ import { pruneOldConversations } from './writes';
  *   `db.select().from(conversations).where(...)` works as it does on
  *   the server.
  *
- * Persistence: opfs:pinpoint.sqlite via the bundler-friendly Worker.
+ * Persistence: opfs:pinagent.sqlite via the bundler-friendly Worker.
  * If OPFS isn't available (Firefox in some configurations, Safari pre-17),
  * we fall back to `:memory:` — the cache is lost on reload but the UI
  * keeps working.
@@ -88,8 +88,8 @@ async function doInit(): Promise<BrowserDb> {
   // installs the OPFS SAH Pool VFS, which works without the COOP/COEP
   // headers the basic `opfs` VFS would need. Source lives in
   // packages/next/src/db-worker-source.ts and is served at
-  // /__pinpoint/db-worker.js.
-  const worker = new Worker('/__pinpoint/db-worker.js', { type: 'module' });
+  // /__pinagent/db-worker.js.
+  const worker = new Worker('/__pinagent/db-worker.js', { type: 'module' });
 
   let nextMsgId = 0;
   const pending = new Map<number, PendingCall>();
@@ -124,7 +124,7 @@ async function doInit(): Promise<BrowserDb> {
 
   worker.addEventListener('error', (e) => {
     // eslint-disable-next-line no-console
-    console.error('[pinpoint:db] worker error:', e.message);
+    console.error('[pinagent:db] worker error:', e.message);
   });
 
   function call(
@@ -154,7 +154,7 @@ async function doInit(): Promise<BrowserDb> {
   }
 
   await ready;
-  await call('init', { dbName: 'pinpoint.sqlite' });
+  await call('init', { dbName: 'pinagent.sqlite' });
 
   // Fetch + apply migrations. Refetched from the dev server rather
   // than bundled so the schema can't drift between server and browser
@@ -166,7 +166,7 @@ async function doInit(): Promise<BrowserDb> {
   // re-runs would fail with "duplicate column name" — SQLite has no
   // `IF NOT EXISTS` for that statement.
   try {
-    const res = await fetch('/__pinpoint/db-migrations');
+    const res = await fetch('/__pinagent/db-migrations');
     if (res.ok) {
       const body = (await res.json()) as { migrations: MigrationEntry[] };
       await applyMigrations(
@@ -176,7 +176,7 @@ async function doInit(): Promise<BrowserDb> {
     }
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn('[pinpoint:db] failed to apply migrations:', err);
+    console.warn('[pinagent:db] failed to apply migrations:', err);
   }
 
   // Drizzle sqlite-proxy adapter. Forwards each query to the worker.
@@ -198,11 +198,11 @@ async function doInit(): Promise<BrowserDb> {
     const dropped = await pruneOldConversations(db);
     if (dropped > 0) {
       // eslint-disable-next-line no-console
-      console.log(`[pinpoint:db] pruned ${dropped} stale conversations`);
+      console.log(`[pinagent:db] pruned ${dropped} stale conversations`);
     }
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn('[pinpoint:db] prune failed (non-fatal):', err);
+    console.warn('[pinagent:db] prune failed (non-fatal):', err);
   }
 
   return db;

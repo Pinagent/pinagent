@@ -144,7 +144,7 @@ class EventBus {
 // later module instance) publishes to a different Map — same
 // feedbackId, two separate stores, silent UI. A globalThis-keyed
 // Symbol pins the Map across all instances.
-const BUSES_SYMBOL = Symbol.for('pinpoint.event-bus.buses');
+const BUSES_SYMBOL = Symbol.for('pinagent.event-bus.buses');
 const buses: Map<string, EventBus> = ((globalThis as Record<symbol, unknown>)[
   BUSES_SYMBOL
 ] as Map<string, EventBus> | undefined) ?? new Map<string, EventBus>();

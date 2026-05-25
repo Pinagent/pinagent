@@ -9,7 +9,7 @@ const traverse = (
     : _traverse
 ) as typeof _traverse;
 
-const ATTR = 'data-pp-loc';
+const ATTR = 'data-pa-loc';
 
 export interface TransformOptions {
   /** Relative path (POSIX) to embed into the attribute. */

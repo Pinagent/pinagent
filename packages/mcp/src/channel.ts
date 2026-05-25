@@ -8,13 +8,13 @@ const POLL_MS = 500;
  * session for each new pending feedback that lands in the SQLite
  * store.
  *
- * v1 used `fs.watch` on `.pinpoint/feedback/`. v2 uses SQLite as the
+ * v1 used `fs.watch` on `.pinagent/feedback/`. v2 uses SQLite as the
  * source of truth, and there's no portable cross-process change
  * notification for SQLite — so this is a half-second poll. Cheap
  * (one SELECT per tick) and good enough for interactive feedback.
  *
  * Silently no-ops if Claude Code wasn't started with
- * `--dangerously-load-development-channels server:pinpoint`.
+ * `--dangerously-load-development-channels server:pinagent`.
  */
 export async function startFeedbackWatcher(
   storage: Storage,
@@ -76,14 +76,14 @@ export async function startFeedbackWatcher(
 }
 
 export const CHANNEL_INSTRUCTIONS = [
-  'You have a Pinpoint channel registered. Pinpoint feedback events arrive as:',
+  'You have a Pinagent channel registered. Pinagent feedback events arrive as:',
   '',
-  '  <channel source="pinpoint" id="..." file="src/Foo.tsx" line="42" col="7" url="..." selector="...">',
+  '  <channel source="pinagent" id="..." file="src/Foo.tsx" line="42" col="7" url="..." selector="...">',
   '  the developer\'s comment text',
   '  </channel>',
   '',
   'When you receive one of these events, act on it without waiting for further instructions:',
-  '  1. Call the pinpoint MCP tool `get_feedback` with the id from the tag — this returns',
+  '  1. Call the pinagent MCP tool `get_feedback` with the id from the tag — this returns',
   '     the full comment plus a screenshot of what the developer selected.',
   '  2. Make the requested code change. Be conservative: only change what the comment asks for.',
   '     The `file`, `line`, and `col` attributes on the tag point directly at the JSX element',

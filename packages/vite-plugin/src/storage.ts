@@ -40,7 +40,7 @@ export interface FeedbackRecord {
   url: string;
   viewport: { w: number; h: number };
   userAgent: string;
-  screenshot: string; // path relative to .pinpoint/
+  screenshot: string; // path relative to .pinagent/
   status: Status;
   note: string | null;
   commitSha: string | null;
@@ -62,8 +62,8 @@ export class Storage {
 
   constructor(root: string) {
     this.root = root;
-    this.feedbackDir = join(root, '.pinpoint', 'feedback');
-    this.screenshotsDir = join(root, '.pinpoint', 'screenshots');
+    this.feedbackDir = join(root, '.pinagent', 'feedback');
+    this.screenshotsDir = join(root, '.pinagent', 'screenshots');
   }
 
   private async ensureDirs(): Promise<void> {
@@ -76,7 +76,7 @@ export class Storage {
 
     const pngBuf = Buffer.from(input.screenshot, 'base64');
     const pngRel = join('screenshots', `${id}.png`);
-    const pngAbs = join(this.root, '.pinpoint', pngRel);
+    const pngAbs = join(this.root, '.pinagent', pngRel);
     await this.atomicWriteBytes(pngAbs, pngBuf);
 
     const record: FeedbackRecord = {
@@ -129,7 +129,7 @@ export class Storage {
   }
 
   async readScreenshotBase64(rec: FeedbackRecord): Promise<string | null> {
-    const abs = join(this.root, '.pinpoint', rec.screenshot);
+    const abs = join(this.root, '.pinagent', rec.screenshot);
     if (!existsSync(abs)) return null;
     const buf = await readFile(abs);
     return buf.toString('base64');
@@ -180,7 +180,7 @@ export async function isInGitignore(root: string): Promise<boolean> {
     return txt
       .split(/\r?\n/)
       .map((s) => s.trim())
-      .some((s) => s === '.pinpoint' || s === '.pinpoint/' || s === '/.pinpoint' || s === '/.pinpoint/');
+      .some((s) => s === '.pinagent' || s === '.pinagent/' || s === '/.pinagent' || s === '/.pinagent/');
   } catch {
     return false;
   }

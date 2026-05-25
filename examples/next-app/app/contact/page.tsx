@@ -10,7 +10,7 @@ export default function ContactPage() {
     >
       <h1 style={{ fontSize: '2.25rem' }}>Contact</h1>
       <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
-        Get in touch with the Pinpoint team.
+        Get in touch with the Pinagent team.
       </p>
 
       <section style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -24,8 +24,8 @@ export default function ContactPage() {
         >
           <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Email</h2>
           <p style={{ color: '#374151', lineHeight: 1.55, marginTop: 8, marginBottom: 0 }}>
-            <a href="mailto:hello@pinpoint.dev" style={{ color: '#2563eb' }}>
-              hello@pinpoint.dev
+            <a href="mailto:hello@pinagent.dev" style={{ color: '#2563eb' }}>
+              hello@pinagent.dev
             </a>
           </p>
         </article>
@@ -40,7 +40,7 @@ export default function ContactPage() {
         >
           <h2 style={{ fontSize: '1.25rem', margin: 0 }}>GitHub</h2>
           <p style={{ color: '#374151', lineHeight: 1.55, marginTop: 8, marginBottom: 0 }}>
-            File issues or open pull requests on the Pinpoint repository.
+            File issues or open pull requests on the Pinagent repository.
           </p>
         </article>
 

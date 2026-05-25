@@ -3,12 +3,12 @@ import { mount } from './widget';
 // Only mount once per page load.
 declare global {
   interface Window {
-    __pinpointMounted?: boolean;
+    __pinagentMounted?: boolean;
   }
 }
 
-if (typeof window !== 'undefined' && !window.__pinpointMounted) {
-  window.__pinpointMounted = true;
+if (typeof window !== 'undefined' && !window.__pinagentMounted) {
+  window.__pinagentMounted = true;
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => mount(), { once: true });
   } else {

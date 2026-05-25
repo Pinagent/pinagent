@@ -5,7 +5,7 @@ import { createMiddleware } from './middleware';
 import { Storage, isInGitignore } from './storage';
 import { transformJsx } from './transform';
 
-export interface PinpointOptions {
+export interface PinagentOptions {
   /**
    * Override the project root. Defaults to Vite's `server.config.root`.
    */
@@ -22,14 +22,14 @@ export interface PinpointOptions {
   autoTrigger?: boolean | AutoTriggerOptions;
 }
 
-const SCRIPT_TAG = '<script type="module" src="/__pinpoint/widget.js"></script>';
+const SCRIPT_TAG = '<script type="module" src="/__pinagent/widget.js"></script>';
 
-export default function pinpoint(options: PinpointOptions = {}): Plugin {
+export default function pinagent(options: PinagentOptions = {}): Plugin {
   let isServe = false;
   let resolvedRoot = process.cwd();
 
   return {
-    name: 'pinpoint',
+    name: 'pinagent',
     apply: 'serve',
     enforce: 'pre',
 
@@ -51,7 +51,7 @@ export default function pinpoint(options: PinpointOptions = {}): Plugin {
       const inGi = await isInGitignore(root);
       if (!inGi) {
         server.config.logger.warn(
-          '[pinpoint] .pinpoint/ is not in .gitignore — feedback files and screenshots may be committed.',
+          '[pinagent] .pinagent/ is not in .gitignore — feedback files and screenshots may be committed.',
         );
       }
 
@@ -61,13 +61,13 @@ export default function pinpoint(options: PinpointOptions = {}): Plugin {
           typeof options.autoTrigger === 'object' ? options.autoTrigger : {};
         autoTrigger = new AutoTrigger(triggerOpts, root, server.config.logger);
         server.config.logger.info(
-          `[pinpoint] auto-trigger ON — Claude Agent SDK (${triggerOpts.permissionMode ?? 'acceptEdits'}) will run on each submit`,
+          `[pinagent] auto-trigger ON — Claude Agent SDK (${triggerOpts.permissionMode ?? 'acceptEdits'}) will run on each submit`,
         );
       }
 
       server.middlewares.use(createMiddleware(storage, autoTrigger));
 
-      server.config.logger.info('[pinpoint] ready — widget at /__pinpoint/widget.js');
+      server.config.logger.info('[pinagent] ready — widget at /__pinagent/widget.js');
     },
 
     transform(code, id) {
@@ -94,7 +94,7 @@ export default function pinpoint(options: PinpointOptions = {}): Plugin {
       order: 'post',
       handler(html) {
         if (!isServe) return html;
-        if (html.includes('/__pinpoint/widget.js')) return html;
+        if (html.includes('/__pinagent/widget.js')) return html;
         if (html.includes('</body>')) {
           return html.replace('</body>', `${SCRIPT_TAG}\n</body>`);
         }
@@ -108,4 +108,4 @@ function toPosix(p: string): string {
   return p.split(sep).join('/');
 }
 
-export { pinpoint };
+export { pinagent };

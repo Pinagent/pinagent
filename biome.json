@@ -5,7 +5,7 @@
     "ignore": [
       "**/dist/**",
       "**/node_modules/**",
-      "**/.pinpoint/**",
+      "**/.pinagent/**",
       "**/.next/**",
       "**/coverage/**",
       "**/__generated__/**",

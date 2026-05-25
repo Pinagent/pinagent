@@ -37,7 +37,7 @@ interface PendingAsk {
 // route-module instance) would never resolve when the WS handler
 // (singleton on globalThis, bound to an earlier instance) tries to
 // look up the askId. See event-bus.ts for the longer note.
-const ASKS_SYMBOL = Symbol.for('pinpoint.ask-user.pending');
+const ASKS_SYMBOL = Symbol.for('pinagent.ask-user.pending');
 const pending: Map<string, PendingAsk> = ((globalThis as Record<symbol, unknown>)[
   ASKS_SYMBOL
 ] as Map<string, PendingAsk> | undefined) ?? new Map<string, PendingAsk>();
@@ -121,7 +121,7 @@ export function createAskUserMcpServer(feedbackId: string) {
   );
 
   return createSdkMcpServer({
-    name: 'pinpoint-ask-user',
+    name: 'pinagent-ask-user',
     version: '0.1.0',
     tools: [askTool],
   });
@@ -158,4 +158,4 @@ export function rejectAsk(feedbackId: string, reason: string): void {
  * permission prompt — otherwise `acceptEdits` mode wouldn't auto-allow a
  * non-Edit tool call.
  */
-export const ASK_USER_TOOL_NAME = 'mcp__pinpoint-ask-user__ask_user';
+export const ASK_USER_TOOL_NAME = 'mcp__pinagent-ask-user__ask_user';

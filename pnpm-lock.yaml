@@ -33,7 +33,7 @@ importers:
         specifier: ^19.0.0
         version: 19.2.6(react@19.2.6)
     devDependencies:
-      '@pinpoint/next':
+      '@pinagent/next':
         specifier: workspace:*
         version: link:../../packages/next
       '@types/node':
@@ -58,7 +58,7 @@ importers:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
     devDependencies:
-      '@pinpoint/vite-plugin':
+      '@pinagent/vite-plugin':
         specifier: workspace:*
         version: link:../../packages/vite-plugin
       '@types/react':
@@ -97,7 +97,7 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.4
         version: 1.29.0(zod@3.25.76)
-      '@pinpoint/db':
+      '@pinagent/db':
         specifier: workspace:*
         version: link:../db
       better-sqlite3:
@@ -137,7 +137,7 @@ importers:
       '@babel/types':
         specifier: ^7.26.3
         version: 7.29.0
-      '@pinpoint/db':
+      '@pinagent/db':
         specifier: workspace:*
         version: link:../db
       '@sqlite.org/sqlite-wasm':
@@ -159,7 +159,7 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
     devDependencies:
-      '@pinpoint/widget':
+      '@pinagent/widget':
         specifier: workspace:*
         version: link:../widget
       '@types/babel__traverse':
@@ -214,7 +214,7 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
     devDependencies:
-      '@pinpoint/widget':
+      '@pinagent/widget':
         specifier: workspace:*
         version: link:../widget
       '@types/babel__traverse':
@@ -235,7 +235,7 @@ importers:
 
   packages/widget:
     dependencies:
-      '@pinpoint/db':
+      '@pinagent/db':
         specifier: workspace:*
         version: link:../db
       '@sqlite.org/sqlite-wasm':
@@ -1689,6 +1689,9 @@ packages:
 
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
+
+  '@types/estree@1.0.9':
+    resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
   '@types/node@22.19.19':
     resolution: {integrity: sha512-dyh/xO2Fh5bYrfWaaqGrRQQGkNdmYw6AmaAUvYeUMNTWQtvb796ikLdmTchRmOlOiIJ1TDXfWgVx1QkUlQ6Hew==}
@@ -3801,6 +3804,8 @@ snapshots:
 
   '@types/estree@1.0.8': {}
 
+  '@types/estree@1.0.9': {}
+
   '@types/node@22.19.19':
     dependencies:
       undici-types: 6.21.0
@@ -4226,7 +4231,7 @@ snapshots:
 
   estree-walker@3.0.3:
     dependencies:
-      '@types/estree': 1.0.8
+      '@types/estree': 1.0.9
 
   etag@1.8.1: {}
 

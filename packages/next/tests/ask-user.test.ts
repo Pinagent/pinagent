@@ -24,7 +24,7 @@ describe('ask-user', () => {
       // Anything else and the allowedTools entry in agent.ts wouldn't
       // match what the model emits, and the call would get prompted
       // for permission instead of auto-allowed.
-      expect(ASK_USER_TOOL_NAME).toBe('mcp__pinpoint-ask-user__ask_user');
+      expect(ASK_USER_TOOL_NAME).toBe('mcp__pinagent-ask-user__ask_user');
     });
   });
 

@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
-import { Pinpoint } from '@pinpoint/next';
+import { Pinagent } from '@pinagent/next';
 import { Logo } from './_components/Logo';
 import { SideNav } from './_components/SideNav';
 
 export const metadata = {
-  title: 'Pinpoint Next example',
+  title: 'Pinagent Next example',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -38,14 +38,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               }}
             >
               <Logo size={22} />
-              Pinpoint
+              Pinagent
             </div>
             <SideNav />
           </aside>
           <div style={{ flex: 1, minWidth: 0, background: '#ffffff' }}>{children}</div>
         </div>
         <div
-          aria-label="Pinpoint logo"
+          aria-label="Pinagent logo"
           style={{
             position: 'fixed',
             top: 16,
@@ -65,9 +65,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           }}
         >
           <Logo size={16} variant="mono" style={{ color: '#f9fafb' }} />
-          Pinpoint
+          Pinagent
         </div>
-        <Pinpoint />
+        <Pinagent />
       </body>
     </html>
   );

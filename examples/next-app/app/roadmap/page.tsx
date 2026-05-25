@@ -10,7 +10,7 @@ export default function RoadmapPage() {
     >
       <h1 style={{ fontSize: '2.25rem' }}>Roadmap</h1>
       <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
-        Planned work and upcoming features for Pinpoint.
+        Planned work and upcoming features for Pinagent.
       </p>
 
       <section style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>

@@ -167,7 +167,7 @@ export default function IssuesPage() {
     >
       <h1 style={{ fontSize: '2.25rem' }}>Issues</h1>
       <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
-        A running log of bugs and rough edges surfaced while building Pinpoint —
+        A running log of bugs and rough edges surfaced while building Pinagent —
         the click-to-comment widget itself, the source-map transform, the
         persistent storage layer, the agent runtimes, and the example apps that
         exercise all of them. Each item lists the affected component, the date

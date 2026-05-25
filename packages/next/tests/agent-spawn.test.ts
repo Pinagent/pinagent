@@ -52,11 +52,11 @@ let bus: BusMod;
 let storageMod: StorageMod;
 let sdk: SdkMod;
 
-const PROJECT_ROOT = join(tmpdir(), `pp-agent-${nanoid(8)}`);
+const PROJECT_ROOT = join(tmpdir(), `pa-agent-${nanoid(8)}`);
 
 beforeAll(async () => {
-  process.env.PINPOINT_PROJECT_ROOT = PROJECT_ROOT;
-  process.env.PINPOINT_SPAWN_AGENT = 'inline';
+  process.env.PINAGENT_PROJECT_ROOT = PROJECT_ROOT;
+  process.env.PINAGENT_SPAWN_AGENT = 'inline';
   process.env.NODE_ENV = 'production'; // belt-and-suspenders against WS bootstrap
   await mkdir(PROJECT_ROOT, { recursive: true });
   agent = await import('../src/agent');
@@ -212,7 +212,7 @@ describe('spawnAgent', () => {
         session_id: 'sess-1',
         model: 'claude-opus',
         permissionMode: 'acceptEdits',
-        mcp_servers: [{ name: 'pinpoint', status: 'connected' }],
+        mcp_servers: [{ name: 'pinagent', status: 'connected' }],
         apiKeySource: 'oauth',
       } as never,
       {
@@ -267,8 +267,8 @@ describe('spawnAgent', () => {
     });
 
     // Log file landed.
-    const log = await readFile(join(PROJECT_ROOT, '.pinpoint', 'logs', `${id}.md`), 'utf8');
-    expect(log).toContain('# Pinpoint feedback');
+    const log = await readFile(join(PROJECT_ROOT, '.pinagent', 'logs', `${id}.md`), 'utf8');
+    expect(log).toContain('# Pinagent feedback');
     expect(log).toContain('sess-1'); // init footer
     expect(log).toContain('Looking at the button'); // assistant text
     expect(log).toContain('[Edit]'); // tool chip
@@ -301,12 +301,12 @@ describe('spawnAgent', () => {
     expect(captured.capturedParams).toBeDefined();
     const opts = captured.capturedParams?.options;
     expect(opts).toBeDefined();
-    expect(opts?.mcpServers).toHaveProperty('pinpoint-ask-user');
-    expect(opts?.allowedTools).toContain('mcp__pinpoint-ask-user__ask_user');
+    expect(opts?.mcpServers).toHaveProperty('pinagent-ask-user');
+    expect(opts?.allowedTools).toContain('mcp__pinagent-ask-user__ask_user');
     expect(opts?.systemPrompt).toMatchObject({ type: 'preset', preset: 'claude_code' });
-    // PINPOINT_PROJECT_ROOT is pinned in the SDK env so the MCP server
+    // PINAGENT_PROJECT_ROOT is pinned in the SDK env so the MCP server
     // running in the worktree resolves storage back to the real root.
-    expect(opts?.env?.PINPOINT_PROJECT_ROOT).toBe(PROJECT_ROOT);
+    expect(opts?.env?.PINAGENT_PROJECT_ROOT).toBe(PROJECT_ROOT);
   });
 
   it('emits an error event when the SDK iterator throws', async () => {
@@ -348,7 +348,7 @@ describe('spawnAgent', () => {
     expect((sdk.query as Mock).mock.calls).toHaveLength(0);
     // No log file was written for this id.
     await expect(
-      readFile(join(PROJECT_ROOT, '.pinpoint', 'logs', `${id}.md`), 'utf8'),
+      readFile(join(PROJECT_ROOT, '.pinagent', 'logs', `${id}.md`), 'utf8'),
     ).rejects.toThrow();
   });
 });
@@ -442,7 +442,7 @@ describe('runFollowUpTurn', () => {
     expect(second.capturedParams).toBeDefined();
     expect(second.capturedParams?.options?.resume).toBe('sess-follow');
     // The follow-up prompt is the user message itself, not the
-    // boilerplate Pinpoint workflow prompt.
+    // boilerplate Pinagent workflow prompt.
     expect(second.capturedParams?.prompt).toBe('and make it bold');
     expect(resultsSeen).toBeGreaterThanOrEqual(1);
   });

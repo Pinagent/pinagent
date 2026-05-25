@@ -14,11 +14,11 @@ import WebSocket from 'ws';
  */
 
 const TEST_PORT = 53700;
-const WS_URL = `ws://127.0.0.1:${TEST_PORT}/__pinpoint/ws`;
+const WS_URL = `ws://127.0.0.1:${TEST_PORT}/__pinagent/ws`;
 
 // Symbol the ws-server uses to cache the singleton. Cleared in
 // beforeAll so a previous run's stale handle (if any) is dropped.
-const SINGLETON_KEY = Symbol.for('pinpoint.ws-server');
+const SINGLETON_KEY = Symbol.for('pinagent.ws-server');
 
 type ServerMod = typeof import('../src/ws-server');
 type BusMod = typeof import('../src/event-bus');
@@ -27,7 +27,7 @@ let server: ServerMod;
 let bus: BusMod;
 
 beforeAll(async () => {
-  process.env.PINPOINT_WS_PORT = String(TEST_PORT);
+  process.env.PINAGENT_WS_PORT = String(TEST_PORT);
   (globalThis as Record<symbol, unknown>)[SINGLETON_KEY] = undefined;
   server = await import('../src/ws-server');
   bus = await import('../src/event-bus');

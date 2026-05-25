@@ -4,20 +4,20 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import * as schema from '@pinpoint/db/schema';
+import * as schema from '@pinagent/db/schema';
 
 export type Db = BetterSQLite3Database<typeof schema>;
 
 /**
  * One Drizzle handle per dev process, keyed by project root so a
- * monorepo with multiple Pinpoint-enabled apps gets distinct DBs.
+ * monorepo with multiple Pinagent-enabled apps gets distinct DBs.
  *
  * Storage is per-process and held on a globalThis Symbol so Next 16's
  * route module re-evaluations don't open the same DB file twice. The
  * underlying better-sqlite3 handle is cheap to keep open for the
  * lifetime of `next dev`.
  */
-const SINGLETON_KEY = Symbol.for('pinpoint.db');
+const SINGLETON_KEY = Symbol.for('pinagent.db');
 
 interface GlobalHolder {
   [SINGLETON_KEY]?: Map<string, Db>;
@@ -50,7 +50,7 @@ export function getDb(projectRoot: string): Db {
   const existing = cache.get(root);
   if (existing) return existing;
 
-  const dbPath = join(root, '.pinpoint', 'db.sqlite');
+  const dbPath = join(root, '.pinagent', 'db.sqlite');
   mkdirSync(dirname(dbPath), { recursive: true });
 
   const raw = new Database(dbPath);
@@ -71,7 +71,7 @@ export function getDb(projectRoot: string): Db {
     // (no down-migration story) but fine for the dev-only DB.
     // eslint-disable-next-line no-console
     console.warn(
-      `[pinpoint:db] no migrations dir at ${MIGRATIONS_DIR}; skipping migrate(). Run \`pnpm --filter @pinpoint/next drizzle:gen\` to generate.`,
+      `[pinagent:db] no migrations dir at ${MIGRATIONS_DIR}; skipping migrate(). Run \`pnpm --filter @pinagent/next drizzle:gen\` to generate.`,
     );
   }
 

@@ -13,7 +13,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@pinpoint/next": "workspace:*",
+    "@pinagent/next": "workspace:*",
     "@types/node": "^22.10.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

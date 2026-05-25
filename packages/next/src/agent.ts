@@ -17,7 +17,7 @@ export type SpawnAgentMode = 'worktree' | 'inline' | false;
  * channel-mode / pull-mode setups don't get a redundant agent per submit.
  */
 export function resolveAgentMode(env: NodeJS.ProcessEnv): SpawnAgentMode {
-  const v = env.PINPOINT_SPAWN_AGENT;
+  const v = env.PINAGENT_SPAWN_AGENT;
   if (v === 'worktree') return 'worktree';
   if (v === 'off' || v === 'false') return false;
   // 'inline', unset, or any unrecognised value falls through to the V2 default.
@@ -44,7 +44,7 @@ interface ActiveRun {
 // look up activeRuns; if the route module re-evaluates between an
 // agent run starting and a user clicking Stop, a fresh activeRuns
 // Map would lose the entry and interrupt would no-op.
-const ACTIVE_RUNS_SYMBOL = Symbol.for('pinpoint.agent.activeRuns');
+const ACTIVE_RUNS_SYMBOL = Symbol.for('pinagent.agent.activeRuns');
 const activeRuns: Map<string, ActiveRun> = ((globalThis as Record<symbol, unknown>)[
   ACTIVE_RUNS_SYMBOL
 ] as Map<string, ActiveRun> | undefined) ?? new Map<string, ActiveRun>();
@@ -55,13 +55,13 @@ const activeRuns: Map<string, ActiveRun> = ((globalThis as Record<symbol, unknow
  * feedback record. Kicks off in the background; the route handler resolves
  * its POST as soon as this returns "started", not when the agent finishes.
  *
- * Log file at `.pinpoint/logs/<id>.md` accumulates the transcript across
+ * Log file at `.pinagent/logs/<id>.md` accumulates the transcript across
  * the initial run plus any follow-up turns the user sends over WS.
  */
 export async function spawnAgent(ctx: AgentContext): Promise<void> {
   if (ctx.mode === false) return;
 
-  const logsDir = join(ctx.projectRoot, '.pinpoint', 'logs');
+  const logsDir = join(ctx.projectRoot, '.pinagent', 'logs');
   await mkdir(logsDir, { recursive: true });
   const logPath = join(logsDir, `${ctx.feedback.id}.md`);
 
@@ -75,7 +75,7 @@ export async function spawnAgent(ctx: AgentContext): Promise<void> {
       await appendLog(
         logPath,
         renderHeader(ctx, cwd, startedAt, /* worktreeReady */ false) +
-          `\n> [pinpoint] worktree creation failed: ${stringifyErr(err)}\n`,
+          `\n> [pinagent] worktree creation failed: ${stringifyErr(err)}\n`,
       );
       return;
     }
@@ -111,7 +111,7 @@ export async function runFollowUpTurn(feedbackId: string, content: string): Prom
     throw new Error('a turn is already in progress for this feedback');
   }
 
-  const projectRoot = process.env.PINPOINT_PROJECT_ROOT ?? process.cwd();
+  const projectRoot = process.env.PINAGENT_PROJECT_ROOT ?? process.cwd();
   const storage = new Storage(projectRoot);
   const rec = await storage.read(feedbackId);
   if (!rec) throw new Error(`feedback not found: ${feedbackId}`);
@@ -122,10 +122,10 @@ export async function runFollowUpTurn(feedbackId: string, content: string): Prom
   // If the original run used a worktree and it's still there, resume in
   // it. Otherwise fall back to the project root. This is robust to the
   // user flipping `spawnAgent: 'worktree' ↔ 'inline'` between runs.
-  const worktreePath = join(projectRoot, '.pinpoint', 'worktrees', feedbackId);
+  const worktreePath = join(projectRoot, '.pinagent', 'worktrees', feedbackId);
   const cwd = existsSync(worktreePath) ? worktreePath : projectRoot;
 
-  const logsDir = join(projectRoot, '.pinpoint', 'logs');
+  const logsDir = join(projectRoot, '.pinagent', 'logs');
   await mkdir(logsDir, { recursive: true });
   const logPath = join(logsDir, `${feedbackId}.md`);
 
@@ -189,7 +189,7 @@ async function runQuery(opts: RunQueryOpts): Promise<void> {
   // ~12 min to cover the full ASK_TTL window in ask-user.ts.
   const env: Record<string, string | undefined> = {
     ...process.env,
-    PINPOINT_PROJECT_ROOT: opts.projectRoot,
+    PINAGENT_PROJECT_ROOT: opts.projectRoot,
     CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '720000',
   };
 
@@ -200,7 +200,7 @@ async function runQuery(opts: RunQueryOpts): Promise<void> {
     settingSources: ['user', 'project', 'local'],
     abortController: abort,
     mcpServers: {
-      'pinpoint-ask-user': createAskUserMcpServer(opts.feedbackId),
+      'pinagent-ask-user': createAskUserMcpServer(opts.feedbackId),
     },
     allowedTools: [ASK_USER_TOOL_NAME],
     systemPrompt: {
@@ -208,7 +208,7 @@ async function runQuery(opts: RunQueryOpts): Promise<void> {
       preset: 'claude_code',
       append: [
         '',
-        'You are running inside Pinpoint, a tool that lets developers click a UI',
+        'You are running inside Pinagent, a tool that lets developers click a UI',
         'element in the browser and leave a comment for you to act on. The user',
         'is watching your output stream into a small widget pane next to the',
         'element they clicked.',
@@ -298,7 +298,7 @@ async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<v
   } catch (err) {
     const msg = stringifyErr(err);
     bus.publish({ type: 'error', message: msg });
-    await appendLog(opts.logPath, `\n> [pinpoint] agent stream errored: ${msg}\n`);
+    await appendLog(opts.logPath, `\n> [pinagent] agent stream errored: ${msg}\n`);
   } finally {
     if (!resultRendered && opts.isInitial) {
       // Initial runs always get a resolution block, even on abort, so the
@@ -404,10 +404,10 @@ async function createWorktree(
     throw new Error('project root is not a git repository');
   }
 
-  const worktreeDir = join(projectRoot, '.pinpoint', 'worktrees');
+  const worktreeDir = join(projectRoot, '.pinagent', 'worktrees');
   await mkdir(worktreeDir, { recursive: true });
   const worktreePath = join(worktreeDir, feedbackId);
-  const branch = `pinpoint/${feedbackId}`;
+  const branch = `pinagent/${feedbackId}`;
 
   await runGit(projectRoot, ['worktree', 'add', '-b', branch, worktreePath], logPath);
   return worktreePath;
@@ -425,7 +425,7 @@ function runGit(cwd: string, args: string[], logPath: string): Promise<void> {
       if (code === 0) {
         res();
       } else {
-        appendLog(logPath, `[pinpoint:git] git ${args.join(' ')} → exit ${code}\n${stderr}\n`).catch(
+        appendLog(logPath, `[pinagent:git] git ${args.join(' ')} → exit ${code}\n${stderr}\n`).catch(
           () => {},
         );
         rej(new Error(`git ${args.join(' ')} exited ${code}: ${stderr.trim()}`));
@@ -449,7 +449,7 @@ function stringifyErr(e: unknown): string {
 }
 
 export function resolvePermissionMode(env: NodeJS.ProcessEnv): PermissionMode {
-  const v = env.PINPOINT_AGENT_PERMISSION_MODE;
+  const v = env.PINAGENT_AGENT_PERMISSION_MODE;
   if (
     v === 'default' ||
     v === 'acceptEdits' ||
@@ -474,7 +474,7 @@ function renderHeader(
     ? `${rec.file}:${rec.line ?? '?'}${rec.col != null ? `:${rec.col}` : ''}`
     : rec.selector;
   const branchLine =
-    ctx.mode === 'worktree' && worktreeReady ? `branch: pinpoint/${rec.id}\n` : '';
+    ctx.mode === 'worktree' && worktreeReady ? `branch: pinagent/${rec.id}\n` : '';
 
   return [
     '---',
@@ -487,11 +487,11 @@ function renderHeader(
     branchLine.trimEnd(),
     '---',
     '',
-    `# Pinpoint feedback \`${rec.id}\``,
+    `# Pinagent feedback \`${rec.id}\``,
     '',
     `**Target:** \`${where}\`  `,
     `**URL:** ${rec.url}  `,
-    `**Mode:** ${ctx.mode}${ctx.mode === 'worktree' && worktreeReady ? `  ·  **Branch:** \`pinpoint/${rec.id}\`` : ''}`,
+    `**Mode:** ${ctx.mode}${ctx.mode === 'worktree' && worktreeReady ? `  ·  **Branch:** \`pinagent/${rec.id}\`` : ''}`,
     '',
     '> **Comment**',
     '> ',
@@ -570,7 +570,7 @@ function buildInitialPrompt(rec: FeedbackRecord, mode: SpawnAgentMode, cwd: stri
           '',
           'You are working in a FRESH git worktree at:',
           `  ${cwd}`,
-          `on branch pinpoint/${rec.id} (forked from current HEAD).`,
+          `on branch pinagent/${rec.id} (forked from current HEAD).`,
           '',
           'Make edits freely. DO NOT commit — the developer will review your',
           'changes by diffing this branch against main.',
@@ -578,7 +578,7 @@ function buildInitialPrompt(rec: FeedbackRecord, mode: SpawnAgentMode, cwd: stri
       : '';
 
   return [
-    'A developer submitted Pinpoint feedback. Address it autonomously.',
+    'A developer submitted Pinagent feedback. Address it autonomously.',
     '',
     `Feedback id: ${rec.id}`,
     `Target: ${where}`,
@@ -586,7 +586,7 @@ function buildInitialPrompt(rec: FeedbackRecord, mode: SpawnAgentMode, cwd: stri
     worktreeContext,
     '',
     'Workflow:',
-    '  1. Call the pinpoint MCP tool `get_feedback` with the id above —',
+    '  1. Call the pinagent MCP tool `get_feedback` with the id above —',
     '     it returns the full comment plus a screenshot of what the user',
     '     selected.',
     '  2. Optionally call `get_source_context` to see code around the target.',

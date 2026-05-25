@@ -4,12 +4,12 @@ import { isAbsolute, resolve, sep } from 'node:path';
 
 /**
  * Resolve the editor command. Honors (in order):
- *   1. PINPOINT_EDITOR — pinpoint-specific override
+ *   1. PINAGENT_EDITOR — pinagent-specific override
  *   2. EDITOR / VISUAL — standard *nix env vars
  *   3. 'code' — VSCode CLI, the most common default
  */
 function detectEditor(env: NodeJS.ProcessEnv): string {
-  return env.PINPOINT_EDITOR || env.EDITOR || env.VISUAL || 'code';
+  return env.PINAGENT_EDITOR || env.EDITOR || env.VISUAL || 'code';
 }
 
 interface Command {

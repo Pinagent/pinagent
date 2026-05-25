@@ -32,7 +32,7 @@ function makeInput(overrides: Partial<FeedbackInput> = {}): FeedbackInput {
 let root: string;
 
 beforeEach(async () => {
-  root = join(tmpdir(), `pp-storage-${nanoid(8)}`);
+  root = join(tmpdir(), `pa-storage-${nanoid(8)}`);
   await mkdir(root, { recursive: true });
 });
 
@@ -56,11 +56,11 @@ describe('Storage', () => {
     expect(read).toEqual(created);
   });
 
-  it('create writes the screenshot under .pinpoint/screenshots/<id>.png', async () => {
+  it('create writes the screenshot under .pinagent/screenshots/<id>.png', async () => {
     const s = new Storage(root);
     const id = nanoid(10);
     await s.create(id, makeInput());
-    const pngPath = join(root, '.pinpoint', 'screenshots', `${id}.png`);
+    const pngPath = join(root, '.pinagent', 'screenshots', `${id}.png`);
     expect(existsSync(pngPath)).toBe(true);
   });
 
@@ -111,7 +111,7 @@ describe('Storage', () => {
     const s = new Storage(root);
     const id = 'legacy0000';
     // Hand-write a record that predates the agentSessionId field.
-    await mkdir(join(root, '.pinpoint', 'feedback'), { recursive: true });
+    await mkdir(join(root, '.pinagent', 'feedback'), { recursive: true });
     const legacy = {
       id,
       comment: 'old',
@@ -130,7 +130,7 @@ describe('Storage', () => {
       resolvedAt: null,
     };
     await writeFile(
-      join(root, '.pinpoint', 'feedback', `${id}.json`),
+      join(root, '.pinagent', 'feedback', `${id}.json`),
       JSON.stringify(legacy),
       'utf8',
     );
@@ -191,10 +191,10 @@ describe('isInGitignore', () => {
   });
 
   it.each([
-    ['.pinpoint'],
-    ['.pinpoint/'],
-    ['/.pinpoint'],
-    ['/.pinpoint/'],
+    ['.pinagent'],
+    ['.pinagent/'],
+    ['/.pinagent'],
+    ['/.pinagent/'],
   ])('accepts the line %s', async (line) => {
     await writeFile(join(root, '.gitignore'), `node_modules\n${line}\nbuild\n`, 'utf8');
     expect(await isInGitignore(root)).toBe(true);
@@ -210,7 +210,7 @@ describe('isInGitignore', () => {
   });
 
   it('ignores leading/trailing whitespace on each line', async () => {
-    await writeFile(join(root, '.gitignore'), '  .pinpoint  \n', 'utf8');
+    await writeFile(join(root, '.gitignore'), '  .pinagent  \n', 'utf8');
     expect(await isInGitignore(root)).toBe(true);
   });
 });

@@ -116,12 +116,12 @@ describe('renderInitFooter', () => {
       session_id: 'sess-abc',
       model: 'claude-opus-4-7',
       permissionMode: 'acceptEdits',
-      mcp_servers: [{ name: 'pinpoint', status: 'connected' }],
+      mcp_servers: [{ name: 'pinagent', status: 'connected' }],
     } as never);
     expect(out).toContain('sess-abc');
     expect(out).toContain('claude-opus-4-7');
     expect(out).toContain('acceptEdits');
-    expect(out).toContain('pinpoint=connected');
+    expect(out).toContain('pinagent=connected');
   });
 
   it('omits the mcp line when no servers are connected', () => {
@@ -230,7 +230,7 @@ describe('summariseToolInput', () => {
   });
 
   it('renders a single MCP arg when shape is unambiguous', () => {
-    expect(summariseToolInput('mcp__pinpoint__resolve_feedback', { id: 'abc' })).toBe(
+    expect(summariseToolInput('mcp__pinagent__resolve_feedback', { id: 'abc' })).toBe(
       'id=`abc`',
     );
   });

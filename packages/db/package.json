@@ -1,8 +1,8 @@
 {
-  "name": "@pinpoint/db",
+  "name": "@pinagent/db",
   "version": "0.0.1",
   "private": true,
-  "description": "Shared Drizzle schema for Pinpoint — used by the server (better-sqlite3) and the browser (sqlite-wasm) so they stay in lockstep.",
+  "description": "Shared Drizzle schema for Pinagent — used by the server (better-sqlite3) and the browser (sqlite-wasm) so they stay in lockstep.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -7,10 +7,10 @@ import { resolveAgentMode, resolvePermissionMode } from '../src/agent';
  * process.env — we just pass our own.
  */
 const env = (val?: string): NodeJS.ProcessEnv =>
-  val === undefined ? {} : { PINPOINT_SPAWN_AGENT: val };
+  val === undefined ? {} : { PINAGENT_SPAWN_AGENT: val };
 
 const permEnv = (val?: string): NodeJS.ProcessEnv =>
-  val === undefined ? {} : { PINPOINT_AGENT_PERMISSION_MODE: val };
+  val === undefined ? {} : { PINAGENT_AGENT_PERMISSION_MODE: val };
 
 afterEach(() => {
   vi.unstubAllEnvs();

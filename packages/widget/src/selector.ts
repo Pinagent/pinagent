@@ -32,16 +32,16 @@ export function shortSelector(el: Element, maxDepth = 4): string {
   return parts.join(' > ');
 }
 
-export interface PpLoc {
+export interface PaLoc {
   file: string;
   line: number;
   col: number;
 }
 
-export function findLoc(start: Element): PpLoc | null {
+export function findLoc(start: Element): PaLoc | null {
   let cur: Element | null = start;
   while (cur && cur.nodeType === 1) {
-    const raw = cur.getAttribute?.('data-pp-loc');
+    const raw = cur.getAttribute?.('data-pa-loc');
     if (raw) {
       const parts = raw.split(':');
       if (parts.length >= 3) {

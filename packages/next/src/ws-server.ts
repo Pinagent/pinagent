@@ -9,9 +9,9 @@ import {
 } from './ws-protocol';
 
 const DEFAULT_PORT = 53636;
-const WS_PATH = '/__pinpoint/ws';
+const WS_PATH = '/__pinagent/ws';
 
-const SINGLETON_KEY = Symbol.for('pinpoint.ws-server');
+const SINGLETON_KEY = Symbol.for('pinagent.ws-server');
 
 interface ServerHandle {
   port: number;
@@ -31,7 +31,7 @@ interface GlobalHolder {
  *
  * We run on a dedicated port rather than hijacking Next's underlying http
  * server because Next App Router routes can't perform an upgrade. The widget
- * learns the port from a prelude injected into /__pinpoint/widget.js by the
+ * learns the port from a prelude injected into /__pinagent/widget.js by the
  * route handler (see `widget-config.ts`).
  */
 export function startWsServer(): ServerHandle {
@@ -39,10 +39,10 @@ export function startWsServer(): ServerHandle {
   const existing = g[SINGLETON_KEY];
   if (existing) return existing;
 
-  const envPort = process.env.PINPOINT_WS_PORT;
+  const envPort = process.env.PINAGENT_WS_PORT;
   const port = envPort ? Number(envPort) : DEFAULT_PORT;
   if (!Number.isFinite(port) || port <= 0 || port > 65535) {
-    throw new Error(`[pinpoint] invalid PINPOINT_WS_PORT: ${envPort}`);
+    throw new Error(`[pinagent] invalid PINAGENT_WS_PORT: ${envPort}`);
   }
 
   const wss = new WebSocketServer({ port, path: WS_PATH });
@@ -53,7 +53,7 @@ export function startWsServer(): ServerHandle {
 
   wss.on('listening', () => {
     // eslint-disable-next-line no-console
-    console.log(`[pinpoint] WebSocket server listening on ws://127.0.0.1:${port}${WS_PATH}`);
+    console.log(`[pinagent] WebSocket server listening on ws://127.0.0.1:${port}${WS_PATH}`);
   });
 
   // The 'error' handler runs async, so we may have already returned the
@@ -66,16 +66,16 @@ export function startWsServer(): ServerHandle {
     if (err.code === 'EADDRINUSE') {
       // eslint-disable-next-line no-console
       console.log(
-        `[pinpoint] WebSocket server already running on port ${port} (duplicate bind ignored)`,
+        `[pinagent] WebSocket server already running on port ${port} (duplicate bind ignored)`,
       );
       // Clear the singleton slot so a future startWsServer call could try
-      // again on a different port if the user changed PINPOINT_WS_PORT —
+      // again on a different port if the user changed PINAGENT_WS_PORT —
       // unlikely, but harmless.
       if (g[SINGLETON_KEY]?.wss === wss) delete g[SINGLETON_KEY];
       return;
     }
     // eslint-disable-next-line no-console
-    console.error('[pinpoint] WebSocket server error:', err);
+    console.error('[pinagent] WebSocket server error:', err);
   });
 
   const handle: ServerHandle = { port, wss, httpServer: null };

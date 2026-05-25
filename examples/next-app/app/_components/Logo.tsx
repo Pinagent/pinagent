@@ -1,7 +1,7 @@
 import type { SVGProps } from 'react';
 
 /**
- * Shared Pinpoint pin path. Stays in lockstep with
+ * Shared Pinagent pin path. Stays in lockstep with
  * `packages/widget/src/widget.ts::PIN_PATH` and `app/icon.svg`.
  */
 const PIN_PATH =

@@ -6,7 +6,7 @@ import {
   conversations,
   messages,
   widgetAnchors,
-} from '@pinpoint/db/schema';
+} from '@pinagent/db/schema';
 import type { BrowserDb } from './client';
 
 export interface PendingRow {

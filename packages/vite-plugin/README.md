@@ -1,15 +1,15 @@
-# @pinpoint/vite-plugin
+# @pinagent/vite-plugin
 
 Vite plugin (dev-only) that:
 
-1. Tags every JSX opening element with `data-pp-loc="<relPath>:<line>:<col>"` via a Babel transform.
-2. Injects a `<script src="/__pinpoint/widget.js">` into served HTML.
-3. Serves middleware under `/__pinpoint/*` that writes captured feedback to `.pinpoint/feedback/`.
+1. Tags every JSX opening element with `data-pa-loc="<relPath>:<line>:<col>"` via a Babel transform.
+2. Injects a `<script src="/__pinagent/widget.js">` into served HTML.
+3. Serves middleware under `/__pinagent/*` that writes captured feedback to `.pinagent/feedback/`.
 
 ## Install
 
 ```bash
-pnpm add -D @pinpoint/vite-plugin
+pnpm add -D @pinagent/vite-plugin
 ```
 
 ## Usage
@@ -18,10 +18,10 @@ pnpm add -D @pinpoint/vite-plugin
 // vite.config.ts
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import pinpoint from '@pinpoint/vite-plugin';
+import pinagent from '@pinagent/vite-plugin';
 
 export default defineConfig({
-  plugins: [pinpoint(), react()],
+  plugins: [pinagent(), react()],
 });
 ```
 
@@ -31,10 +31,10 @@ The plugin is `apply: 'serve'` — it does nothing on `vite build`.
 
 | Method | Path                                  | Purpose                                            |
 | ------ | ------------------------------------- | -------------------------------------------------- |
-| GET    | `/__pinpoint/widget.js`               | Bundled IIFE (embedded at publish time).           |
-| POST   | `/__pinpoint/feedback`                | Receive a comment + screenshot. Returns `{ id }`.  |
-| GET    | `/__pinpoint/feedback`                | List all feedback (shallow, no screenshot blob).   |
-| GET    | `/__pinpoint/feedback/:id`            | Full record including base64 screenshot.           |
-| PATCH  | `/__pinpoint/feedback/:id`            | Update `status`, `note`, `commitSha`.              |
+| GET    | `/__pinagent/widget.js`               | Bundled IIFE (embedded at publish time).           |
+| POST   | `/__pinagent/feedback`                | Receive a comment + screenshot. Returns `{ id }`.  |
+| GET    | `/__pinagent/feedback`                | List all feedback (shallow, no screenshot blob).   |
+| GET    | `/__pinagent/feedback/:id`            | Full record including base64 screenshot.           |
+| PATCH  | `/__pinagent/feedback/:id`            | Update `status`, `note`, `commitSha`.              |
 
-Files land in `<project root>/.pinpoint/`. Make sure that path is git-ignored.
+Files land in `<project root>/.pinagent/`. Make sure that path is git-ignored.

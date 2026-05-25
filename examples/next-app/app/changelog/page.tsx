@@ -10,7 +10,7 @@ export default function ChangelogPage() {
     >
       <h1 style={{ fontSize: '2.25rem' }}>Changelog</h1>
       <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
-        Release notes and updates from the Pinpoint Next.js demo.
+        Release notes and updates from the Pinagent Next.js demo.
       </p>
 
       <section style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -27,7 +27,7 @@ export default function ChangelogPage() {
             <time style={{ color: '#6b7280', fontSize: '0.875rem' }}>2026-05-20</time>
           </header>
           <ul style={{ color: '#374151', lineHeight: 1.55, marginTop: 12 }}>
-            <li>Multiple pinpoint widgets can now be open simultaneously without conflicts.</li>
+            <li>Multiple pinagent widgets can now be open simultaneously without conflicts.</li>
             <li>Improved widget positioning when the targeted element is near the viewport edge.</li>
             <li>Smoother streaming output in the comment pane.</li>
           </ul>
@@ -66,7 +66,7 @@ export default function ChangelogPage() {
           </header>
           <ul style={{ color: '#374151', lineHeight: 1.55, marginTop: 12 }}>
             <li>Shipped this Next.js App Router demo app.</li>
-            <li>Wired the Pinpoint click-to-comment widget into the layout.</li>
+            <li>Wired the Pinagent click-to-comment widget into the layout.</li>
             <li>Documented setup steps for new projects.</li>
           </ul>
         </article>
@@ -84,7 +84,7 @@ export default function ChangelogPage() {
             <time style={{ color: '#6b7280', fontSize: '0.875rem' }}>2026-04-01</time>
           </header>
           <ul style={{ color: '#374151', lineHeight: 1.55, marginTop: 12 }}>
-            <li>First public version of Pinpoint.</li>
+            <li>First public version of Pinagent.</li>
             <li>Click any UI element, leave a comment, and have an agent edit the code.</li>
           </ul>
         </article>

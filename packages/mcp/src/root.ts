@@ -3,18 +3,18 @@ import { dirname, resolve } from 'node:path';
 
 /**
  * Resolve the project root by:
- *   1. Honoring PINPOINT_PROJECT_ROOT if set.
- *   2. Walking up from cwd looking for `.pinpoint/`.
+ *   1. Honoring PINAGENT_PROJECT_ROOT if set.
+ *   2. Walking up from cwd looking for `.pinagent/`.
  *   3. Falling back to the nearest `package.json` ancestor.
  *   4. Falling back to cwd.
  */
 export function resolveRoot(env: NodeJS.ProcessEnv, cwd: string): string {
-  if (env.PINPOINT_PROJECT_ROOT) {
-    return resolve(env.PINPOINT_PROJECT_ROOT);
+  if (env.PINAGENT_PROJECT_ROOT) {
+    return resolve(env.PINAGENT_PROJECT_ROOT);
   }
 
-  const pinpointRoot = walkUp(cwd, (dir) => isDir(resolve(dir, '.pinpoint')));
-  if (pinpointRoot) return pinpointRoot;
+  const pinagentRoot = walkUp(cwd, (dir) => isDir(resolve(dir, '.pinagent')));
+  if (pinagentRoot) return pinagentRoot;
 
   const pkgRoot = walkUp(cwd, (dir) => existsSync(resolve(dir, 'package.json')));
   if (pkgRoot) return pkgRoot;

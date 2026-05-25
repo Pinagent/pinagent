@@ -22,7 +22,7 @@ function Logo({ size = 24 }: { size?: number }) {
 export function App() {
   return (
     <main style={{ fontFamily: 'system-ui, sans-serif', padding: '40px', maxWidth: 720, margin: '0 auto' }}>
-      <h1>Pinpoint demo</h1>
+      <h1>Pinagent demo</h1>
       <p>
         Open the <Logo size={16} /> button in the bottom-right, pick an element, and leave
         a comment.
@@ -51,7 +51,7 @@ function Footer() {
       onMouseLeave={() => setHovered(false)}
       style={{ marginTop: 40, color: hovered ? '#111827' : '#6b7280', fontSize: 13 }}
     >
-      Built for pinpoint smoke tests.
+      Built for pinagent smoke tests.
     </footer>
   );
 }

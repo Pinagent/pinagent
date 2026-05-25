@@ -61,14 +61,14 @@ describe('shortSelector', () => {
 
 describe('findLoc', () => {
   it('returns parsed loc from the element itself', () => {
-    document.body.innerHTML = '<div data-pp-loc="src/Foo.tsx:42:7"><span>x</span></div>';
+    document.body.innerHTML = '<div data-pa-loc="src/Foo.tsx:42:7"><span>x</span></div>';
     const div = document.querySelector('div') as Element;
     expect(findLoc(div)).toEqual({ file: 'src/Foo.tsx', line: 42, col: 7 });
   });
 
   it('walks up to find the nearest ancestor with the attribute', () => {
     document.body.innerHTML =
-      '<div data-pp-loc="src/A.tsx:1:1"><section><p>deep</p></section></div>';
+      '<div data-pa-loc="src/A.tsx:1:1"><section><p>deep</p></section></div>';
     const p = document.querySelector('p') as Element;
     expect(findLoc(p)).toEqual({ file: 'src/A.tsx', line: 1, col: 1 });
   });
@@ -80,27 +80,27 @@ describe('findLoc', () => {
   });
 
   it('handles file paths that contain colons (Windows-style or routes)', () => {
-    document.body.innerHTML = '<div data-pp-loc="C:/proj/Foo.tsx:10:3"></div>';
+    document.body.innerHTML = '<div data-pa-loc="C:/proj/Foo.tsx:10:3"></div>';
     const div = document.querySelector('div') as Element;
     // file is everything before the last two colon-segments.
     expect(findLoc(div)).toEqual({ file: 'C:/proj/Foo.tsx', line: 10, col: 3 });
   });
 
   it('returns null for malformed attribute (non-numeric line/col)', () => {
-    document.body.innerHTML = '<div data-pp-loc="src/Foo.tsx:abc:def"></div>';
+    document.body.innerHTML = '<div data-pa-loc="src/Foo.tsx:abc:def"></div>';
     const div = document.querySelector('div') as Element;
     expect(findLoc(div)).toBeNull();
   });
 
   it('returns null for too-few-parts attribute', () => {
-    document.body.innerHTML = '<div data-pp-loc="just-a-string"></div>';
+    document.body.innerHTML = '<div data-pa-loc="just-a-string"></div>';
     const div = document.querySelector('div') as Element;
     expect(findLoc(div)).toBeNull();
   });
 
   it('prefers the nearest ancestor over a more distant one', () => {
     document.body.innerHTML =
-      '<div data-pp-loc="far.tsx:1:1"><div data-pp-loc="near.tsx:2:2"><span>x</span></div></div>';
+      '<div data-pa-loc="far.tsx:1:1"><div data-pa-loc="near.tsx:2:2"><span>x</span></div></div>';
     const span = document.querySelector('span') as Element;
     expect(findLoc(span)).toEqual({ file: 'near.tsx', line: 2, col: 2 });
   });

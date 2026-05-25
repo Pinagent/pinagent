@@ -1,10 +1,10 @@
 {
   "mcpServers": {
-    "pinpoint": {
+    "pinagent": {
       "type": "stdio",
       "command": "node",
       "args": [
-        "/Users/jacksonmalloy/code/pinpoint/packages/mcp/dist/index.js"
+        "/Users/jacksonmalloy/code/pinagent/packages/mcp/dist/index.js"
       ],
       "env": {}
     }

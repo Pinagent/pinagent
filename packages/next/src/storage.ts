@@ -3,7 +3,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { z } from 'zod';
-import { asc, conversations, eq, widgetAnchors } from '@pinpoint/db';
+import { asc, conversations, eq, widgetAnchors } from '@pinagent/db';
 import { type Db, getDb } from './db/client';
 
 export const ID_RE = /^[A-Za-z0-9_-]{8,16}$/;
@@ -42,7 +42,7 @@ export interface FeedbackRecord {
   url: string;
   viewport: { w: number; h: number };
   userAgent: string;
-  /** Path relative to .pinpoint/, e.g. `screenshots/abc.png`. */
+  /** Path relative to .pinagent/, e.g. `screenshots/abc.png`. */
   screenshot: string;
   status: Status;
   note: string | null;
@@ -67,15 +67,15 @@ export type Patch = z.infer<typeof PatchSchema>;
 
 /**
  * Server-side feedback storage. Backed by SQLite via Drizzle on the
- * shared `@pinpoint/db` schema; screenshots stay on disk as PNG files
- * under `.pinpoint/screenshots/` because they're large binary blobs.
+ * shared `@pinagent/db` schema; screenshots stay on disk as PNG files
+ * under `.pinagent/screenshots/` because they're large binary blobs.
  *
  * The class deliberately preserves the v1 `FeedbackRecord` shape and
  * method names so the MCP server, route handler, and agent code don't
  * need to change. Internally it joins `conversations` and
  * `widget_anchors` on every read.
  *
- * On first open, any legacy `.pinpoint/feedback/<id>.json` files are
+ * On first open, any legacy `.pinagent/feedback/<id>.json` files are
  * imported into SQLite (and left on disk as a backup). Once they're in
  * the DB, subsequent reads come from SQLite.
  */
@@ -87,8 +87,8 @@ export class Storage {
 
   constructor(root: string) {
     this.root = root;
-    this.feedbackDir = join(root, '.pinpoint', 'feedback');
-    this.screenshotsDir = join(root, '.pinpoint', 'screenshots');
+    this.feedbackDir = join(root, '.pinagent', 'feedback');
+    this.screenshotsDir = join(root, '.pinagent', 'screenshots');
   }
 
   private db(): Db {
@@ -166,7 +166,7 @@ export class Storage {
 
     const pngBuf = Buffer.from(input.screenshot, 'base64');
     const pngRel = join('screenshots', `${id}.png`);
-    const pngAbs = join(this.root, '.pinpoint', pngRel);
+    const pngAbs = join(this.root, '.pinagent', pngRel);
     await this.atomicWriteBytes(pngAbs, pngBuf);
 
     const db = this.db();
@@ -237,7 +237,7 @@ export class Storage {
   }
 
   async readScreenshotBase64(rec: FeedbackRecord): Promise<string | null> {
-    const abs = join(this.root, '.pinpoint', rec.screenshot);
+    const abs = join(this.root, '.pinagent', rec.screenshot);
     if (!existsSync(abs)) return null;
     const buf = await readFile(abs);
     return buf.toString('base64');
@@ -334,7 +334,7 @@ export async function isInGitignore(root: string): Promise<boolean> {
       .split(/\r?\n/)
       .map((s) => s.trim())
       .some(
-        (s) => s === '.pinpoint' || s === '.pinpoint/' || s === '/.pinpoint' || s === '/.pinpoint/',
+        (s) => s === '.pinagent' || s === '.pinagent/' || s === '/.pinagent' || s === '/.pinagent/',
       );
   } catch {
     return false;

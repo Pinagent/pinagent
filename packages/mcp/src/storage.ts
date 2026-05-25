@@ -1,16 +1,16 @@
-// SQLite-backed mirror of @pinpoint/next/src/storage.ts. The MCP
+// SQLite-backed mirror of @pinagent/next/src/storage.ts. The MCP
 // server runs in a separate Node process from the dev server but
-// opens the same `.pinpoint/db.sqlite` file (SQLite WAL mode handles
+// opens the same `.pinagent/db.sqlite` file (SQLite WAL mode handles
 // concurrent readers/writers across processes).
 //
-// Screenshots stay on disk under `.pinpoint/screenshots/<id>.png`.
+// Screenshots stay on disk under `.pinagent/screenshots/<id>.png`.
 import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { asc, conversations, eq, widgetAnchors } from '@pinpoint/db';
-import * as schema from '@pinpoint/db/schema';
+import { asc, conversations, eq, widgetAnchors } from '@pinagent/db';
+import * as schema from '@pinagent/db/schema';
 import { z } from 'zod';
 
 export const ID_RE = /^[A-Za-z0-9_-]{8,16}$/;
@@ -44,7 +44,7 @@ export class Storage {
   /**
    * Legacy directory we still expose for the channel watcher path
    * comparison and any consumer that scans it. The new source of
-   * truth is SQLite, but `.pinpoint/feedback/` may still contain
+   * truth is SQLite, but `.pinagent/feedback/` may still contain
    * pre-migration JSON files which the import step folds in.
    */
   readonly feedbackDir: string;
@@ -53,12 +53,12 @@ export class Storage {
 
   constructor(root: string) {
     this.root = root;
-    this.feedbackDir = join(root, '.pinpoint', 'feedback');
+    this.feedbackDir = join(root, '.pinagent', 'feedback');
   }
 
   private db(): Db {
     if (this.dbHandle) return this.dbHandle;
-    const dbPath = join(this.root, '.pinpoint', 'db.sqlite');
+    const dbPath = join(this.root, '.pinagent', 'db.sqlite');
     const raw = new Database(dbPath, { fileMustExist: false });
     raw.pragma('journal_mode = WAL');
     raw.pragma('foreign_keys = ON');
@@ -158,7 +158,7 @@ export class Storage {
   }
 
   async readScreenshot(rec: FeedbackRecord): Promise<Buffer | null> {
-    const abs = join(this.root, '.pinpoint', rec.screenshot);
+    const abs = join(this.root, '.pinagent', rec.screenshot);
     if (!existsSync(abs)) return null;
     return readFile(abs);
   }

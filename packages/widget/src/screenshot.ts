@@ -56,7 +56,7 @@ async function downscaleBlob(bitmap: ImageBitmap, targetWidth: number): Promise<
 export async function capturePageScreenshot(
   filter?: (node: HTMLElement) => boolean,
 ): Promise<string> {
-  // Compose user filter with our defaults — skip the pinpoint host (passed
+  // Compose user filter with our defaults — skip the pinagent host (passed
   // in) and any cross-origin <img> nodes so html-to-image doesn't try to
   // inline them (CSP/CORS would fail the fetch).
   const composedFilter = (node: HTMLElement): boolean => {
@@ -77,11 +77,11 @@ export async function capturePageScreenshot(
       skipFonts: true,
     });
   } catch (err) {
-    console.warn('[pinpoint] screenshot capture failed, submitting without image:', err);
+    console.warn('[pinagent] screenshot capture failed, submitting without image:', err);
     return TRANSPARENT_PNG_BASE64;
   }
   if (!blob) {
-    console.warn('[pinpoint] screenshot capture returned no blob, submitting without image');
+    console.warn('[pinagent] screenshot capture returned no blob, submitting without image');
     return TRANSPARENT_PNG_BASE64;
   }
 
@@ -107,7 +107,7 @@ export async function capturePageScreenshot(
     }
     bitmap.close?.();
   } catch (err) {
-    console.warn('[pinpoint] downscale step failed; using full-size capture:', err);
+    console.warn('[pinagent] downscale step failed; using full-size capture:', err);
   }
 
   return blobToBase64(blob);

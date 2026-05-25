@@ -1,4 +1,4 @@
 .next
-.pinpoint
+.pinagent
 node_modules
 *.tsbuildinfo

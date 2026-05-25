@@ -23,12 +23,12 @@ if (
   process.env.NODE_ENV !== 'production' &&
   resolveAgentMode(process.env) !== false
 ) {
-  if (!process.env.PINPOINT_WS_PORT) process.env.PINPOINT_WS_PORT = '53636';
+  if (!process.env.PINAGENT_WS_PORT) process.env.PINAGENT_WS_PORT = '53636';
   try {
     startWsServer();
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error('[pinpoint] failed to start WebSocket server:', err);
+    console.error('[pinagent] failed to start WebSocket server:', err);
   }
 }
 
@@ -36,11 +36,11 @@ if (
 // inline in their own route file — Next 16 statically parses route-segment
 // config and refuses to follow re-exports for `dynamic` / `runtime`.
 //
-// Your `app/pinpoint/[[...slug]]/route.ts` should look like:
+// Your `app/pinagent/[[...slug]]/route.ts` should look like:
 //
 //   export const dynamic = 'force-dynamic';
 //   export const runtime = 'nodejs';
-//   export { GET, POST, PATCH } from '@pinpoint/next/route';
+//   export { GET, POST, PATCH } from '@pinagent/next/route';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -51,8 +51,8 @@ interface RouteCtx {
 }
 
 function getStorage(): Storage {
-  // PINPOINT_PROJECT_ROOT lets a turborepo target a specific app root.
-  const root = process.env.PINPOINT_PROJECT_ROOT ?? process.cwd();
+  // PINAGENT_PROJECT_ROOT lets a turborepo target a specific app root.
+  const root = process.env.PINAGENT_PROJECT_ROOT ?? process.cwd();
   return new Storage(root);
 }
 
@@ -64,7 +64,7 @@ async function readSlug(ctx: RouteCtx): Promise<string[]> {
 export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
   const slug = await readSlug(ctx);
 
-  // /__pinpoint/widget.js
+  // /__pinagent/widget.js
   if (slug.length === 1 && slug[0] === 'widget.js') {
     return new Response(buildWidgetBundle(), {
       status: 200,
@@ -75,7 +75,7 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
     });
   }
 
-  // /__pinpoint/sqlite-wasm/<file> — proxies the sqlite-wasm jswasm
+  // /__pinagent/sqlite-wasm/<file> — proxies the sqlite-wasm jswasm
   // directory so the browser can spawn the Worker + load the WASM. We
   // serve directly out of node_modules rather than copying into dist
   // because the files are big (~1.5MB total) and only used in dev.
@@ -83,13 +83,13 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
     return serveSqliteWasm(slug[1] ?? '');
   }
 
-  // /__pinpoint/db-migrations — concatenated migration SQL for the
-  // browser cache. Same DDL the server runs on .pinpoint/db.sqlite.
+  // /__pinagent/db-migrations — concatenated migration SQL for the
+  // browser cache. Same DDL the server runs on .pinagent/db.sqlite.
   if (slug.length === 1 && slug[0] === 'db-migrations') {
     return serveDbMigrations();
   }
 
-  // /__pinpoint/db-worker.js — our own sqlite-wasm worker. Installs
+  // /__pinagent/db-worker.js — our own sqlite-wasm worker. Installs
   // the OPFS SAH Pool VFS so persistence works without COOP/COEP.
   if (slug.length === 1 && slug[0] === 'db-worker.js') {
     return new Response(DB_WORKER_SOURCE, {
@@ -103,7 +103,7 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
 
   const storage = getStorage();
 
-  // /__pinpoint/feedback
+  // /__pinagent/feedback
   if (slug.length === 1 && slug[0] === 'feedback') {
     const items = await storage.list();
     const shallow = items.map((r) => ({
@@ -121,7 +121,7 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
     return json(200, shallow);
   }
 
-  // /__pinpoint/feedback/:id
+  // /__pinagent/feedback/:id
   if (slug.length === 2 && slug[0] === 'feedback') {
     const id = slug[1] ?? '';
     if (!ID_RE.test(id)) return json(400, { error: 'invalid id' });
@@ -137,7 +137,7 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
 export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
   const slug = await readSlug(ctx);
 
-  // /__pinpoint/open — spawn the developer's editor at file:line:col.
+  // /__pinagent/open — spawn the developer's editor at file:line:col.
   if (slug.length === 1 && slug[0] === 'open') {
     const url = new URL(req.url);
     const file = url.searchParams.get('file');
@@ -145,7 +145,7 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
     const colRaw = url.searchParams.get('col');
     if (!file) return json(400, { error: 'file required' });
     try {
-      const root = process.env.PINPOINT_PROJECT_ROOT ?? process.cwd();
+      const root = process.env.PINAGENT_PROJECT_ROOT ?? process.cwd();
       const result = await openInEditor(
         root,
         file,
@@ -210,16 +210,16 @@ export async function PATCH(req: Request, ctx: RouteCtx): Promise<Response> {
  * Build the widget IIFE plus a small prelude that hands the widget the
  * dynamic config it needs at runtime (currently just the WebSocket URL).
  *
- * The widget reads `window.__pinpointConfig` on mount. If unset, it falls
+ * The widget reads `window.__pinagentConfig` on mount. If unset, it falls
  * back to a default port — but that fallback only succeeds when running
  * against the same machine on the standard port, so we always inject.
  */
 function buildWidgetBundle(): string {
-  const wsPort = process.env.PINPOINT_WS_PORT;
+  const wsPort = process.env.PINAGENT_WS_PORT;
   const config = wsPort
-    ? { wsUrl: `ws://${defaultWsHost()}:${wsPort}/__pinpoint/ws` }
+    ? { wsUrl: `ws://${defaultWsHost()}:${wsPort}/__pinagent/ws` }
     : { wsUrl: null };
-  const prelude = `;(function(){try{window.__pinpointConfig=${JSON.stringify(config)};}catch(e){}})();\n`;
+  const prelude = `;(function(){try{window.__pinagentConfig=${JSON.stringify(config)};}catch(e){}})();\n`;
   return prelude + WIDGET_SOURCE;
 }
 
@@ -241,7 +241,7 @@ function sqliteWasmDir(): string {
   if (sqliteWasmDirCache) return sqliteWasmDirCache;
   // createRequire so we resolve from this module's own location,
   // independent of cwd, and let pnpm's symlinks find the real path.
-  const req = createRequire(import.meta.url ?? `file://${process.cwd()}/__pinpoint__.js`);
+  const req = createRequire(import.meta.url ?? `file://${process.cwd()}/__pinagent__.js`);
   const pkgJson = req.resolve('@sqlite.org/sqlite-wasm/package.json');
   sqliteWasmDirCache = join(dirname(pkgJson), 'sqlite-wasm', 'jswasm');
   return sqliteWasmDirCache;
@@ -267,7 +267,7 @@ async function serveSqliteWasm(file: string): Promise<Response> {
     });
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.error(`[pinpoint] failed to serve sqlite-wasm/${file}:`, e);
+    console.error(`[pinagent] failed to serve sqlite-wasm/${file}:`, e);
     return new Response(null, { status: 500 });
   }
 }
@@ -312,7 +312,7 @@ async function serveDbMigrations(): Promise<Response> {
     });
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.error('[pinpoint] failed to serve db-migrations:', e);
+    console.error('[pinagent] failed to serve db-migrations:', e);
     return new Response(JSON.stringify({ migrations: [] }), {
       status: 200,
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
@@ -323,7 +323,7 @@ async function serveDbMigrations(): Promise<Response> {
 function defaultWsHost(): string {
   // 127.0.0.1 is safer than `localhost` (avoids IPv6/IPv4 resolution
   // mismatches that can cause silent connect failures on some setups).
-  // Consumers running pinpoint behind a tunnel/proxy can override the
+  // Consumers running pinagent behind a tunnel/proxy can override the
   // bundle by handling the route themselves; that's a v3 concern.
   return '127.0.0.1';
 }

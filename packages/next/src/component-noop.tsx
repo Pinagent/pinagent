@@ -1,4 +1,4 @@
-// Production stub for the `<Pinpoint />` component.
+// Production stub for the `<Pinagent />` component.
 //
 // Resolved by the `"default"` condition in package.json exports when the
 // bundler is not running in `"development"`. Keeps the heavier
@@ -9,6 +9,6 @@
 // layouts behave identically.
 'use client';
 
-export function Pinpoint(): null {
+export function Pinagent(): null {
   return null;
 }

@@ -8,22 +8,22 @@ interface LoaderContext {
 }
 
 /**
- * Webpack loader for Next.js. Runs the same JSX transform as @pinpoint/vite-plugin.
+ * Webpack loader for Next.js. Runs the same JSX transform as @pinagent/vite-plugin.
  *
- * Wire it up via @pinpoint/next/config or directly in next.config.js:
+ * Wire it up via @pinagent/next/config or directly in next.config.js:
  *
  *   webpack(config, { dev, isServer }) {
  *     if (dev && !isServer) {
  *       config.module.rules.unshift({
  *         test: /\.(t|j)sx$/,
  *         exclude: /node_modules/,
- *         use: require.resolve('@pinpoint/next/loader'),
+ *         use: require.resolve('@pinagent/next/loader'),
  *       });
  *     }
  *     return config;
  *   }
  */
-export default function pinpointLoader(this: LoaderContext, source: string): void {
+export default function pinagentLoader(this: LoaderContext, source: string): void {
   const cb = this.async();
   try {
     const resource = this.resourcePath;

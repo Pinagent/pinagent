@@ -1,10 +1,10 @@
 {
-  "name": "@pinpoint/mcp",
+  "name": "@pinagent/mcp",
   "version": "0.0.1",
-  "description": "stdio MCP server for Pinpoint — exposes pending feedback, screenshots, and source context to a coding agent.",
+  "description": "stdio MCP server for Pinagent — exposes pending feedback, screenshots, and source context to a coding agent.",
   "type": "module",
   "bin": {
-    "pinpoint-mcp": "dist/index.js"
+    "pinagent-mcp": "dist/index.js"
   },
   "main": "dist/index.js",
   "files": ["dist"],
@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "@pinpoint/db": "workspace:*",
+    "@pinagent/db": "workspace:*",
     "better-sqlite3": "^11.8.1",
     "drizzle-orm": "^0.38.0",
     "zod": "^3.23.8"
