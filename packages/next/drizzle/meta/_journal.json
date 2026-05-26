@@ -15,6 +15,13 @@
       "when": 1779738163032,
       "tag": "0001_lazy_jimmy_woo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1779751883198,
+      "tag": "0002_cool_thena",
+      "breakpoints": true
     }
   ]
 }

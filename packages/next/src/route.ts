@@ -175,15 +175,19 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
   const storage = getStorage();
   const rec = await storage.create(id, parsed.data);
 
-  // Optionally spawn an isolated agent (worktree or inline). Fires and forgets;
-  // the agent runs detached and writes its own log file. If env var isn't set,
-  // this is a cheap no-op.
+  // Optionally spawn an isolated agent (worktree or inline). `spawnAgent`
+  // returns once the worktree exists (or immediately in inline mode); the
+  // actual SDK run is fire-and-forget inside. We `await` here so the
+  // widget's first `subscribe` sees `worktreeState='active'` instead of
+  // racing the worktree creation.
   const mode = resolveAgentMode(process.env);
   const agentSpawned = mode !== false;
   if (agentSpawned) {
-    spawnAgent({ projectRoot: storage.root, feedback: rec, mode }).catch(() => {
+    try {
+      await spawnAgent({ projectRoot: storage.root, feedback: rec, mode });
+    } catch {
       // Swallow — errors land in the per-feedback log.
-    });
+    }
   }
 
   return json(200, { id: rec.id, agentSpawned });

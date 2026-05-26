@@ -41,20 +41,63 @@ interface AgentEvent {
   [k: string]: unknown;
 }
 
+/**
+ * Mirrors the `WorktreeWireState` union on the server. Includes transient
+ * `landing` / `discarding` states the widget renders optimistically before
+ * the server confirms with `landed` / `discarded` / `conflict`.
+ */
+type WorktreeWireState =
+  | 'none'
+  | 'active'
+  | 'landing'
+  | 'landed'
+  | 'discarding'
+  | 'discarded'
+  | 'conflict'
+  | 'ttl_warning';
+
+interface WorktreeStateMessage {
+  state: WorktreeWireState;
+  commitSha?: string;
+  conflicts?: string[];
+  message?: string;
+}
+
 interface ServerMessage {
-  type: 'event' | 'done' | 'error' | 'pong';
+  type: 'event' | 'done' | 'error' | 'pong' | 'worktree_state';
   feedbackId?: string;
   event?: AgentEvent;
   message?: string;
+  state?: WorktreeWireState;
+  commitSha?: string;
+  conflicts?: string[];
 }
 
 interface FeedbackHandler {
   onEvent(event: AgentEvent): void;
   onDone(): void;
   onError(message: string): void;
+  /**
+   * Phase H — the conversation's worktree lifecycle changed. Optional
+   * because inline-mode conversations never call this and the widget
+   * keeps working without a header lifecycle row.
+   */
+  onWorktreeState?(payload: WorktreeStateMessage): void;
 }
 
 type AgentState = 'pending' | 'running' | 'done' | 'error';
+
+/**
+ * DOM nodes for the Phase H worktree-lifecycle row. Looked up once when
+ * the composer iframe loads and threaded through `attachStreamHandler`
+ * so the worktree_state listener can mutate them.
+ */
+interface LifecycleEls {
+  row: HTMLElement;
+  label: HTMLElement;
+  landBtn: HTMLButtonElement;
+  discardBtn: HTMLButtonElement;
+}
 
 interface Composer {
   feedbackId: string | null;
@@ -241,6 +284,14 @@ class WidgetWsClient {
     this.send({ type: 'interrupt', feedbackId });
   }
 
+  sendLandRequest(feedbackId: string): void {
+    this.send({ type: 'land_request', feedbackId });
+  }
+
+  sendDiscardRequest(feedbackId: string): void {
+    this.send({ type: 'discard_request', feedbackId });
+  }
+
   private send(msg: object): void {
     const payload = JSON.stringify(msg);
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
@@ -335,6 +386,20 @@ class WidgetWsClient {
         if (id) {
           const h = this.handlers.get(id);
           if (h) h.onError(message);
+        }
+        return;
+      }
+      case 'worktree_state': {
+        const id = parsed.feedbackId;
+        const state = parsed.state;
+        if (!id || !state) return;
+        const h = this.handlers.get(id);
+        if (h?.onWorktreeState) {
+          const payload: WorktreeStateMessage = { state };
+          if (parsed.commitSha) payload.commitSha = parsed.commitSha;
+          if (parsed.conflicts) payload.conflicts = parsed.conflicts;
+          if (parsed.message) payload.message = parsed.message;
+          h.onWorktreeState(payload);
         }
         return;
       }
@@ -883,6 +948,10 @@ export function mount(): void {
       const stopBtn = idoc.getElementById('pa-stop') as HTMLButtonElement | null;
       const followInput = idoc.getElementById('pa-follow-input') as HTMLTextAreaElement | null;
       const followSend = idoc.getElementById('pa-follow-send') as HTMLButtonElement | null;
+      const lifecycleRow = idoc.getElementById('pa-lifecycle') as HTMLElement | null;
+      const lifecycleLabel = idoc.getElementById('pa-lifecycle-label') as HTMLElement | null;
+      const landBtn = idoc.getElementById('pa-land') as HTMLButtonElement | null;
+      const discardBtn = idoc.getElementById('pa-discard') as HTMLButtonElement | null;
       if (
         !ta ||
         !cancel ||
@@ -896,10 +965,20 @@ export function mount(): void {
         !dismissBtn ||
         !stopBtn ||
         !followInput ||
-        !followSend
+        !followSend ||
+        !lifecycleRow ||
+        !lifecycleLabel ||
+        !landBtn ||
+        !discardBtn
       ) {
         return;
       }
+      const lifecycle: LifecycleEls = {
+        row: lifecycleRow,
+        label: lifecycleLabel,
+        landBtn,
+        discardBtn,
+      };
 
       if (loc2) {
         metaEl.classList.add('clickable');
@@ -1009,6 +1088,7 @@ export function mount(): void {
             stopBtn,
             followInput,
             followSend,
+            lifecycle,
             replayed,
           );
         })();
@@ -1112,6 +1192,7 @@ export function mount(): void {
               stopBtn,
               followInput,
               followSend,
+              lifecycle,
             );
           } else {
             toast('Sent', 'success');
@@ -1271,6 +1352,7 @@ function attachStreamHandler(
   stopBtn: HTMLButtonElement,
   followInput: HTMLTextAreaElement,
   followSend: HTMLButtonElement,
+  lifecycle: LifecycleEls,
   /**
    * Historical messages to replay before going live. Restoration on
    * reload uses this to repopulate the stream pane from the browser
@@ -1287,6 +1369,7 @@ function attachStreamHandler(
   let pendingAskFormRoot: HTMLElement | null = null;
   let apiKeySource: string | null = null;
   let turnRunning = true;
+  let worktreeState: WorktreeWireState = 'none';
 
   function setStopVisible(visible: boolean) {
     stopBtn.hidden = !visible;
@@ -1300,6 +1383,11 @@ function attachStreamHandler(
   function setHeaderRunning(running: boolean) {
     if (running) header.classList.add('running');
     else header.classList.remove('running');
+    // Land/Discard are gated on `!turnRunning`; refresh the row so the
+    // buttons disable as soon as a new turn starts and re-enable the
+    // moment one ends, without each call site having to know about
+    // lifecycle state.
+    renderLifecycle();
   }
   setHeaderRunning(true);
 
@@ -1615,6 +1703,116 @@ function attachStreamHandler(
     }
   }
 
+  /**
+   * Render the lifecycle row from the current `worktreeState` +
+   * `turnRunning`. Called from both the worktree_state listener and
+   * after turn transitions (because Land/Discard are disabled while a
+   * turn is running). Idempotent — safe to call repeatedly.
+   */
+  function renderLifecycle(extra?: { commitSha?: string; message?: string }) {
+    const { row, label, landBtn, discardBtn } = lifecycle;
+    const cls = row.classList;
+    cls.remove('landed', 'discarded', 'conflict', 'busy');
+
+    if (worktreeState === 'none') {
+      row.hidden = true;
+      return;
+    }
+    row.hidden = false;
+
+    const canAct = !turnRunning && !pendingAskId;
+    switch (worktreeState) {
+      case 'active':
+        label.textContent = canAct ? 'Ready to land or discard' : 'Working…';
+        landBtn.hidden = false;
+        discardBtn.hidden = false;
+        landBtn.disabled = !canAct;
+        discardBtn.disabled = !canAct;
+        landBtn.textContent = 'Land';
+        discardBtn.textContent = 'Discard';
+        if (extra?.message) label.textContent = `Last attempt: ${extra.message}`;
+        break;
+      case 'landing':
+        cls.add('busy');
+        label.textContent = 'Landing…';
+        landBtn.hidden = false;
+        discardBtn.hidden = true;
+        landBtn.disabled = true;
+        landBtn.textContent = 'Landing…';
+        break;
+      case 'landed':
+        cls.add('landed');
+        label.textContent = extra?.commitSha
+          ? `Landed · ${extra.commitSha.slice(0, 12)}`
+          : 'Landed';
+        landBtn.hidden = true;
+        discardBtn.hidden = true;
+        break;
+      case 'discarding':
+        cls.add('busy');
+        label.textContent = 'Discarding…';
+        landBtn.hidden = true;
+        discardBtn.hidden = false;
+        discardBtn.disabled = true;
+        discardBtn.textContent = 'Discarding…';
+        break;
+      case 'discarded':
+        cls.add('discarded');
+        label.textContent = 'Discarded';
+        landBtn.hidden = true;
+        discardBtn.hidden = true;
+        break;
+      case 'conflict':
+        cls.add('conflict');
+        label.textContent = 'Merge conflict — resolve in editor, then retry';
+        landBtn.hidden = false;
+        discardBtn.hidden = false;
+        landBtn.disabled = !canAct;
+        discardBtn.disabled = !canAct;
+        landBtn.textContent = 'Retry land';
+        discardBtn.textContent = 'Discard';
+        break;
+      case 'ttl_warning':
+        label.textContent = 'Old worktree — review or discard';
+        landBtn.hidden = false;
+        discardBtn.hidden = false;
+        landBtn.disabled = !canAct;
+        discardBtn.disabled = !canAct;
+        landBtn.textContent = 'Land';
+        discardBtn.textContent = 'Discard';
+        break;
+    }
+  }
+
+  lifecycle.landBtn.addEventListener('click', () => {
+    if (lifecycle.landBtn.disabled) return;
+    client.sendLandRequest(feedbackId);
+    // Optimistic — the server echoes 'landing' too, but reacting now
+    // avoids a flash of "Ready to land or discard" between click and
+    // the round-trip.
+    worktreeState = 'landing';
+    renderLifecycle();
+  });
+
+  lifecycle.discardBtn.addEventListener('click', () => {
+    if (lifecycle.discardBtn.disabled) return;
+    // One-click discard. The transcript stays in the cache so the
+    // user can still read what the agent did even though the worktree
+    // is gone. A confirm dialog felt heavier than the destructive
+    // surface warrants — discard only throws away uncommitted edits,
+    // and the user has the transcript to remember what was done.
+    client.sendDiscardRequest(feedbackId);
+    worktreeState = 'discarding';
+    renderLifecycle();
+  });
+
+  function renderConflicts(files: string[]) {
+    const wrap = el('div', 'conflict-block');
+    wrap.appendChild(el('div', 'conflict-title', `Merge conflicts in ${files.length} file(s)`));
+    for (const f of files) wrap.appendChild(el('div', 'conflict-file', f));
+    append(wrap);
+  }
+
   client.subscribe(feedbackId, {
     onEvent(event) {
       // Persist before rendering so a render error doesn't lose the
@@ -1634,6 +1832,17 @@ function attachStreamHandler(
       setHeaderRunning(false);
       setStopVisible(false);
       if (!pendingAskId) setFollowEnabled(true);
+      renderLifecycle();
+    },
+    onWorktreeState(payload) {
+      worktreeState = payload.state;
+      if (payload.state === 'conflict' && payload.conflicts && payload.conflicts.length > 0) {
+        renderConflicts(payload.conflicts);
+      }
+      renderLifecycle({
+        ...(payload.commitSha ? { commitSha: payload.commitSha } : {}),
+        ...(payload.message ? { message: payload.message } : {}),
+      });
     },
     onError(message) {
       append(el('div', 'err-line', message));
@@ -1799,6 +2008,57 @@ function composerHTML(metaText: string): string {
   .err-line { color: #b91c1c; font-size: 12px; white-space: pre-wrap; }
   .footer-note { font-size: 11px; color: #6b7280; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
+  /* Phase H — worktree lifecycle row, shown only when the conversation has
+     an active worktree to act on. The text label on the left echoes the
+     current state ("Working on pinagent/abc · 3 changes" while active,
+     "Landed as 1a2b3c4d" after) and the buttons on the right give the
+     terminal actions. */
+  .lifecycle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 6px;
+    background: #f5f3ff;
+    border: 1px solid #ddd6fe;
+    border-radius: 6px;
+    font-size: 11px;
+    color: #4c1d95;
+  }
+  .lifecycle[hidden] { display: none; }
+  .lifecycle.landed { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+  .lifecycle.discarded { background: #f3f4f6; border-color: #e5e7eb; color: #6b7280; }
+  .lifecycle.conflict { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+  .lifecycle.busy { opacity: 0.7; }
+  .lifecycle-label {
+    flex: 1;
+    min-width: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .lifecycle-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .lifecycle-btn { font-size: 11px; padding: 3px 8px; }
+  .lifecycle-btn[hidden] { display: none; }
+
+  .conflict-block {
+    background: #fef2f2;
+    border-left: 3px solid #fca5a5;
+    padding: 6px 8px;
+    border-radius: 0 4px 4px 0;
+    font-size: 11px;
+    color: #991b1b;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .conflict-block .conflict-title { font-weight: 600; }
+  .conflict-block .conflict-file {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #7f1d1d;
+  }
+
   .ask-form {
     background: #fffbeb;
     border: 1px solid #fde68a;
@@ -1858,6 +2118,13 @@ function composerHTML(metaText: string): string {
 
     <div class="pane" id="pa-stream-pane" hidden>
       <div class="header" id="pa-stream-header">Working…</div>
+      <div class="lifecycle" id="pa-lifecycle" hidden>
+        <span class="lifecycle-label" id="pa-lifecycle-label"></span>
+        <div class="lifecycle-actions">
+          <button class="btn lifecycle-btn primary" id="pa-land" type="button" hidden>Land</button>
+          <button class="btn lifecycle-btn ghost" id="pa-discard" type="button" hidden>Discard</button>
+        </div>
+      </div>
       <div class="log" id="pa-stream-log"></div>
       <div class="follow">
         <textarea id="pa-follow-input" rows="2" placeholder="Working…" disabled></textarea>
@@ -1867,7 +2134,7 @@ function composerHTML(metaText: string): string {
         <span class="footer-note" id="pa-stream-footer"></span>
         <div class="row" style="gap:6px;">
           <button class="btn ghost stop" id="pa-stop" type="button" hidden>Stop</button>
-          <button class="btn ghost cancel" id="pa-dismiss" type="button">Cancel</button>
+          <button class="btn ghost cancel" id="pa-dismiss" type="button">Minimize</button>
         </div>
       </div>
     </div>

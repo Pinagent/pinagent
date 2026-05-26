@@ -1,12 +1,17 @@
 import type { Server as HttpServer } from 'node:http';
+import { join } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { resolveAsk } from './ask-user';
 import { type AgentEvent, getOrCreateBus } from './event-bus';
+import { enqueue } from './merge-queue';
+import { Storage } from './storage';
 import {
   type ClientMessage,
   ClientMessageSchema,
   type ServerMessage,
+  type WorktreeWireState,
 } from './ws-protocol';
+import { clearWarning, isStale, sweepStaleWorktrees } from './worktree-ttl';
 
 const DEFAULT_PORT = 53636;
 const WS_PATH = '/__pinagent/ws';
@@ -85,6 +90,12 @@ export function startWsServer(): ServerHandle {
   process.once('SIGINT', () => wss.close());
   process.once('SIGTERM', () => wss.close());
 
+  // Fire-and-forget orphan-worktree TTL scan. Populates a flag set the
+  // next `subscribe` consults to upgrade `active` → `ttl_warning` for
+  // stale conversations. Safe to ignore failures — the only consequence
+  // is users don't get the nudge on this boot.
+  void sweepStaleWorktrees(projectRoot());
+
   return handle;
 }
 
@@ -92,6 +103,54 @@ export function startWsServer(): ServerHandle {
 interface ConnectionState {
   subscriptions: Map<string, () => void>; // feedbackId → unsubscribe
   alive: boolean;
+}
+
+/**
+ * Worktree-state fan-out: keyed by feedbackId, value is the set of
+ * sockets currently subscribed. Lives separately from the
+ * `event-bus` because worktree state is a property of the conversation
+ * row (durable in SQLite) rather than an agent-run event — and changes
+ * to it can happen long after the agent run's bus has been finished
+ * and evicted. Survives module re-eval via globalThis pinning.
+ */
+const WT_SUBS_SYMBOL = Symbol.for('pinagent.ws.worktreeSubs');
+const worktreeSubs: Map<string, Set<WebSocket>> = ((globalThis as Record<symbol, unknown>)[
+  WT_SUBS_SYMBOL
+] as Map<string, Set<WebSocket>> | undefined) ?? new Map<string, Set<WebSocket>>();
+(globalThis as Record<symbol, unknown>)[WT_SUBS_SYMBOL] = worktreeSubs;
+
+function addWorktreeSub(feedbackId: string, socket: WebSocket): void {
+  let set = worktreeSubs.get(feedbackId);
+  if (!set) {
+    set = new Set();
+    worktreeSubs.set(feedbackId, set);
+  }
+  set.add(socket);
+}
+
+function removeWorktreeSub(feedbackId: string, socket: WebSocket): void {
+  const set = worktreeSubs.get(feedbackId);
+  if (!set) return;
+  set.delete(socket);
+  if (set.size === 0) worktreeSubs.delete(feedbackId);
+}
+
+function broadcastWorktreeState(
+  feedbackId: string,
+  payload: Omit<Extract<ServerMessage, { type: 'worktree_state' }>, 'type' | 'feedbackId'>,
+): void {
+  const set = worktreeSubs.get(feedbackId);
+  if (!set) return;
+  const msg: ServerMessage = { type: 'worktree_state', feedbackId, ...payload };
+  for (const sock of set) send(sock, msg);
+}
+
+function projectRoot(): string {
+  return process.env.PINAGENT_PROJECT_ROOT ?? process.cwd();
+}
+
+function logPathFor(root: string, feedbackId: string): string {
+  return join(root, '.pinagent', 'logs', `${feedbackId}.md`);
 }
 
 const PING_INTERVAL_MS = 30_000;
@@ -138,7 +197,10 @@ function attachConnection(socket: WebSocket): void {
 
   socket.on('close', () => {
     clearInterval(ping);
-    for (const unsub of state.subscriptions.values()) unsub();
+    for (const [feedbackId, unsub] of state.subscriptions.entries()) {
+      unsub();
+      removeWorktreeSub(feedbackId, socket);
+    }
     state.subscriptions.clear();
   });
 
@@ -163,9 +225,16 @@ async function handleClientMessage(
         onClose() {
           send(socket, { type: 'done', feedbackId: msg.feedbackId });
           state.subscriptions.delete(msg.feedbackId);
+          removeWorktreeSub(msg.feedbackId, socket);
         },
       });
       state.subscriptions.set(msg.feedbackId, unsub);
+      addWorktreeSub(msg.feedbackId, socket);
+
+      // Send the current worktree state to the new subscriber so it can
+      // render Land/Discard controls (or their absence) without an HTTP
+      // round-trip. Best-effort — missing rows just produce no message.
+      void emitCurrentWorktreeState(socket, msg.feedbackId);
       return;
     }
     case 'unsubscribe': {
@@ -174,6 +243,7 @@ async function handleClientMessage(
         unsub();
         state.subscriptions.delete(msg.feedbackId);
       }
+      removeWorktreeSub(msg.feedbackId, socket);
       return;
     }
     case 'ask_response': {
@@ -200,10 +270,80 @@ async function handleClientMessage(
       }
       return;
     }
+    case 'land_request': {
+      const root = projectRoot();
+      const logPath = logPathFor(root, msg.feedbackId);
+      clearWarning(msg.feedbackId);
+      broadcastWorktreeState(msg.feedbackId, { state: 'landing' });
+      // Serialise per-project so two widgets racing to land on the same
+      // HEAD branch can't interleave merges.
+      const { mergeWorktree } = await import('./agent');
+      const result = await enqueue(root, () => mergeWorktree(root, msg.feedbackId, logPath));
+      if (result.ok) {
+        broadcastWorktreeState(msg.feedbackId, {
+          state: 'landed',
+          ...(result.commitSha ? { commitSha: result.commitSha } : {}),
+        });
+      } else if (result.conflicts && result.conflicts.length > 0) {
+        broadcastWorktreeState(msg.feedbackId, {
+          state: 'conflict',
+          conflicts: result.conflicts,
+        });
+      } else {
+        // Non-conflict failure (no worktree, detached HEAD, etc.) —
+        // revert the optimistic 'landing' state and report.
+        broadcastWorktreeState(msg.feedbackId, {
+          state: 'active',
+          ...(result.error ? { message: result.error } : {}),
+        });
+      }
+      return;
+    }
+    case 'discard_request': {
+      const root = projectRoot();
+      const logPath = logPathFor(root, msg.feedbackId);
+      clearWarning(msg.feedbackId);
+      broadcastWorktreeState(msg.feedbackId, { state: 'discarding' });
+      const { discardWorktree } = await import('./agent');
+      try {
+        await enqueue(root, () => discardWorktree(root, msg.feedbackId, logPath));
+        broadcastWorktreeState(msg.feedbackId, { state: 'discarded' });
+      } catch (err) {
+        broadcastWorktreeState(msg.feedbackId, {
+          state: 'active',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+      return;
+    }
     case 'ping': {
       send(socket, { type: 'pong' });
       return;
     }
+  }
+}
+
+async function emitCurrentWorktreeState(socket: WebSocket, feedbackId: string): Promise<void> {
+  try {
+    const storage = new Storage(projectRoot());
+    const rec = await storage.read(feedbackId);
+    if (!rec) return;
+    // Upgrade `active` → `ttl_warning` for stale orphans surfaced by the
+    // boot-time sweep. The widget renders the same Land/Discard
+    // affordances but with a "Old worktree — review or discard" label.
+    const state: WorktreeWireState =
+      rec.worktreeState === 'active' && isStale(feedbackId)
+        ? 'ttl_warning'
+        : (rec.worktreeState as WorktreeWireState);
+    const payload: Extract<ServerMessage, { type: 'worktree_state' }> = {
+      type: 'worktree_state',
+      feedbackId,
+      state,
+    };
+    if (rec.commitSha) payload.commitSha = rec.commitSha;
+    send(socket, payload);
+  } catch {
+    // Best-effort — the widget will still get state on the next action.
   }
 }
 

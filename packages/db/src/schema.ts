@@ -46,6 +46,19 @@ export const conversations = sqliteTable('conversations', {
   branch: text('branch'),
   /** When spawn mode is `worktree`, the absolute worktree path. */
   worktreePath: text('worktree_path'),
+  /**
+   * Lifecycle of the worktree itself, orthogonal to `status` (which
+   * tracks the developer's intent toward the feedback). `none` for
+   * inline-mode rows that never created a worktree; `active` while the
+   * worktree exists on disk; `landed` after a successful merge into
+   * the project's HEAD branch; `discarded` after the developer threw
+   * the work away. Once non-`active`, Land/Discard controls are hidden.
+   */
+  worktreeState: text('worktree_state', {
+    enum: ['none', 'active', 'landed', 'discarded'],
+  })
+    .notNull()
+    .default('none'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .notNull()
     .default(sql`(unixepoch() * 1000)`),

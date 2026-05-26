@@ -32,6 +32,9 @@ export type FeedbackInput = z.infer<typeof FeedbackInputSchema>;
 export const StatusSchema = z.enum(['pending', 'fixed', 'wontfix', 'deferred']);
 export type Status = z.infer<typeof StatusSchema>;
 
+export const WorktreeStateSchema = z.enum(['none', 'active', 'landed', 'discarded']);
+export type WorktreeState = z.infer<typeof WorktreeStateSchema>;
+
 export interface FeedbackRecord {
   id: string;
   comment: string;
@@ -53,7 +56,15 @@ export interface FeedbackRecord {
    * conversation rather than starting fresh.
    */
   agentSessionId: string | null;
+  /** Git branch the worktree was created on. Null for inline-mode rows. */
+  branch: string | null;
+  /** Absolute path to the worktree on disk. Null for inline-mode rows. */
+  worktreePath: string | null;
+  /** Lifecycle of the worktree itself (see schema for state meanings). */
+  worktreeState: WorktreeState;
   createdAt: string;
+  /** When the row was last mutated. Echoed for TTL-sweep computations. */
+  updatedAt: string;
   resolvedAt: string | null;
 }
 
@@ -62,6 +73,9 @@ export const PatchSchema = z.object({
   note: z.string().max(8000).nullable().optional(),
   commitSha: z.string().max(64).nullable().optional(),
   agentSessionId: z.string().max(128).nullable().optional(),
+  branch: z.string().max(256).nullable().optional(),
+  worktreePath: z.string().max(1024).nullable().optional(),
+  worktreeState: WorktreeStateSchema.optional(),
 });
 export type Patch = z.infer<typeof PatchSchema>;
 
@@ -205,7 +219,11 @@ export class Storage {
       note: null,
       commitSha: null,
       agentSessionId: null,
+      branch: null,
+      worktreePath: null,
+      worktreeState: 'none',
       createdAt: input.createdAt,
+      updatedAt: input.createdAt,
       resolvedAt: null,
     };
   }
@@ -271,6 +289,9 @@ export class Storage {
     if (patch.note !== undefined) update.note = patch.note;
     if (patch.commitSha !== undefined) update.commitSha = patch.commitSha;
     if (patch.agentSessionId !== undefined) update.agentSessionId = patch.agentSessionId;
+    if (patch.branch !== undefined) update.branch = patch.branch;
+    if (patch.worktreePath !== undefined) update.worktreePath = patch.worktreePath;
+    if (patch.worktreeState !== undefined) update.worktreeState = patch.worktreeState;
 
     const db = this.db();
     await db.update(conversations).set(update).where(eq(conversations.id, id));
@@ -320,7 +341,11 @@ function rowToRecord(row: {
     note: c.note,
     commitSha: c.commitSha,
     agentSessionId: c.agentSessionId,
+    branch: c.branch,
+    worktreePath: c.worktreePath,
+    worktreeState: c.worktreeState,
     createdAt: c.createdAt.toISOString(),
+    updatedAt: c.updatedAt.toISOString(),
     resolvedAt: c.resolvedAt ? c.resolvedAt.toISOString() : null,
   };
 }
