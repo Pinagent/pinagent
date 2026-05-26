@@ -1,0 +1,26 @@
+{
+  "name": "@pinagent/ee-infra",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Cloud-specific orchestration: deploy, observability glue, and infra wiring.",
+  "license": "Elastic-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3"
+  }
+}

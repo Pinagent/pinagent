@@ -1,0 +1,27 @@
+{
+  "name": "@pinagent/cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pinagent CLI: thin wrapper around the OSS packages. `pinagent dev`, `pinagent mcp`, `pinagent init`.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "pinagent": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pinagent/mcp": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3"
+  }
+}

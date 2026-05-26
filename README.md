@@ -28,3 +28,22 @@ See the original Pinagent MVP technical specification in chat history. Notable i
 - No auth. Trust boundary is the developer's own machine.
 - File-system is the message bus between Vite and MCP.
 - React + Vite only in v1.
+
+## Licensing
+
+This repository contains two licenses:
+
+- **Apache License 2.0** — covers `packages/`, `apps/cli/`, and `examples/`.
+  Free for any use, commercial or otherwise. See [LICENSE](./LICENSE).
+- **Elastic License v2** — covers `ee/` and `apps/cloud/`. Source-available;
+  may be used for internal purposes but may not be provided as a hosted service
+  to third parties. See [ee/LICENSE](./ee/LICENSE).
+
+The rule of thumb: if it runs on the developer's own machine, it's Apache-2.0.
+If it runs as a hosted multi-tenant service, it's Elastic License v2.
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md). External contributions are welcome
+against `packages/*` and `apps/cli/`; we do not accept external PRs against
+`ee/*` or `apps/cloud/`.

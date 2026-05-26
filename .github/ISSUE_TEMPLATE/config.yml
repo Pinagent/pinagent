@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security disclosure
+    url: https://github.com/jacksonmalloy/pinagent/blob/main/SECURITY.md
+    about: Please do NOT open a public issue for security problems. See SECURITY.md.
