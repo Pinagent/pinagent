@@ -13,6 +13,7 @@
     "lint:deps": "sherif --ignore-package react-vite-example --ignore-package next-app-example",
     "lint:deps:fix": "sherif --fix --ignore-package react-vite-example --ignore-package next-app-example",
     "lint:spdx": "node scripts/check-spdx.mjs",
+    "lint:widget-cascade": "node scripts/widget-cascade-check.mjs",
     "format": "biome format --write .",
     "test": "vitest run",
     "test:watch": "vitest",
