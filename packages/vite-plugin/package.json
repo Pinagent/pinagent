@@ -26,7 +26,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.150",
     "@babel/parser": "^7.26.2",
-    "@babel/traverse": "^7.26.4",
+    "@babel/traverse": "^7.29.7",
     "@babel/types": "^7.29.7",
     "nanoid": "^5.0.9",
     "zod": "^3.23.8"
