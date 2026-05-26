@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,13 +12,13 @@ import { drizzle, type SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy';
  * exact write/read code paths (`packages/widget/src/db/writes.ts`,
  * `packages/widget/src/db/reads.ts`) without bringing up sqlite-wasm.
  *
- * Applies every `.sql` file from `packages/next/drizzle/` in order so
+ * Applies every `.sql` file from `packages/next-plugin/drizzle/` in order so
  * the schema mirrors what the dev server runs.
  */
 export type TestDb = SqliteRemoteDatabase<typeof schema>;
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS_DIR = join(THIS_DIR, '..', '..', '..', 'next', 'drizzle');
+const MIGRATIONS_DIR = join(THIS_DIR, '..', '..', '..', 'next-plugin', 'drizzle');
 
 export function openTestDb(): { db: TestDb; close: () => void } {
   const raw = new Database(':memory:');

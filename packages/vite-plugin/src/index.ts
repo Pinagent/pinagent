@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { relative, sep } from 'node:path';
 import type { Plugin } from 'vite';
 import { AutoTrigger, type AutoTriggerOptions } from './auto-trigger';

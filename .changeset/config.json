@@ -15,6 +15,10 @@
     "@pinagent/ee-infra",
     "@pinagent/cloud",
     "@pinagent/widget",
+    "@pinagent/shared",
+    "@pinagent/babel-plugin",
+    "@pinagent/host-script",
+    "@pinagent/dev-server",
     "react-vite-example",
     "next-app-example"
   ]

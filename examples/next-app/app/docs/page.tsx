@@ -54,7 +54,7 @@ export default function DocsPage() {
           <ol className="mt-3 list-decimal pl-5 leading-relaxed">
             <li>
               Install the Pinagent package in your app:{' '}
-              <code className="font-mono text-sm">npm install @pinagent/next</code>.
+              <code className="font-mono text-sm">npm install @pinagent/next-plugin</code>.
             </li>
             <li>
               Add the Pinagent plugin to your{' '}

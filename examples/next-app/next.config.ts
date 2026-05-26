@@ -1,4 +1,4 @@
-import pinagent from '@pinagent/next/config';
+import pinagent from '@pinagent/next-plugin/config';
 import type { NextConfig } from 'next';
 
 const coreConfig: NextConfig = {
@@ -6,7 +6,7 @@ const coreConfig: NextConfig = {
   transpilePackages: ['@pinagent/ui'],
 };
 
-// pinagent(config, options?) — see packages/next/src/config.ts.
+// pinagent(config, options?) — see packages/next-plugin/src/config.ts.
 //
 // V2 default: every submit runs a Claude Agent SDK query inline (cwd =
 // project root) and streams events back into the widget pane. Pass

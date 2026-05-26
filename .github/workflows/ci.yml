@@ -57,6 +57,14 @@ jobs:
       - name: Lint dependencies (sherif)
         run: pnpm lint:deps
 
+      # SPDX header enforcement: every source file under packages/,
+      # ee/packages/, apps/cli, apps/cloud must declare its license
+      # on the first line. Apache-2.0 for OSS trees, Elastic-2.0 for
+      # ee/ and apps/cloud. Generated files (__generated__/) are
+      # exempt because they're rewritten by the build.
+      - name: Lint SPDX headers
+        run: pnpm lint:spdx
+
       # Biome lint + format. Runs before typecheck because it's the
       # cheapest signal (~30ms) and surfaces the broadest class of
       # issues. A failure here means an autofixable problem the dev

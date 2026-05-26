@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { Pinagent } from '@pinagent/next';
+import { Pinagent } from '@pinagent/next-plugin';
 import type { ReactNode } from 'react';
 import { Logo } from './_components/Logo';
 import { SideNav } from './_components/SideNav';

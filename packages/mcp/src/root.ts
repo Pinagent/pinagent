@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { existsSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 

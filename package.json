@@ -12,6 +12,7 @@
     "lint:fix": "biome check --write .",
     "lint:deps": "sherif --ignore-package react-vite-example --ignore-package next-app-example",
     "lint:deps:fix": "sherif --fix --ignore-package react-vite-example --ignore-package next-app-example",
+    "lint:spdx": "node scripts/check-spdx.mjs",
     "format": "biome format --write .",
     "test": "vitest run",
     "test:watch": "vitest",

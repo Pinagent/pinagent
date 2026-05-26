@@ -4,5 +4,9 @@ dist
 .DS_Store
 *.log
 .turbo
+.next
 coverage
 .cache
+.env
+.env.*
+!.env.example
