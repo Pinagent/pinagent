@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { nanoid } from 'nanoid';
 import type { Connect } from 'vite';

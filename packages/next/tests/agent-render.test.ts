@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { describe, expect, it } from 'vitest';
 import {

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Per-project FIFO queue for landing/discarding pinagent worktrees.
  *

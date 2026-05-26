@@ -3,6 +3,7 @@
   "version": "0.0.2",
   "description": "Vite plugin for Pinagent: tags JSX with file:line, injects the widget, serves /__pinagent middleware.",
   "type": "module",
+  "sideEffects": false,
   "main": "dist/index.cjs",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",

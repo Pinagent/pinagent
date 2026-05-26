@@ -6,9 +6,14 @@ While running `vite dev`, click a UI element in the browser, leave a comment, an
 
 ## Packages
 
+OSS (Apache-2.0, under `packages/`):
+
 - `@pinagent/vite-plugin` — Vite plugin: tags JSX with source locations, injects the widget, serves middleware to capture feedback.
-- `@pinagent/widget` — Browser UI (shadow-root chat button → pick mode → composer). Built as IIFE and embedded in `vite-plugin`.
+- `@pinagent/next` — Next.js adapter: webpack loader for JSX tagging, route handlers for `/__pinagent/*`, the `<Pinagent />` widget component, and the local agent runtime + WebSocket layer.
+- `@pinagent/widget` — Browser UI (shadow-root chat button → pick mode → composer). Built as IIFE and embedded into `vite-plugin` and `next` at build time.
+- `@pinagent/db` — Shared Drizzle schema consumed by the server (`better-sqlite3`) and the browser (`sqlite-wasm`) so they stay in lockstep.
 - `@pinagent/mcp` — stdio MCP server that reads `.pinagent/feedback/` and exposes tools to your coding agent.
+- `@pinagent/ui` — shadcn/ui components and Tailwind theme shared across the example Next.js apps.
 
 ## Quick start
 

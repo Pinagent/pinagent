@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "description": "stdio MCP server for Pinagent — exposes pending feedback, screenshots, and source context to a coding agent.",
   "type": "module",
+  "sideEffects": false,
   "bin": {
     "pinagent-mcp": "dist/index.js"
   },

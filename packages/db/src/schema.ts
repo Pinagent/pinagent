@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Pinagent persistent state. Shared between the dev-side server
  * (`better-sqlite3` via `@pinagent/next/db/client`) and the browser

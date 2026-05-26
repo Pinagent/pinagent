@@ -5,6 +5,19 @@
   "type": "module",
   "description": "Pinagent browser widget (shadow-root pick + composer). Built as IIFE and consumed by @pinagent/vite-plugin.",
   "main": "dist/widget.iife.js",
+  "exports": {
+    ".": "./dist/widget.iife.js",
+    "./brand": {
+      "types": "./dist/brand.d.ts",
+      "import": "./dist/brand.js",
+      "require": "./dist/brand.cjs"
+    },
+    "./logo": {
+      "types": "./dist/logo.d.ts",
+      "import": "./dist/logo.js",
+      "require": "./dist/logo.cjs"
+    }
+  },
   "files": [
     "dist"
   ],
@@ -12,6 +25,14 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@pinagent/db": "workspace:*",
@@ -22,7 +43,9 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
+    "@types/react": "^19.2.15",
     "better-sqlite3": "^12.10.0",
+    "react": "^19.2.6",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3"
   }

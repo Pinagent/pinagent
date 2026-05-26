@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { Server as HttpServer } from 'node:http';
 import { join } from 'node:path';
 import { type WebSocket, WebSocketServer } from 'ws';

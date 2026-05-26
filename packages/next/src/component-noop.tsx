@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Production stub for the `<Pinagent />` component.
 //
 // Resolved by the `"default"` condition in package.json exports when the

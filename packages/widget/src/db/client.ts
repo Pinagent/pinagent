@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import * as schema from '@pinagent/db/schema';
 import { drizzle, type SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy';
 import { applyMigrations, type MigrationEntry } from './migrations';

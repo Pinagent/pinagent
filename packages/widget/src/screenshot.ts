@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { toBlob } from 'html-to-image';
 
 const MAX_WIDTH = 1280;

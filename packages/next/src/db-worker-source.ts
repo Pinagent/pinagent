@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Source for the browser-side sqlite worker. Served verbatim at
  * `/__pinagent/db-worker.js`; the widget spawns it with

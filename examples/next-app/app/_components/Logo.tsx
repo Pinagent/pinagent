@@ -1,14 +1,14 @@
-import { BRAND_INK, BRAND_VIEWBOX, PIN_PATH } from '@pinagent/ui/brand';
+// SPDX-License-Identifier: Apache-2.0
+import { BRAND_INK, BRAND_VIEWBOX, PIN_PATH } from '@pinagent/widget/brand';
 import type { SVGProps } from 'react';
 
 interface LogoProps extends Omit<SVGProps<SVGSVGElement>, 'viewBox'> {
   size?: number;
   /**
-   * `full` renders the next-app marketing variant — gold rounded
-   * tile, a deliberate departure from the canonical cream square
-   * exported by `@pinagent/ui/components/ui/logo`. `mono` renders
-   * just the pin in `currentColor` for inline use on coloured
-   * backgrounds.
+   * `full` renders the brand mark on next-app's gold rounded tile —
+   * a marketing-specific variant of the canonical cream square in
+   * `@pinagent/widget/logo`. `mono` renders only the pin in
+   * `currentColor` for inline use on coloured backgrounds.
    */
   variant?: 'full' | 'mono';
 }

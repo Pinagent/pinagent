@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';

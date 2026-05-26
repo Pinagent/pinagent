@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { _resetForTests, enqueue, queueSize } from '../src/merge-queue';
 
