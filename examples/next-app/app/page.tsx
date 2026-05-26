@@ -17,16 +17,16 @@ export default function Page() {
         Click the <Logo size={16} style={{ verticalAlign: '-3px', borderRadius: 3 }} /> button, pick
         an element, and leave a comment — an agent picks it up and edits the code directly.
       </p>
-      <p style={{ color: '#4b5563', lineHeight: 1.55 }}>Click. Comment. Ship. Try it below.</p>
+      <p style={{ color: '#3D3730', lineHeight: 1.55 }}>Click. Comment. Ship. Try it below.</p>
       <section
         style={{
           marginTop: 24,
           maxHeight: 280,
           overflowY: 'auto',
-          border: '1px solid #e5e7eb',
+          border: '1px solid #E8DFB0',
           borderRadius: 8,
           padding: 12,
-          background: '#f9fafb',
+          background: '#FCF9E8',
         }}
       >
         <CounterList

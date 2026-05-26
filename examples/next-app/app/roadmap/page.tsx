@@ -9,24 +9,24 @@ export default function RoadmapPage() {
       }}
     >
       <h1 style={{ fontSize: '2.25rem' }}>Roadmap</h1>
-      <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
+      <p style={{ color: '#3D3730', lineHeight: 1.55 }}>
         Planned work and upcoming features for Pinagent.
       </p>
 
       <section style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
         <article
           style={{
-            border: '1px solid #e5e7eb',
+            border: '1px solid #E8DFB0',
             borderRadius: 8,
             padding: 20,
-            background: '#f9fafb',
+            background: '#FCF9E8',
           }}
         >
           <header style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
             <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Now</h2>
-            <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>In progress</span>
+            <span style={{ color: '#5C5546', fontSize: '0.875rem' }}>In progress</span>
           </header>
-          <ul style={{ color: '#374151', lineHeight: 1.55, marginTop: 12 }}>
+          <ul style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 12 }}>
             <li>Persistent storage for feedback events across sessions.</li>
             <li>Improved widget positioning for elements near the viewport edge.</li>
             <li>Server-side feedback history with searchable archive.</li>
@@ -40,17 +40,17 @@ export default function RoadmapPage() {
 
         <article
           style={{
-            border: '1px solid #e5e7eb',
+            border: '1px solid #E8DFB0',
             borderRadius: 8,
             padding: 20,
-            background: '#f9fafb',
+            background: '#FCF9E8',
           }}
         >
           <header style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
             <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Next</h2>
-            <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>Up next</span>
+            <span style={{ color: '#5C5546', fontSize: '0.875rem' }}>Up next</span>
           </header>
-          <ul style={{ color: '#374151', lineHeight: 1.55, marginTop: 12 }}>
+          <ul style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 12 }}>
             <li>Team workspaces with shared feedback queues.</li>
             <li>Inline diff previews before the agent applies changes.</li>
             <li>Custom routing rules so comments reach the right agent or reviewer.</li>
@@ -66,17 +66,17 @@ export default function RoadmapPage() {
 
         <article
           style={{
-            border: '1px solid #e5e7eb',
+            border: '1px solid #E8DFB0',
             borderRadius: 8,
             padding: 20,
-            background: '#f9fafb',
+            background: '#FCF9E8',
           }}
         >
           <header style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
             <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Later</h2>
-            <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>Exploring</span>
+            <span style={{ color: '#5C5546', fontSize: '0.875rem' }}>Exploring</span>
           </header>
-          <ul style={{ color: '#374151', lineHeight: 1.55, marginTop: 12 }}>
+          <ul style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 12 }}>
             <li>Native integrations for Linear, GitHub Issues, and Slack.</li>
             <li>Mobile and tablet widgets for on-device feedback.</li>
             <li>Replay mode that ties feedback to a recorded session.</li>
