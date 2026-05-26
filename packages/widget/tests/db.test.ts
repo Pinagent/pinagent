@@ -1,6 +1,6 @@
 import { conversations, messages, widgetAnchors } from '@pinagent/db/schema';
 import { eq, sql } from 'drizzle-orm';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getConversationMessages, listPendingForCurrentPage } from '../src/db/reads';
 import {
   type AnchorInput,
@@ -110,9 +110,14 @@ describe('recordEvent', () => {
   });
 
   it('throws if the conversation does not exist (FK enforced)', async () => {
-    await expect(
-      recordEvent(db, 'never-existed', 1, { type: 'text', text: 'x' }),
-    ).rejects.toThrow();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(
+        recordEvent(db, 'never-existed', 1, { type: 'text', text: 'x' }),
+      ).rejects.toThrow();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

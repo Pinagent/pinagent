@@ -107,5 +107,3 @@ export default function pinagent(options: PinagentOptions = {}): Plugin {
 function toPosix(p: string): string {
   return p.split(sep).join('/');
 }
-
-export { pinagent };

@@ -6,7 +6,7 @@ export default defineConfig({
   dts: true,
   target: 'es2022',
   platform: 'neutral',
-  external: ['drizzle-orm', 'drizzle-orm/sqlite-core'],
+  deps: { neverBundle: ['drizzle-orm', 'drizzle-orm/sqlite-core'] },
   sourcemap: true,
   clean: true,
   splitting: false,
