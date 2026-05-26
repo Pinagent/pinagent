@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # pnpm comes BEFORE Node so setup-node's `cache: 'pnpm'` can find
       # the pnpm CLI. Version pinned to match packageManager in
