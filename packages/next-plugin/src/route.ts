@@ -6,7 +6,6 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  DB_WORKER_SOURCE,
   FeedbackInputSchema,
   ID_RE,
   openInEditor,
@@ -16,6 +15,7 @@ import {
   spawnAgent,
   startWsServer,
 } from '@pinagent/agent-runner';
+import { DB_WORKER_SOURCE } from '@pinagent/browser-runtime';
 import { nanoid } from 'nanoid';
 import { WIDGET_SOURCE } from './__generated__/widget';
 
