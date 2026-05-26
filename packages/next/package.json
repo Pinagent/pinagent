@@ -48,8 +48,8 @@
   ],
   "scripts": {
     "prebuild": "node scripts/embed-widget.mjs",
-    "build": "tsup",
-    "dev": "tsup --watch",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",
     "drizzle:gen": "drizzle-kit generate",
     "drizzle:check": "drizzle-kit check"
@@ -81,7 +81,7 @@
     "drizzle-kit": "^0.31.10",
     "next": "^16.0.0",
     "react": "^19.0.0",
-    "tsup": "^8.3.5",
+    "tsdown": "^0.22.0",
     "typescript": "^5.6.3"
   }
 }

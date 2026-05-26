@@ -80,8 +80,12 @@ describe('GET /widget.js', () => {
     const body = await res.text();
     // Prelude inlines window.__pinagentConfig.
     expect(body).toContain('__pinagentConfig');
-    // IIFE body present (the var name our bundler exposes).
-    expect(body).toContain('PinagentWidget');
+    // IIFE body present: wrapped in a function-expression and non-trivial in size.
+    // The widget src/index.ts has zero exports (pure side-effect mount), so we
+    // don't assert on a bundler-injected global name — just that the IIFE is
+    // there and substantial.
+    expect(body).toMatch(/[;(]\s*\(function\s*\(\s*\)\s*\{/);
+    expect(body.length).toBeGreaterThan(50_000);
   });
 });
 

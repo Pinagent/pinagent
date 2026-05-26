@@ -10,7 +10,7 @@
         "app/**",
         "scripts/**",
         "tsconfig.json",
-        "tsup.config.ts",
+        "tsdown.config.ts",
         "vite.config.ts",
         "next.config.ts",
         "package.json"
