@@ -44,7 +44,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', async () => {
 
 // Late imports so the mock is in place before agent.ts pulls the SDK in.
 type AgentMod = typeof import('../src/agent');
-type BusMod = typeof import('../src/event-bus');
+type BusMod = typeof import('@pinagent/shared');
 type StorageMod = typeof import('../src/storage');
 type SdkMod = typeof import('@anthropic-ai/claude-agent-sdk');
 
@@ -61,7 +61,7 @@ beforeAll(async () => {
   process.env.NODE_ENV = 'production'; // belt-and-suspenders against WS bootstrap
   await mkdir(PROJECT_ROOT, { recursive: true });
   agent = await import('../src/agent');
-  bus = await import('../src/event-bus');
+  bus = await import('@pinagent/shared');
   storageMod = await import('../src/storage');
   sdk = await import('@anthropic-ai/claude-agent-sdk');
 });
@@ -164,10 +164,10 @@ async function makeFeedback(commentOverride = 'make it red'): Promise<{
 /** Collect bus events until a predicate fires (or a timeout elapses). */
 async function collectUntil(
   feedbackId: string,
-  predicate: (e: import('../src/event-bus').AgentEvent) => boolean,
+  predicate: (e: import('@pinagent/shared').AgentEvent) => boolean,
   timeoutMs = 1500,
-): Promise<import('../src/event-bus').AgentEvent[]> {
-  const collected: import('../src/event-bus').AgentEvent[] = [];
+): Promise<import('@pinagent/shared').AgentEvent[]> {
+  const collected: import('@pinagent/shared').AgentEvent[] = [];
   return new Promise((resolve, reject) => {
     const t = setTimeout(
       () => reject(new Error(`collectUntil timed out (got ${collected.length} events)`)),
@@ -323,7 +323,7 @@ describe('spawnAgent', () => {
       })(),
     );
 
-    const events: import('../src/event-bus').AgentEvent[] = [];
+    const events: import('@pinagent/shared').AgentEvent[] = [];
     bus.getOrCreateBus(id).subscribe({
       onEvent(e) {
         events.push(e);

@@ -30,7 +30,7 @@
  */
 
 /**
- * Drizzle-format migration entry — what the dev-server hands us at
+ * Drizzle-format migration entry — what the agent-runner hands us at
  * `/__pinagent/db-migrations` after reading `meta/_journal.json` +
  * the per-entry `.sql` files.
  */

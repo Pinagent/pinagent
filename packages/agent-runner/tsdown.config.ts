@@ -5,9 +5,12 @@ export default defineConfig({
   entry: { index: 'src/index.ts' },
   format: ['esm', 'cjs'],
   dts: true,
-  target: 'es2022',
+  target: 'node20',
   platform: 'node',
+  deps: { neverBundle: ['better-sqlite3', '@sqlite.org/sqlite-wasm'] },
   sourcemap: true,
   clean: true,
   splitting: false,
+  fixedExtension: false,
+  hash: false,
 });

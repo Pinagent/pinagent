@@ -9,6 +9,7 @@ import {
   query,
   type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk';
+import { type AgentEvent, getOrCreateBus } from '@pinagent/shared';
 import {
   renderInitFooter,
   renderMessage,
@@ -16,7 +17,6 @@ import {
   summariseToolInput,
 } from './agent-render';
 import { ASK_USER_TOOL_NAME, createAskUserMcpServer, rejectAsk } from './ask-user';
-import { type AgentEvent, getOrCreateBus } from './event-bus';
 import { type FeedbackRecord, Storage } from './storage';
 
 export type SpawnAgentMode = 'worktree' | 'inline' | false;

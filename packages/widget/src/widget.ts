@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import type { WorktreeWireState } from '@pinagent/shared';
 import { BRAND_CREAM, BRAND_VIEWBOX, PICKER_CURSOR_DATA_URL, PIN_PATH } from './brand';
 import { flushBrowserDb, getBrowserDb, initBrowserDb } from './db/client';
 import { getConversationMessages, listPendingForCurrentPage, type PendingRow } from './db/reads';
@@ -38,21 +39,6 @@ interface AgentEvent {
     | 'status_changed';
   [k: string]: unknown;
 }
-
-/**
- * Mirrors the `WorktreeWireState` union on the server. Includes transient
- * `landing` / `discarding` states the widget renders optimistically before
- * the server confirms with `landed` / `discarded` / `conflict`.
- */
-type WorktreeWireState =
-  | 'none'
-  | 'active'
-  | 'landing'
-  | 'landed'
-  | 'discarding'
-  | 'discarded'
-  | 'conflict'
-  | 'ttl_warning';
 
 interface WorktreeStateMessage {
   state: WorktreeWireState;

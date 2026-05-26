@@ -2,7 +2,7 @@
 /**
  * Phase H — orphan-worktree TTL sweep.
  *
- * On dev-server boot, scan SQLite for conversations whose worktree has been
+ * On agent-runner boot, scan SQLite for conversations whose worktree has been
  * sitting in `worktreeState='active'` past the configured TTL. Add each one
  * to an in-memory set; next time the widget subscribes to that feedback,
  * the WS server overrides the initial `worktree_state` emission from
@@ -38,7 +38,7 @@ function ttlDays(env: NodeJS.ProcessEnv): number {
 
 /**
  * One-shot scan at startup. Idempotent — re-running just refreshes the
- * flag set. Best-effort; swallows DB errors so a dev-server boot is
+ * flag set. Best-effort; swallows DB errors so an agent-runner boot is
  * never blocked by a TTL sweep failure.
  */
 export async function sweepStaleWorktrees(projectRoot: string): Promise<void> {

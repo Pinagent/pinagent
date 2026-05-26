@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { Server as HttpServer } from 'node:http';
 import { join } from 'node:path';
+import {
+  type AgentEvent,
+  type ClientMessage,
+  ClientMessageSchema,
+  getOrCreateBus,
+  type ServerMessage,
+  type WorktreeWireState,
+} from '@pinagent/shared';
 import { type WebSocket, WebSocketServer } from 'ws';
 import { discardWorktree, interruptRun, mergeWorktree, runFollowUpTurn } from './agent';
 import { resolveAsk } from './ask-user';
-import { type AgentEvent, getOrCreateBus } from './event-bus';
 import { enqueue } from './merge-queue';
 import { Storage } from './storage';
 import { clearWarning, isStale, sweepStaleWorktrees } from './worktree-ttl';
-import {
-  type ClientMessage,
-  ClientMessageSchema,
-  type ServerMessage,
-  type WorktreeWireState,
-} from './ws-protocol';
 
 const DEFAULT_PORT = 53636;
 const WS_PATH = '/__pinagent/ws';

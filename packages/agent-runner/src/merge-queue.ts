@@ -9,7 +9,7 @@
  * the queue continues from the same logical point so the next job
  * isn't poisoned.
  *
- * In-memory only. On a dev-server restart, in-flight queue entries are
+ * In-memory only. On an agent-runner restart, in-flight queue entries are
  * dropped along with the WS connections that initiated them; the DB
  * still shows `worktreeState='active'` for any conversation that
  * hadn't reached `landed`/`discarded`, so the user can re-click Land
