@@ -164,6 +164,9 @@ importers:
       '@pinagent/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@pinagent/widget':
+        specifier: workspace:*
+        version: link:../../packages/widget
       react:
         specifier: ^19.2.6
         version: 19.2.6
