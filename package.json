@@ -26,7 +26,7 @@
     "happy-dom": "^20.9.0",
     "sherif": "^1.6.0",
     "turbo": "^2.3.0",
-    "typescript": "^5.6.3",
+    "typescript": "^6.0.3",
     "vitest": "^3.2.4"
   },
   "engines": {
