@@ -27,7 +27,7 @@ export function Logo({ size = 24, variant = 'full', ...props }: LogoProps) {
       aria-hidden="true"
       {...props}
     >
-      {variant === 'full' && <rect width="93" height="93" fill="#FCF9E8" />}
+      {variant === 'full' && <rect width="93" height="93" rx="16" fill="#FFD700" />}
       <path d={PIN_PATH} fill={variant === 'full' ? '#201B21' : 'currentColor'} />
     </svg>
   );

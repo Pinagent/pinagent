@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from 'node:http';
 import { join } from 'node:path';
 import { type WebSocket, WebSocketServer } from 'ws';
+import { discardWorktree, interruptRun, mergeWorktree, runFollowUpTurn } from './agent';
 import { resolveAsk } from './ask-user';
 import { type AgentEvent, getOrCreateBus } from './event-bus';
 import { enqueue } from './merge-queue';
@@ -252,9 +253,6 @@ async function handleClientMessage(
       return;
     }
     case 'user_message': {
-      // Multi-turn entrypoint. Imported lazily so the module graph doesn't
-      // cycle (agent.ts → event-bus → ws-server → agent.ts).
-      const { runFollowUpTurn } = await import('./agent');
       try {
         await runFollowUpTurn(msg.feedbackId, msg.content);
       } catch (err) {
@@ -263,7 +261,6 @@ async function handleClientMessage(
       return;
     }
     case 'interrupt': {
-      const { interruptRun } = await import('./agent');
       const interrupted = interruptRun(msg.feedbackId);
       if (!interrupted) {
         sendError(socket, msg.feedbackId, 'no in-flight run to interrupt');
@@ -277,7 +274,6 @@ async function handleClientMessage(
       broadcastWorktreeState(msg.feedbackId, { state: 'landing' });
       // Serialise per-project so two widgets racing to land on the same
       // HEAD branch can't interleave merges.
-      const { mergeWorktree } = await import('./agent');
       const result = await enqueue(root, () => mergeWorktree(root, msg.feedbackId, logPath));
       if (result.ok) {
         broadcastWorktreeState(msg.feedbackId, {
@@ -304,7 +300,6 @@ async function handleClientMessage(
       const logPath = logPathFor(root, msg.feedbackId);
       clearWarning(msg.feedbackId);
       broadcastWorktreeState(msg.feedbackId, { state: 'discarding' });
-      const { discardWorktree } = await import('./agent');
       try {
         await enqueue(root, () => discardWorktree(root, msg.feedbackId, logPath));
         broadcastWorktreeState(msg.feedbackId, { state: 'discarded' });
