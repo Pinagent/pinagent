@@ -333,12 +333,6 @@ importers:
       '@pinagent/browser-runtime':
         specifier: workspace:*
         version: link:../browser-runtime
-      '@pinagent/db':
-        specifier: workspace:*
-        version: link:../db
-      '@pinagent/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@sqlite.org/sqlite-wasm':
         specifier: ^3.50.0-build1
         version: 3.50.0-build1
