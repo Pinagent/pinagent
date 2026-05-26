@@ -12,7 +12,8 @@
       "**/__generated__/**",
       "**/drizzle/**",
       "**/next-env.d.ts",
-      "pnpm-lock.yaml"
+      "pnpm-lock.yaml",
+      "signatures/**"
     ]
   },
   "organizeImports": { "enabled": true },
