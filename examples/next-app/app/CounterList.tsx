@@ -1,6 +1,6 @@
 'use client';
-import { useState } from 'react';
 import type { DragEvent } from 'react';
+import { useState } from 'react';
 import { Counter } from './Counter';
 
 type Item = { label: string; description?: string };

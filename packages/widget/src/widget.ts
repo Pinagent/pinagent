@@ -1,5 +1,5 @@
 import { flushBrowserDb, getBrowserDb, initBrowserDb } from './db/client';
-import { type PendingRow, getConversationMessages, listPendingForCurrentPage } from './db/reads';
+import { getConversationMessages, listPendingForCurrentPage, type PendingRow } from './db/reads';
 import {
   deleteConversation,
   markConversationResolved,

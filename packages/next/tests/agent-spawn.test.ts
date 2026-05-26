@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { nanoid } from 'nanoid';
 import {
-  type Mock,
   afterAll,
   afterEach,
   beforeAll,
@@ -12,6 +11,7 @@ import {
   describe,
   expect,
   it,
+  type Mock,
   vi,
 } from 'vitest';
 
@@ -124,7 +124,7 @@ function scriptHangingQuery(): { aborted: Promise<void> } {
         apiKeySource: 'oauth',
       } as never;
 
-      await new Promise<void>((resolve, reject) => {
+      await new Promise<void>((_resolve, reject) => {
         if (signal?.aborted) {
           resolveAborted();
           reject(new Error('aborted'));

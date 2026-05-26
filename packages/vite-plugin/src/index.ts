@@ -2,7 +2,7 @@ import { relative, sep } from 'node:path';
 import type { Plugin } from 'vite';
 import { AutoTrigger, type AutoTriggerOptions } from './auto-trigger';
 import { createMiddleware } from './middleware';
-import { Storage, isInGitignore } from './storage';
+import { isInGitignore, Storage } from './storage';
 import { transformJsx } from './transform';
 
 export interface PinagentOptions {

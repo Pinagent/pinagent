@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { nanoid } from 'nanoid';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { type FeedbackInput, Storage, isInGitignore, isInsideRoot } from '../src/storage';
+import { type FeedbackInput, isInGitignore, isInsideRoot, Storage } from '../src/storage';
 
 // 1x1 transparent PNG.
 const TINY_PNG_B64 =
@@ -184,13 +184,15 @@ describe('isInGitignore', () => {
     expect(await isInGitignore(root)).toBe(false);
   });
 
-  it.each([['.pinagent'], ['.pinagent/'], ['/.pinagent'], ['/.pinagent/']])(
-    'accepts the line %s',
-    async (line) => {
-      await writeFile(join(root, '.gitignore'), `node_modules\n${line}\nbuild\n`, 'utf8');
-      expect(await isInGitignore(root)).toBe(true);
-    },
-  );
+  it.each([
+    ['.pinagent'],
+    ['.pinagent/'],
+    ['/.pinagent'],
+    ['/.pinagent/'],
+  ])('accepts the line %s', async (line) => {
+    await writeFile(join(root, '.gitignore'), `node_modules\n${line}\nbuild\n`, 'utf8');
+    expect(await isInGitignore(root)).toBe(true);
+  });
 
   it('rejects unrelated lines', async () => {
     await writeFile(join(root, '.gitignore'), 'node_modules\n.next\ndist\n', 'utf8');

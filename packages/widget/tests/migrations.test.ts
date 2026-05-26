@@ -15,19 +15,10 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate as drizzleMigrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { describe, expect, it } from 'vitest';
-import { type ExecCall, type MigrationEntry, applyMigrations } from '../src/db/migrations';
+import { applyMigrations, type ExecCall, type MigrationEntry } from '../src/db/migrations';
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = join(THIS_DIR, '..', '..', 'next', 'drizzle');
-
-interface RawDb {
-  exec(sql: string): unknown;
-  prepare(sql: string): {
-    all(...params: unknown[]): unknown[][];
-    run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint };
-  };
-  close(): void;
-}
 
 /**
  * Wrap a `better-sqlite3` handle in the worker's `call` API shape so

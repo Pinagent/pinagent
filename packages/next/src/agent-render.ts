@@ -112,10 +112,7 @@ function renderToolUse(name: string, input: unknown): string {
   return `\`[${name}]\`${summary ? ` ${summary}` : ''}\n`;
 }
 
-function renderToolResult(block: {
-  is_error?: boolean;
-  content?: unknown;
-}): string {
+function renderToolResult(block: { is_error?: boolean; content?: unknown }): string {
   const status = block.is_error ? '✗' : '✓';
   // We deliberately don't include block content — it's often a long file
   // read or a tool dump. The interesting payload is summarised in the

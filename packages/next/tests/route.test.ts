@@ -2,7 +2,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { nanoid } from 'nanoid';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 /**
  * Route-handler integration tests.
@@ -32,9 +32,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await rm(PROJECT_ROOT, { recursive: true, force: true });
-  // biome-ignore lint/performance/noDelete: assigning undefined would set the env var to the string "undefined"
   delete process.env.PINAGENT_PROJECT_ROOT;
-  // biome-ignore lint/performance/noDelete: assigning undefined would set the env var to the string "undefined"
   delete process.env.PINAGENT_SPAWN_AGENT;
 });
 

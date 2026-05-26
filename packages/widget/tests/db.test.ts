@@ -11,7 +11,7 @@ import {
   recordEvent,
   recordUserMessage,
 } from '../src/db/writes';
-import { type TestDb, openTestDb } from './_helpers/test-db';
+import { openTestDb, type TestDb } from './_helpers/test-db';
 
 let db: TestDb;
 let close: () => void;

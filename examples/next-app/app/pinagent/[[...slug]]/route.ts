@@ -1,3 +1,3 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-export { GET, POST, PATCH } from '@pinagent/next/route';
+export { GET, PATCH, POST } from '@pinagent/next/route';
