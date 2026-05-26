@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@pinagent/db": "workspace:*",
+    "@pinagent/ui": "workspace:*",
     "@sqlite.org/sqlite-wasm": "^3.50.0-build1",
     "drizzle-orm": "^0.38.0",
     "html-to-image": "^1.11.13"

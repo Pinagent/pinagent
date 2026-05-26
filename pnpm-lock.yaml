@@ -158,6 +158,9 @@ importers:
 
   examples/react-vite:
     dependencies:
+      '@pinagent/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       react:
         specifier: ^19.2.6
         version: 19.2.6
@@ -370,6 +373,9 @@ importers:
       '@pinagent/db':
         specifier: workspace:*
         version: link:../db
+      '@pinagent/ui':
+        specifier: workspace:*
+        version: link:../ui
       '@sqlite.org/sqlite-wasm':
         specifier: ^3.50.0-build1
         version: 3.50.0-build1
