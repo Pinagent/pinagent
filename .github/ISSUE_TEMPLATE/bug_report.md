@@ -23,7 +23,7 @@ assignees: ''
 ## Environment
 
 - Pinagent version / commit:
-- Package(s) affected: <!-- e.g. @pinagent/vite-plugin, @pinagent/next, @pinagent/mcp -->
+- Package(s) affected: <!-- e.g. @pinagent/vite-plugin, @pinagent/next-plugin, @pinagent/mcp -->
 - Node version: <!-- `node --version` -->
 - pnpm version: <!-- `pnpm --version` -->
 - Framework / version: <!-- e.g. Vite 5.4.11, Next 16.0.0 -->

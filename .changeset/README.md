@@ -14,7 +14,7 @@ Packages under `ee/*` and `apps/cloud/` are listed in `ignore` in `config.json`
 npm, so they don't get changesets.
 
 `@pinagent/widget` is also ignored because it is private and bundled into
-`@pinagent/vite-plugin` / `@pinagent/next` at build time rather than published
+`@pinagent/vite-plugin` / `@pinagent/next-plugin` at build time rather than published
 independently.
 
 To add a changeset for a publishable package change:

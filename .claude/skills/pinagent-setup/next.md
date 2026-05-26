@@ -9,19 +9,19 @@ From the pinagent repo:
 ```bash
 cd /Users/jacksonmalloy/code/pinagent
 pnpm --filter @pinagent/widget build
-pnpm --filter @pinagent/next build
+pnpm --filter @pinagent/next-plugin build
 cd packages/next
 pnpm pack
 # produces pinagent-next-<version>.tgz
 ```
 
-If you've packed before and the contents change, **bump the version in `packages/next/package.json` first** — pnpm caches by tarball filename and otherwise won't re-extract. Same goes for editing the consumer's `package.json` to point at the new version.
+If you've packed before and the contents change, **bump the version in `packages/next-plugin/package.json` first** — pnpm caches by tarball filename and otherwise won't re-extract. Same goes for editing the consumer's `package.json` to point at the new version.
 
 ## 2. Install in the target
 
 ```bash
 cd /path/to/target/repo
-pnpm add -D /Users/jacksonmalloy/code/pinagent/packages/next/pinagent-next-<version>.tgz
+pnpm add -D /Users/jacksonmalloy/code/pinagent/packages/next-plugin/pinagent-next-<version>.tgz
 ```
 
 Use `--ignore-scripts` if the consumer's monorepo postinstall hook (sherif, lint, etc.) fails and rolls back the install. Pinagent's own behavior doesn't depend on the consumer's postinstall.
@@ -29,7 +29,7 @@ Use `--ignore-scripts` if the consumer's monorepo postinstall hook (sherif, lint
 ## 3. Wrap `next.config.{js,ts}`
 
 ```js
-import pinagent from '@pinagent/next/config';
+import pinagent from '@pinagent/next-plugin/config';
 
 const coreConfig = {
   // ...existing config
@@ -58,7 +58,7 @@ What `pinagent(config, options?)` does:
 
 ```tsx
 // app/layout.tsx
-import { Pinagent } from '@pinagent/next';
+import { Pinagent } from '@pinagent/next-plugin';
 
 export default function RootLayout({ children }) {
   return (
@@ -84,10 +84,10 @@ Create the file **exactly** as below — don't be tempted to one-line the re-exp
 // app/pinagent/[[...slug]]/route.ts
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-export { GET, POST, PATCH } from '@pinagent/next/route';
+export { GET, POST, PATCH } from '@pinagent/next-plugin/route';
 ```
 
-Why `dynamic` and `runtime` are inline: Next 16 statically parses route-segment config at build time and refuses to follow re-exports for those fields. If you write `export { dynamic, runtime } from '@pinagent/next/route'` you'll get:
+Why `dynamic` and `runtime` are inline: Next 16 statically parses route-segment config at build time and refuses to follow re-exports for those fields. If you write `export { dynamic, runtime } from '@pinagent/next-plugin/route'` you'll get:
 
 ```
 Next.js can't recognize the exported `dynamic` field in route. It mustn't be reexported.

@@ -94,7 +94,7 @@ The Vite plugin's `autoTrigger` serializes submits — if multiple comments arri
 
 If neither autoTrigger nor channel mode is on, feedback sits on disk and the developer manually asks the agent ("what's pending?") — that's the spec-default pull mode.
 
-## Features available in @pinagent/next but NOT yet in @pinagent/vite-plugin
+## Features available in @pinagent/next-plugin but NOT yet in @pinagent/vite-plugin
 
 These are roadmap items. If a user explicitly needs one of these in a Vite project, that's a real porting task:
 

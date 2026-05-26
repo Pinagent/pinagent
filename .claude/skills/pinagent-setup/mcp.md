@@ -109,7 +109,7 @@ The first turn's `sessionId` is persisted on the feedback record (`agent.session
 Opt in via the plugin option in `next.config.js`:
 
 ```js
-import pinagent from '@pinagent/next/config';
+import pinagent from '@pinagent/next-plugin/config';
 export default pinagent(coreConfig, { spawnAgent: 'worktree' });
 ```
 
@@ -192,7 +192,7 @@ To remove pinagent from a project:
 
 ```bash
 cd /path/to/target
-pnpm remove @pinagent/vite-plugin    # or @pinagent/next
+pnpm remove @pinagent/vite-plugin    # or @pinagent/next-plugin
 rm .mcp.json                          # if project-scoped
 rm -rf .pinagent                      # local feedback
 # revert vite.config.ts / next.config.js / app/layout.tsx / app/pinagent/ as needed
