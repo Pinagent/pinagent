@@ -1,0 +1,37 @@
+{
+  "name": "@pinagent/babel-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Babel transform that injects data-pp-loc (source file:line) attributes onto JSX elements at build time.",
+  "type": "module",
+  "sideEffects": false,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@babel/core": "^7.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@babel/types": "^7.29.7",
+    "@types/babel__core": "^7.20.5",
+    "@types/node": "^22.10.1",
+    "tsdown": "^0.22.0",
+    "typescript": "^6.0.3"
+  }
+}
