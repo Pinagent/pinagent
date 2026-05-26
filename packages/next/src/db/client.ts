@@ -27,7 +27,7 @@ interface GlobalHolder {
 // `out` directory) and ship with the package via the `files` array in
 // package.json.
 //
-// At runtime tsup-bundled output sits in `packages/next/dist/`, so the
+// At runtime the bundled output sits in `packages/next/dist/`, so the
 // folder is one level up. But when running the source directly (vitest,
 // ts-node, etc.) the module is at `packages/next/src/db/`, two levels
 // up. Probe both and use the first that exists, so the same module

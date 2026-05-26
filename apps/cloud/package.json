@@ -1,0 +1,27 @@
+{
+  "name": "@pinagent/cloud",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pinagent hosted product. Source-available under the Elastic License v2.",
+  "license": "Elastic-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pinagent/ee-auth": "workspace:*",
+    "@pinagent/ee-billing": "workspace:*",
+    "@pinagent/ee-infra": "workspace:*",
+    "@pinagent/ee-relay": "workspace:*",
+    "@pinagent/ee-team-features": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsdown": "^0.22.0",
+    "typescript": "^5.6.3"
+  }
+}

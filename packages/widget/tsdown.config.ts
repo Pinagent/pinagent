@@ -1,9 +1,8 @@
-import { defineConfig } from 'tsup';
+import { defineConfig } from 'tsdown';
 
 export default defineConfig({
   entry: { widget: 'src/index.ts' },
   format: ['iife'],
-  globalName: 'PinagentWidget',
   outDir: 'dist',
   platform: 'browser',
   target: 'es2020',
@@ -11,6 +10,7 @@ export default defineConfig({
   sourcemap: false,
   splitting: false,
   clean: true,
-  // Bundle html-to-image into the IIFE
-  noExternal: [/.*/],
+  // Bundle everything (drizzle-orm, html-to-image) into the IIFE so the
+  // widget is a single self-contained script the host page can drop in.
+  deps: { alwaysBundle: [/.*/] },
 });

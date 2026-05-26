@@ -2,7 +2,7 @@
 // so it can mount the widget script via useEffect (avoiding SSR/hydration races
 // with PostHog and other third-party script injectors).
 //
-// The `'use client'` directive is added by tsup banner for this bundle.
+// The `'use client'` directive is added by the tsdown banner for this bundle.
 //
 // For the Next config wrapper, import from `@pinagent/next/config`.
 // For route handlers, import from `@pinagent/next/route`.

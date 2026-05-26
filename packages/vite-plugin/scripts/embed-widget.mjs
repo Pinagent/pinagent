@@ -5,7 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const widgetDist = resolve(here, '../../widget/dist/widget.global.js');
+const widgetDist = resolve(here, '../../widget/dist/widget.iife.js');
 const out = resolve(here, '../src/__generated__/widget.ts');
 
 if (!existsSync(widgetDist)) {

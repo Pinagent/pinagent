@@ -35,12 +35,12 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 11.2.2
+          version: 10.14.0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       # `--frozen-lockfile` fails the run if pnpm-lock.yaml is out of
@@ -48,6 +48,14 @@ jobs:
       # to commit the lockfile.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Sherif checks for cross-workspace version drift (e.g. two
+      # packages on different `better-sqlite3` majors). Cheap (<1s)
+      # and reads only package.json, so we run it right after install
+      # for fail-fast — keeps reviewers from wasting time on a typecheck
+      # green light that hides version-mismatch landmines.
+      - name: Lint dependencies (sherif)
+        run: pnpm lint:deps
 
       # `pnpm -r typecheck` runs tsc --noEmit across every package in
       # the workspace. The widget IIFE, the Next adapter, the MCP
@@ -65,9 +73,17 @@ jobs:
         run: pnpm test
 
       # Build last so a green test run still catches packaging
-      # regressions (tsup config, embed-widget script, exports map).
+      # regressions (tsdown config, embed-widget script, exports map).
       - name: Build
         run: pnpm build
+
+      # Smoke-test the OSS-only filter that `release` uses
+      # (`pnpm build:oss && changeset publish`). After the full `pnpm
+      # build` above this is a near-instant turbo cache hit — its job
+      # is to catch a stale `--filter` glob, so the release path stays
+      # buildable without waiting for release day to find out.
+      - name: Build (OSS filter)
+        run: pnpm build:oss
 
       # Lint is not yet a gate — the repo currently has ~77 unrelated
       # formatting/style errors. Surfaced as a soft check so we can

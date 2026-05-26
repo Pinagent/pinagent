@@ -1,0 +1,21 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": [
+    "@pinagent/ee-relay",
+    "@pinagent/ee-auth",
+    "@pinagent/ee-billing",
+    "@pinagent/ee-team-features",
+    "@pinagent/ee-infra",
+    "@pinagent/cloud",
+    "@pinagent/widget",
+    "react-vite-example",
+    "next-app-example"
+  ]
+}

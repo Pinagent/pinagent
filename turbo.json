@@ -1,0 +1,43 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "stream",
+  "globalDependencies": ["tsconfig.base.json", ".nvmrc"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "app/**",
+        "scripts/**",
+        "tsconfig.json",
+        "tsdown.config.ts",
+        "vite.config.ts",
+        "next.config.ts",
+        "package.json"
+      ],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "out/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "tsconfig.json",
+        "package.json"
+      ]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "tsconfig.json",
+        "package.json"
+      ]
+    }
+  }
+}

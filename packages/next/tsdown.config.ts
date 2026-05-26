@@ -1,4 +1,4 @@
-import { defineConfig } from 'tsup';
+import { defineConfig } from 'tsdown';
 
 const common = {
   format: ['esm', 'cjs'] as ('esm' | 'cjs')[],
@@ -8,6 +8,13 @@ const common = {
   external: ['next', 'react', 'react/jsx-runtime'],
   sourcemap: true,
   splitting: false,
+  // Match tsup naming: ESM as `.js`, CJS as `.cjs`. package.json's
+  // `exports` map references `./dist/<entry>.js` (ESM) and `.cjs` (CJS).
+  fixedExtension: false,
+  // Disable content-hashed chunk filenames so the shared chunk split
+  // out between the two-config array build gets a stable name —
+  // important for deterministic turbo cache hits.
+  hash: false,
 };
 
 export default defineConfig([
