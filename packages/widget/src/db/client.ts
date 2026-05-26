@@ -1,5 +1,5 @@
-import { drizzle, type SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy';
 import * as schema from '@pinagent/db/schema';
+import { type SqliteRemoteDatabase, drizzle } from 'drizzle-orm/sqlite-proxy';
 import { type MigrationEntry, applyMigrations } from './migrations';
 import { pruneOldConversations } from './writes';
 
@@ -127,17 +127,12 @@ async function doInit(): Promise<BrowserDb> {
     console.error('[pinagent:db] worker error:', e.message);
   });
 
-  function call(
-    type: string,
-    args: object,
-  ): Promise<{ ok: boolean; rows?: unknown[][] }> {
+  function call(type: string, args: object): Promise<{ ok: boolean; rows?: unknown[][] }> {
     const id = ++nextMsgId;
-    const promise = new Promise<{ ok: boolean; rows?: unknown[][] }>(
-      (resolve, reject) => {
-        pending.set(id, { resolve: resolve as PendingCall['resolve'], reject });
-        worker.postMessage({ id, type, args });
-      },
-    );
+    const promise = new Promise<{ ok: boolean; rows?: unknown[][] }>((resolve, reject) => {
+      pending.set(id, { resolve: resolve as PendingCall['resolve'], reject });
+      worker.postMessage({ id, type, args });
+    });
     // Track for beforeunload flush. Reads + writes both — reads are
     // fast (SAH is synchronous) and Promise.allSettled doesn't care.
     //
@@ -169,10 +164,7 @@ async function doInit(): Promise<BrowserDb> {
     const res = await fetch('/__pinagent/db-migrations');
     if (res.ok) {
       const body = (await res.json()) as { migrations: MigrationEntry[] };
-      await applyMigrations(
-        (type, args) => call(type, args as object),
-        body.migrations,
-      );
+      await applyMigrations((type, args) => call(type, args as object), body.migrations);
     }
   } catch (err) {
     // eslint-disable-next-line no-console

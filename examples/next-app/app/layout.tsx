@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
 import { Pinagent } from '@pinagent/next';
+import type { ReactNode } from 'react';
 import { Logo } from './_components/Logo';
 import { SideNav } from './_components/SideNav';
 

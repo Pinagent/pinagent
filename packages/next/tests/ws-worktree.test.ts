@@ -295,12 +295,8 @@ describe('ws-server — worktree lifecycle', () => {
     await Promise.all([a.opened, b.opened]);
     a.send({ type: 'subscribe', feedbackId: id });
     b.send({ type: 'subscribe', feedbackId: id });
-    await a.waitFor(
-      (m) => (m as { type?: string }).type === 'worktree_state',
-    );
-    await b.waitFor(
-      (m) => (m as { type?: string }).type === 'worktree_state',
-    );
+    await a.waitFor((m) => (m as { type?: string }).type === 'worktree_state');
+    await b.waitFor((m) => (m as { type?: string }).type === 'worktree_state');
 
     a.send({ type: 'discard_request', feedbackId: id });
 

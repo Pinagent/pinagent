@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { nanoid } from 'nanoid';
 import type { Connect } from 'vite';
-import type { AutoTrigger } from './auto-trigger';
 import { WIDGET_SOURCE } from './__generated__/widget';
+import type { AutoTrigger } from './auto-trigger';
 import { FeedbackInputSchema, ID_RE, PatchSchema, type Storage } from './storage';
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024; // 8MB raw JSON (screenshot dominates)
@@ -74,8 +74,7 @@ export function createMiddleware(
       }
 
       // PATCH /__pinagent/feedback/:id
-      const patchMatch =
-        req.method === 'PATCH' && /^\/__pinagent\/feedback\/([^/]+)$/.exec(url);
+      const patchMatch = req.method === 'PATCH' && /^\/__pinagent\/feedback\/([^/]+)$/.exec(url);
       if (patchMatch) {
         const id = patchMatch[1] ?? '';
         if (!ID_RE.test(id)) return badRequest(res, 'invalid id');

@@ -19,10 +19,7 @@ import { startWsServer } from './ws-server';
 //
 // Singleton-guarded inside startWsServer so HMR / multiple route imports
 // don't try to bind the same port twice.
-if (
-  process.env.NODE_ENV !== 'production' &&
-  resolveAgentMode(process.env) !== false
-) {
+if (process.env.NODE_ENV !== 'production' && resolveAgentMode(process.env) !== false) {
   if (!process.env.PINAGENT_WS_PORT) process.env.PINAGENT_WS_PORT = '53636';
   try {
     startWsServer();

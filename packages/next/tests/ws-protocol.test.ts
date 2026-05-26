@@ -6,7 +6,9 @@ const validId = 'AbCdEfGh12'; // 10 chars, allowed alphabet
 describe('ClientMessageSchema', () => {
   describe('subscribe', () => {
     it('accepts a well-formed subscribe', () => {
-      expect(ClientMessageSchema.safeParse({ type: 'subscribe', feedbackId: validId }).success).toBe(true);
+      expect(
+        ClientMessageSchema.safeParse({ type: 'subscribe', feedbackId: validId }).success,
+      ).toBe(true);
     });
 
     it('rejects a feedbackId with special chars', () => {
@@ -37,7 +39,9 @@ describe('ClientMessageSchema', () => {
 
   describe('unsubscribe', () => {
     it('accepts a well-formed unsubscribe', () => {
-      expect(ClientMessageSchema.safeParse({ type: 'unsubscribe', feedbackId: validId }).success).toBe(true);
+      expect(
+        ClientMessageSchema.safeParse({ type: 'unsubscribe', feedbackId: validId }).success,
+      ).toBe(true);
     });
   });
 
@@ -117,7 +121,9 @@ describe('ClientMessageSchema', () => {
 
   describe('interrupt', () => {
     it('accepts a well-formed interrupt', () => {
-      expect(ClientMessageSchema.safeParse({ type: 'interrupt', feedbackId: validId }).success).toBe(true);
+      expect(
+        ClientMessageSchema.safeParse({ type: 'interrupt', feedbackId: validId }).success,
+      ).toBe(true);
     });
   });
 
@@ -128,9 +134,7 @@ describe('ClientMessageSchema', () => {
   });
 
   it('rejects an unknown type', () => {
-    expect(
-      ClientMessageSchema.safeParse({ type: 'definitely-not-a-message' }).success,
-    ).toBe(false);
+    expect(ClientMessageSchema.safeParse({ type: 'definitely-not-a-message' }).success).toBe(false);
   });
 
   it('rejects null / non-object input', () => {

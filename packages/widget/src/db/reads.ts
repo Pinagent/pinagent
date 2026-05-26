@@ -1,4 +1,3 @@
-import { asc, desc, eq } from 'drizzle-orm';
 import {
   type Conversation,
   type Message,
@@ -7,6 +6,7 @@ import {
   messages,
   widgetAnchors,
 } from '@pinagent/db/schema';
+import { asc, desc, eq } from 'drizzle-orm';
 import type { BrowserDb } from './client';
 
 export interface PendingRow {
@@ -23,10 +23,7 @@ export interface PendingRow {
  * was started on a different route would put the bubble at meaningless
  * coordinates.
  */
-export async function listPendingForCurrentPage(
-  db: BrowserDb,
-  url: string,
-): Promise<PendingRow[]> {
+export async function listPendingForCurrentPage(db: BrowserDb, url: string): Promise<PendingRow[]> {
   const rows = await db
     .select({ conversation: conversations, anchor: widgetAnchors })
     .from(conversations)

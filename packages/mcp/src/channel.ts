@@ -79,7 +79,7 @@ export const CHANNEL_INSTRUCTIONS = [
   'You have a Pinagent channel registered. Pinagent feedback events arrive as:',
   '',
   '  <channel source="pinagent" id="..." file="src/Foo.tsx" line="42" col="7" url="..." selector="...">',
-  '  the developer\'s comment text',
+  "  the developer's comment text",
   '  </channel>',
   '',
   'When you receive one of these events, act on it without waiting for further instructions:',

@@ -38,9 +38,7 @@ describe('renderMessage', () => {
       asSdk({
         type: 'assistant',
         message: {
-          content: [
-            { type: 'tool_use', name: 'Edit', input: { file_path: 'src/foo.ts' } },
-          ],
+          content: [{ type: 'tool_use', name: 'Edit', input: { file_path: 'src/foo.ts' } }],
         } as never,
       }),
     );
@@ -230,9 +228,7 @@ describe('summariseToolInput', () => {
   });
 
   it('renders a single MCP arg when shape is unambiguous', () => {
-    expect(summariseToolInput('mcp__pinagent__resolve_feedback', { id: 'abc' })).toBe(
-      'id=`abc`',
-    );
+    expect(summariseToolInput('mcp__pinagent__resolve_feedback', { id: 'abc' })).toBe('id=`abc`');
   });
 
   it('returns "" for null / non-object input', () => {

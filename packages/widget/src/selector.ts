@@ -17,9 +17,7 @@ export function shortSelector(el: Element, maxDepth = 4): string {
     const parent: Element | null = cur.parentElement;
     if (parent) {
       const tagName = cur.tagName;
-      const siblings: Element[] = Array.from(parent.children).filter(
-        (c) => c.tagName === tagName,
-      );
+      const siblings: Element[] = Array.from(parent.children).filter((c) => c.tagName === tagName);
       if (siblings.length > 1) {
         const idx = siblings.indexOf(cur) + 1;
         part += `:nth-of-type(${idx})`;

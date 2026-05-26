@@ -1,9 +1,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Database from 'better-sqlite3';
 import * as schema from '@pinagent/db/schema';
-import { drizzle, type SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy';
+import Database from 'better-sqlite3';
+import { type SqliteRemoteDatabase, drizzle } from 'drizzle-orm/sqlite-proxy';
 
 /**
  * In-memory better-sqlite3 wrapped in a drizzle/sqlite-proxy adapter

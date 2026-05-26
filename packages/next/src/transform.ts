@@ -66,10 +66,7 @@ export function transformJsx(code: string, opts: TransformOptions): string | nul
 
       // Already tagged?
       const has = node.attributes.some(
-        (a) =>
-          t.isJSXAttribute(a) &&
-          t.isJSXIdentifier(a.name) &&
-          a.name.name === ATTR,
+        (a) => t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === ATTR,
       );
       if (has) return;
 

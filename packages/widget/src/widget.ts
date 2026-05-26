@@ -1,9 +1,5 @@
 import { flushBrowserDb, getBrowserDb, initBrowserDb } from './db/client';
-import {
-  type PendingRow,
-  getConversationMessages,
-  listPendingForCurrentPage,
-} from './db/reads';
+import { type PendingRow, getConversationMessages, listPendingForCurrentPage } from './db/reads';
 import {
   deleteConversation,
   markConversationResolved,
@@ -587,18 +583,17 @@ export function mount(): void {
     // (swap to that composer).
     const prevHost = host.style.pointerEvents;
     host.style.pointerEvents = 'none';
-    const prevExpanded =
-      expandedComposer && expandedComposer.expanded
-        ? expandedComposer.iframe.style.pointerEvents
-        : null;
-    if (expandedComposer && expandedComposer.expanded) {
+    const prevExpanded = expandedComposer?.expanded
+      ? expandedComposer.iframe.style.pointerEvents
+      : null;
+    if (expandedComposer?.expanded) {
       expandedComposer.iframe.style.pointerEvents = 'none';
     }
 
     const target = document.elementFromPoint(e.clientX, e.clientY);
 
     host.style.pointerEvents = prevHost;
-    if (expandedComposer && expandedComposer.expanded && prevExpanded !== null) {
+    if (expandedComposer?.expanded && prevExpanded !== null) {
       // Inside picker mode the expanded iframe is already suspended
       // (enterPicking sets none). Restoring here would briefly re-enable
       // it between events. Honor the suspended state for the picker
@@ -788,7 +783,10 @@ export function mount(): void {
       const iframeTop = Math.max(8, baseTop + composer.userOffsetY);
       const iframeLeft = Math.max(
         window.scrollX + 8,
-        Math.min(window.scrollX + window.innerWidth - IFRAME_W - 8, baseLeft + composer.userOffsetX),
+        Math.min(
+          window.scrollX + window.innerWidth - IFRAME_W - 8,
+          baseLeft + composer.userOffsetX,
+        ),
       );
       iframe.style.top = `${iframeTop}px`;
       iframe.style.left = `${iframeLeft}px`;
@@ -814,7 +812,10 @@ export function mount(): void {
         Math.min(iframeLeft + IFRAME_W - POINTER_W - 24, anchorDocX - POINTER_W / 2),
       );
       if (placeBelow) {
-        pointerPath.setAttribute('d', `M 0.5 ${POINTER_H} L 9 0.5 L ${POINTER_W - 0.5} ${POINTER_H}`);
+        pointerPath.setAttribute(
+          'd',
+          `M 0.5 ${POINTER_H} L 9 0.5 L ${POINTER_W - 0.5} ${POINTER_H}`,
+        );
         pointer.style.top = `${iframeTop - POINTER_H + 1}px`;
       } else {
         pointerPath.setAttribute('d', `M 0.5 0.5 L ${POINTER_W - 0.5} 0.5 L 9 ${POINTER_H - 0.5}`);
@@ -1027,11 +1028,7 @@ export function mount(): void {
           else c.close();
           return;
         }
-        if (
-          hotkeyChar &&
-          e.key.toLowerCase() === hotkeyChar &&
-          !shouldIgnoreHotkey(e)
-        ) {
+        if (hotkeyChar && e.key.toLowerCase() === hotkeyChar && !shouldIgnoreHotkey(e)) {
           e.preventDefault();
           if (state.mode === 'picking') exitPicking();
           else enterPicking();
@@ -1139,9 +1136,10 @@ export function mount(): void {
             const body = await res.text().catch(() => '');
             throw new Error(`HTTP ${res.status}: ${body || res.statusText}`);
           }
-          const result = (await res.json().catch(() => null)) as
-            | { id: string; agentSpawned?: boolean }
-            | null;
+          const result = (await res.json().catch(() => null)) as {
+            id: string;
+            agentSpawned?: boolean;
+          } | null;
 
           if (result?.id && result.agentSpawned) {
             c.feedbackId = result.id;
@@ -1328,9 +1326,7 @@ export function mount(): void {
 function createWsClient(): WidgetWsClient {
   const cfg = (window as unknown as { __pinagentConfig?: { wsUrl?: string | null } })
     .__pinagentConfig;
-  const url =
-    cfg?.wsUrl ??
-    `ws://${window.location.hostname || '127.0.0.1'}:53636/__pinagent/ws`;
+  const url = cfg?.wsUrl ?? `ws://${window.location.hostname || '127.0.0.1'}:53636/__pinagent/ws`;
   return new WidgetWsClient(url);
 }
 
@@ -1529,145 +1525,140 @@ function attachStreamHandler(
   function processEvent(event: AgentEvent) {
     switch (event.type) {
       case 'init': {
-          const session = String(event.sessionId ?? '').slice(0, 8);
-          const model = String(event.model ?? 'claude');
-          apiKeySource = typeof event.apiKeySource === 'string' ? event.apiKeySource : null;
-          header.textContent = `Working · ${model}${session ? ` · ${session}` : ''}`;
-          turnRunning = true;
-          setHeaderRunning(true);
-          stopBtn.disabled = false;
-          stopBtn.textContent = 'Stop';
-          setStopVisible(true);
-          setFollowEnabled(false);
-          setAgentState('running');
-          break;
-        }
-        case 'text': {
-          const text = String(event.text ?? '');
-          if (!text) break;
-          if (!activeTextBlock) {
-            activeTextBlock = el('div', 'msg', text);
-            append(activeTextBlock);
-          } else {
-            activeTextBlock.textContent = `${activeTextBlock.textContent ?? ''}\n${text}`;
-            log.scrollTop = log.scrollHeight;
-          }
-          lastToolChip = null;
-          break;
-        }
-        case 'tool_use': {
-          activeTextBlock = null;
-          const name = String(event.name ?? 'tool');
-          const summary = String(event.summary ?? '');
-          const chip = el('div', 'chip');
-          chip.appendChild(el('span', 'chip-name', name));
-          if (summary) chip.appendChild(el('span', 'chip-summary', summary));
-          const status = el('span', 'chip-status', '…');
-          chip.appendChild(status);
-          lastToolChip = chip;
-          append(chip);
-          break;
-        }
-        case 'tool_result': {
-          const ok = !!event.ok;
-          if (lastToolChip) {
-            const status = lastToolChip.querySelector('.chip-status');
-            if (status) {
-              status.textContent = ok ? '✓' : '✗';
-              (status as HTMLElement).classList.add(ok ? 'ok' : 'err');
-            }
-          } else {
-            append(el('div', `chip ${ok ? '' : 'err'}`, ok ? '✓ tool result' : '✗ tool result'));
-          }
-          lastToolChip = null;
-          break;
-        }
-        case 'ask_user': {
-          activeTextBlock = null;
-          lastToolChip = null;
-          const askId = String(event.askId ?? '');
-          const question = String(event.question ?? '');
-          const options = Array.isArray(event.options) ? (event.options as string[]) : undefined;
-          if (!askId || !question) break;
-          renderAskUserForm(askId, question, options);
-          break;
-        }
-        case 'error': {
-          activeTextBlock = null;
-          lastToolChip = null;
-          append(el('div', 'err-line', String(event.message ?? 'error')));
-          setAgentState('error');
-          turnRunning = false;
-          setHeaderRunning(false);
-          setStopVisible(false);
-          if (!pendingAskId) setFollowEnabled(true);
-          // Terminal: stop the conversation from restoring on next
-          // reload. The transcript stays in the cache (it's still
-          // useful for review) — only the status flips.
-          const db = getBrowserDb();
-          if (db) {
-            void markConversationResolved(db, feedbackId, 'wontfix').catch(() => {});
-          }
-          break;
-        }
-        case 'status_changed': {
-          // Server-authoritative status flip — the agent called
-          // resolve_feedback (or similar) and the server's Storage
-          // wrote the new status. Mirror that into the browser cache
-          // so this conversation stops showing as pending on reload.
-          const status = String(event.status ?? '');
-          if (status === 'fixed' || status === 'wontfix' || status === 'deferred') {
-            const db = getBrowserDb();
-            if (db) {
-              const resolvedRaw = event.resolvedAt;
-              const resolvedAt =
-                typeof resolvedRaw === 'string' ? new Date(resolvedRaw) : null;
-              void markConversationResolved(db, feedbackId, status, resolvedAt).catch(
-                () => {},
-              );
-            }
-            // Surface the resolution in the live UI too.
-            const noteRaw = event.note;
-            if (typeof noteRaw === 'string' && noteRaw) {
-              append(el('div', 'msg', `Resolved (${status}): ${noteRaw}`));
-            } else {
-              append(el('div', 'msg', `Resolved (${status}).`));
-            }
-            setAgentState(status === 'fixed' ? 'done' : 'error');
-          }
-          break;
-        }
-        case 'result': {
-          activeTextBlock = null;
-          lastToolChip = null;
-          const subtype = String(event.subtype ?? '');
-          const cost = typeof event.totalCostUsd === 'number' ? event.totalCostUsd : 0;
-          const turns = typeof event.numTurns === 'number' ? event.numTurns : 0;
-          const ok = subtype === 'success';
-          header.textContent = ok ? '✓ Done' : `Ended: ${subtype}`;
-          const turnsLabel = `${turns} turn${turns === 1 ? '' : 's'}`;
-          if (apiKeySource === 'oauth') {
-            footer.textContent = `${turnsLabel} · subscription`;
-            footer.title = `≈ $${cost.toFixed(4)} API-equivalent (not billed — Claude subscription)`;
-          } else {
-            footer.textContent = `${turnsLabel} · $${cost.toFixed(4)}`;
-            footer.title = '';
-          }
-          turnRunning = false;
-          setHeaderRunning(false);
-          setStopVisible(false);
-          setAgentState(ok ? 'done' : 'error');
-          if (!pendingAskId) setFollowEnabled(true);
-          // Terminal: flip status so restoration scans skip this.
-          const db = getBrowserDb();
-          if (db) {
-            void markConversationResolved(db, feedbackId, ok ? 'fixed' : 'wontfix').catch(
-              () => {},
-            );
-          }
-          break;
-        }
+        const session = String(event.sessionId ?? '').slice(0, 8);
+        const model = String(event.model ?? 'claude');
+        apiKeySource = typeof event.apiKeySource === 'string' ? event.apiKeySource : null;
+        header.textContent = `Working · ${model}${session ? ` · ${session}` : ''}`;
+        turnRunning = true;
+        setHeaderRunning(true);
+        stopBtn.disabled = false;
+        stopBtn.textContent = 'Stop';
+        setStopVisible(true);
+        setFollowEnabled(false);
+        setAgentState('running');
+        break;
       }
+      case 'text': {
+        const text = String(event.text ?? '');
+        if (!text) break;
+        if (!activeTextBlock) {
+          activeTextBlock = el('div', 'msg', text);
+          append(activeTextBlock);
+        } else {
+          activeTextBlock.textContent = `${activeTextBlock.textContent ?? ''}\n${text}`;
+          log.scrollTop = log.scrollHeight;
+        }
+        lastToolChip = null;
+        break;
+      }
+      case 'tool_use': {
+        activeTextBlock = null;
+        const name = String(event.name ?? 'tool');
+        const summary = String(event.summary ?? '');
+        const chip = el('div', 'chip');
+        chip.appendChild(el('span', 'chip-name', name));
+        if (summary) chip.appendChild(el('span', 'chip-summary', summary));
+        const status = el('span', 'chip-status', '…');
+        chip.appendChild(status);
+        lastToolChip = chip;
+        append(chip);
+        break;
+      }
+      case 'tool_result': {
+        const ok = !!event.ok;
+        if (lastToolChip) {
+          const status = lastToolChip.querySelector('.chip-status');
+          if (status) {
+            status.textContent = ok ? '✓' : '✗';
+            (status as HTMLElement).classList.add(ok ? 'ok' : 'err');
+          }
+        } else {
+          append(el('div', `chip ${ok ? '' : 'err'}`, ok ? '✓ tool result' : '✗ tool result'));
+        }
+        lastToolChip = null;
+        break;
+      }
+      case 'ask_user': {
+        activeTextBlock = null;
+        lastToolChip = null;
+        const askId = String(event.askId ?? '');
+        const question = String(event.question ?? '');
+        const options = Array.isArray(event.options) ? (event.options as string[]) : undefined;
+        if (!askId || !question) break;
+        renderAskUserForm(askId, question, options);
+        break;
+      }
+      case 'error': {
+        activeTextBlock = null;
+        lastToolChip = null;
+        append(el('div', 'err-line', String(event.message ?? 'error')));
+        setAgentState('error');
+        turnRunning = false;
+        setHeaderRunning(false);
+        setStopVisible(false);
+        if (!pendingAskId) setFollowEnabled(true);
+        // Terminal: stop the conversation from restoring on next
+        // reload. The transcript stays in the cache (it's still
+        // useful for review) — only the status flips.
+        const db = getBrowserDb();
+        if (db) {
+          void markConversationResolved(db, feedbackId, 'wontfix').catch(() => {});
+        }
+        break;
+      }
+      case 'status_changed': {
+        // Server-authoritative status flip — the agent called
+        // resolve_feedback (or similar) and the server's Storage
+        // wrote the new status. Mirror that into the browser cache
+        // so this conversation stops showing as pending on reload.
+        const status = String(event.status ?? '');
+        if (status === 'fixed' || status === 'wontfix' || status === 'deferred') {
+          const db = getBrowserDb();
+          if (db) {
+            const resolvedRaw = event.resolvedAt;
+            const resolvedAt = typeof resolvedRaw === 'string' ? new Date(resolvedRaw) : null;
+            void markConversationResolved(db, feedbackId, status, resolvedAt).catch(() => {});
+          }
+          // Surface the resolution in the live UI too.
+          const noteRaw = event.note;
+          if (typeof noteRaw === 'string' && noteRaw) {
+            append(el('div', 'msg', `Resolved (${status}): ${noteRaw}`));
+          } else {
+            append(el('div', 'msg', `Resolved (${status}).`));
+          }
+          setAgentState(status === 'fixed' ? 'done' : 'error');
+        }
+        break;
+      }
+      case 'result': {
+        activeTextBlock = null;
+        lastToolChip = null;
+        const subtype = String(event.subtype ?? '');
+        const cost = typeof event.totalCostUsd === 'number' ? event.totalCostUsd : 0;
+        const turns = typeof event.numTurns === 'number' ? event.numTurns : 0;
+        const ok = subtype === 'success';
+        header.textContent = ok ? '✓ Done' : `Ended: ${subtype}`;
+        const turnsLabel = `${turns} turn${turns === 1 ? '' : 's'}`;
+        if (apiKeySource === 'oauth') {
+          footer.textContent = `${turnsLabel} · subscription`;
+          footer.title = `≈ $${cost.toFixed(4)} API-equivalent (not billed — Claude subscription)`;
+        } else {
+          footer.textContent = `${turnsLabel} · $${cost.toFixed(4)}`;
+          footer.title = '';
+        }
+        turnRunning = false;
+        setHeaderRunning(false);
+        setStopVisible(false);
+        setAgentState(ok ? 'done' : 'error');
+        if (!pendingAskId) setFollowEnabled(true);
+        // Terminal: flip status so restoration scans skip this.
+        const db = getBrowserDb();
+        if (db) {
+          void markConversationResolved(db, feedbackId, ok ? 'fixed' : 'wontfix').catch(() => {});
+        }
+        break;
+      }
+    }
   }
 
   // Replay history before going live. User-typed follow-ups stored
@@ -1866,11 +1857,7 @@ function attachStreamHandler(
 
 function composerHTML(metaText: string): string {
   const esc = (s: string) =>
-    s
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   return `<!doctype html>
 <html><head><meta charset="utf-8"><style>
   html, body { margin: 0; padding: 0; background: transparent; height: 100%; }

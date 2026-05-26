@@ -180,7 +180,9 @@ export async function isInGitignore(root: string): Promise<boolean> {
     return txt
       .split(/\r?\n/)
       .map((s) => s.trim())
-      .some((s) => s === '.pinagent' || s === '.pinagent/' || s === '/.pinagent' || s === '/.pinagent/');
+      .some(
+        (s) => s === '.pinagent' || s === '.pinagent/' || s === '/.pinagent' || s === '/.pinagent/',
+      );
   } catch {
     return false;
   }

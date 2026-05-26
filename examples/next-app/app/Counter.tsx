@@ -22,9 +22,7 @@ export function Counter({ label, description }: { label: string; description?: s
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <span style={{ fontWeight: 600 }}>{label}</span>
-        {description && (
-          <span style={{ color: '#6b7280', fontSize: 13 }}>{description}</span>
-        )}
+        {description && <span style={{ color: '#6b7280', fontSize: 13 }}>{description}</span>}
       </div>
       <button
         type="button"

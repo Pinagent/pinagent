@@ -32,7 +32,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await rm(PROJECT_ROOT, { recursive: true, force: true });
+  // biome-ignore lint/performance/noDelete: assigning undefined would set the env var to the string "undefined"
   delete process.env.PINAGENT_PROJECT_ROOT;
+  // biome-ignore lint/performance/noDelete: assigning undefined would set the env var to the string "undefined"
   delete process.env.PINAGENT_SPAWN_AGENT;
 });
 
@@ -122,10 +124,7 @@ describe('GET /sqlite-wasm/*', () => {
 
 describe('GET /db-worker.js', () => {
   it('serves our custom SAH-Pool-aware worker source', async () => {
-    const res = await route.GET(
-      makeRequest('/__pinagent/db-worker.js'),
-      ctx(['db-worker.js']),
-    );
+    const res = await route.GET(makeRequest('/__pinagent/db-worker.js'), ctx(['db-worker.js']));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/application\/javascript/);
     const body = await res.text();
@@ -135,10 +134,7 @@ describe('GET /db-worker.js', () => {
 
 describe('GET /db-migrations', () => {
   it('returns drizzle-format migration entries (tag, when, hash, sql)', async () => {
-    const res = await route.GET(
-      makeRequest('/__pinagent/db-migrations'),
-      ctx(['db-migrations']),
-    );
+    const res = await route.GET(makeRequest('/__pinagent/db-migrations'), ctx(['db-migrations']));
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       migrations: { tag: string; when: number; hash: string; sql: string }[];
@@ -172,14 +168,16 @@ describe('POST /feedback', () => {
   afterEach(async () => {
     // Best-effort cleanup so tests don't pollute each other's list views.
     for (const id of createdIds) {
-      await route.PATCH(
-        makeRequest(`/__pinagent/feedback/${id}`, {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ status: 'wontfix' }),
-        }),
-        ctx(['feedback', id]),
-      ).catch(() => {});
+      await route
+        .PATCH(
+          makeRequest(`/__pinagent/feedback/${id}`, {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ status: 'wontfix' }),
+          }),
+          ctx(['feedback', id]),
+        )
+        .catch(() => {});
     }
     createdIds = [];
   });
@@ -230,10 +228,7 @@ describe('POST /feedback', () => {
 
 describe('GET /feedback/:id', () => {
   it('returns 400 for an invalid id', async () => {
-    const res = await route.GET(
-      makeRequest('/__pinagent/feedback/!'),
-      ctx(['feedback', '!']),
-    );
+    const res = await route.GET(makeRequest('/__pinagent/feedback/!'), ctx(['feedback', '!']));
     expect(res.status).toBe(400);
   });
 
@@ -256,10 +251,7 @@ describe('GET /feedback/:id', () => {
     );
     const { id } = (await post.json()) as { id: string };
 
-    const get = await route.GET(
-      makeRequest(`/__pinagent/feedback/${id}`),
-      ctx(['feedback', id]),
-    );
+    const get = await route.GET(makeRequest(`/__pinagent/feedback/${id}`), ctx(['feedback', id]));
     expect(get.status).toBe(200);
     const rec = (await get.json()) as {
       id: string;
@@ -342,10 +334,7 @@ describe('POST /open', () => {
 
 describe('404 fallthrough', () => {
   it('GET unknown slug → 404', async () => {
-    const res = await route.GET(
-      makeRequest('/__pinagent/random-nothing'),
-      ctx(['random-nothing']),
-    );
+    const res = await route.GET(makeRequest('/__pinagent/random-nothing'), ctx(['random-nothing']));
     expect(res.status).toBe(404);
   });
 

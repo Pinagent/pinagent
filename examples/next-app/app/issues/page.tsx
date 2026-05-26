@@ -167,14 +167,13 @@ export default function IssuesPage() {
     >
       <h1 style={{ fontSize: '2.25rem' }}>Issues</h1>
       <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
-        A running log of bugs and rough edges surfaced while building Pinagent —
-        the click-to-comment widget itself, the source-map transform, the
-        persistent storage layer, the agent runtimes, and the example apps that
-        exercise all of them. Each item lists the affected component, the date
-        it was opened, and where it stands today, from freshly reported to
-        already shipped. To file a new one, click any element on the page,
-        leave a short note describing what looks wrong, and it will land here
-        once the agent or a reviewer has picked it up.
+        A running log of bugs and rough edges surfaced while building Pinagent — the
+        click-to-comment widget itself, the source-map transform, the persistent storage layer, the
+        agent runtimes, and the example apps that exercise all of them. Each item lists the affected
+        component, the date it was opened, and where it stands today, from freshly reported to
+        already shipped. To file a new one, click any element on the page, leave a short note
+        describing what looks wrong, and it will land here once the agent or a reviewer has picked
+        it up.
       </p>
 
       <section

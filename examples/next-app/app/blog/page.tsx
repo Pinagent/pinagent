@@ -53,8 +53,8 @@ export default function BlogPage() {
             <time style={{ color: '#6b7280', fontSize: '0.875rem' }}>2026-05-02</time>
           </header>
           <p style={{ color: '#374151', lineHeight: 1.55, marginTop: 12, marginBottom: 0 }}>
-            A walkthrough of the Pinagent loop: click a UI element, leave a comment, watch the
-            agent edit the exact JSX node you pointed at.
+            A walkthrough of the Pinagent loop: click a UI element, leave a comment, watch the agent
+            edit the exact JSX node you pointed at.
           </p>
         </article>
 
@@ -75,8 +75,8 @@ export default function BlogPage() {
             <time style={{ color: '#6b7280', fontSize: '0.875rem' }}>2026-04-15</time>
           </header>
           <p style={{ color: '#374151', lineHeight: 1.55, marginTop: 12, marginBottom: 0 }}>
-            The gap between "I see the bug" and "the agent has the right context" was the
-            slowest part of our day. So we closed it.
+            The gap between "I see the bug" and "the agent has the right context" was the slowest
+            part of our day. So we closed it.
           </p>
         </article>
       </section>

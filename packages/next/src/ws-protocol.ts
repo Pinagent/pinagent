@@ -20,7 +20,11 @@ import type { AgentEvent } from './event-bus';
 
 // ---------- Client → server ----------
 
-const FeedbackId = z.string().min(8).max(16).regex(/^[A-Za-z0-9_-]+$/);
+const FeedbackId = z
+  .string()
+  .min(8)
+  .max(16)
+  .regex(/^[A-Za-z0-9_-]+$/);
 
 export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('subscribe'), feedbackId: FeedbackId }),

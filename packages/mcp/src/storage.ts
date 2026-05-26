@@ -7,10 +7,10 @@
 import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
-import Database from 'better-sqlite3';
-import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { asc, conversations, eq, widgetAnchors } from '@pinagent/db';
 import * as schema from '@pinagent/db/schema';
+import Database from 'better-sqlite3';
+import { type BetterSQLite3Database, drizzle } from 'drizzle-orm/better-sqlite3';
 import { z } from 'zod';
 
 export const ID_RE = /^[A-Za-z0-9_-]{8,16}$/;

@@ -9,9 +9,7 @@ export default function ContactPage() {
       }}
     >
       <h1 style={{ fontSize: '2.25rem' }}>Contact</h1>
-      <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
-        Get in touch with the Pinagent team.
-      </p>
+      <p style={{ color: '#4b5563', lineHeight: 1.55 }}>Get in touch with the Pinagent team.</p>
 
       <section style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <article

@@ -57,6 +57,13 @@ jobs:
       - name: Lint dependencies (sherif)
         run: pnpm lint:deps
 
+      # Biome lint + format. Runs before typecheck because it's the
+      # cheapest signal (~30ms) and surfaces the broadest class of
+      # issues. A failure here means an autofixable problem the dev
+      # can resolve with `pnpm exec biome check --write .`.
+      - name: Lint (biome)
+        run: pnpm lint
+
       # `pnpm -r typecheck` runs tsc --noEmit across every package in
       # the workspace. The widget IIFE, the Next adapter, the MCP
       # server, and the shared db schema all go through their own
@@ -84,11 +91,3 @@ jobs:
       # buildable without waiting for release day to find out.
       - name: Build (OSS filter)
         run: pnpm build:oss
-
-      # Lint is not yet a gate — the repo currently has ~77 unrelated
-      # formatting/style errors. Surfaced as a soft check so we can
-      # see the count drift without blocking PRs.
-      - name: Lint (non-blocking)
-        if: always()
-        continue-on-error: true
-        run: pnpm lint

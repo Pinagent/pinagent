@@ -1,5 +1,5 @@
-import { eq, sql } from 'drizzle-orm';
 import { conversations, messages, widgetAnchors } from '@pinagent/db/schema';
+import { eq, sql } from 'drizzle-orm';
 import type { BrowserDb } from './client';
 
 /**
@@ -127,10 +127,7 @@ export async function markConversationResolved(
  * the widget (Cancel button, Esc-on-done), signalling they don't
  * want it to come back.
  */
-export async function deleteConversation(
-  db: BrowserDb,
-  feedbackId: string,
-): Promise<void> {
+export async function deleteConversation(db: BrowserDb, feedbackId: string): Promise<void> {
   await db.delete(conversations).where(eq(conversations.id, feedbackId));
 }
 

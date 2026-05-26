@@ -2,11 +2,21 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
-import { query, type Options, type PermissionMode, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { renderInitFooter, renderMessage, renderResultFooter, summariseToolInput } from './agent-render';
+import {
+  type Options,
+  type PermissionMode,
+  type SDKMessage,
+  query,
+} from '@anthropic-ai/claude-agent-sdk';
+import {
+  renderInitFooter,
+  renderMessage,
+  renderResultFooter,
+  summariseToolInput,
+} from './agent-render';
 import { ASK_USER_TOOL_NAME, createAskUserMcpServer, rejectAsk } from './ask-user';
 import { type AgentEvent, getOrCreateBus } from './event-bus';
-import { Storage, type FeedbackRecord } from './storage';
+import { type FeedbackRecord, Storage } from './storage';
 
 export type SpawnAgentMode = 'worktree' | 'inline' | false;
 
@@ -45,9 +55,10 @@ interface ActiveRun {
 // agent run starting and a user clicking Stop, a fresh activeRuns
 // Map would lose the entry and interrupt would no-op.
 const ACTIVE_RUNS_SYMBOL = Symbol.for('pinagent.agent.activeRuns');
-const activeRuns: Map<string, ActiveRun> = ((globalThis as Record<symbol, unknown>)[
-  ACTIVE_RUNS_SYMBOL
-] as Map<string, ActiveRun> | undefined) ?? new Map<string, ActiveRun>();
+const activeRuns: Map<string, ActiveRun> =
+  ((globalThis as Record<symbol, unknown>)[ACTIVE_RUNS_SYMBOL] as
+    | Map<string, ActiveRun>
+    | undefined) ?? new Map<string, ActiveRun>();
 (globalThis as Record<symbol, unknown>)[ACTIVE_RUNS_SYMBOL] = activeRuns;
 
 /**
@@ -74,8 +85,7 @@ export async function spawnAgent(ctx: AgentContext): Promise<void> {
     } catch (err) {
       await appendLog(
         logPath,
-        renderHeader(ctx, cwd, startedAt, /* worktreeReady */ false) +
-          `\n> [pinagent] worktree creation failed: ${stringifyErr(err)}\n`,
+        `${renderHeader(ctx, cwd, startedAt, /* worktreeReady */ false)}\n> [pinagent] worktree creation failed: ${stringifyErr(err)}\n`,
       );
       return;
     }
@@ -526,24 +536,15 @@ export async function mergeWorktree(
     return { ok: false, error: `cannot compare branches: ${ahead.stderr.trim()}` };
   }
   if (Number(ahead.stdout.trim()) === 0) {
-    await appendLog(logPath, `> [pinagent] no changes to land\n`);
+    await appendLog(logPath, '> [pinagent] no changes to land\n');
     await cleanupWorktreeFiles(rec.worktreePath, rec.branch, projectRoot, logPath);
     await storage.patch(feedbackId, { worktreeState: 'landed' });
     return { ok: true };
   }
 
-  const merge = await runGitCapture(projectRoot, [
-    'merge',
-    '--no-ff',
-    '--no-edit',
-    rec.branch,
-  ]);
+  const merge = await runGitCapture(projectRoot, ['merge', '--no-ff', '--no-edit', rec.branch]);
   if (merge.code !== 0) {
-    const conflicted = await runGitCapture(projectRoot, [
-      'diff',
-      '--name-only',
-      '--diff-filter=U',
-    ]);
+    const conflicted = await runGitCapture(projectRoot, ['diff', '--name-only', '--diff-filter=U']);
     const conflicts = conflicted.stdout
       .split('\n')
       .map((s) => s.trim())
@@ -552,9 +553,7 @@ export async function mergeWorktree(
     await runGitCapture(projectRoot, ['merge', '--abort']);
     await appendLog(
       logPath,
-      `> [pinagent] merge into \`${targetBranch}\` failed: ${conflicts.length} conflicted file(s)\n` +
-        conflicts.map((c) => `>   - \`${c}\`\n`).join('') +
-        '\n',
+      `> [pinagent] merge into \`${targetBranch}\` failed: ${conflicts.length} conflicted file(s)\n${conflicts.map((c) => `>   - \`${c}\`\n`).join('')}\n`,
     );
     return { ok: false, conflicts };
   }
@@ -606,12 +605,7 @@ async function cleanupWorktreeFiles(
   logPath: string,
 ): Promise<void> {
   if (existsSync(worktreePath)) {
-    const rm = await runGitCapture(projectRoot, [
-      'worktree',
-      'remove',
-      '--force',
-      worktreePath,
-    ]);
+    const rm = await runGitCapture(projectRoot, ['worktree', 'remove', '--force', worktreePath]);
     if (rm.code !== 0) {
       await appendLog(
         logPath,
@@ -661,9 +655,10 @@ function runGit(cwd: string, args: string[], logPath: string): Promise<void> {
       if (code === 0) {
         res();
       } else {
-        appendLog(logPath, `[pinagent:git] git ${args.join(' ')} → exit ${code}\n${stderr}\n`).catch(
-          () => {},
-        );
+        appendLog(
+          logPath,
+          `[pinagent:git] git ${args.join(' ')} → exit ${code}\n${stderr}\n`,
+        ).catch(() => {});
         rej(new Error(`git ${args.join(' ')} exited ${code}: ${stderr.trim()}`));
       }
     });
@@ -737,8 +732,7 @@ function renderHeader(
   const where = rec.file
     ? `${rec.file}:${rec.line ?? '?'}${rec.col != null ? `:${rec.col}` : ''}`
     : rec.selector;
-  const branchLine =
-    ctx.mode === 'worktree' && worktreeReady ? `branch: pinagent/${rec.id}\n` : '';
+  const branchLine = ctx.mode === 'worktree' && worktreeReady ? `branch: pinagent/${rec.id}\n` : '';
 
   return [
     '---',

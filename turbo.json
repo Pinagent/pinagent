@@ -23,21 +23,11 @@
     },
     "typecheck": {
       "dependsOn": ["^build"],
-      "inputs": [
-        "src/**",
-        "tests/**",
-        "tsconfig.json",
-        "package.json"
-      ]
+      "inputs": ["src/**", "tests/**", "tsconfig.json", "package.json"]
     },
     "test": {
       "dependsOn": ["^build"],
-      "inputs": [
-        "src/**",
-        "tests/**",
-        "tsconfig.json",
-        "package.json"
-      ]
+      "inputs": ["src/**", "tests/**", "tsconfig.json", "package.json"]
     }
   }
 }

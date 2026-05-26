@@ -5,9 +5,7 @@
   "type": "module",
   "description": "Pinagent browser widget (shadow-root pick + composer). Built as IIFE and consumed by @pinagent/vite-plugin.",
   "main": "dist/widget.iife.js",
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",

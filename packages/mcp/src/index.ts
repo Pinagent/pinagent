@@ -2,14 +2,11 @@ import { readFile } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { CHANNEL_INSTRUCTIONS, startFeedbackWatcher } from './channel';
 import { resolveRoot } from './root';
-import { Storage, StatusSchema, isInsideRoot } from './storage';
+import { StatusSchema, Storage, isInsideRoot } from './storage';
 
 const TOOL_LIST = [
   {
@@ -162,8 +159,7 @@ async function main() {
           const pretty = formatFeedback(rec);
           const png = await storage.readScreenshot(rec);
           const content: Array<
-            | { type: 'text'; text: string }
-            | { type: 'image'; data: string; mimeType: string }
+            { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
           > = [{ type: 'text', text: pretty }];
           if (png) {
             content.push({
@@ -191,7 +187,12 @@ async function main() {
           }
           await storage.write(next);
           return {
-            content: [{ type: 'text', text: JSON.stringify({ ok: true, id: next.id, status: next.status }, null, 2) }],
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({ ok: true, id: next.id, status: next.status }, null, 2),
+              },
+            ],
           };
         }
 
@@ -269,9 +270,7 @@ function formatFeedback(r: {
   status: string;
   createdAt: string;
 }): string {
-  const loc = r.file
-    ? `${r.file}:${r.line ?? '?'}${r.col != null ? `:${r.col}` : ''}`
-    : r.selector;
+  const loc = r.file ? `${r.file}:${r.line ?? '?'}${r.col != null ? `:${r.col}` : ''}` : r.selector;
   return [
     `id: ${r.id}`,
     `status: ${r.status}`,

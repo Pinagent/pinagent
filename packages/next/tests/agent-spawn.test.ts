@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { nanoid } from 'nanoid';
 import {
+  type Mock,
   afterAll,
   afterEach,
   beforeAll,
@@ -11,7 +12,6 @@ import {
   describe,
   expect,
   it,
-  type Mock,
   vi,
 } from 'vitest';
 
@@ -110,9 +110,8 @@ function scriptHangingQuery(): { aborted: Promise<void> } {
     resolveAborted = r;
   });
   (sdk.query as Mock).mockImplementation((params: unknown) => {
-    const signal = (
-      params as { options?: { abortController?: AbortController } }
-    ).options?.abortController?.signal;
+    const signal = (params as { options?: { abortController?: AbortController } }).options
+      ?.abortController?.signal;
     return (async function* () {
       // Yield an init so the run has time to register in activeRuns.
       yield {
@@ -154,7 +153,8 @@ async function makeFeedback(commentOverride = 'make it red'): Promise<{
     url: 'http://localhost:3000/',
     viewport: { w: 1280, h: 720 },
     userAgent: 'vitest',
-    screenshot: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+    screenshot:
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
     createdAt: new Date().toISOString(),
   });
   return { id, storage };
@@ -168,7 +168,10 @@ async function collectUntil(
 ): Promise<import('../src/event-bus').AgentEvent[]> {
   const collected: import('../src/event-bus').AgentEvent[] = [];
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`collectUntil timed out (got ${collected.length} events)`)), timeoutMs);
+    const t = setTimeout(
+      () => reject(new Error(`collectUntil timed out (got ${collected.length} events)`)),
+      timeoutMs,
+    );
     bus.getOrCreateBus(feedbackId).subscribe({
       onEvent(e) {
         collected.push(e);
@@ -222,9 +225,7 @@ describe('spawnAgent', () => {
       {
         type: 'assistant',
         message: {
-          content: [
-            { type: 'tool_use', name: 'Edit', input: { file_path: 'src/Foo.tsx' } },
-          ],
+          content: [{ type: 'tool_use', name: 'Edit', input: { file_path: 'src/Foo.tsx' } }],
         },
       } as never,
       {
@@ -313,13 +314,12 @@ describe('spawnAgent', () => {
     const { id, storage } = await makeFeedback();
     const rec = await storage.read(id);
 
-    (sdk.query as Mock).mockImplementation(
-      () =>
-        (async function* () {
-          throw new Error('SDK exploded');
-          // biome-ignore lint/correctness/noUnreachable: scripted
-          yield {} as never;
-        })(),
+    (sdk.query as Mock).mockImplementation(() =>
+      (async function* () {
+        throw new Error('SDK exploded');
+        // biome-ignore lint/correctness/noUnreachable: scripted
+        yield {} as never;
+      })(),
     );
 
     const events: import('../src/event-bus').AgentEvent[] = [];
@@ -356,15 +356,11 @@ describe('spawnAgent', () => {
 describe('runFollowUpTurn', () => {
   it('rejects when there is no prior agent session', async () => {
     const { id } = await makeFeedback('first comment');
-    await expect(agent.runFollowUpTurn(id, 'follow up')).rejects.toThrow(
-      /no prior agent session/,
-    );
+    await expect(agent.runFollowUpTurn(id, 'follow up')).rejects.toThrow(/no prior agent session/);
   });
 
   it('rejects when the feedback does not exist', async () => {
-    await expect(agent.runFollowUpTurn('aBcDeFgHiJ', 'hi')).rejects.toThrow(
-      /feedback not found/,
-    );
+    await expect(agent.runFollowUpTurn('aBcDeFgHiJ', 'hi')).rejects.toThrow(/feedback not found/);
   });
 
   it('resumes the prior SDK session and processes the follow-up turn', async () => {

@@ -1,5 +1,5 @@
-import type { NextConfig } from 'next';
 import pinagent from '@pinagent/next/config';
+import type { NextConfig } from 'next';
 
 const coreConfig: NextConfig = {
   reactStrictMode: true,

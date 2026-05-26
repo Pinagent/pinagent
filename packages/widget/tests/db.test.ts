@@ -1,14 +1,7 @@
+import { conversations, messages, widgetAnchors } from '@pinagent/db/schema';
 import { eq, sql } from 'drizzle-orm';
-import {
-  conversations,
-  messages,
-  widgetAnchors,
-} from '@pinagent/db/schema';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-  getConversationMessages,
-  listPendingForCurrentPage,
-} from '../src/db/reads';
+import { getConversationMessages, listPendingForCurrentPage } from '../src/db/reads';
 import {
   type AnchorInput,
   deleteConversation,
@@ -18,7 +11,7 @@ import {
   recordEvent,
   recordUserMessage,
 } from '../src/db/writes';
-import { openTestDb, type TestDb } from './_helpers/test-db';
+import { type TestDb, openTestDb } from './_helpers/test-db';
 
 let db: TestDb;
 let close: () => void;
@@ -100,9 +93,7 @@ describe('recordEvent', () => {
 
   it('touches conversations.updated_at on each event', async () => {
     // Force an older updated_at so we can detect the touch.
-    await db.run(
-      sql`UPDATE conversations SET updated_at = 1000 WHERE id = 'fb-1'`,
-    );
+    await db.run(sql`UPDATE conversations SET updated_at = 1000 WHERE id = 'fb-1'`);
     await recordEvent(db, 'fb-1', 1, { type: 'text', text: 'hello' });
     const [conv] = await db.select().from(conversations).where(eq(conversations.id, 'fb-1'));
     // Timestamp must be present and much larger than 1000ms-epoch.
@@ -152,7 +143,7 @@ describe('markConversationResolved', () => {
     });
   });
 
-  it("flips status and sets resolvedAt to a real Date", async () => {
+  it('flips status and sets resolvedAt to a real Date', async () => {
     await markConversationResolved(db, 'fb-1', 'fixed');
     const [conv] = await db.select().from(conversations).where(eq(conversations.id, 'fb-1'));
     expect(conv?.status).toBe('fixed');
@@ -166,9 +157,7 @@ describe('markConversationResolved', () => {
   });
 
   it('is a no-op when the conversation does not exist (UPDATE matches nothing)', async () => {
-    await expect(
-      markConversationResolved(db, 'nope', 'fixed'),
-    ).resolves.toBeUndefined();
+    await expect(markConversationResolved(db, 'nope', 'fixed')).resolves.toBeUndefined();
   });
 });
 
@@ -214,9 +203,7 @@ describe('pruneOldConversations', () => {
       anchor: anchor(),
     });
     const ancient = Date.now() - 31 * 24 * 60 * 60 * 1000;
-    await db.run(
-      sql`UPDATE conversations SET updated_at = ${ancient} WHERE id = 'old-pending'`,
-    );
+    await db.run(sql`UPDATE conversations SET updated_at = ${ancient} WHERE id = 'old-pending'`);
     await pruneOldConversations(db);
     expect(await db.select().from(conversations)).toHaveLength(1);
   });
