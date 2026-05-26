@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import { relative, sep } from 'node:path';
+import { isInGitignore, Storage } from '@pinagent/agent-runner';
+import { transformJsx } from '@pinagent/babel-plugin';
 import type { Plugin } from 'vite';
 import { AutoTrigger, type AutoTriggerOptions } from './auto-trigger';
 import { createMiddleware } from './middleware';
-import { isInGitignore, Storage } from './storage';
-import { transformJsx } from './transform';
 
 export interface PinagentOptions {
   /**

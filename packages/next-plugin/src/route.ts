@@ -5,13 +5,19 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  DB_WORKER_SOURCE,
+  FeedbackInputSchema,
+  ID_RE,
+  openInEditor,
+  PatchSchema,
+  resolveAgentMode,
+  Storage,
+  spawnAgent,
+  startWsServer,
+} from '@pinagent/agent-runner';
 import { nanoid } from 'nanoid';
 import { WIDGET_SOURCE } from './__generated__/widget';
-import { resolveAgentMode, spawnAgent } from './agent';
-import { DB_WORKER_SOURCE } from './db-worker-source';
-import { openInEditor } from './editor';
-import { FeedbackInputSchema, ID_RE, PatchSchema, Storage } from './storage';
-import { startWsServer } from './ws-server';
 
 // Boot the WebSocket server in this module — same process as spawnAgent and
 // the event bus. Starting it from next.config.ts would put it in a different

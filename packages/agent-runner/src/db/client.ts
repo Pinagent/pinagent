@@ -24,21 +24,22 @@ interface GlobalHolder {
   [SINGLETON_KEY]?: Map<string, Db>;
 }
 
-// Migrations live at `packages/next-plugin/drizzle/` (drizzle-kit's default
-// `out` directory) and ship with the package via the `files` array in
-// package.json.
-//
-// At runtime the bundled output sits in `packages/next-plugin/dist/`, so the
-// folder is one level up. But when running the source directly (vitest,
-// ts-node, etc.) the module is at `packages/next-plugin/src/db/`, two levels
-// up. Probe both and use the first that exists, so the same module
-// works in both contexts without each caller knowing which one it's in.
+// Migrations live at `packages/next-plugin/drizzle/` — they ship with the
+// published @pinagent/next-plugin package via its `files` array. agent-runner
+// is bundled into next-plugin's dist, so the relative paths below cover both
+// the bundled runtime and the in-monorepo dev/test layout.
 const moduleUrl: string | undefined = import.meta.url;
 const MIGRATIONS_DIR = (() => {
   const base = moduleUrl ? dirname(fileURLToPath(moduleUrl)) : __dirname;
   const candidates = [
-    resolve(base, '..', 'drizzle'), // dist/route.{js,cjs} → packages/next-plugin/drizzle
-    resolve(base, '..', '..', 'drizzle'), // src/db/client.ts → packages/next-plugin/drizzle
+    // Bundled into next-plugin: packages/next-plugin/dist/route.{js,cjs} → ../drizzle
+    resolve(base, '..', 'drizzle'),
+    // agent-runner's own dist: packages/agent-runner/dist/index.{js,cjs} →
+    // packages/next-plugin/drizzle (when consumers import @pinagent/agent-runner).
+    resolve(base, '..', '..', 'next-plugin', 'drizzle'),
+    // agent-runner source (tests, ts-node): packages/agent-runner/src/db/client.ts →
+    // packages/next-plugin/drizzle
+    resolve(base, '..', '..', '..', 'next-plugin', 'drizzle'),
   ];
   return candidates.find((p) => existsSync(p)) ?? candidates[0]!;
 })();

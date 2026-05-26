@@ -1,5 +1,5 @@
 {
-  "name": "@pinagent/dev-server",
+  "name": "@pinagent/agent-runner",
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
@@ -23,8 +23,20 @@
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.150",
+    "@pinagent/db": "workspace:*",
+    "@pinagent/shared": "workspace:*",
+    "better-sqlite3": "^12.10.0",
+    "drizzle-orm": "^0.38.0",
+    "nanoid": "^5.0.9",
+    "ws": "^8.21.0",
+    "zod": "^3.23.8"
+  },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.1",
+    "@types/ws": "^8.18.1",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3"
   }

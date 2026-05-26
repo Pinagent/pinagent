@@ -17,8 +17,8 @@
     "@pinagent/widget",
     "@pinagent/shared",
     "@pinagent/babel-plugin",
-    "@pinagent/host-script",
-    "@pinagent/dev-server",
+    "@pinagent/browser-runtime",
+    "@pinagent/agent-runner",
     "react-vite-example",
     "next-app-example"
   ]

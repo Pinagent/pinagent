@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { FeedbackInputSchema, ID_RE, PatchSchema, type Storage } from '@pinagent/agent-runner';
 import { nanoid } from 'nanoid';
 import type { Connect } from 'vite';
 import { WIDGET_SOURCE } from './__generated__/widget';
 import type { AutoTrigger } from './auto-trigger';
-import { FeedbackInputSchema, ID_RE, PatchSchema, type Storage } from './storage';
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024; // 8MB raw JSON (screenshot dominates)
 

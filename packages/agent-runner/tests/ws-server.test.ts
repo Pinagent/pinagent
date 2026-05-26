@@ -22,7 +22,7 @@ const WS_URL = `ws://127.0.0.1:${TEST_PORT}/__pinagent/ws`;
 const SINGLETON_KEY = Symbol.for('pinagent.ws-server');
 
 type ServerMod = typeof import('../src/ws-server');
-type BusMod = typeof import('../src/event-bus');
+type BusMod = typeof import('@pinagent/shared');
 
 let server: ServerMod;
 let bus: BusMod;
@@ -31,7 +31,7 @@ beforeAll(async () => {
   process.env.PINAGENT_WS_PORT = String(TEST_PORT);
   (globalThis as Record<symbol, unknown>)[SINGLETON_KEY] = undefined;
   server = await import('../src/ws-server');
-  bus = await import('../src/event-bus');
+  bus = await import('@pinagent/shared');
   const handle = server.startWsServer();
   // Wait for the bind to actually complete.
   await new Promise<void>((resolve, reject) => {

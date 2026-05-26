@@ -14,7 +14,7 @@ Pinagent is a localhost feedback loop: a build-time plugin tags JSX with `data-p
 > - **Phase E (done, bi-directional).** The widget composer iframe swaps into a streaming pane on Submit and renders text + tool chips + final cost/turns inline. Persistent follow-up input lets you send additional turns over WS (resumes the prior session). `ask_user` events render as inline forms with optional one-click options; submitting POSTs an `ask_response` back over WS and the agent continues.
 > - **Phase F (done).** `ask_user` custom SDK tool (`packages/next-plugin/src/ask-user.ts`) registered on every spawn. Per-process pending-asks map with 10-min TTL. System prompt instructs the agent to prefer asking over guessing.
 > - **V2 default in Next.** `spawnAgent` defaults to `'inline'` so the streaming-into-widget flow is on out of the box. Worktree mode is opt-in (`spawnAgent: 'worktree'`); `'off'` / `false` disables per-submit spawn entirely.
-> - **Not yet shipped (Phases C/D/F/G/H/I/J).** SQLite layer, host-script + iframe-per-widget architecture, `ask_user` clarification, HMR re-anchoring, Land/Discard worktree lifecycle, post-edit verification, per-turn process spawn.
+> - **Not yet shipped (Phases C/D/F/G/H/I/J).** SQLite layer, browser-runtime + iframe-per-widget architecture, `ask_user` clarification, HMR re-anchoring, Land/Discard worktree lifecycle, post-edit verification, per-turn process spawn.
 
 ## Detect the runtime
 
@@ -41,7 +41,7 @@ build-time plugin → tags JSX with data-pa-loc
                   ↓
 browser widget     → picks element, captures screenshot, POSTs to /__pinagent/feedback
                   ↓
-dev-server route   → writes <project>/.pinagent/feedback/<id>.json + screenshot.png
+agent-runner route → writes <project>/.pinagent/feedback/<id>.json + screenshot.png
                   ↓
 @pinagent/mcp     → reads .pinagent/, exposes 4 tools to the agent
                   ↓

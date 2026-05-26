@@ -17,7 +17,7 @@
  * client that connects right after the agent ends still sees the
  * outcome, then garbage-collected.
  *
- * Storage is per-process, in-memory. A dev-server restart wipes the
+ * Storage is per-process, in-memory. An agent-runner restart wipes the
  * bus — and kills the SDK agent — which matches today's lifecycle
  * (Phase J in the v2 plan moves to per-turn process spawn).
  */
