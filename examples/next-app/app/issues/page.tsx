@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+import { cn } from '@pinagent/ui/lib/utils';
+
 type Issue = {
   id: string;
   title: string;
@@ -131,19 +134,21 @@ const issues: Issue[] = [
   },
 ];
 
-const priorityColor: Record<Issue['priority'], string> = {
-  High: '#b91c1c',
-  Medium: '#b45309',
-  Low: '#3D3730',
+const priorityClass: Record<Issue['priority'], string> = {
+  High: 'text-red-700',
+  Medium: 'text-amber-700',
+  Low: 'text-foreground/70',
 };
 
-const statusColor: Record<Issue['status'], { fg: string; bg: string }> = {
-  Open: { fg: '#1d4ed8', bg: '#dbeafe' },
-  Triaged: { fg: '#3D3730', bg: '#F5EFD0' },
-  'In review': { fg: '#7c3aed', bg: '#ede9fe' },
-  'In progress': { fg: '#b45309', bg: '#fef3c7' },
-  Fixed: { fg: '#047857', bg: '#d1fae5' },
+const statusClass: Record<Issue['status'], string> = {
+  Open: 'bg-blue-100 text-blue-800',
+  Triaged: 'bg-secondary text-foreground/80',
+  'In review': 'bg-violet-100 text-violet-800',
+  'In progress': 'bg-amber-100 text-amber-800',
+  Fixed: 'bg-emerald-100 text-emerald-800',
 };
+
+const statusOrder: Issue['status'][] = ['Open', 'Triaged', 'In progress', 'In review', 'Fixed'];
 
 const counts = issues.reduce(
   (acc, issue) => {
@@ -153,20 +158,11 @@ const counts = issues.reduce(
   {} as Record<Issue['status'], number>,
 );
 
-const statusOrder: Issue['status'][] = ['Open', 'Triaged', 'In progress', 'In review', 'Fixed'];
-
 export default function IssuesPage() {
   return (
-    <main
-      style={{
-        fontFamily: 'system-ui, sans-serif',
-        padding: '40px',
-        maxWidth: 720,
-        margin: '0 auto',
-      }}
-    >
-      <h1 style={{ fontSize: '2.25rem' }}>Issues</h1>
-      <p style={{ color: '#3D3730', lineHeight: 1.55 }}>
+    <main className="mx-auto max-w-3xl p-10">
+      <h1 className="text-4xl font-semibold tracking-tight">Issues</h1>
+      <p className="mt-2 leading-relaxed text-muted-foreground">
         A running log of bugs and rough edges surfaced while building Pinagent — the
         click-to-comment widget itself, the source-map transform, the persistent storage layer, the
         agent runtimes, and the example apps that exercise all of them. Each item lists the affected
@@ -176,96 +172,44 @@ export default function IssuesPage() {
         it up.
       </p>
 
-      <section
-        style={{
-          marginTop: 24,
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 8,
-        }}
-      >
+      <section className="mt-6 flex flex-wrap gap-2">
         {statusOrder.map((status) => (
           <span
             key={status}
-            style={{
-              fontSize: '0.8125rem',
-              padding: '4px 10px',
-              borderRadius: 999,
-              background: statusColor[status].bg,
-              color: statusColor[status].fg,
-              fontWeight: 500,
-            }}
+            className={cn('rounded-full px-2.5 py-1 text-[13px] font-medium', statusClass[status])}
           >
             {status}: {counts[status] ?? 0}
           </span>
         ))}
       </section>
 
-      <ul
-        style={{
-          listStyle: 'none',
-          padding: 0,
-          marginTop: 24,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
+      <ul className="mt-6 m-0 flex list-none flex-col gap-3 p-0">
         {issues.map((issue) => (
           <li
             key={issue.id}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-              padding: '14px 16px',
-              border: '1px solid #E8DFB0',
-              borderRadius: 8,
-              background: '#FCF9E8',
-            }}
+            className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4"
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <span
-                style={{
-                  fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-                  fontSize: '0.8125rem',
-                  color: '#5C5546',
-                  minWidth: 64,
-                }}
-              >
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="min-w-[64px] font-mono text-[13px] text-muted-foreground">
                 {issue.id}
               </span>
-              <span style={{ flex: 1, color: '#201B21', fontWeight: 500 }}>{issue.title}</span>
-              <span
-                style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  color: priorityColor[issue.priority],
-                }}
-              >
+              <span className="flex-1 font-medium text-foreground">{issue.title}</span>
+              <span className={cn('text-xs font-semibold', priorityClass[issue.priority])}>
                 {issue.priority}
               </span>
               <span
-                style={{
-                  fontSize: '0.75rem',
-                  color: statusColor[issue.status].fg,
-                  padding: '2px 8px',
-                  borderRadius: 999,
-                  background: statusColor[issue.status].bg,
-                  fontWeight: 500,
-                }}
+                className={cn(
+                  'rounded-full px-2 py-0.5 text-xs font-medium',
+                  statusClass[issue.status],
+                )}
               >
                 {issue.status}
               </span>
             </div>
-            <p style={{ color: '#3D3730', lineHeight: 1.5, margin: 0, fontSize: '0.9375rem' }}>
-              {issue.description}
-            </p>
-            <div style={{ display: 'flex', gap: 12, fontSize: '0.75rem', color: '#5C5546' }}>
+            <p className="m-0 text-[15px] leading-snug text-foreground/85">{issue.description}</p>
+            <div className="flex gap-3 text-xs text-muted-foreground">
               <span>
-                <code style={{ fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>
-                  {issue.component}
-                </code>
+                <code className="font-mono">{issue.component}</code>
               </span>
               <span>·</span>
               <span>opened {issue.opened}</span>

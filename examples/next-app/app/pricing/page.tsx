@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0
+import { Button } from '@pinagent/ui/components/ui/button';
+import { Card } from '@pinagent/ui/components/ui/card';
+import { cn } from '@pinagent/ui/lib/utils';
+
 type Tier = {
   name: string;
   price: string;
@@ -43,113 +48,69 @@ const tiers: Tier[] = [
 
 export default function PricingPage() {
   return (
-    <main
-      style={{
-        fontFamily: 'system-ui, sans-serif',
-        padding: '40px',
-        maxWidth: 1080,
-        margin: '0 auto',
-      }}
-    >
-      <h1 style={{ fontSize: '2.25rem', marginBottom: 8 }}>Pricing</h1>
-      <p style={{ color: '#3D3730', lineHeight: 1.55, marginTop: 0 }}>
+    <main className="mx-auto max-w-5xl p-10">
+      <h1 className="text-4xl font-semibold tracking-tight">Pricing</h1>
+      <p className="mt-2 leading-relaxed text-muted-foreground">
         Simple, transparent pricing. Pick the plan that fits your team.
       </p>
 
       <section
-        style={{
-          marginTop: 32,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-          gap: 16,
-        }}
+        className="mt-8 grid gap-4"
+        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}
       >
         {tiers.map((tier) => (
-          <article
+          <Card
             key={tier.name}
-            style={{
-              border: tier.highlighted ? '1px solid #201B21' : '1px solid #E8DFB0',
-              borderRadius: 8,
-              padding: 24,
-              background: tier.highlighted ? '#201B21' : '#FCF9E8',
-              color: tier.highlighted ? '#FCF9E8' : '#201B21',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 16,
-            }}
+            className={cn(
+              'flex flex-col gap-4 p-6',
+              tier.highlighted &&
+                'border-primary bg-primary text-primary-foreground [&_*]:text-primary-foreground',
+            )}
           >
             <div>
-              <h2 style={{ fontSize: '1.25rem', margin: 0 }}>{tier.name}</h2>
+              <h2 className="m-0 text-xl font-semibold">{tier.name}</h2>
               <p
-                style={{
-                  color: tier.highlighted ? '#C9BC85' : '#3D3730',
-                  lineHeight: 1.55,
-                  marginTop: 8,
-                  marginBottom: 0,
-                  fontSize: '0.9rem',
-                }}
+                className={cn(
+                  'mt-2 mb-0 text-sm leading-relaxed',
+                  tier.highlighted ? 'text-primary-foreground/70' : 'text-muted-foreground',
+                )}
               >
                 {tier.description}
               </p>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <span style={{ fontSize: '2rem', fontWeight: 700 }}>{tier.price}</span>
+            <div className="flex items-baseline gap-1">
+              <span className="text-3xl font-bold">{tier.price}</span>
               {tier.cadence && (
                 <span
-                  style={{
-                    color: tier.highlighted ? '#8A8270' : '#5C5546',
-                    fontSize: '0.9rem',
-                  }}
+                  className={cn(
+                    'text-sm',
+                    tier.highlighted ? 'text-primary-foreground/60' : 'text-muted-foreground',
+                  )}
                 >
                   {tier.cadence}
                 </span>
               )}
             </div>
 
-            <ul
-              style={{
-                listStyle: 'none',
-                padding: 0,
-                margin: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 8,
-              }}
-            >
+            <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
               {tier.features.map((feature) => (
-                <li
-                  key={feature}
-                  style={{
-                    fontSize: '0.9rem',
-                    color: tier.highlighted ? '#E8DFB0' : '#2A2528',
-                    display: 'flex',
-                    gap: 8,
-                  }}
-                >
+                <li key={feature} className="flex gap-2">
                   <span aria-hidden="true">•</span>
                   {feature}
                 </li>
               ))}
             </ul>
 
-            <button
+            <Button
               type="button"
-              style={{
-                marginTop: 'auto',
-                padding: '10px 16px',
-                borderRadius: 6,
-                border: tier.highlighted ? '1px solid #FCF9E8' : '1px solid #201B21',
-                background: tier.highlighted ? '#FCF9E8' : '#201B21',
-                color: tier.highlighted ? '#201B21' : '#FCF9E8',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-              }}
+              variant={tier.highlighted ? 'secondary' : 'default'}
+              size="lg"
+              className="mt-auto"
             >
               {tier.cta}
-            </button>
-          </article>
+            </Button>
+          </Card>
         ))}
       </section>
     </main>

@@ -1,0 +1,36 @@
+{
+  "name": "@pinagent/ui",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared shadcn/ui components and Tailwind theme for Pinagent Next.js apps.",
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    "./styles/globals.css": "./src/styles/globals.css",
+    "./lib/utils": "./src/lib/utils.ts",
+    "./brand": "./src/brand.ts",
+    "./components/ui/button": "./src/components/ui/button.tsx",
+    "./components/ui/card": "./src/components/ui/card.tsx",
+    "./components/ui/logo": "./src/components/ui/logo.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.6.0"
+  },
+  "peerDependencies": {
+    "react": "^18 || ^19",
+    "tailwindcss": "^4"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.15",
+    "react": "^19.2.6",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+/*
+ * Scan this package's own components so consumers automatically pick up
+ * every Tailwind utility class used inside @pinagent/ui. Paths are
+ * resolved relative to this CSS file (packages/ui/src/styles/).
+ */
+@source "../components/**/*.{ts,tsx}";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-xs: calc(var(--radius) * 0.5);
+  --radius-sm: calc(var(--radius) * 0.75);
+  --radius-md: calc(var(--radius) * 0.875);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+}
+
+:root {
+  /*
+   * Pinagent palette — cream on dark.
+   *   Background: #FCF9E8
+   *   Darks:      #201B21
+   */
+  --background: #fcf9e8;
+  --foreground: #201b21;
+  --card: #fcf9e8;
+  --card-foreground: #201b21;
+  --popover: #fcf9e8;
+  --popover-foreground: #201b21;
+  --primary: #201b21;
+  --primary-foreground: #fcf9e8;
+  --secondary: #f5efd0;
+  --secondary-foreground: #201b21;
+  --muted: #f5efd0;
+  --muted-foreground: #5c5546;
+  --accent: #ffd700;
+  --accent-foreground: #201b21;
+  --destructive: #b91c1c;
+  --destructive-foreground: #fcf9e8;
+  --border: #e8dfb0;
+  --input: #e8dfb0;
+  --ring: #201b21;
+
+  --radius: 0.625rem;
+}
+
+.dark {
+  --background: #201b21;
+  --foreground: #fcf9e8;
+  --card: #2a2528;
+  --card-foreground: #fcf9e8;
+  --popover: #2a2528;
+  --popover-foreground: #fcf9e8;
+  --primary: #fcf9e8;
+  --primary-foreground: #201b21;
+  --secondary: #2a2528;
+  --secondary-foreground: #fcf9e8;
+  --muted: #2a2528;
+  --muted-foreground: #c9bc85;
+  --accent: #ffd700;
+  --accent-foreground: #201b21;
+  --destructive: #b91c1c;
+  --destructive-foreground: #fcf9e8;
+  --border: #3d3730;
+  --input: #3d3730;
+  --ring: #fcf9e8;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

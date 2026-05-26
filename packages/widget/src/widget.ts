@@ -1,3 +1,4 @@
+import { BRAND_CREAM, BRAND_VIEWBOX, PICKER_CURSOR_DATA_URL, PIN_PATH } from '@pinagent/ui/brand';
 import { flushBrowserDb, getBrowserDb, initBrowserDb } from './db/client';
 import { getConversationMessages, listPendingForCurrentPage, type PendingRow } from './db/reads';
 import {
@@ -142,7 +143,7 @@ const DOC_STYLES = `
    32x32 cursor space. The crosshair fallback covers browsers that
    won't render SVG cursors. */
 :root.pa-picking, :root.pa-picking * {
-  cursor: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 93 93'%3E%3Cg transform='rotate(135 46.5 46.5)'%3E%3Cpath d='M38.0761 27C24.2046 27 16.7486 43.8193 26.2852 53.7027L26.4587 53.8761L47.2659 74.6834L68.0732 53.8761L68.2466 53.7027C77.9567 43.8193 70.3273 27 56.4558 27L38.0761 27Z' fill='%23201B21' stroke='%23FCF9E8' stroke-width='4' stroke-linejoin='round'/%3E%3C/g%3E%3C/svg%3E") 9 9, crosshair !important;
+  cursor: ${PICKER_CURSOR_DATA_URL}, crosshair !important;
 }
 
 .pa-iframe {
@@ -470,7 +471,7 @@ export function mount(): void {
   fab.type = 'button';
   fab.title = 'Pinagent — pick an element';
   fab.style.pointerEvents = 'auto';
-  fab.appendChild(buildPinIcon(26, '#FCF9E8'));
+  fab.appendChild(buildPinIcon(26, BRAND_CREAM));
   root.appendChild(fab);
 
   const outline = document.createElement('div');
@@ -2129,21 +2130,12 @@ function composerHTML(metaText: string): string {
 </body></html>`;
 }
 
-/**
- * Pinagent pin-shape path (teardrop). 93x93 viewBox. Single shape on
- * a transparent background — caller picks fill via the path's fill
- * attribute. The full-logo version sits on a cream `#FCF9E8` square,
- * but the FAB uses just the pin in cream against the dark button.
- */
-const PIN_PATH =
-  'M38.0761 27C24.2046 27 16.7486 43.8193 26.2852 53.7027L26.4587 53.8761L47.2659 74.6834L68.0732 53.8761L68.2466 53.7027C77.9567 43.8193 70.3273 27 56.4558 27L38.0761 27Z';
-
 function buildPinIcon(size: number, fill: string): SVGSVGElement {
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('width', String(size));
   svg.setAttribute('height', String(size));
-  svg.setAttribute('viewBox', '0 0 93 93');
+  svg.setAttribute('viewBox', BRAND_VIEWBOX);
   svg.setAttribute('aria-hidden', 'true');
   const path = document.createElementNS(ns, 'path');
   path.setAttribute('d', PIN_PATH);
