@@ -1,5 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { SVGProps } from 'react';
-import { BRAND_CREAM, BRAND_INK, BRAND_VIEWBOX, PIN_PATH } from '../../brand';
+import { BRAND_CREAM, BRAND_INK, BRAND_VIEWBOX, PIN_PATH } from './brand';
 
 export interface LogoProps extends Omit<SVGProps<SVGSVGElement>, 'viewBox'> {
   size?: number;

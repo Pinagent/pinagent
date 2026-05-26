@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Pinagent brand primitives. Single source of truth for the pin
  * shape and the two brand colors — imported by the widget bundle,

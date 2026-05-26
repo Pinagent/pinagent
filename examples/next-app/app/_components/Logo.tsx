@@ -1,4 +1,5 @@
-import { BRAND_INK, BRAND_VIEWBOX, PIN_PATH } from '@pinagent/ui/brand';
+// SPDX-License-Identifier: Apache-2.0
+import { BRAND_INK, BRAND_VIEWBOX, PIN_PATH } from '@pinagent/widget/brand';
 import type { SVGProps } from 'react';
 
 interface LogoProps extends Omit<SVGProps<SVGSVGElement>, 'viewBox'> {

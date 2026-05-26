@@ -10,10 +10,8 @@
   "exports": {
     "./styles/globals.css": "./src/styles/globals.css",
     "./lib/utils": "./src/lib/utils.ts",
-    "./brand": "./src/brand.ts",
     "./components/ui/button": "./src/components/ui/button.tsx",
-    "./components/ui/card": "./src/components/ui/card.tsx",
-    "./components/ui/logo": "./src/components/ui/logo.tsx"
+    "./components/ui/card": "./src/components/ui/card.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

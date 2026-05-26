@@ -1,4 +1,4 @@
-import { BRAND_CREAM, BRAND_VIEWBOX, PICKER_CURSOR_DATA_URL, PIN_PATH } from '@pinagent/ui/brand';
+import { BRAND_CREAM, BRAND_VIEWBOX, PICKER_CURSOR_DATA_URL, PIN_PATH } from './brand';
 import { flushBrowserDb, getBrowserDb, initBrowserDb } from './db/client';
 import { getConversationMessages, listPendingForCurrentPage, type PendingRow } from './db/reads';
 import {

@@ -1,4 +1,4 @@
-import { Logo } from '@pinagent/ui/components/ui/logo';
+import { Logo } from '@pinagent/widget/logo';
 import { useState } from 'react';
 import { Counter } from './Counter';
 
