@@ -11,13 +11,13 @@ export default function DocsPage() {
       }}
     >
       <h1 style={{ fontSize: '2.25rem' }}>Docs</h1>
-      <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
+      <p style={{ color: '#3D3730', lineHeight: 1.55 }}>
         Pinagent turns any UI element into a comment thread an agent can act on. Click an element in
         the browser, leave a note, and the agent edits the underlying code directly — no copying
         file paths, no describing where the element lives in your tree, no context-switching back to
         your editor.
       </p>
-      <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
+      <p style={{ color: '#3D3730', lineHeight: 1.55 }}>
         Under the hood, Pinagent instruments your JSX at build time so every rendered element
         carries its source location. When you click, the widget captures a screenshot, the
         surrounding DOM, and the file:line of the element, then hands the whole bundle to an agent.
@@ -26,14 +26,14 @@ export default function DocsPage() {
       <section style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
         <article
           style={{
-            border: '1px solid #e5e7eb',
+            border: '1px solid #E8DFB0',
             borderRadius: 8,
             padding: 20,
-            background: '#f9fafb',
+            background: '#FCF9E8',
           }}
         >
           <h2 style={{ fontSize: '1.25rem', margin: 0 }}>How it works</h2>
-          <ol style={{ color: '#374151', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
+          <ol style={{ color: '#2A2528', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
             <li>
               Click the <Logo size={14} style={{ verticalAlign: '-2px', borderRadius: 3 }} /> button
               in the bottom-right of any page.
@@ -62,14 +62,14 @@ export default function DocsPage() {
 
         <article
           style={{
-            border: '1px solid #e5e7eb',
+            border: '1px solid #E8DFB0',
             borderRadius: 8,
             padding: 20,
-            background: '#f9fafb',
+            background: '#FCF9E8',
           }}
         >
           <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Setup in a Next.js app</h2>
-          <ol style={{ color: '#374151', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
+          <ol style={{ color: '#2A2528', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
             <li>
               Install the Pinagent package in your app: <code>npm install @pinagent/next</code>.
             </li>
@@ -86,7 +86,7 @@ export default function DocsPage() {
               go.
             </li>
           </ol>
-          <p style={{ color: '#4b5563', lineHeight: 1.55, marginTop: 12 }}>
+          <p style={{ color: '#3D3730', lineHeight: 1.55, marginTop: 12 }}>
             That&apos;s it — every page in your app is now click-to-comment. Pinagent only activates
             in development, so there&apos;s no runtime cost in production builds.
           </p>
@@ -94,18 +94,18 @@ export default function DocsPage() {
 
         <article
           style={{
-            border: '1px solid #e5e7eb',
+            border: '1px solid #E8DFB0',
             borderRadius: 8,
             padding: 20,
-            background: '#f9fafb',
+            background: '#FCF9E8',
           }}
         >
           <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Agent runtimes</h2>
-          <p style={{ color: '#4b5563', lineHeight: 1.55, marginTop: 12 }}>
+          <p style={{ color: '#3D3730', lineHeight: 1.55, marginTop: 12 }}>
             Pinagent can route feedback to two different agent runtimes. Pick whichever matches how
             you already work.
           </p>
-          <ul style={{ color: '#374151', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
+          <ul style={{ color: '#2A2528', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
             <li>
               <strong>MCP into Claude Code</strong> — feedback streams into your running Claude Code
               session as channel events you can act on inline. Best when you want to stay in one
@@ -121,14 +121,14 @@ export default function DocsPage() {
 
         <article
           style={{
-            border: '1px solid #e5e7eb',
+            border: '1px solid #E8DFB0',
             borderRadius: 8,
             padding: 20,
-            background: '#f9fafb',
+            background: '#FCF9E8',
           }}
         >
           <h2 style={{ fontSize: '1.25rem', margin: 0 }}>What you can comment on</h2>
-          <ul style={{ color: '#374151', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
+          <ul style={{ color: '#2A2528', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
             <li>Copy edits — &quot;change this heading to &apos;Welcome back&apos;&quot;.</li>
             <li>
               Styling tweaks — &quot;add more padding&quot;, &quot;make this card border
@@ -142,14 +142,14 @@ export default function DocsPage() {
 
         <article
           style={{
-            border: '1px solid #e5e7eb',
+            border: '1px solid #E8DFB0',
             borderRadius: 8,
             padding: 20,
-            background: '#f9fafb',
+            background: '#FCF9E8',
           }}
         >
           <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Tips</h2>
-          <ul style={{ color: '#374151', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
+          <ul style={{ color: '#2A2528', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
             <li>Keep comments scoped to one change — agents act conservatively.</li>
             <li>
               Click the element closest to what you want changed; Pinagent uses its file and line to

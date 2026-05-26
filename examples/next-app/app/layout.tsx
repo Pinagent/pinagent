@@ -10,14 +10,14 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" style={{ height: '100vh' }}>
-      <body style={{ margin: 0, background: '#ffffff', fontFamily: 'system-ui, sans-serif' }}>
+      <body style={{ margin: 0, background: '#FCF9E8', fontFamily: 'system-ui, sans-serif' }}>
         <div style={{ display: 'flex', minHeight: '100vh' }}>
           <aside
             style={{
               width: 240,
               flexShrink: 0,
-              background: '#ffffff',
-              borderRight: '1px solid #d1d5db',
+              background: '#FCF9E8',
+              borderRight: '1px solid #C9BC85',
               padding: '24px 20px',
               boxSizing: 'border-box',
               position: 'sticky',
@@ -42,7 +42,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </div>
             <SideNav />
           </aside>
-          <div style={{ flex: 1, minWidth: 0, background: '#ffffff' }}>{children}</div>
+          <div style={{ flex: 1, minWidth: 0, background: '#FCF9E8' }}>{children}</div>
         </div>
         <div
           aria-label="Pinagent logo"
@@ -54,17 +54,17 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             alignItems: 'center',
             gap: 8,
             padding: '6px 12px',
-            background: '#111827',
-            border: '1px solid #374151',
+            background: '#201B21',
+            border: '1px solid #2A2528',
             borderRadius: 999,
             boxShadow: '0 1px 2px rgba(0,0,0,0.4)',
             fontWeight: 600,
             fontSize: '0.875rem',
-            color: '#f9fafb',
+            color: '#FCF9E8',
             zIndex: 1000,
           }}
         >
-          <Logo size={16} variant="mono" style={{ color: '#f9fafb' }} />
+          <Logo size={16} variant="mono" style={{ color: '#FCF9E8' }} />
           Pinagent
         </div>
         <Pinagent />

@@ -32,9 +32,9 @@ export function SideNav() {
             style={{
               padding: '8px 10px',
               borderRadius: 6,
-              color: isActive ? '#111827' : '#4b5563',
+              color: isActive ? '#201B21' : '#3D3730',
               textDecoration: 'none',
-              background: isActive ? '#f3f4f6' : 'transparent',
+              background: isActive ? '#F5EFD0' : 'transparent',
               fontWeight: isActive ? 500 : 400,
               fontSize: 13,
             }}

@@ -9,19 +9,19 @@ export default function ContactPage() {
       }}
     >
       <h1 style={{ fontSize: '2.25rem' }}>Contact</h1>
-      <p style={{ color: '#4b5563', lineHeight: 1.55 }}>Get in touch with the Pinagent team.</p>
+      <p style={{ color: '#3D3730', lineHeight: 1.55 }}>Get in touch with the Pinagent team.</p>
 
       <section style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <article
           style={{
-            border: '1px solid #e5e7eb',
+            border: '1px solid #E8DFB0',
             borderRadius: 8,
             padding: 20,
-            background: '#f9fafb',
+            background: '#FCF9E8',
           }}
         >
           <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Email</h2>
-          <p style={{ color: '#374151', lineHeight: 1.55, marginTop: 8, marginBottom: 0 }}>
+          <p style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 8, marginBottom: 0 }}>
             <a href="mailto:hello@pinagent.dev" style={{ color: '#2563eb' }}>
               hello@pinagent.dev
             </a>
@@ -30,28 +30,28 @@ export default function ContactPage() {
 
         <article
           style={{
-            border: '1px solid #e5e7eb',
+            border: '1px solid #E8DFB0',
             borderRadius: 8,
             padding: 20,
-            background: '#f9fafb',
+            background: '#FCF9E8',
           }}
         >
           <h2 style={{ fontSize: '1.25rem', margin: 0 }}>GitHub</h2>
-          <p style={{ color: '#374151', lineHeight: 1.55, marginTop: 8, marginBottom: 0 }}>
+          <p style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 8, marginBottom: 0 }}>
             File issues or open pull requests on the Pinagent repository.
           </p>
         </article>
 
         <article
           style={{
-            border: '1px solid #e5e7eb',
+            border: '1px solid #E8DFB0',
             borderRadius: 8,
             padding: 20,
-            background: '#f9fafb',
+            background: '#FCF9E8',
           }}
         >
           <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Community</h2>
-          <p style={{ color: '#374151', lineHeight: 1.55, marginTop: 8, marginBottom: 0 }}>
+          <p style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 8, marginBottom: 0 }}>
             Join the conversation in our community channels for support, ideas, and discussion.
           </p>
         </article>

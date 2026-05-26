@@ -134,12 +134,12 @@ const issues: Issue[] = [
 const priorityColor: Record<Issue['priority'], string> = {
   High: '#b91c1c',
   Medium: '#b45309',
-  Low: '#4b5563',
+  Low: '#3D3730',
 };
 
 const statusColor: Record<Issue['status'], { fg: string; bg: string }> = {
   Open: { fg: '#1d4ed8', bg: '#dbeafe' },
-  Triaged: { fg: '#4b5563', bg: '#f3f4f6' },
+  Triaged: { fg: '#3D3730', bg: '#F5EFD0' },
   'In review': { fg: '#7c3aed', bg: '#ede9fe' },
   'In progress': { fg: '#b45309', bg: '#fef3c7' },
   Fixed: { fg: '#047857', bg: '#d1fae5' },
@@ -166,7 +166,7 @@ export default function IssuesPage() {
       }}
     >
       <h1 style={{ fontSize: '2.25rem' }}>Issues</h1>
-      <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
+      <p style={{ color: '#3D3730', lineHeight: 1.55 }}>
         A running log of bugs and rough edges surfaced while building Pinagent — the
         click-to-comment widget itself, the source-map transform, the persistent storage layer, the
         agent runtimes, and the example apps that exercise all of them. Each item lists the affected
@@ -219,9 +219,9 @@ export default function IssuesPage() {
               flexDirection: 'column',
               gap: 8,
               padding: '14px 16px',
-              border: '1px solid #e5e7eb',
+              border: '1px solid #E8DFB0',
               borderRadius: 8,
-              background: '#ffffff',
+              background: '#FCF9E8',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -229,13 +229,13 @@ export default function IssuesPage() {
                 style={{
                   fontFamily: 'ui-monospace, SFMono-Regular, monospace',
                   fontSize: '0.8125rem',
-                  color: '#6b7280',
+                  color: '#5C5546',
                   minWidth: 64,
                 }}
               >
                 {issue.id}
               </span>
-              <span style={{ flex: 1, color: '#111827', fontWeight: 500 }}>{issue.title}</span>
+              <span style={{ flex: 1, color: '#201B21', fontWeight: 500 }}>{issue.title}</span>
               <span
                 style={{
                   fontSize: '0.75rem',
@@ -258,10 +258,10 @@ export default function IssuesPage() {
                 {issue.status}
               </span>
             </div>
-            <p style={{ color: '#4b5563', lineHeight: 1.5, margin: 0, fontSize: '0.9375rem' }}>
+            <p style={{ color: '#3D3730', lineHeight: 1.5, margin: 0, fontSize: '0.9375rem' }}>
               {issue.description}
             </p>
-            <div style={{ display: 'flex', gap: 12, fontSize: '0.75rem', color: '#6b7280' }}>
+            <div style={{ display: 'flex', gap: 12, fontSize: '0.75rem', color: '#5C5546' }}>
               <span>
                 <code style={{ fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>
                   {issue.component}

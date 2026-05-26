@@ -52,7 +52,7 @@ export default function PricingPage() {
       }}
     >
       <h1 style={{ fontSize: '2.25rem', marginBottom: 8 }}>Pricing</h1>
-      <p style={{ color: '#4b5563', lineHeight: 1.55, marginTop: 0 }}>
+      <p style={{ color: '#3D3730', lineHeight: 1.55, marginTop: 0 }}>
         Simple, transparent pricing. Pick the plan that fits your team.
       </p>
 
@@ -68,11 +68,11 @@ export default function PricingPage() {
           <article
             key={tier.name}
             style={{
-              border: tier.highlighted ? '1px solid #111827' : '1px solid #e5e7eb',
+              border: tier.highlighted ? '1px solid #201B21' : '1px solid #E8DFB0',
               borderRadius: 8,
               padding: 24,
-              background: tier.highlighted ? '#111827' : '#f9fafb',
-              color: tier.highlighted ? '#f9fafb' : '#111827',
+              background: tier.highlighted ? '#201B21' : '#FCF9E8',
+              color: tier.highlighted ? '#FCF9E8' : '#201B21',
               display: 'flex',
               flexDirection: 'column',
               gap: 16,
@@ -82,7 +82,7 @@ export default function PricingPage() {
               <h2 style={{ fontSize: '1.25rem', margin: 0 }}>{tier.name}</h2>
               <p
                 style={{
-                  color: tier.highlighted ? '#d1d5db' : '#4b5563',
+                  color: tier.highlighted ? '#C9BC85' : '#3D3730',
                   lineHeight: 1.55,
                   marginTop: 8,
                   marginBottom: 0,
@@ -98,7 +98,7 @@ export default function PricingPage() {
               {tier.cadence && (
                 <span
                   style={{
-                    color: tier.highlighted ? '#9ca3af' : '#6b7280',
+                    color: tier.highlighted ? '#8A8270' : '#5C5546',
                     fontSize: '0.9rem',
                   }}
                 >
@@ -122,7 +122,7 @@ export default function PricingPage() {
                   key={feature}
                   style={{
                     fontSize: '0.9rem',
-                    color: tier.highlighted ? '#e5e7eb' : '#374151',
+                    color: tier.highlighted ? '#E8DFB0' : '#2A2528',
                     display: 'flex',
                     gap: 8,
                   }}
@@ -139,9 +139,9 @@ export default function PricingPage() {
                 marginTop: 'auto',
                 padding: '10px 16px',
                 borderRadius: 6,
-                border: tier.highlighted ? '1px solid #f9fafb' : '1px solid #111827',
-                background: tier.highlighted ? '#f9fafb' : '#111827',
-                color: tier.highlighted ? '#111827' : '#f9fafb',
+                border: tier.highlighted ? '1px solid #FCF9E8' : '1px solid #201B21',
+                background: tier.highlighted ? '#FCF9E8' : '#201B21',
+                color: tier.highlighted ? '#201B21' : '#FCF9E8',
                 fontWeight: 600,
                 fontSize: '0.9rem',
                 cursor: 'pointer',
