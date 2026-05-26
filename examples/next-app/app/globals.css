@@ -1,0 +1,8 @@
+@import "@pinagent/ui/styles/globals.css";
+
+/*
+ * Tailwind v4 auto-detects sources from the directory containing this
+ * CSS file. That picks up `app/` automatically; this @source line just
+ * makes the scan explicit and tolerant of any future moves.
+ */
+@source "./**/*.{ts,tsx}";

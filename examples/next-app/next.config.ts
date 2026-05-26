@@ -3,6 +3,7 @@ import type { NextConfig } from 'next';
 
 const coreConfig: NextConfig = {
   reactStrictMode: true,
+  transpilePackages: ['@pinagent/ui'],
 };
 
 // pinagent(config, options?) — see packages/next/src/config.ts.

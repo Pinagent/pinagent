@@ -1,7 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Pinagent } from '@pinagent/next';
 import type { ReactNode } from 'react';
 import { Logo } from './_components/Logo';
 import { SideNav } from './_components/SideNav';
+import './globals.css';
 
 export const metadata = {
   title: 'Pinagent Next example',
@@ -9,62 +11,23 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" style={{ height: '100vh' }}>
-      <body style={{ margin: 0, background: '#FCF9E8', fontFamily: 'system-ui, sans-serif' }}>
-        <div style={{ display: 'flex', minHeight: '100vh' }}>
-          <aside
-            style={{
-              width: 240,
-              flexShrink: 0,
-              background: '#FCF9E8',
-              borderRight: '1px solid #C9BC85',
-              padding: '24px 20px',
-              boxSizing: 'border-box',
-              position: 'sticky',
-              top: 0,
-              alignSelf: 'flex-start',
-              height: '100vh',
-              overflowY: 'auto',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                fontWeight: 700,
-                fontSize: '1.05rem',
-                marginBottom: 20,
-              }}
-            >
+    <html lang="en" className="h-screen">
+      <body className="m-0 bg-background font-sans text-foreground">
+        <div className="flex min-h-screen">
+          <aside className="sticky top-0 box-border h-screen w-60 shrink-0 self-start overflow-y-auto border-r border-border bg-background px-5 py-6">
+            <div className="mb-5 flex items-center gap-2 text-[1.05rem] font-bold">
               <Logo size={22} />
               Pinagent
             </div>
             <SideNav />
           </aside>
-          <div style={{ flex: 1, minWidth: 0, background: '#FCF9E8' }}>{children}</div>
+          <div className="min-w-0 flex-1 bg-background">{children}</div>
         </div>
         <div
           aria-label="Pinagent logo"
-          style={{
-            position: 'fixed',
-            top: 16,
-            right: 16,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '6px 12px',
-            background: '#201B21',
-            border: '1px solid #2A2528',
-            borderRadius: 999,
-            boxShadow: '0 1px 2px rgba(0,0,0,0.4)',
-            fontWeight: 600,
-            fontSize: '0.875rem',
-            color: '#FCF9E8',
-            zIndex: 1000,
-          }}
+          className="fixed right-4 top-4 z-50 flex items-center gap-2 rounded-full border border-primary bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground shadow"
         >
-          <Logo size={16} variant="mono" style={{ color: '#FCF9E8' }} />
+          <Logo size={16} variant="mono" />
           Pinagent
         </div>
         <Pinagent />
