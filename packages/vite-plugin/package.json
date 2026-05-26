@@ -1,6 +1,7 @@
 {
   "name": "@pinagent/vite-plugin",
   "version": "0.0.2",
+  "license": "Apache-2.0",
   "description": "Vite plugin for Pinagent: tags JSX with file:line, injects the widget, serves /__pinagent middleware.",
   "type": "module",
   "main": "dist/index.cjs",
