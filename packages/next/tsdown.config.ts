@@ -5,7 +5,7 @@ const common = {
   dts: true,
   target: 'node20' as const,
   platform: 'node' as const,
-  external: ['next', 'react', 'react/jsx-runtime'],
+  deps: { neverBundle: ['next', 'react', 'react/jsx-runtime'] },
   sourcemap: true,
   splitting: false,
   // Match tsup naming: ESM as `.js`, CJS as `.cjs`. package.json's

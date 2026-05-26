@@ -15,5 +15,3 @@ type NextConfig = any;
 export default function pinagent(config: NextConfig = {}): NextConfig {
   return config;
 }
-
-export { pinagent };

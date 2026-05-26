@@ -170,5 +170,3 @@ export default function pinagent(
 
   return next;
 }
-
-export { pinagent };
