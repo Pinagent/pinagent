@@ -20,8 +20,7 @@ describe('shortSelector', () => {
   });
 
   it('adds :nth-of-type when there are multiple same-tag siblings', () => {
-    document.body.innerHTML =
-      '<ul><li>a</li><li>b</li><li>c</li></ul>';
+    document.body.innerHTML = '<ul><li>a</li><li>b</li><li>c</li></ul>';
     const items = document.querySelectorAll('li');
     expect(shortSelector(items[0]!)).toBe('body > ul > li:nth-of-type(1)');
     expect(shortSelector(items[1]!)).toBe('body > ul > li:nth-of-type(2)');
@@ -29,8 +28,7 @@ describe('shortSelector', () => {
   });
 
   it('omits :nth-of-type when there is only one same-tag sibling', () => {
-    document.body.innerHTML =
-      '<div><span>a</span><p>b</p><span>c</span></div>';
+    document.body.innerHTML = '<div><span>a</span><p>b</p><span>c</span></div>';
     const p = document.querySelector('p') as Element;
     expect(shortSelector(p)).toBe('body > div > p');
   });
@@ -42,8 +40,7 @@ describe('shortSelector', () => {
   });
 
   it('honours maxDepth (truncates the upward walk)', () => {
-    document.body.innerHTML =
-      '<a><b><c><d><e>leaf</e></d></c></b></a>';
+    document.body.innerHTML = '<a><b><c><d><e>leaf</e></d></c></b></a>';
     const leaf = document.querySelector('e') as Element;
     const sel = shortSelector(leaf, 2);
     // 2 levels walked → at most 2 tag segments before we run out.

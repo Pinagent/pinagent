@@ -27,7 +27,7 @@ describe('transformJsx', () => {
   });
 
   it('tags a single self-closing element', () => {
-    const out = transform(`const X = <Foo />;`);
+    const out = transform('const X = <Foo />;');
     expect(out).not.toBeNull();
     expect(out).toMatch(tagPattern);
     expect(out).toContain('<Foo data-pa-loc=');
@@ -57,7 +57,7 @@ describe('transformJsx', () => {
   });
 
   it('does not tag fragments', () => {
-    const out = transform(`const X = <><span>a</span></>;`);
+    const out = transform('const X = <><span>a</span></>;');
     expect(out).not.toBeNull();
     // The <span> gets tagged. The fragment itself doesn't have a name
     // to attach an attribute to.
@@ -67,7 +67,7 @@ describe('transformJsx', () => {
   });
 
   it('is idempotent — running twice does not double-tag', () => {
-    const once = transform(`const X = <Foo />;`);
+    const once = transform('const X = <Foo />;');
     expect(once).not.toBeNull();
     const twice = transform(once!);
     // No second tag added → no mutation → null returned.
@@ -86,27 +86,27 @@ describe('transformJsx', () => {
   });
 
   it('tags member-expression names (e.g. <Foo.Bar />)', () => {
-    const out = transform(`const X = <Foo.Bar />;`);
+    const out = transform('const X = <Foo.Bar />;');
     expect(out).not.toBeNull();
     expect(out).toMatch(tagPattern);
   });
 
   it('skips namespaced names (e.g. <svg:circle />) — uncommon, opt-out by spec', () => {
-    const out = transform(`const X = <svg:circle />;`);
+    const out = transform('const X = <svg:circle />;');
     // No tag added → no mutation → null
     expect(out).toBeNull();
   });
 
   it('preserves source line/column relationship to the inserted attribute', () => {
     // <Foo on line 1 col 11 (0-indexed col 10, +1 → 11)
-    const out = transform(`const X = <Foo />;`);
+    const out = transform('const X = <Foo />;');
     expect(out).toContain(`data-pa-loc="${RELPATH}:1:11"`);
   });
 
   it('uses ts:false when given a plain .jsx file', () => {
     // No TS-specific syntax in the input but parser must still accept it
     // without the typescript plugin.
-    const out = transformJsx(`const X = <Foo />;`, { relPath: 'Foo.jsx', ts: false });
+    const out = transformJsx('const X = <Foo />;', { relPath: 'Foo.jsx', ts: false });
     expect(out).not.toBeNull();
   });
 

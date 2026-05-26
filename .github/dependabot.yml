@@ -1,0 +1,30 @@
+version: 2
+updates:
+  # Keep npm dependencies fresh across the monorepo. Dependabot follows
+  # pnpm-workspace.yaml, so it sees every workspace package.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Group dev-tool bumps (biome, turbo, tsdown, vitest, typescript)
+      # into one PR per week — they're low-risk and high-noise otherwise.
+      dev-tooling:
+        patterns:
+          - '@biomejs/*'
+          - 'turbo'
+          - 'tsdown'
+          - 'vitest'
+          - 'typescript'
+          - 'sherif'
+          - '@changesets/*'
+
+  # GitHub Actions versions (actions/checkout, actions/setup-node,
+  # pnpm/action-setup). Low-frequency, but pinning matters for CI
+  # reproducibility and security.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

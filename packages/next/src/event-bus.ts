@@ -145,9 +145,9 @@ class EventBus {
 // feedbackId, two separate stores, silent UI. A globalThis-keyed
 // Symbol pins the Map across all instances.
 const BUSES_SYMBOL = Symbol.for('pinagent.event-bus.buses');
-const buses: Map<string, EventBus> = ((globalThis as Record<symbol, unknown>)[
-  BUSES_SYMBOL
-] as Map<string, EventBus> | undefined) ?? new Map<string, EventBus>();
+const buses: Map<string, EventBus> =
+  ((globalThis as Record<symbol, unknown>)[BUSES_SYMBOL] as Map<string, EventBus> | undefined) ??
+  new Map<string, EventBus>();
 (globalThis as Record<symbol, unknown>)[BUSES_SYMBOL] = buses;
 
 export function getOrCreateBus(id: string): EventBus {

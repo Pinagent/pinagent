@@ -1,17 +1,17 @@
 import type { Server as HttpServer } from 'node:http';
 import { join } from 'node:path';
-import { WebSocketServer, type WebSocket } from 'ws';
+import { type WebSocket, WebSocketServer } from 'ws';
 import { resolveAsk } from './ask-user';
 import { type AgentEvent, getOrCreateBus } from './event-bus';
 import { enqueue } from './merge-queue';
 import { Storage } from './storage';
+import { clearWarning, isStale, sweepStaleWorktrees } from './worktree-ttl';
 import {
   type ClientMessage,
   ClientMessageSchema,
   type ServerMessage,
   type WorktreeWireState,
 } from './ws-protocol';
-import { clearWarning, isStale, sweepStaleWorktrees } from './worktree-ttl';
 
 const DEFAULT_PORT = 53636;
 const WS_PATH = '/__pinagent/ws';

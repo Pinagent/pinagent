@@ -9,6 +9,7 @@
     "dev": "turbo run dev --filter='./packages/*'",
     "typecheck": "turbo run typecheck",
     "lint": "biome check .",
+    "lint:fix": "biome check --write .",
     "lint:deps": "sherif --ignore-package react-vite-example --ignore-package next-app-example",
     "lint:deps:fix": "sherif --fix --ignore-package react-vite-example --ignore-package next-app-example",
     "format": "biome format --write .",
@@ -29,7 +30,7 @@
     "vitest": "^3.2.4"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.18.0"
   },
   "packageManager": "pnpm@10.14.0"
 }

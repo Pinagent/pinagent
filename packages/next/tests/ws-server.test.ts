@@ -41,9 +41,7 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
-  const handle = (globalThis as Record<symbol, { wss?: { close: () => void } }>)[
-    SINGLETON_KEY
-  ];
+  const handle = (globalThis as Record<symbol, { wss?: { close: () => void } }>)[SINGLETON_KEY];
   handle?.wss?.close();
   (globalThis as Record<symbol, unknown>)[SINGLETON_KEY] = undefined;
 });
@@ -236,7 +234,7 @@ describe('ws-server', () => {
     await c.waitFor(
       (m) =>
         (m as { type?: string }).type === 'event' &&
-        ((m as { event?: { text?: string } }).event?.text === 'before'),
+        (m as { event?: { text?: string } }).event?.text === 'before',
     );
 
     c.send({ type: 'unsubscribe', feedbackId: id });
@@ -247,11 +245,13 @@ describe('ws-server', () => {
     bus.getOrCreateBus(id).publish({ type: 'text', text: 'after' });
     await new Promise((r) => setTimeout(r, 50));
     // After unsubscribe, no new event frames should arrive.
-    const newFrames = c.messages.slice(before).filter(
-      (m) =>
-        (m as { type?: string }).type === 'event' &&
-        ((m as { event?: { text?: string } }).event?.text === 'after'),
-    );
+    const newFrames = c.messages
+      .slice(before)
+      .filter(
+        (m) =>
+          (m as { type?: string }).type === 'event' &&
+          (m as { event?: { text?: string } }).event?.text === 'after',
+      );
     expect(newFrames).toHaveLength(0);
   });
 

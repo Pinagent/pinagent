@@ -68,10 +68,7 @@ const TRACKING_TABLE_DDL =
   '\t\t\t\tcreated_at numeric\n' +
   '\t\t\t)';
 
-export async function applyMigrations(
-  call: ExecCall,
-  migrations: MigrationEntry[],
-): Promise<void> {
+export async function applyMigrations(call: ExecCall, migrations: MigrationEntry[]): Promise<void> {
   await call('exec', { sql: TRACKING_TABLE_DDL });
 
   const lastRes = await call('exec', {

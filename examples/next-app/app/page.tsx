@@ -14,17 +14,10 @@ export default function Page() {
     >
       <h1 style={{ fontSize: '2.75rem' }}>Pinagent · Next.js demo</h1>
       <p style={{ fontWeight: 'bold' }}>
-        Click the{' '}
-        <Logo
-          size={16}
-          style={{ verticalAlign: '-3px', borderRadius: 3 }}
-        />{' '}
-        button, pick an element, and leave a comment — an agent picks it up and edits the
-        code directly.
+        Click the <Logo size={16} style={{ verticalAlign: '-3px', borderRadius: 3 }} /> button, pick
+        an element, and leave a comment — an agent picks it up and edits the code directly.
       </p>
-      <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
-        Click. Comment. Ship. Try it below.
-      </p>
+      <p style={{ color: '#4b5563', lineHeight: 1.55 }}>Click. Comment. Ship. Try it below.</p>
       <section
         style={{
           marginTop: 24,
@@ -37,9 +30,7 @@ export default function Page() {
         }}
       >
         <CounterList
-          items={[
-            { label: 'Blueberries', description: 'Tiny antioxidant-rich gems.' },
-          ]}
+          items={[{ label: 'Blueberries', description: 'Tiny antioxidant-rich gems.' }]}
         />
       </section>
       <Footer />

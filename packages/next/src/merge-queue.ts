@@ -22,9 +22,9 @@ const QUEUES_SYMBOL = Symbol.for('pinagent.merge-queue.tails');
 // Map per evaluation would break serialisation guarantees the moment
 // a tail Promise is held by one instance while the next enqueue lands
 // in another. A globalThis Symbol pins the Map across evals.
-const tails: Map<string, Promise<void>> = ((globalThis as Record<symbol, unknown>)[
-  QUEUES_SYMBOL
-] as Map<string, Promise<void>> | undefined) ?? new Map<string, Promise<void>>();
+const tails: Map<string, Promise<void>> = ((globalThis as Record<symbol, unknown>)[QUEUES_SYMBOL] as
+  | Map<string, Promise<void>>
+  | undefined) ?? new Map<string, Promise<void>>();
 (globalThis as Record<symbol, unknown>)[QUEUES_SYMBOL] = tails;
 
 /**

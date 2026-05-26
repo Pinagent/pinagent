@@ -44,9 +44,7 @@ function makeCall(raw: Database.Database): ExecCall {
       trimmed.startsWith('pragma') ||
       trimmed.startsWith('with')
     ) {
-      const rows = (stmt as { raw(): { all(...p: unknown[]): unknown[][] } })
-        .raw()
-        .all(...params);
+      const rows = (stmt as { raw(): { all(...p: unknown[]): unknown[][] } }).raw().all(...params);
       return { ok: true, rows };
     }
     stmt.run(...params);
@@ -211,18 +209,19 @@ describe('drizzle migration compatibility', () => {
     await applyMigrations(makeCall(ourRaw), []);
 
     const cols = (db: Database.Database) =>
-      db
-        .prepare('PRAGMA table_info(__drizzle_migrations)')
-        .all() as { name: string; type: string; notnull: number; pk: number }[];
+      db.prepare('PRAGMA table_info(__drizzle_migrations)').all() as {
+        name: string;
+        type: string;
+        notnull: number;
+        pk: number;
+      }[];
 
     expect(cols(ourRaw)).toEqual(cols(refRaw));
 
     // And the CREATE TABLE text stored in sqlite_master matches drizzle byte-for-byte.
     const ddl = (db: Database.Database) =>
       db
-        .prepare(
-          "SELECT sql FROM sqlite_master WHERE type='table' AND name='__drizzle_migrations'",
-        )
+        .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='__drizzle_migrations'")
         .get() as { sql: string };
     expect(ddl(ourRaw).sql).toBe(ddl(refRaw).sql);
 

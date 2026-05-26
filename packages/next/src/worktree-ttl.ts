@@ -16,15 +16,15 @@
  *     before a worktree is flagged. Set to 0 to disable the sweep.
  */
 
-import { conversations, eq, lt, and } from '@pinagent/db';
+import { and, conversations, eq, lt } from '@pinagent/db';
 import { getDb } from './db/client';
 
 const DEFAULT_TTL_DAYS = 7;
 
 const TTL_SYMBOL = Symbol.for('pinagent.worktree-ttl.flagged');
-const flagged: Set<string> = ((globalThis as Record<symbol, unknown>)[TTL_SYMBOL] as
-  | Set<string>
-  | undefined) ?? new Set<string>();
+const flagged: Set<string> =
+  ((globalThis as Record<symbol, unknown>)[TTL_SYMBOL] as Set<string> | undefined) ??
+  new Set<string>();
 (globalThis as Record<symbol, unknown>)[TTL_SYMBOL] = flagged;
 
 function ttlDays(env: NodeJS.ProcessEnv): number {

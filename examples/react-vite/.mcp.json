@@ -3,9 +3,7 @@
     "pinagent": {
       "type": "stdio",
       "command": "node",
-      "args": [
-        "/Users/jacksonmalloy/code/pinagent/packages/mcp/dist/index.js"
-      ],
+      "args": ["/Users/jacksonmalloy/code/pinagent/packages/mcp/dist/index.js"],
       "env": {}
     }
   }

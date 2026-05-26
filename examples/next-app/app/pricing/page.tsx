@@ -14,11 +14,7 @@ const tiers: Tier[] = [
     price: '$0',
     cadence: '/month',
     description: 'For solo developers trying Pinagent on personal projects.',
-    features: [
-      'Up to 3 projects',
-      'Unlimited local feedback',
-      'Community support',
-    ],
+    features: ['Up to 3 projects', 'Unlimited local feedback', 'Community support'],
     cta: 'Get started',
   },
   {
@@ -40,12 +36,7 @@ const tiers: Tier[] = [
     price: 'Custom',
     cadence: '',
     description: 'For organizations with custom security and compliance needs.',
-    features: [
-      'SSO & SAML',
-      'Audit logs',
-      'Dedicated support',
-      'Custom SLAs',
-    ],
+    features: ['SSO & SAML', 'Audit logs', 'Dedicated support', 'Custom SLAs'],
     cta: 'Contact sales',
   },
 ];

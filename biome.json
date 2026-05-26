@@ -7,9 +7,13 @@
       "**/node_modules/**",
       "**/.pinagent/**",
       "**/.next/**",
+      "**/.turbo/**",
       "**/coverage/**",
       "**/__generated__/**",
-      "**/drizzle/**"
+      "**/drizzle/**",
+      "**/next-env.d.ts",
+      "pnpm-lock.yaml",
+      "signatures/**"
     ]
   },
   "organizeImports": { "enabled": true },

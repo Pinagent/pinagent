@@ -1,7 +1,9 @@
 import { createRequire } from 'node:module';
+import type { NextConfig } from 'next';
 
-// biome-ignore lint/suspicious/noExplicitAny: NextConfig isn't easily importable as a type-only dep
-type NextConfig = any;
+type WebpackFn = NonNullable<NextConfig['webpack']>;
+type RewritesFn = NonNullable<NextConfig['rewrites']>;
+type RewritesReturn = Awaited<ReturnType<RewritesFn>>;
 
 export interface PinagentOptions {
   /**
@@ -30,8 +32,7 @@ const loaderPath = (() => {
   // Next.js 16 loads next.config.ts in a way that can leave import.meta.url
   // undefined for imported modules. Fall back to a cwd-anchored URL so
   // createRequire still produces a usable resolver.
-  const baseUrl =
-    import.meta.url ?? `file://${process.cwd()}/__pinagent_config__.js`;
+  const baseUrl = import.meta.url ?? `file://${process.cwd()}/__pinagent_config__.js`;
   const req = createRequire(baseUrl);
   try {
     return req.resolve('@pinagent/next/loader');
@@ -92,7 +93,6 @@ export default function pinagent(
 
   const userWebpack = config.webpack;
   const userRewrites = config.rewrites;
-  const isDev = process.env.NODE_ENV !== 'production';
 
   // Communicate spawn-agent preference to the route handler via env var.
   // The route reads it on each POST. Set at config-load time (dev startup).
@@ -101,30 +101,29 @@ export default function pinagent(
   // without ceremony. Users can opt into 'worktree' for parallel isolated
   // branches, or 'off' / `false` to disable the SDK spawn entirely (for
   // channel-mode or pull-mode workflows).
-  if (isDev) {
-    const effective =
-      options.spawnAgent === undefined
-        ? 'inline'
-        : options.spawnAgent === false
-          ? 'off'
-          : options.spawnAgent;
-    process.env.PINAGENT_SPAWN_AGENT = effective;
+  const effective =
+    options.spawnAgent === undefined
+      ? 'inline'
+      : options.spawnAgent === false
+        ? 'off'
+        : options.spawnAgent;
+  process.env.PINAGENT_SPAWN_AGENT = effective;
 
-    // Pick a WS port at config-load time and propagate via env var. The
-    // actual `ws.WebSocketServer` is started by the route module (see
-    // `route.ts`), NOT here — Next 16 runs `next.config.ts` and route
-    // handlers in separate processes, so a server started here would
-    // never see the event bus that the route's spawnAgent publishes to.
-    // Keeping the server in the route module keeps WS, bus, and agent
-    // co-located in the same process.
-    if (effective !== 'off' && !process.env.PINAGENT_WS_PORT) {
-      process.env.PINAGENT_WS_PORT = '53636';
-    }
+  // Pick a WS port at config-load time and propagate via env var. The
+  // actual `ws.WebSocketServer` is started by the route module (see
+  // `route.ts`), NOT here — Next 16 runs `next.config.ts` and route
+  // handlers in separate processes, so a server started here would
+  // never see the event bus that the route's spawnAgent publishes to.
+  // Keeping the server in the route module keeps WS, bus, and agent
+  // co-located in the same process.
+  if (effective !== 'off' && !process.env.PINAGENT_WS_PORT) {
+    process.env.PINAGENT_WS_PORT = '53636';
   }
 
   const next: NextConfig = {
     ...config,
-    webpack(webpackConfig: any, options: any) {
+    webpack(...args: Parameters<WebpackFn>): ReturnType<WebpackFn> {
+      const [webpackConfig, options] = args;
       if (options.dev && !options.isServer) {
         webpackConfig.module = webpackConfig.module ?? {};
         webpackConfig.module.rules = webpackConfig.module.rules ?? [];
@@ -136,47 +135,38 @@ export default function pinagent(
       }
       return userWebpack ? userWebpack(webpackConfig, options) : webpackConfig;
     },
-    async rewrites() {
-      const existing = await (typeof userRewrites === 'function'
+    async rewrites(): Promise<RewritesReturn> {
+      const existing: RewritesReturn = await (typeof userRewrites === 'function'
         ? userRewrites()
         : Promise.resolve(userRewrites ?? []));
-
-      if (!isDev) return existing as any;
 
       if (Array.isArray(existing)) {
         return [PINAGENT_REWRITE, ...existing];
       }
-      // Existing is an object with beforeFiles/afterFiles/fallback.
-      const obj = existing as {
-        beforeFiles?: any[];
-        afterFiles?: any[];
-        fallback?: any[];
-      };
+      // Existing is the object form: { beforeFiles?, afterFiles?, fallback? }.
       return {
-        beforeFiles: [PINAGENT_REWRITE, ...(obj.beforeFiles ?? [])],
-        afterFiles: obj.afterFiles ?? [],
-        fallback: obj.fallback ?? [],
+        beforeFiles: [PINAGENT_REWRITE, ...(existing.beforeFiles ?? [])],
+        afterFiles: existing.afterFiles ?? [],
+        fallback: existing.fallback ?? [],
       };
     },
   };
 
-  if (isDev) {
-    next.turbopack = {
-      ...(config.turbopack ?? {}),
-      rules: {
-        ...(config.turbopack?.rules ?? {}),
-        // Pass the loader as a package specifier (not the absolute path used
-        // for webpack). Turbopack resolves loader strings from the project
-        // root; an absolute path that lives outside the root (e.g. in a pnpm
-        // workspace's `packages/`) breaks `get_next_server_import_map` with
-        // "Next.js package not found" because Turbopack walks `node_modules`
-        // from the loader file's directory, not the project root.
-        '*.{ts,tsx,js,jsx}': {
-          loaders: ['@pinagent/next/loader'],
-        },
+  next.turbopack = {
+    ...(config.turbopack ?? {}),
+    rules: {
+      ...(config.turbopack?.rules ?? {}),
+      // Pass the loader as a package specifier (not the absolute path used
+      // for webpack). Turbopack resolves loader strings from the project
+      // root; an absolute path that lives outside the root (e.g. in a pnpm
+      // workspace's `packages/`) breaks `get_next_server_import_map` with
+      // "Next.js package not found" because Turbopack walks `node_modules`
+      // from the loader file's directory, not the project root.
+      '*.{ts,tsx,js,jsx}': {
+        loaders: ['@pinagent/next/loader'],
       },
-    };
-  }
+    },
+  };
 
   return next;
 }

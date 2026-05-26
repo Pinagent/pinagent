@@ -48,16 +48,12 @@ describe('resolvePermissionMode', () => {
     expect(resolvePermissionMode(permEnv())).toBe('acceptEdits');
   });
 
-  it.each([
-    'default',
-    'acceptEdits',
-    'bypassPermissions',
-    'plan',
-    'dontAsk',
-    'auto',
-  ] as const)('accepts the documented mode %s', (mode) => {
-    expect(resolvePermissionMode(permEnv(mode))).toBe(mode);
-  });
+  it.each(['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk', 'auto'] as const)(
+    'accepts the documented mode %s',
+    (mode) => {
+      expect(resolvePermissionMode(permEnv(mode))).toBe(mode);
+    },
+  );
 
   it('falls back to acceptEdits for unknown values', () => {
     expect(resolvePermissionMode(permEnv('rude'))).toBe('acceptEdits');

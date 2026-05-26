@@ -1,4 +1,9 @@
-import { query, type Options, type PermissionMode, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import {
+  type Options,
+  type PermissionMode,
+  type SDKMessage,
+  query,
+} from '@anthropic-ai/claude-agent-sdk';
 import type { Logger } from 'vite';
 
 export interface AutoTriggerOptions {
@@ -103,8 +108,7 @@ export class AutoTrigger {
             );
           } else {
             this.logger.warn(
-              `[pinagent] auto-fix ended with ${message.subtype}` +
-                (message.errors?.length ? `: ${message.errors.join('; ')}` : ''),
+              `[pinagent] auto-fix ended with ${message.subtype}${message.errors?.length ? `: ${message.errors.join('; ')}` : ''}`,
             );
           }
         }
@@ -165,9 +169,7 @@ function buildPrompt(batch: QueueItem[]): string {
     'A user just submitted Pinagent feedback in their running Vite dev server. Address each item by:',
   );
   lines.push('  1) Calling the pinagent MCP tool `get_feedback` to read the comment + screenshot.');
-  lines.push(
-    '  2) Optionally calling `get_source_context` to view the surrounding code.',
-  );
+  lines.push('  2) Optionally calling `get_source_context` to view the surrounding code.');
   lines.push(
     '  3) Editing the relevant file(s) to address the request. Be conservative; only change what the comment asks for.',
   );

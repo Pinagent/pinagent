@@ -28,7 +28,9 @@ export default function ChangelogPage() {
           </header>
           <ul style={{ color: '#374151', lineHeight: 1.55, marginTop: 12 }}>
             <li>Multiple pinagent widgets can now be open simultaneously without conflicts.</li>
-            <li>Improved widget positioning when the targeted element is near the viewport edge.</li>
+            <li>
+              Improved widget positioning when the targeted element is near the viewport edge.
+            </li>
             <li>Smoother streaming output in the comment pane.</li>
           </ul>
         </article>

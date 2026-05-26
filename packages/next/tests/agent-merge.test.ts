@@ -24,7 +24,10 @@ let storageMod: StorageMod;
 
 const ROOT = join(tmpdir(), `pa-merge-${nanoid(8)}`);
 
-function git(cwd: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+function git(
+  cwd: string,
+  args: string[],
+): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((res, rej) => {
     const child = spawn('git', args, { cwd, stdio: 'pipe' });
     let stdout = '';

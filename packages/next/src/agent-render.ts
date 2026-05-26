@@ -29,9 +29,7 @@ export function renderMessage(message: SDKMessage): string {
 export function renderInitFooter(
   message: Extract<SDKMessage, { type: 'system'; subtype: 'init' }>,
 ): string {
-  const mcp = message.mcp_servers
-    .map((s) => `${s.name}=${s.status}`)
-    .join(', ');
+  const mcp = message.mcp_servers.map((s) => `${s.name}=${s.status}`).join(', ');
   const lines = [
     `> _session_ \`${message.session_id}\` · model \`${message.model}\` · ${message.permissionMode}`,
   ];
@@ -40,12 +38,12 @@ export function renderInitFooter(
   return `${lines.join('\n')}\n`;
 }
 
-export function renderResultFooter(
-  result: Extract<SDKMessage, { type: 'result' }>,
-): string {
+export function renderResultFooter(result: Extract<SDKMessage, { type: 'result' }>): string {
   const lines: string[] = [];
   if (result.subtype === 'success') {
-    lines.push(`**Outcome:** success (${result.num_turns} turn${result.num_turns === 1 ? '' : 's'})`);
+    lines.push(
+      `**Outcome:** success (${result.num_turns} turn${result.num_turns === 1 ? '' : 's'})`,
+    );
   } else {
     lines.push(`**Outcome:** \`${result.subtype}\``);
     if (result.errors?.length) {
@@ -54,22 +52,22 @@ export function renderResultFooter(
     }
   }
   lines.push(
-    `**Tokens:** in=${result.usage.input_tokens} · out=${result.usage.output_tokens}` +
-      (result.usage.cache_read_input_tokens
+    `**Tokens:** in=${result.usage.input_tokens} · out=${result.usage.output_tokens}${
+      result.usage.cache_read_input_tokens
         ? ` · cache_read=${result.usage.cache_read_input_tokens}`
-        : '') +
-      (result.usage.cache_creation_input_tokens
+        : ''
+    }${
+      result.usage.cache_creation_input_tokens
         ? ` · cache_write=${result.usage.cache_creation_input_tokens}`
-        : ''),
+        : ''
+    }`,
   );
   lines.push(`**Cost:** $${result.total_cost_usd.toFixed(4)}`);
   lines.push(`**Duration:** ${(result.duration_ms / 1000).toFixed(1)}s`);
   return lines.join('  \n');
 }
 
-function renderAssistant(
-  message: Extract<SDKMessage, { type: 'assistant' }>,
-): string {
+function renderAssistant(message: Extract<SDKMessage, { type: 'assistant' }>): string {
   const blocks = message.message.content;
   if (!Array.isArray(blocks)) return '';
 

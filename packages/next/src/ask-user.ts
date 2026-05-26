@@ -38,9 +38,9 @@ interface PendingAsk {
 // (singleton on globalThis, bound to an earlier instance) tries to
 // look up the askId. See event-bus.ts for the longer note.
 const ASKS_SYMBOL = Symbol.for('pinagent.ask-user.pending');
-const pending: Map<string, PendingAsk> = ((globalThis as Record<symbol, unknown>)[
-  ASKS_SYMBOL
-] as Map<string, PendingAsk> | undefined) ?? new Map<string, PendingAsk>();
+const pending: Map<string, PendingAsk> =
+  ((globalThis as Record<symbol, unknown>)[ASKS_SYMBOL] as Map<string, PendingAsk> | undefined) ??
+  new Map<string, PendingAsk>();
 (globalThis as Record<symbol, unknown>)[ASKS_SYMBOL] = pending;
 
 const inputSchema = {

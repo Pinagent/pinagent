@@ -22,7 +22,9 @@ export function SideNav() {
     <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {items.map((item) => {
         const isActive =
-          item.href === '/' ? pathname === '/' : pathname === item.href || pathname.startsWith(`${item.href}/`);
+          item.href === '/'
+            ? pathname === '/'
+            : pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
           <Link
             key={item.href}
