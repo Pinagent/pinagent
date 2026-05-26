@@ -65,6 +65,19 @@ jobs:
       - name: Lint SPDX headers
         run: pnpm lint:spdx
 
+      # Widget cascade: @pinagent/widget is embedded into next-plugin
+      # and vite-plugin at build time, so widget code changes must
+      # ship via a changeset that bumps both consumers. PR-only —
+      # post-merge pushes to main don't have a useful base to diff
+      # against, and the gate has already gated the merge by then.
+      # We fetch the base ref first because actions/checkout does a
+      # shallow clone and our script needs `origin/<base>` to resolve.
+      - name: Lint widget cascade
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=50 origin ${{ github.base_ref }}
+          pnpm lint:widget-cascade
+
       # Biome lint + format. Runs before typecheck because it's the
       # cheapest signal (~30ms) and surfaces the broadest class of
       # issues. A failure here means an autofixable problem the dev
