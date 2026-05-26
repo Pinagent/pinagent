@@ -1,60 +1,40 @@
+// SPDX-License-Identifier: Apache-2.0
+import { Card } from '@pinagent/ui/components/ui/card';
+
 export default function ContactPage() {
   return (
-    <main
-      style={{
-        fontFamily: 'system-ui, sans-serif',
-        padding: '40px',
-        maxWidth: 720,
-        margin: '0 auto',
-      }}
-    >
-      <h1 style={{ fontSize: '2.25rem' }}>Contact</h1>
-      <p style={{ color: '#3D3730', lineHeight: 1.55 }}>Get in touch with the Pinagent team.</p>
+    <main className="mx-auto max-w-3xl p-10">
+      <h1 className="text-4xl font-semibold tracking-tight">Contact</h1>
+      <p className="mt-2 leading-relaxed text-muted-foreground">
+        Get in touch with the Pinagent team.
+      </p>
 
-      <section style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <article
-          style={{
-            border: '1px solid #E8DFB0',
-            borderRadius: 8,
-            padding: 20,
-            background: '#FCF9E8',
-          }}
-        >
-          <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Email</h2>
-          <p style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 8, marginBottom: 0 }}>
-            <a href="mailto:hello@pinagent.dev" style={{ color: '#2563eb' }}>
+      <section className="mt-8 flex flex-col gap-4">
+        <Card className="p-5">
+          <h2 className="m-0 text-xl font-semibold">Email</h2>
+          <p className="mt-2 mb-0 leading-relaxed">
+            <a
+              href="mailto:hello@pinagent.dev"
+              className="font-medium text-foreground underline underline-offset-4 decoration-muted-foreground hover:decoration-foreground"
+            >
               hello@pinagent.dev
             </a>
           </p>
-        </article>
+        </Card>
 
-        <article
-          style={{
-            border: '1px solid #E8DFB0',
-            borderRadius: 8,
-            padding: 20,
-            background: '#FCF9E8',
-          }}
-        >
-          <h2 style={{ fontSize: '1.25rem', margin: 0 }}>GitHub</h2>
-          <p style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 8, marginBottom: 0 }}>
+        <Card className="p-5">
+          <h2 className="m-0 text-xl font-semibold">GitHub</h2>
+          <p className="mt-2 mb-0 leading-relaxed">
             File issues or open pull requests on the Pinagent repository.
           </p>
-        </article>
+        </Card>
 
-        <article
-          style={{
-            border: '1px solid #E8DFB0',
-            borderRadius: 8,
-            padding: 20,
-            background: '#FCF9E8',
-          }}
-        >
-          <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Community</h2>
-          <p style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 8, marginBottom: 0 }}>
+        <Card className="p-5">
+          <h2 className="m-0 text-xl font-semibold">Community</h2>
+          <p className="mt-2 mb-0 leading-relaxed">
             Join the conversation in our community channels for support, ideas, and discussion.
           </p>
-        </article>
+        </Card>
       </section>
     </main>
   );

@@ -1,45 +1,34 @@
+// SPDX-License-Identifier: Apache-2.0
+import { Card } from '@pinagent/ui/components/ui/card';
 import { Logo } from '../_components/Logo';
 
 export default function DocsPage() {
   return (
-    <main
-      style={{
-        fontFamily: 'system-ui, sans-serif',
-        padding: '40px',
-        maxWidth: 720,
-        margin: '0 auto',
-      }}
-    >
-      <h1 style={{ fontSize: '2.25rem' }}>Docs</h1>
-      <p style={{ color: '#3D3730', lineHeight: 1.55 }}>
+    <main className="mx-auto max-w-3xl p-10">
+      <h1 className="text-4xl font-semibold tracking-tight">Docs</h1>
+      <p className="mt-2 leading-relaxed text-muted-foreground">
         Pinagent turns any UI element into a comment thread an agent can act on. Click an element in
         the browser, leave a note, and the agent edits the underlying code directly — no copying
         file paths, no describing where the element lives in your tree, no context-switching back to
         your editor.
       </p>
-      <p style={{ color: '#3D3730', lineHeight: 1.55 }}>
+      <p className="mt-3 leading-relaxed text-muted-foreground">
         Under the hood, Pinagent instruments your JSX at build time so every rendered element
         carries its source location. When you click, the widget captures a screenshot, the
         surrounding DOM, and the file:line of the element, then hands the whole bundle to an agent.
       </p>
 
-      <section style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
-        <article
-          style={{
-            border: '1px solid #E8DFB0',
-            borderRadius: 8,
-            padding: 20,
-            background: '#FCF9E8',
-          }}
-        >
-          <h2 style={{ fontSize: '1.25rem', margin: 0 }}>How it works</h2>
-          <ol style={{ color: '#2A2528', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
+      <section className="mt-8 flex flex-col gap-6">
+        <Card className="p-5">
+          <h2 className="m-0 text-xl font-semibold">How it works</h2>
+          <ol className="mt-3 list-decimal pl-5 leading-relaxed">
             <li>
               Click the <Logo size={14} style={{ verticalAlign: '-2px', borderRadius: 3 }} /> button
               in the bottom-right of any page.
             </li>
             <li>
-              Pick the element you want to change — the overlay highlights what's under your cursor.
+              Pick the element you want to change — the overlay highlights what&apos;s under your
+              cursor.
             </li>
             <li>
               Type a short comment describing what you want (e.g. &quot;make this button red&quot;
@@ -58,54 +47,43 @@ export default function DocsPage() {
               agent finishing.
             </li>
           </ol>
-        </article>
+        </Card>
 
-        <article
-          style={{
-            border: '1px solid #E8DFB0',
-            borderRadius: 8,
-            padding: 20,
-            background: '#FCF9E8',
-          }}
-        >
-          <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Setup in a Next.js app</h2>
-          <ol style={{ color: '#2A2528', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
+        <Card className="p-5">
+          <h2 className="m-0 text-xl font-semibold">Setup in a Next.js app</h2>
+          <ol className="mt-3 list-decimal pl-5 leading-relaxed">
             <li>
-              Install the Pinagent package in your app: <code>npm install @pinagent/next</code>.
+              Install the Pinagent package in your app:{' '}
+              <code className="font-mono text-sm">npm install @pinagent/next</code>.
             </li>
             <li>
-              Add the Pinagent plugin to your <code>next.config.js</code> so JSX gets instrumented
+              Add the Pinagent plugin to your{' '}
+              <code className="font-mono text-sm">next.config.js</code> so JSX gets instrumented
               during the build.
             </li>
             <li>
-              Mount the <code>&lt;Pinagent /&gt;</code> component once in your root{' '}
-              <code>app/layout.tsx</code>, after <code>{'{children}'}</code>.
+              Mount the <code className="font-mono text-sm">&lt;Pinagent /&gt;</code> component once
+              in your root <code className="font-mono text-sm">app/layout.tsx</code>, after{' '}
+              <code className="font-mono text-sm">{'{children}'}</code>.
             </li>
             <li>
               Run your dev server alongside the Pinagent agent runner so comments have somewhere to
               go.
             </li>
           </ol>
-          <p style={{ color: '#3D3730', lineHeight: 1.55, marginTop: 12 }}>
+          <p className="mt-3 leading-relaxed text-muted-foreground">
             That&apos;s it — every page in your app is now click-to-comment. Pinagent only activates
             in development, so there&apos;s no runtime cost in production builds.
           </p>
-        </article>
+        </Card>
 
-        <article
-          style={{
-            border: '1px solid #E8DFB0',
-            borderRadius: 8,
-            padding: 20,
-            background: '#FCF9E8',
-          }}
-        >
-          <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Agent runtimes</h2>
-          <p style={{ color: '#3D3730', lineHeight: 1.55, marginTop: 12 }}>
+        <Card className="p-5">
+          <h2 className="m-0 text-xl font-semibold">Agent runtimes</h2>
+          <p className="mt-3 leading-relaxed text-muted-foreground">
             Pinagent can route feedback to two different agent runtimes. Pick whichever matches how
             you already work.
           </p>
-          <ul style={{ color: '#2A2528', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
+          <ul className="mt-3 list-disc pl-5 leading-relaxed">
             <li>
               <strong>MCP into Claude Code</strong> — feedback streams into your running Claude Code
               session as channel events you can act on inline. Best when you want to stay in one
@@ -117,18 +95,11 @@ export default function DocsPage() {
               tweaks where you want several changes to land at once without waiting in line.
             </li>
           </ul>
-        </article>
+        </Card>
 
-        <article
-          style={{
-            border: '1px solid #E8DFB0',
-            borderRadius: 8,
-            padding: 20,
-            background: '#FCF9E8',
-          }}
-        >
-          <h2 style={{ fontSize: '1.25rem', margin: 0 }}>What you can comment on</h2>
-          <ul style={{ color: '#2A2528', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
+        <Card className="p-5">
+          <h2 className="m-0 text-xl font-semibold">What you can comment on</h2>
+          <ul className="mt-3 list-disc pl-5 leading-relaxed">
             <li>Copy edits — &quot;change this heading to &apos;Welcome back&apos;&quot;.</li>
             <li>
               Styling tweaks — &quot;add more padding&quot;, &quot;make this card border
@@ -138,18 +109,11 @@ export default function DocsPage() {
             <li>Component swaps — &quot;replace this with a dropdown&quot;.</li>
             <li>Behavior — &quot;disable this when the form is empty&quot;.</li>
           </ul>
-        </article>
+        </Card>
 
-        <article
-          style={{
-            border: '1px solid #E8DFB0',
-            borderRadius: 8,
-            padding: 20,
-            background: '#FCF9E8',
-          }}
-        >
-          <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Tips</h2>
-          <ul style={{ color: '#2A2528', lineHeight: 1.6, marginTop: 12, paddingLeft: 20 }}>
+        <Card className="p-5">
+          <h2 className="m-0 text-xl font-semibold">Tips</h2>
+          <ul className="mt-3 list-disc pl-5 leading-relaxed">
             <li>Keep comments scoped to one change — agents act conservatively.</li>
             <li>
               Click the element closest to what you want changed; Pinagent uses its file and line to
@@ -165,7 +129,7 @@ export default function DocsPage() {
               an in-flight thread.
             </li>
           </ul>
-        </article>
+        </Card>
       </section>
     </main>
   );

@@ -1,4 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
 'use client';
+import { cn } from '@pinagent/ui/lib/utils';
 import type { DragEvent } from 'react';
 import { useState } from 'react';
 import { Counter } from './Counter';
@@ -44,27 +46,27 @@ export function CounterList({ items: initial }: { items: Item[] }) {
 
   return (
     <>
-      {items.map((item, i) => (
-        <div
-          key={item.label}
-          draggable
-          onDragStart={(e) => handleDragStart(e, i)}
-          onDragOver={(e) => handleDragOver(e, i)}
-          onDrop={(e) => handleDrop(e, i)}
-          onDragEnd={reset}
-          style={{
-            opacity: dragIndex === i ? 0.4 : 1,
-            cursor: 'grab',
-            borderTop:
-              overIndex === i && dragIndex !== null && dragIndex !== i
-                ? '2px solid #4ade80'
-                : '2px solid transparent',
-            transition: 'opacity 120ms ease, border-color 120ms ease',
-          }}
-        >
-          <Counter label={item.label} description={item.description} />
-        </div>
-      ))}
+      {items.map((item, i) => {
+        const isDragging = dragIndex === i;
+        const isDropTarget = overIndex === i && dragIndex !== null && dragIndex !== i;
+        return (
+          <div
+            key={item.label}
+            draggable
+            onDragStart={(e) => handleDragStart(e, i)}
+            onDragOver={(e) => handleDragOver(e, i)}
+            onDrop={(e) => handleDrop(e, i)}
+            onDragEnd={reset}
+            className={cn(
+              'cursor-grab border-t-2 border-transparent transition-[opacity,border-color] duration-100',
+              isDragging && 'opacity-40',
+              isDropTarget && 'border-accent',
+            )}
+          >
+            <Counter label={item.label} description={item.description} />
+          </div>
+        );
+      })}
     </>
   );
 }

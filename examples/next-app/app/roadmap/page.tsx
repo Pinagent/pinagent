@@ -1,96 +1,79 @@
+// SPDX-License-Identifier: Apache-2.0
+import { Card } from '@pinagent/ui/components/ui/card';
+
+const sections = [
+  {
+    title: 'Now',
+    status: 'In progress',
+    items: [
+      'Persistent storage for feedback events across sessions.',
+      'Improved widget positioning for elements near the viewport edge.',
+      'Server-side feedback history with searchable archive.',
+      'Screenshot capture with element highlighting for every comment.',
+      'Streaming agent output rendered inline in the widget pane.',
+      'Source mapping from clicked DOM nodes back to JSX file and line.',
+      'Multi-comment batching so related feedback resolves together.',
+      'Keyboard shortcuts for triggering, navigating, and resolving comments.',
+    ],
+  },
+  {
+    title: 'Next',
+    status: 'Up next',
+    items: [
+      'Team workspaces with shared feedback queues.',
+      'Inline diff previews before the agent applies changes.',
+      'Custom routing rules so comments reach the right agent or reviewer.',
+      'Per-comment branch and PR creation with automatic commit attribution.',
+      'Threaded conversations so reviewers can iterate on agent responses.',
+      'Role-based permissions for comment authors, reviewers, and admins.',
+      'Component-level tagging to group feedback by feature or owner.',
+      'SSO, SAML, and SCIM for enterprise authentication.',
+      'Audit log of every comment, agent action, and resolution.',
+      'Slash commands inside comments for quick agent directives.',
+    ],
+  },
+  {
+    title: 'Later',
+    status: 'Exploring',
+    items: [
+      'Native integrations for Linear, GitHub Issues, and Slack.',
+      'Mobile and tablet widgets for on-device feedback.',
+      'Replay mode that ties feedback to a recorded session.',
+      'Figma and design-tool integrations for design-versus-built diffs.',
+      'End-user feedback mode so customers can leave comments in production.',
+      'Voice and video comments transcribed into agent-ready context.',
+      'AI-suggested fixes that preview before any code is written.',
+      'Cross-browser and responsive viewport testing from a single comment.',
+      'Analytics dashboard for resolution time, hotspots, and agent accuracy.',
+      'Self-hosted and on-prem deployments for regulated environments.',
+      'Plugin SDK for custom widgets, transports, and agent runtimes.',
+      'Localization and right-to-left layout support for the widget UI.',
+    ],
+  },
+];
+
 export default function RoadmapPage() {
   return (
-    <main
-      style={{
-        fontFamily: 'system-ui, sans-serif',
-        padding: '40px',
-        maxWidth: 720,
-        margin: '0 auto',
-      }}
-    >
-      <h1 style={{ fontSize: '2.25rem' }}>Roadmap</h1>
-      <p style={{ color: '#3D3730', lineHeight: 1.55 }}>
+    <main className="mx-auto max-w-3xl p-10">
+      <h1 className="text-4xl font-semibold tracking-tight">Roadmap</h1>
+      <p className="mt-2 leading-relaxed text-muted-foreground">
         Planned work and upcoming features for Pinagent.
       </p>
 
-      <section style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
-        <article
-          style={{
-            border: '1px solid #E8DFB0',
-            borderRadius: 8,
-            padding: 20,
-            background: '#FCF9E8',
-          }}
-        >
-          <header style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-            <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Now</h2>
-            <span style={{ color: '#5C5546', fontSize: '0.875rem' }}>In progress</span>
-          </header>
-          <ul style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 12 }}>
-            <li>Persistent storage for feedback events across sessions.</li>
-            <li>Improved widget positioning for elements near the viewport edge.</li>
-            <li>Server-side feedback history with searchable archive.</li>
-            <li>Screenshot capture with element highlighting for every comment.</li>
-            <li>Streaming agent output rendered inline in the widget pane.</li>
-            <li>Source mapping from clicked DOM nodes back to JSX file and line.</li>
-            <li>Multi-comment batching so related feedback resolves together.</li>
-            <li>Keyboard shortcuts for triggering, navigating, and resolving comments.</li>
-          </ul>
-        </article>
-
-        <article
-          style={{
-            border: '1px solid #E8DFB0',
-            borderRadius: 8,
-            padding: 20,
-            background: '#FCF9E8',
-          }}
-        >
-          <header style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-            <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Next</h2>
-            <span style={{ color: '#5C5546', fontSize: '0.875rem' }}>Up next</span>
-          </header>
-          <ul style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 12 }}>
-            <li>Team workspaces with shared feedback queues.</li>
-            <li>Inline diff previews before the agent applies changes.</li>
-            <li>Custom routing rules so comments reach the right agent or reviewer.</li>
-            <li>Per-comment branch and PR creation with automatic commit attribution.</li>
-            <li>Threaded conversations so reviewers can iterate on agent responses.</li>
-            <li>Role-based permissions for comment authors, reviewers, and admins.</li>
-            <li>Component-level tagging to group feedback by feature or owner.</li>
-            <li>SSO, SAML, and SCIM for enterprise authentication.</li>
-            <li>Audit log of every comment, agent action, and resolution.</li>
-            <li>Slash commands inside comments for quick agent directives.</li>
-          </ul>
-        </article>
-
-        <article
-          style={{
-            border: '1px solid #E8DFB0',
-            borderRadius: 8,
-            padding: 20,
-            background: '#FCF9E8',
-          }}
-        >
-          <header style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-            <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Later</h2>
-            <span style={{ color: '#5C5546', fontSize: '0.875rem' }}>Exploring</span>
-          </header>
-          <ul style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 12 }}>
-            <li>Native integrations for Linear, GitHub Issues, and Slack.</li>
-            <li>Mobile and tablet widgets for on-device feedback.</li>
-            <li>Replay mode that ties feedback to a recorded session.</li>
-            <li>Figma and design-tool integrations for design-versus-built diffs.</li>
-            <li>End-user feedback mode so customers can leave comments in production.</li>
-            <li>Voice and video comments transcribed into agent-ready context.</li>
-            <li>AI-suggested fixes that preview before any code is written.</li>
-            <li>Cross-browser and responsive viewport testing from a single comment.</li>
-            <li>Analytics dashboard for resolution time, hotspots, and agent accuracy.</li>
-            <li>Self-hosted and on-prem deployments for regulated environments.</li>
-            <li>Plugin SDK for custom widgets, transports, and agent runtimes.</li>
-            <li>Localization and right-to-left layout support for the widget UI.</li>
-          </ul>
-        </article>
+      <section className="mt-8 flex flex-col gap-6">
+        {sections.map((section) => (
+          <Card key={section.title} className="p-5">
+            <header className="flex flex-wrap items-baseline gap-3">
+              <h2 className="m-0 text-xl font-semibold">{section.title}</h2>
+              <span className="text-sm text-muted-foreground">{section.status}</span>
+            </header>
+            <ul className="mt-3 list-disc pl-5 leading-relaxed">
+              {section.items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </Card>
+        ))}
       </section>
     </main>
   );

@@ -1,5 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
 'use client';
 
+import { cn } from '@pinagent/ui/lib/utils';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -19,7 +21,7 @@ export function SideNav() {
   const pathname = usePathname();
 
   return (
-    <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <nav className="flex flex-col gap-1">
       {items.map((item) => {
         const isActive =
           item.href === '/'
@@ -29,15 +31,12 @@ export function SideNav() {
           <Link
             key={item.href}
             href={item.href}
-            style={{
-              padding: '8px 10px',
-              borderRadius: 6,
-              color: isActive ? '#201B21' : '#3D3730',
-              textDecoration: 'none',
-              background: isActive ? '#F5EFD0' : 'transparent',
-              fontWeight: isActive ? 500 : 400,
-              fontSize: 13,
-            }}
+            className={cn(
+              'rounded-md px-2.5 py-2 text-[13px] no-underline transition-colors',
+              isActive
+                ? 'bg-secondary font-medium text-foreground'
+                : 'text-foreground/70 hover:bg-secondary/60 hover:text-foreground',
+            )}
           >
             {item.label}
           </Link>

@@ -1,84 +1,55 @@
+// SPDX-License-Identifier: Apache-2.0
+import { Card } from '@pinagent/ui/components/ui/card';
+
+const posts = [
+  {
+    slug: 'parallel-agents',
+    title: 'Parallel agents, isolated worktrees',
+    date: '2026-05-18',
+    excerpt:
+      'How we let multiple Pinagent comments run as parallel Claude Agent SDK loops, each in its own git worktree, so concurrent edits never collide.',
+  },
+  {
+    slug: 'click-to-fix',
+    title: 'From click to fix in under a minute',
+    date: '2026-05-02',
+    excerpt:
+      'A walkthrough of the Pinagent loop: click a UI element, leave a comment, watch the agent edit the exact JSX node you pointed at.',
+  },
+  {
+    slug: 'why-pinagent',
+    title: 'Why we built Pinagent',
+    date: '2026-04-15',
+    excerpt:
+      'The gap between "I see the bug" and "the agent has the right context" was the slowest part of our day. So we closed it.',
+  },
+];
+
 export default function BlogPage() {
   return (
-    <main
-      style={{
-        fontFamily: 'system-ui, sans-serif',
-        padding: '40px',
-        maxWidth: 720,
-        margin: '0 auto',
-      }}
-    >
-      <h1 style={{ fontSize: '2.25rem' }}>Blog</h1>
-      <p style={{ color: '#3D3730', lineHeight: 1.55 }}>
+    <main className="mx-auto max-w-3xl p-10">
+      <h1 className="text-4xl font-semibold tracking-tight">Blog</h1>
+      <p className="mt-2 leading-relaxed text-muted-foreground">
         Notes from the Pinagent team on building click-to-fix dev tools.
       </p>
 
-      <section style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
-        <article
-          style={{
-            border: '1px solid #E8DFB0',
-            borderRadius: 8,
-            padding: 20,
-            background: '#FCF9E8',
-          }}
-        >
-          <header style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-            <h2 style={{ fontSize: '1.25rem', margin: 0 }}>
-              <a href="/blog/parallel-agents" style={{ color: '#201B21', textDecoration: 'none' }}>
-                Parallel agents, isolated worktrees
-              </a>
-            </h2>
-            <time style={{ color: '#5C5546', fontSize: '0.875rem' }}>2026-05-18</time>
-          </header>
-          <p style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 12, marginBottom: 0 }}>
-            How we let multiple Pinagent comments run as parallel Claude Agent SDK loops, each in
-            its own git worktree, so concurrent edits never collide.
-          </p>
-        </article>
-
-        <article
-          style={{
-            border: '1px solid #E8DFB0',
-            borderRadius: 8,
-            padding: 20,
-            background: '#FCF9E8',
-          }}
-        >
-          <header style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-            <h2 style={{ fontSize: '1.25rem', margin: 0 }}>
-              <a href="/blog/click-to-fix" style={{ color: '#201B21', textDecoration: 'none' }}>
-                From click to fix in under a minute
-              </a>
-            </h2>
-            <time style={{ color: '#5C5546', fontSize: '0.875rem' }}>2026-05-02</time>
-          </header>
-          <p style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 12, marginBottom: 0 }}>
-            A walkthrough of the Pinagent loop: click a UI element, leave a comment, watch the agent
-            edit the exact JSX node you pointed at.
-          </p>
-        </article>
-
-        <article
-          style={{
-            border: '1px solid #E8DFB0',
-            borderRadius: 8,
-            padding: 20,
-            background: '#FCF9E8',
-          }}
-        >
-          <header style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-            <h2 style={{ fontSize: '1.25rem', margin: 0 }}>
-              <a href="/blog/why-pinagent" style={{ color: '#201B21', textDecoration: 'none' }}>
-                Why we built Pinagent
-              </a>
-            </h2>
-            <time style={{ color: '#5C5546', fontSize: '0.875rem' }}>2026-04-15</time>
-          </header>
-          <p style={{ color: '#2A2528', lineHeight: 1.55, marginTop: 12, marginBottom: 0 }}>
-            The gap between "I see the bug" and "the agent has the right context" was the slowest
-            part of our day. So we closed it.
-          </p>
-        </article>
+      <section className="mt-8 flex flex-col gap-6">
+        {posts.map((post) => (
+          <Card key={post.slug} className="p-5">
+            <header className="flex flex-wrap items-baseline gap-3">
+              <h2 className="m-0 text-xl font-semibold">
+                <a
+                  href={`/blog/${post.slug}`}
+                  className="text-foreground no-underline hover:underline"
+                >
+                  {post.title}
+                </a>
+              </h2>
+              <time className="text-sm text-muted-foreground">{post.date}</time>
+            </header>
+            <p className="mt-3 mb-0 leading-relaxed">{post.excerpt}</p>
+          </Card>
+        ))}
       </section>
     </main>
   );
