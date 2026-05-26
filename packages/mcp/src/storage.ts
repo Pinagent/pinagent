@@ -5,7 +5,7 @@
 //
 // Screenshots stay on disk under `.pinagent/screenshots/<id>.png`.
 import { existsSync } from 'node:fs';
-import { readFile, readdir } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { asc, conversations, eq, widgetAnchors } from '@pinagent/db';
 import * as schema from '@pinagent/db/schema';

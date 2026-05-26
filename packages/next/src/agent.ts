@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import {
   type Options,
   type PermissionMode,
-  type SDKMessage,
   query,
+  type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import {
   renderInitFooter,

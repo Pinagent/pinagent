@@ -42,7 +42,10 @@
     },
     "./loader": "./dist/loader.cjs"
   },
-  "files": ["dist", "drizzle"],
+  "files": [
+    "dist",
+    "drizzle"
+  ],
   "scripts": {
     "prebuild": "node scripts/embed-widget.mjs",
     "build": "tsdown",

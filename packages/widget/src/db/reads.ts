@@ -1,9 +1,9 @@
 import {
   type Conversation,
-  type Message,
-  type WidgetAnchor,
   conversations,
+  type Message,
   messages,
+  type WidgetAnchor,
   widgetAnchors,
 } from '@pinagent/db/schema';
 import { asc, desc, eq } from 'drizzle-orm';

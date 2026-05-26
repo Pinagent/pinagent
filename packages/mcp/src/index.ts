@@ -6,7 +6,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { z } from 'zod';
 import { CHANNEL_INSTRUCTIONS, startFeedbackWatcher } from './channel';
 import { resolveRoot } from './root';
-import { StatusSchema, Storage, isInsideRoot } from './storage';
+import { isInsideRoot, StatusSchema, Storage } from './storage';
 
 const TOOL_LIST = [
   {

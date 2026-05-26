@@ -1,6 +1,6 @@
 import * as schema from '@pinagent/db/schema';
-import { type SqliteRemoteDatabase, drizzle } from 'drizzle-orm/sqlite-proxy';
-import { type MigrationEntry, applyMigrations } from './migrations';
+import { drizzle, type SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy';
+import { applyMigrations, type MigrationEntry } from './migrations';
 import { pruneOldConversations } from './writes';
 
 /**

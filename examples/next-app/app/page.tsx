@@ -1,6 +1,6 @@
+import { Logo } from './_components/Logo';
 import { CounterList } from './CounterList';
 import { Footer } from './Footer';
-import { Logo } from './_components/Logo';
 
 export default function Page() {
   return (
