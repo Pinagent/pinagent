@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Re-export the drizzle operators consumers use against this schema.
 // Importing them through @pinagent/db (rather than directly from
 // drizzle-orm in each consumer) guarantees a single drizzle instance

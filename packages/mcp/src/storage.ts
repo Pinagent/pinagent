@@ -1,4 +1,5 @@
-// SQLite-backed mirror of @pinagent/next/src/storage.ts. The MCP
+// SPDX-License-Identifier: Apache-2.0
+// SQLite-backed mirror of @pinagent/next-plugin/src/storage.ts. The MCP
 // server runs in a separate Node process from the dev server but
 // opens the same `.pinagent/db.sqlite` file (SQLite WAL mode handles
 // concurrent readers/writers across processes).

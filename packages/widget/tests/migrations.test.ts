@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Tests for the browser-side migration runner.
  *
@@ -18,7 +19,7 @@ import { describe, expect, it } from 'vitest';
 import { applyMigrations, type ExecCall, type MigrationEntry } from '../src/db/migrations';
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS_DIR = join(THIS_DIR, '..', '..', 'next', 'drizzle');
+const MIGRATIONS_DIR = join(THIS_DIR, '..', '..', 'next-plugin', 'drizzle');
 
 /**
  * Wrap a `better-sqlite3` handle in the worker's `call` API shape so

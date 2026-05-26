@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 export function shortSelector(el: Element, maxDepth = 4): string {
   const parts: string[] = [];
   let cur: Element | null = el;

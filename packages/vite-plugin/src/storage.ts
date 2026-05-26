@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Buffer } from 'node:buffer';
 import { createReadStream, existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';

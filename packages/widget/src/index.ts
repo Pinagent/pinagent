@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { mount } from './widget';
 
 // Only mount once per page load.

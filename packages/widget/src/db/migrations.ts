@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Browser-side migration runner. Byte-compatible with drizzle's own
  * server-side `migrate()` (see `drizzle-orm/sqlite-core/dialect.js`):

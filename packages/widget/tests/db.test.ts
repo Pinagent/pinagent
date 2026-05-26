@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { conversations, messages, widgetAnchors } from '@pinagent/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
