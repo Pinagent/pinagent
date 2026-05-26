@@ -19,7 +19,6 @@ export {
   rejectAsk,
   resolveAsk,
 } from './ask-user';
-export { DB_WORKER_SOURCE } from './db-worker-source';
 export { type OpenInEditorResult, openInEditor } from './editor';
 export {
   type FeedbackInput,

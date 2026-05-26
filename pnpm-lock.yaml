@@ -330,6 +330,9 @@ importers:
       '@pinagent/babel-plugin':
         specifier: workspace:*
         version: link:../babel-plugin
+      '@pinagent/browser-runtime':
+        specifier: workspace:*
+        version: link:../browser-runtime
       '@pinagent/db':
         specifier: workspace:*
         version: link:../db

@@ -88,7 +88,7 @@ async function doInit(): Promise<BrowserDb> {
   // Our own module worker (not the upstream worker1 wrapper). It
   // installs the OPFS SAH Pool VFS, which works without the COOP/COEP
   // headers the basic `opfs` VFS would need. Source lives in
-  // packages/next-plugin/src/db-worker-source.ts and is served at
+  // packages/browser-runtime/src/db-worker-source.ts and is served at
   // /__pinagent/db-worker.js.
   const worker = new Worker('/__pinagent/db-worker.js', { type: 'module' });
 
