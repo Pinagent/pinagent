@@ -157,7 +157,9 @@ if (stale.length === 0) {
 console.error(`Found ${stale.length} stale workspace dep declaration(s):\n`);
 for (const s of stale) {
   console.error(`  ${s.pkg} declares ${s.dep}`);
-  console.error(`    (${s.pkgJson} — no import found in src/, tests/, scripts/, app/, or *.config.*)`);
+  console.error(
+    `    (${s.pkgJson} — no import found in src/, tests/, scripts/, app/, or *.config.*)`,
+  );
 }
 console.error('');
 console.error('Either remove the declaration from `dependencies`, move it to');
