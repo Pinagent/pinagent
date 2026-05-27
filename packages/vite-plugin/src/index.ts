@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 import { relative, sep } from 'node:path';
-import { isInGitignore, Storage } from '@pinagent/agent-runner';
+import {
+  isInGitignore,
+  resolveAgentMode,
+  type SpawnAgentMode,
+  Storage,
+  startWsServer,
+} from '@pinagent/agent-runner';
 import { transformJsx } from '@pinagent/babel-plugin';
 import type { Plugin } from 'vite';
-import { AutoTrigger, type AutoTriggerOptions } from './auto-trigger';
 import { createMiddleware } from './middleware';
 
 export interface PinagentOptions {
@@ -12,22 +17,47 @@ export interface PinagentOptions {
    */
   root?: string;
   /**
-   * When a comment is submitted, automatically spawn a CLI agent to address it.
-   * Pass `true` to use defaults (claude -p with --permission-mode acceptEdits),
-   * or an options object to customize.
+   * When a comment is submitted, spawn a Claude Agent SDK run to address it.
    *
-   * Requires the agent's CLI to be on PATH (e.g. `claude` from Claude Code).
-   * Submits are serialized — if multiple feedback items arrive while an agent
-   * is running, they're batched into the next invocation.
+   * - `'inline'` (default): each submit runs an SDK query against the project
+   *   root, streaming events back to the widget over WebSocket. Cheaper than
+   *   worktree mode; parallel agents may race on the same files.
+   * - `'worktree'`: each submit creates a fresh git worktree at
+   *   `.pinagent/worktrees/<id>` on a `pinagent/<id>` branch, then runs the
+   *   SDK there. True parallel agents with no edit races; review each
+   *   branch like a PR. Requires a git repo.
+   * - `'off'` (or `false`): no spawn. Comments still land in `.pinagent/`,
+   *   but no agent is started — use this with channel-mode or pull-mode
+   *   workflows where another agent (e.g. `@pinagent/cli mcp`) drives.
+   *
+   * Communicated to the middleware via the `PINAGENT_SPAWN_AGENT` env var so
+   * `agent-runner`'s `resolveAgentMode` can stay framework-agnostic.
+   * Override the default `acceptEdits` permission with
+   * `PINAGENT_AGENT_PERMISSION_MODE`.
    */
-  autoTrigger?: boolean | AutoTriggerOptions;
+  spawnAgent?: 'worktree' | 'inline' | 'off' | false;
 }
 
 const SCRIPT_TAG = '<script type="module" src="/__pinagent/widget.js"></script>';
+const DEFAULT_WS_PORT = 53636;
 
 export default function pinagent(options: PinagentOptions = {}): Plugin {
   let isServe = false;
   let resolvedRoot = process.cwd();
+
+  // Resolve the spawn mode at plugin construction so `configureServer` can
+  // boot the WS server before any widget bytes go out the door. Matches the
+  // `withPinagent(...)` shape in `@pinagent/next-plugin/config`.
+  const effective: 'worktree' | 'inline' | 'off' =
+    options.spawnAgent === undefined
+      ? 'inline'
+      : options.spawnAgent === false
+        ? 'off'
+        : options.spawnAgent;
+  process.env.PINAGENT_SPAWN_AGENT = effective;
+  if (effective !== 'off' && !process.env.PINAGENT_WS_PORT) {
+    process.env.PINAGENT_WS_PORT = String(DEFAULT_WS_PORT);
+  }
 
   return {
     name: 'pinagent',
@@ -35,8 +65,6 @@ export default function pinagent(options: PinagentOptions = {}): Plugin {
     enforce: 'pre',
 
     config() {
-      // Mark that we're serving — Vite calls `apply: 'serve'` for us, but
-      // duplicating here for clarity.
       isServe = true;
     },
 
@@ -47,6 +75,14 @@ export default function pinagent(options: PinagentOptions = {}): Plugin {
     async configureServer(server) {
       const root = options.root ?? server.config.root;
       resolvedRoot = root;
+
+      // Storage's drizzle migrate() runs on first DB connect; make sure
+      // PINAGENT_PROJECT_ROOT points at the same root Vite is serving so
+      // a turborepo target works.
+      if (!process.env.PINAGENT_PROJECT_ROOT) {
+        process.env.PINAGENT_PROJECT_ROOT = root;
+      }
+
       const storage = new Storage(root);
 
       const inGi = await isInGitignore(root);
@@ -56,19 +92,32 @@ export default function pinagent(options: PinagentOptions = {}): Plugin {
         );
       }
 
-      let autoTrigger: AutoTrigger | null = null;
-      if (options.autoTrigger) {
-        const triggerOpts: AutoTriggerOptions =
-          typeof options.autoTrigger === 'object' ? options.autoTrigger : {};
-        autoTrigger = new AutoTrigger(triggerOpts, root, server.config.logger);
-        server.config.logger.info(
-          `[pinagent] auto-trigger ON — Claude Agent SDK (${triggerOpts.permissionMode ?? 'acceptEdits'}) will run on each submit`,
-        );
+      const spawnMode: SpawnAgentMode = resolveAgentMode(process.env);
+      let wsPort: number | null = null;
+
+      // Start the WebSocket server in this process — same process as
+      // `spawnAgent` and the event bus. Singleton-guarded inside
+      // `startWsServer` so re-invocations on Vite restart don't fight
+      // for the port.
+      if (spawnMode !== false) {
+        try {
+          const handle = startWsServer();
+          wsPort = handle.port;
+          server.config.logger.info(
+            `[pinagent] WebSocket server on ws://127.0.0.1:${wsPort}/__pinagent/ws`,
+          );
+        } catch (err) {
+          server.config.logger.error(
+            `[pinagent] failed to start WebSocket server: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
 
-      server.middlewares.use(createMiddleware(storage, autoTrigger));
+      server.middlewares.use(createMiddleware({ storage, spawnMode, wsPort }));
 
-      server.config.logger.info('[pinagent] ready — widget at /__pinagent/widget.js');
+      server.config.logger.info(
+        `[pinagent] ready — widget at /__pinagent/widget.js (spawnAgent: ${effective})`,
+      );
     },
 
     transform(code, id) {
@@ -85,9 +134,9 @@ export default function pinagent(options: PinagentOptions = {}): Plugin {
       const ts = /\.tsx$/.test(cleanId);
       const transformed = transformJsx(code, { relPath: rel, ts });
       if (!transformed) return null;
-      // Return as a string with `map: null` so Vite generates a fresh map from
-      // the diff. This is acceptable because we only insert whitespace +
-      // attributes inline; original line numbers are preserved.
+      // `map: null` lets Vite generate a fresh map from the diff. Safe here
+      // because we only insert attributes inline; original line numbers
+      // are preserved.
       return { code: transformed, map: null };
     },
 
