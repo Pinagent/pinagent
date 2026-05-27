@@ -59,12 +59,7 @@ beforeAll(async () => {
   server = await import('../src/ws-server');
   storageMod = await import('../src/storage');
 
-  const handle = server.startWsServer();
-  await new Promise<void>((resolve, reject) => {
-    if (handle.wss.address()) return resolve();
-    handle.wss.once('listening', () => resolve());
-    handle.wss.once('error', reject);
-  });
+  await server.startWsServer();
 });
 
 afterAll(async () => {

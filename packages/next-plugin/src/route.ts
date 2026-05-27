@@ -29,12 +29,16 @@ import { WIDGET_SOURCE } from './__generated__/widget';
 // don't try to bind the same port twice.
 if (process.env.NODE_ENV !== 'production' && resolveAgentMode(process.env) !== false) {
   if (!process.env.PINAGENT_WS_PORT) process.env.PINAGENT_WS_PORT = '53636';
-  try {
-    startWsServer();
-  } catch (err) {
+  // Fire-and-forget — the bind is async (we may need to fall back if 53636 is
+  // held by a stale dev server from another project). On success, the
+  // singleton mutates `process.env.PINAGENT_WS_PORT` to the actually-bound
+  // port; the widget-bundle prelude (`buildWidgetBundle`) reads that env on
+  // each request so the widget always learns the correct port — even when
+  // the first widget.js request races the bind.
+  startWsServer().catch((err: unknown) => {
     // eslint-disable-next-line no-console
     console.error('[pinagent] failed to start WebSocket server:', err);
-  }
+  });
 }
 
 // These exports exist here for type clarity, but consumers MUST re-declare them

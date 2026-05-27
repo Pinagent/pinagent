@@ -26,6 +26,7 @@ import { clearWarning, isStale, sweepStaleWorktrees } from './worktree-ttl';
 
 const DEFAULT_PORT = 53636;
 const WS_PATH = '/__pinagent/ws';
+const PORT_FALLBACK_RANGE = 10;
 
 const SINGLETON_KEY = Symbol.for('pinagent.ws-server');
 
@@ -36,82 +37,134 @@ interface ServerHandle {
 }
 
 interface GlobalHolder {
-  [SINGLETON_KEY]?: ServerHandle;
+  [SINGLETON_KEY]?: ServerHandle | Promise<ServerHandle>;
+}
+
+/**
+ * Attempt to bind a WebSocketServer on `port`. Resolves to the bound
+ * server, or `null` if the port is in use. Other errors propagate.
+ */
+function tryBind(port: number): Promise<WebSocketServer | null> {
+  return new Promise((resolve, reject) => {
+    const wss = new WebSocketServer({ port, path: WS_PATH });
+    const onListening = () => {
+      wss.off('error', onError);
+      resolve(wss);
+    };
+    const onError = (err: NodeJS.ErrnoException) => {
+      wss.off('listening', onListening);
+      if (err.code === 'EADDRINUSE') {
+        wss.close();
+        resolve(null);
+      } else {
+        reject(err);
+      }
+    };
+    wss.once('listening', onListening);
+    wss.once('error', onError);
+  });
 }
 
 /**
  * Start (or return the existing) WebSocket server for this dev process.
  *
- * Next 16 can load the config more than once (workers, HMR) — the singleton
- * keyed off a global Symbol prevents us from binding the same port twice.
+ * Next 16 / Vite HMR can load the config more than once (workers, HMR) — the
+ * singleton keyed off a global Symbol prevents us from binding the same port
+ * twice. The cached entry is a Promise during in-flight bind so concurrent
+ * callers (parallel Turbopack re-evaluations) share one bind attempt.
+ *
+ * If `PINAGENT_WS_PORT` is already taken — typically by a stale dev server
+ * from another pinagent project on this machine — we walk up to
+ * `PORT_FALLBACK_RANGE` ports forward to find a free one. We then mutate
+ * `process.env.PINAGENT_WS_PORT` so the route handler's widget-bundle
+ * prelude (next-plugin/route.ts) reports the actually-bound port, not the
+ * requested one. Without this, the widget would connect to the stale
+ * stranger and silently see no events.
  *
  * We run on a dedicated port rather than hijacking Next's underlying http
  * server because Next App Router routes can't perform an upgrade. The widget
  * learns the port from a prelude injected into /__pinagent/widget.js by the
  * route handler (see `widget-config.ts`).
  */
-export function startWsServer(): ServerHandle {
+export async function startWsServer(): Promise<ServerHandle> {
   const g = globalThis as GlobalHolder;
   const existing = g[SINGLETON_KEY];
   if (existing) return existing;
 
-  const envPort = process.env.PINAGENT_WS_PORT;
-  const port = envPort ? Number(envPort) : DEFAULT_PORT;
-  if (!Number.isFinite(port) || port <= 0 || port > 65535) {
-    throw new Error(`[pinagent] invalid PINAGENT_WS_PORT: ${envPort}`);
-  }
+  const pending = (async (): Promise<ServerHandle> => {
+    const envPort = process.env.PINAGENT_WS_PORT;
+    const requested = envPort ? Number(envPort) : DEFAULT_PORT;
+    if (!Number.isFinite(requested) || requested <= 0 || requested > 65535) {
+      throw new Error(`[pinagent] invalid PINAGENT_WS_PORT: ${envPort}`);
+    }
 
-  const wss = new WebSocketServer({ port, path: WS_PATH });
-
-  wss.on('connection', (socket) => {
-    attachConnection(socket);
-  });
-
-  wss.on('listening', () => {
-    // eslint-disable-next-line no-console
-    console.log(`[pinagent] WebSocket server listening on ws://127.0.0.1:${port}${WS_PATH}`);
-  });
-
-  // The 'error' handler runs async, so we may have already returned the
-  // handle by the time bind fails. EADDRINUSE is the common case in dev:
-  // Turbopack re-evaluates route.ts on each request, which slips past the
-  // global singleton; the original instance is still bound on the port,
-  // so the duplicate just needs to give up quietly. Any other error stays
-  // loud.
-  wss.on('error', (err: NodeJS.ErrnoException) => {
-    if (err.code === 'EADDRINUSE') {
+    let wss: WebSocketServer | null = null;
+    let boundPort = requested;
+    for (let i = 0; i < PORT_FALLBACK_RANGE; i++) {
+      const candidate = requested + i;
+      // Serial probe is intentional — we want the next free port, so each
+      // attempt must finish before the next begins.
+      wss = await tryBind(candidate);
+      if (wss) {
+        boundPort = candidate;
+        break;
+      }
       // eslint-disable-next-line no-console
       console.log(
-        `[pinagent] WebSocket server already running on port ${port} (duplicate bind ignored)`,
+        `[pinagent] port ${candidate} in use (likely a stale dev server from another project); trying ${candidate + 1}`,
       );
-      // Clear the singleton slot so a future startWsServer call could try
-      // again on a different port if the user changed PINAGENT_WS_PORT —
-      // unlikely, but harmless.
-      if (g[SINGLETON_KEY]?.wss === wss) delete g[SINGLETON_KEY];
-      return;
     }
+    if (!wss) {
+      throw new Error(
+        `[pinagent] no free WS port in range ${requested}..${requested + PORT_FALLBACK_RANGE - 1}`,
+      );
+    }
+
+    // Surface the actual port so downstream config readers (next-plugin's
+    // widget-bundle prelude) hand the widget the right URL.
+    process.env.PINAGENT_WS_PORT = String(boundPort);
+
     // eslint-disable-next-line no-console
-    console.error('[pinagent] WebSocket server error:', err);
-  });
+    console.log(`[pinagent] WebSocket server listening on ws://127.0.0.1:${boundPort}${WS_PATH}`);
 
-  const handle: ServerHandle = { port, wss, httpServer: null };
-  g[SINGLETON_KEY] = handle;
+    wss.on('connection', (socket) => {
+      attachConnection(socket);
+    });
 
-  // Best-effort cleanup so a SIGINT doesn't leak the port.
-  process.once('SIGINT', () => wss.close());
-  process.once('SIGTERM', () => wss.close());
+    // Any error AFTER successful bind (not EADDRINUSE) is unexpected — log
+    // and let the process keep running.
+    wss.on('error', (err: NodeJS.ErrnoException) => {
+      // eslint-disable-next-line no-console
+      console.error('[pinagent] WebSocket server error:', err);
+    });
 
-  // Fire-and-forget orphan-worktree TTL scan. Populates a flag set the
-  // next `subscribe` consults to upgrade `active` → `ttl_warning` for
-  // stale conversations. Safe to ignore failures — the only consequence
-  // is users don't get the nudge on this boot.
-  void sweepStaleWorktrees(projectRoot());
+    const handle: ServerHandle = { port: boundPort, wss, httpServer: null };
+    g[SINGLETON_KEY] = handle;
 
-  // Register the project-event fan-out listener exactly once. Safe to
-  // call on every startWsServer invocation — singleton-guarded inside.
-  ensureProjectListener();
+    // Best-effort cleanup so a SIGINT doesn't leak the port.
+    process.once('SIGINT', () => wss.close());
+    process.once('SIGTERM', () => wss.close());
 
-  return handle;
+    // Fire-and-forget orphan-worktree TTL scan. Populates a flag set the
+    // next `subscribe` consults to upgrade `active` → `ttl_warning` for
+    // stale conversations. Safe to ignore failures — the only consequence
+    // is users don't get the nudge on this boot.
+    void sweepStaleWorktrees(projectRoot());
+
+    // Register the project-event fan-out listener exactly once. Safe to
+    // call on every startWsServer invocation — singleton-guarded inside.
+    ensureProjectListener();
+
+    return handle;
+  })();
+
+  g[SINGLETON_KEY] = pending;
+  try {
+    return await pending;
+  } catch (err) {
+    if (g[SINGLETON_KEY] === pending) delete g[SINGLETON_KEY];
+    throw err;
+  }
 }
 
 /** Per-connection state — which feedback ids this socket is subscribed to. */
