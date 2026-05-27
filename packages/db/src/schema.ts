@@ -147,6 +147,49 @@ export const activeRuns = sqliteTable('active_runs', {
   lastError: text('last_error'),
 });
 
+/**
+ * One row per GitHub PR the dock's compose flow has opened. Populated
+ * by `composePullRequest` on the success path and read by the dock's
+ * PRs route. The `state` column starts as `open` and is intended to be
+ * reconciled against the GitHub API by a future refresh job — the
+ * write path here only knows about creation.
+ *
+ * `conversationIds` is stored as a JSON array of the feedback ids the
+ * compose flow bundled into the PR, mirroring what
+ * `ComposeOpts.feedbackIds` carried in.
+ */
+export const pullRequests = sqliteTable('pull_requests', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  /** GitHub PR number (unique within the repo). */
+  number: integer('number').notNull(),
+  /** Octokit's `html_url` — what the dock links out to. */
+  url: text('url').notNull(),
+  /** Compose branch name pushed for this PR. */
+  branch: text('branch').notNull(),
+  /** Target branch the PR merges into. */
+  baseBranch: text('base_branch').notNull(),
+  title: text('title').notNull(),
+  /**
+   * PR body (markdown). Kept so the dock can show a preview without
+   * round-tripping GitHub.
+   */
+  body: text('body').notNull().default(''),
+  state: text('state', { enum: ['open', 'merged', 'closed', 'draft'] })
+    .notNull()
+    .default('open'),
+  /** Feedback/conversation ids bundled into this PR. */
+  conversationIds: text('conversation_ids', { mode: 'json' })
+    .$type<string[]>()
+    .notNull()
+    .default(sql`('[]')`),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+});
+
 export type Conversation = typeof conversations.$inferSelect;
 export type NewConversation = typeof conversations.$inferInsert;
 export type WidgetAnchor = typeof widgetAnchors.$inferSelect;
@@ -155,3 +198,5 @@ export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 export type ActiveRun = typeof activeRuns.$inferSelect;
 export type NewActiveRun = typeof activeRuns.$inferInsert;
+export type PullRequest = typeof pullRequests.$inferSelect;
+export type NewPullRequest = typeof pullRequests.$inferInsert;

@@ -46,6 +46,7 @@ export {
   type ComposeResult,
   composePullRequest,
 } from './pr-composer';
+export { listPullRequests, type PullRequestRecord } from './pull-requests';
 export {
   type PresentableConnections,
   type SecretsFile,

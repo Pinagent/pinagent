@@ -20,7 +20,7 @@
  * of these, never `fetch` or `new WebSocket()` directly.
  */
 import type { ProjectEvent } from '@pinagent/shared';
-import type { Branch, Change, Conversation } from '../fixtures/types';
+import type { Branch, Change, Conversation, PullRequest } from '../fixtures/types';
 import type { ConnectionStatus, ConversationHandlers } from './ws-client';
 
 export interface ConversationFilters {
@@ -78,6 +78,12 @@ export interface DockTransport {
    * disk usage, for the dock's Branches view. Newest activity first.
    */
   listBranches(): Promise<Branch[]>;
+
+  /**
+   * List GitHub PRs the dock's compose flow has opened. Driven by rows
+   * the composer wrote on success — no GitHub round-trip on read.
+   */
+  listPullRequests(): Promise<PullRequest[]>;
 
   // ---------- Live subscriptions ----------
 

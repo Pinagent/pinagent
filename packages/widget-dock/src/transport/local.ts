@@ -12,7 +12,7 @@
  * returns FeedbackRecord[]".
  */
 import type { ProjectEvent } from '@pinagent/shared';
-import type { Branch, Change, Conversation } from '../fixtures/types';
+import type { Branch, Change, Conversation, PullRequest } from '../fixtures/types';
 import { resolveWsUrl } from '../lib/ws-url';
 import { deriveDockStatus } from './status-derive';
 import type {
@@ -27,6 +27,25 @@ import type {
   PruneStaleResult,
 } from './types';
 import { type ConnectionStatus, type ConversationHandlers, DockWsClient } from './ws-client';
+
+/**
+ * Wire shape for `GET /__pinagent/prs`. Mirrors
+ * `@pinagent/agent-runner.PullRequestRecord`. PR list-row only — no PR
+ * body / diff. Server orders newest-first by `updatedAt`.
+ */
+interface PullRequestWire {
+  id: string;
+  number: number;
+  url: string;
+  branch: string;
+  baseBranch: string;
+  title: string;
+  body: string;
+  state: 'open' | 'merged' | 'closed' | 'draft';
+  conversationIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
 
 /**
  * Wire shape for `GET /__pinagent/branches`. Mirrors
@@ -228,6 +247,29 @@ export class LocalTransport implements DockTransport {
         lastActivity: w.lastActivity,
         state: w.state,
         diskMb: w.diskMb,
+      }),
+    );
+  }
+
+  async listPullRequests(): Promise<PullRequest[]> {
+    const response = await fetch(this.url('/__pinagent/prs'), {
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) {
+      throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
+    }
+    const wire = (await response.json()) as PullRequestWire[];
+    return wire.map(
+      (w): PullRequest => ({
+        id: w.id,
+        number: w.number,
+        title: w.title,
+        state: w.state,
+        branch: w.branch,
+        baseBranch: w.baseBranch,
+        url: w.url,
+        updatedAt: w.updatedAt,
+        conversationIds: w.conversationIds,
       }),
     );
   }

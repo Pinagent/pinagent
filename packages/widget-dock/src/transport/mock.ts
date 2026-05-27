@@ -16,7 +16,9 @@ import {
   FIXTURE_CHANGES,
   FIXTURE_CONVERSATIONS,
   FIXTURE_GITHUB,
+  FIXTURE_PRS,
   FIXTURE_SETTINGS,
+  type PullRequest,
 } from '../fixtures';
 import type {
   ChangeDiff,
@@ -123,6 +125,11 @@ export class MockTransport implements DockTransport {
       failed: [],
       retentionDays,
     };
+  }
+
+  async listPullRequests(): Promise<PullRequest[]> {
+    await sleep(SIMULATED_LATENCY_MS);
+    return FIXTURE_PRS.slice().sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
   }
 
   async getConversation(id: string): Promise<ConversationDetail | null> {

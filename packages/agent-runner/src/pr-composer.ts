@@ -24,6 +24,7 @@ import { Octokit } from '@octokit/rest';
 import { z } from 'zod';
 import { resolveOriginRemote } from './git-remote';
 import { runGitCapture } from './git-utils';
+import { recordPullRequest } from './pull-requests';
 import { SecretsStore } from './secrets-store';
 import { Storage } from './storage';
 
@@ -296,6 +297,18 @@ export async function composePullRequest(
       head: opts.branchName,
       base: opts.baseBranch,
     });
+    // Best-effort: record the PR for the dock's PRs view. A failure
+    // here shouldn't mask the fact that the PR was opened — the user
+    // already has the URL.
+    await recordPullRequest(projectRoot, {
+      number: created.data.number,
+      url: created.data.html_url,
+      branch: opts.branchName,
+      baseBranch: opts.baseBranch,
+      title: opts.title,
+      body: opts.description,
+      conversationIds: opts.feedbackIds,
+    }).catch(() => {});
     return { ok: true, branchPushed: true, prUrl: created.data.html_url };
   } catch (e) {
     // Push succeeded; the PR API call failed (token scope, network,

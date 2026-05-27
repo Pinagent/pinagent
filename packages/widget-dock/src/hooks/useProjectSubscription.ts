@@ -37,10 +37,14 @@ export function useProjectSubscription({ enabled = true }: UseProjectSubscriptio
       if (event.type === 'conversations_changed') {
         // Any conversation change can affect both the list view AND
         // the Changes view (worktree-state transitions ripple into
-        // diff stats). Invalidate both query namespaces.
+        // diff stats). Invalidate both query namespaces. The PRs view
+        // is invalidated too because the compose flow flips affected
+        // conversations to landed and writes the PR row in the same
+        // transition — both signals piggyback on this event.
         void queryClient.invalidateQueries({ queryKey: ['conversations'] });
         void queryClient.invalidateQueries({ queryKey: ['changes'] });
         void queryClient.invalidateQueries({ queryKey: ['branches'] });
+        void queryClient.invalidateQueries({ queryKey: ['pullRequests'] });
       }
     });
     const unsubStatus = transport.onConnectionStatus(setStatus);

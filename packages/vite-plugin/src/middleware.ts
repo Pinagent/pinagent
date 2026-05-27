@@ -15,6 +15,7 @@ import {
   ID_RE,
   listBranches,
   listChanges,
+  listPullRequests,
   openInEditor,
   PatchSchema,
   ProjectSettingsPatchSchema,
@@ -197,6 +198,14 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
         if (!ID_RE.test(id)) return badRequest(res, 'invalid id');
         const result = await pruneBranch(storage.root, id);
         return json(res, result.ok ? 200 : 422, result);
+      }
+
+      // GET /__pinagent/prs — list PRs the compose flow has opened.
+      // Read-only mirror of what was persisted on the POST success
+      // path; doesn't reach out to GitHub.
+      if (req.method === 'GET' && url === '/__pinagent/prs') {
+        const prs = await listPullRequests(storage.root);
+        return json(res, 200, prs);
       }
 
       // POST /__pinagent/prs — compose a PR from multiple conversations.

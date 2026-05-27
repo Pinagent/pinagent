@@ -14,6 +14,7 @@ import {
   ID_RE,
   listBranches,
   listChanges,
+  listPullRequests,
   openInEditor,
   PatchSchema,
   ProjectSettingsPatchSchema,
@@ -143,6 +144,13 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
   if (slug.length === 1 && slug[0] === 'changes') {
     const changes = await listChanges(storage.root);
     return json(200, changes);
+  }
+
+  // /__pinagent/prs — read mirror of PRs the compose flow has opened.
+  // Mirror of the vite-plugin GET handler.
+  if (slug.length === 1 && slug[0] === 'prs') {
+    const prs = await listPullRequests(storage.root);
+    return json(200, prs);
   }
 
   // /__pinagent/changes/:id/diff — full unified diff for one
