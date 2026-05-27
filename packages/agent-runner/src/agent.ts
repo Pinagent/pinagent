@@ -19,6 +19,27 @@ import {
 import { ASK_USER_TOOL_NAME, createAskUserMcpServer, rejectAsk } from './ask-user';
 import { type FeedbackRecord, Storage } from './storage';
 
+/**
+ * @pinagent/mcp tool names the spawned agent needs to do its job:
+ *
+ * - `get_feedback`         — fetch the full feedback record incl. screenshot
+ * - `resolve_feedback`     — mark fixed/wontfix/deferred when done
+ * - `get_source_context`   — read a window of source around file:line
+ * - `list_pending_feedback`— rarely needed by a spawned agent (it knows its
+ *                            own id), included for parity with pull mode
+ *
+ * They are surfaced to the SDK via the user's `.mcp.json` (loaded by
+ * `settingSources: ['user', 'project', 'local']`). Allowlisting them
+ * makes the spawned agent auto-accept the calls instead of timing out
+ * waiting for a non-existent permission prompt.
+ */
+const PINAGENT_MCP_TOOLS = [
+  'mcp__pinagent__get_feedback',
+  'mcp__pinagent__resolve_feedback',
+  'mcp__pinagent__get_source_context',
+  'mcp__pinagent__list_pending_feedback',
+];
+
 export type SpawnAgentMode = 'worktree' | 'inline' | false;
 
 /**
@@ -213,7 +234,7 @@ async function runQuery(opts: RunQueryOpts): Promise<void> {
     mcpServers: {
       'pinagent-ask-user': createAskUserMcpServer(opts.feedbackId),
     },
-    allowedTools: [ASK_USER_TOOL_NAME],
+    allowedTools: [ASK_USER_TOOL_NAME, ...PINAGENT_MCP_TOOLS],
     systemPrompt: {
       type: 'preset',
       preset: 'claude_code',
