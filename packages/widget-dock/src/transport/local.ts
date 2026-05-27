@@ -145,7 +145,7 @@ const FeedbackRecordWithScreenshotSchema = FeedbackRecordSchema.extend({
 
 /**
  * Wire shape for `POST /__pinagent/feedback/bulk-update`. Mirrors the
- * server-side `BulkArchiveResult` from `@pinagent/agent-runner`. Local
+ * server-side BulkArchiveResult shape in @pinagent/agent-runner. Local
  * because the bulk endpoint is dock-specific.
  */
 const BulkArchiveResultSchema = z
