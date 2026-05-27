@@ -23,6 +23,8 @@ import type {
   CreatePullRequestResult,
   DockProjectSettings,
   DockTransport,
+  HistorySearchHit,
+  HistorySearchQuery,
   PresentableConnections,
   PruneStaleResult,
 } from './types';
@@ -394,6 +396,13 @@ export class LocalTransport implements DockTransport {
 
   async pruneStaleBranches(): Promise<PruneStaleResult> {
     return this.jsonWrite<PruneStaleResult>('POST', '/__pinagent/branches/prune-stale');
+  }
+
+  async searchHistory(query: HistorySearchQuery): Promise<HistorySearchHit[]> {
+    const params = new URLSearchParams();
+    params.set('q', query.query);
+    if (query.status) params.set('status', query.status);
+    return this.jsonGet<HistorySearchHit[]>(`/__pinagent/history?${params.toString()}`);
   }
 
   // Internal: shared GET + write helpers so the per-endpoint methods

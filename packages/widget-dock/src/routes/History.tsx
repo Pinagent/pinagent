@@ -1,11 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * History — resolved conversations (landed, discarded, errored). Uses
- * the same useConversations hook as Conversations + a status filter so
- * the cache stays shared. Phase 6 ships proper full-text search + an
- * audit log; the search input here is client-side over loaded rows.
+ * History — resolved conversations (landed, discarded, errored). Two
+ * modes share the same view:
+ *
+ *   - Empty search input: client-side filter over the conversations
+ *     cache, so the default "show me everything resolved" stays free
+ *     of network round-trips and benefits from any live invalidation.
+ *
+ *   - Non-empty search input: server-side full-text search via
+ *     GET /__pinagent/history. Returns matched fields + a snippet so
+ *     the row can show "matched: comment" with the surrounding context.
+ *
+ * Status filter applies to both modes.
  */
 
+import { StatusBadge } from '@pinagent/ui/components/status-badge';
+import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Input } from '@pinagent/ui/components/ui/input';
 import { cn } from '@pinagent/ui/lib/utils';
 import type { StatusKey } from '@pinagent/ui/tokens';
@@ -13,45 +23,55 @@ import { History as HistoryIcon, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AnchorChip } from '../components/AnchorChip';
 import { ListRow } from '../components/ListRow';
+import { TimestampDot } from '../components/TimestampDot';
 import { useConversations } from '../hooks/useConversations';
+import { useDebouncedValue, useHistorySearch } from '../hooks/useHistorySearch';
 import { EmptyState, ErrorState, LoadingState } from '../shell/states';
+import type { HistoryMatchedField, HistorySearchHit } from '../transport';
 
 type HistoryFilter = 'all' | 'landed' | 'discarded' | 'error';
+type StatusParam = 'all' | 'landed' | 'discarded';
 
-const FILTERS: { label: string; key: HistoryFilter; matches: StatusKey[] }[] = [
-  { label: 'All', key: 'all', matches: ['landed', 'discarded', 'error'] },
-  { label: 'Landed', key: 'landed', matches: ['landed'] },
-  { label: 'Discarded', key: 'discarded', matches: ['discarded'] },
-  { label: 'Errored', key: 'error', matches: ['error'] },
-];
+const FILTERS: { label: string; key: HistoryFilter; matches: StatusKey[]; status: StatusParam }[] =
+  [
+    { label: 'All', key: 'all', matches: ['landed', 'discarded', 'error'], status: 'all' },
+    { label: 'Landed', key: 'landed', matches: ['landed'], status: 'landed' },
+    { label: 'Discarded', key: 'discarded', matches: ['discarded'], status: 'discarded' },
+    { label: 'Errored', key: 'error', matches: ['error'], status: 'discarded' },
+  ];
 
 const RESOLVED_STATUSES: ReadonlySet<StatusKey> = new Set(['landed', 'discarded', 'error']);
+
+const MATCH_LABEL: Record<HistoryMatchedField, string> = {
+  comment: 'comment',
+  note: 'note',
+  branch: 'branch',
+  anchor: 'file',
+  selector: 'selector',
+};
 
 export function History() {
   const [filter, setFilter] = useState<HistoryFilter>('all');
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebouncedValue(query);
+  const activeFilter = FILTERS.find((f) => f.key === filter) ?? FILTERS[0]!;
 
   const conversationsQuery = useConversations();
+  const searchQuery = useHistorySearch({ query: debouncedQuery, status: activeFilter.status });
 
-  const resolved = useMemo(() => {
+  const isSearching = debouncedQuery.trim().length > 0;
+
+  // Client-side filter mode (empty query).
+  const filterItems = useMemo(() => {
     const data = conversationsQuery.data ?? [];
-    return data.filter((c) => RESOLVED_STATUSES.has(c.status));
-  }, [conversationsQuery.data]);
-
-  const items = useMemo(() => {
-    const matches = FILTERS.find((f) => f.key === filter)?.matches ?? [];
-    const trimmedQuery = query.trim().toLowerCase();
-    return resolved.filter((c) => {
-      if (!matches.includes(c.status)) return false;
-      if (!trimmedQuery) return true;
-      return (
-        c.title.toLowerCase().includes(trimmedQuery) ||
-        c.anchor.loc.toLowerCase().includes(trimmedQuery) ||
-        c.anchor.selector.toLowerCase().includes(trimmedQuery) ||
-        c.page.toLowerCase().includes(trimmedQuery)
-      );
-    });
-  }, [resolved, filter, query]);
+    return data.filter(
+      (c) => RESOLVED_STATUSES.has(c.status) && activeFilter.matches.includes(c.status),
+    );
+  }, [conversationsQuery.data, activeFilter]);
+  const resolvedCount = useMemo(
+    () => (conversationsQuery.data ?? []).filter((c) => RESOLVED_STATUSES.has(c.status)).length,
+    [conversationsQuery.data],
+  );
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -64,11 +84,11 @@ export function History() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search resolved conversations"
+            placeholder="Search comments, files, branches, selectors…"
             className="h-8 pl-8 text-xs"
           />
         </div>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {FILTERS.map((f) => (
             <button
               key={f.key}
@@ -85,65 +105,173 @@ export function History() {
               {f.label}
             </button>
           ))}
+          {isSearching && searchQuery.isFetching && (
+            <span className="ml-auto text-[11px] text-muted-foreground italic">Searching…</span>
+          )}
         </div>
       </div>
 
       <div className="flex-1 overflow-auto">
-        {conversationsQuery.isLoading && <LoadingState rows={5} />}
-
-        {conversationsQuery.isError && (
-          <ErrorState
-            title="Couldn't load history"
-            description="The dock couldn't reach the local pinagent dev-server. Resolved conversations live with the rest — they'll appear once the server's back."
-            onRetry={() => conversationsQuery.refetch()}
+        {!isSearching ? (
+          <ClientFilterView
+            query={conversationsQuery}
+            items={filterItems}
+            resolvedCount={resolvedCount}
           />
-        )}
-
-        {conversationsQuery.isSuccess && resolved.length === 0 && (
-          <EmptyState
-            Icon={HistoryIcon}
-            title="Nothing resolved yet"
-            description="Landed, discarded, and errored conversations appear here once they leave the active list."
-          />
-        )}
-
-        {conversationsQuery.isSuccess && resolved.length > 0 && items.length === 0 && (
-          <EmptyState
-            Icon={HistoryIcon}
-            title="No matches"
-            description="Try a different filter or clear the search."
-          />
-        )}
-
-        {items.length > 0 && (
-          <div className="flex flex-col gap-1.5 p-3">
-            {items.map((c) => (
-              <ListRow
-                key={c.id}
-                status={c.status}
-                title={c.title}
-                meta={
-                  <>
-                    {c.anchor.loc && <AnchorChip loc={c.anchor.loc} selector={c.anchor.selector} />}
-                    {c.page && (
-                      <span className="truncate font-mono text-[10.5px]">{safePath(c.page)}</span>
-                    )}
-                  </>
-                }
-                updatedAt={c.updatedAt}
-              />
-            ))}
-          </div>
+        ) : (
+          <SearchView query={searchQuery} />
         )}
       </div>
 
       <div className="border-t border-border bg-secondary/30 px-3 py-2">
         <p className="text-[11px] text-muted-foreground">
-          Client-side search · full-text + audit log ship with Phase 6.
+          {isSearching
+            ? 'Server-side full-text search over comments, notes, files, selectors, and branches.'
+            : 'Showing the conversations cache · type to search the whole history.'}
         </p>
       </div>
     </div>
   );
+}
+
+function ClientFilterView({
+  query,
+  items,
+  resolvedCount,
+}: {
+  query: ReturnType<typeof useConversations>;
+  items: NonNullable<ReturnType<typeof useConversations>['data']>;
+  resolvedCount: number;
+}) {
+  if (query.isLoading) return <LoadingState rows={5} />;
+  if (query.isError) {
+    return (
+      <ErrorState
+        title="Couldn't load history"
+        description="The dock couldn't reach the local pinagent dev-server. Resolved conversations live with the rest — they'll appear once the server's back."
+        onRetry={() => query.refetch()}
+      />
+    );
+  }
+  if (resolvedCount === 0) {
+    return (
+      <EmptyState
+        Icon={HistoryIcon}
+        title="Nothing resolved yet"
+        description="Landed, discarded, and errored conversations appear here once they leave the active list."
+      />
+    );
+  }
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        Icon={HistoryIcon}
+        title="No matches"
+        description="Try a different status, or search the full history above."
+      />
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1.5 p-3">
+      {items.map((c) => (
+        <ListRow
+          key={c.id}
+          status={c.status}
+          title={c.title}
+          meta={
+            <>
+              {c.anchor.loc && <AnchorChip loc={c.anchor.loc} selector={c.anchor.selector} />}
+              {c.page && (
+                <span className="truncate font-mono text-[10.5px]">{safePath(c.page)}</span>
+              )}
+            </>
+          }
+          updatedAt={c.updatedAt}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SearchView({ query }: { query: ReturnType<typeof useHistorySearch> }) {
+  if (query.isLoading) return <LoadingState rows={5} />;
+  if (query.isError) {
+    return (
+      <ErrorState
+        title="Search failed"
+        description={query.error instanceof Error ? query.error.message : 'Unknown error'}
+        onRetry={() => query.refetch()}
+      />
+    );
+  }
+  const hits = query.data ?? [];
+  if (hits.length === 0) {
+    return (
+      <EmptyState
+        Icon={HistoryIcon}
+        title="No matches"
+        description="Try a shorter query, a different status, or check the spelling."
+      />
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1.5 p-3">
+      {hits.map((hit) => (
+        <HitRow key={hit.id} hit={hit} />
+      ))}
+    </div>
+  );
+}
+
+function HitRow({ hit }: { hit: HistorySearchHit }) {
+  const status: StatusKey =
+    hit.worktreeState === 'landed'
+      ? 'landed'
+      : hit.worktreeState === 'discarded' || hit.status === 'wontfix'
+        ? 'discarded'
+        : 'pending';
+  const title = firstLine(hit.comment);
+  const loc = locString(hit.file, hit.line, hit.col);
+  return (
+    <article className="group flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
+      <StatusBadge status={status} variant="dot" className="mt-1.5 pointer-events-none" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start gap-2">
+          <span className="flex-1 text-sm font-medium leading-tight text-foreground truncate">
+            {title}
+          </span>
+          <TimestampDot iso={hit.resolvedAt ?? hit.updatedAt} className="mt-0.5" />
+        </div>
+        {hit.snippet && (
+          <p className="mt-1 text-[11.5px] text-muted-foreground leading-relaxed line-clamp-2">
+            {hit.snippet}
+          </p>
+        )}
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+          {loc && <AnchorChip loc={loc} selector={hit.selector} />}
+          {hit.url && <span className="truncate font-mono text-[10.5px]">{safePath(hit.url)}</span>}
+          {hit.branch && <span className="truncate font-mono text-[10.5px]">{hit.branch}</span>}
+          {hit.matchedFields.length > 0 && (
+            <Badge variant="outline" className="text-[10px]">
+              matched: {hit.matchedFields.map((f) => MATCH_LABEL[f]).join(', ')}
+            </Badge>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function firstLine(text: string): string {
+  const trimmed = (text.split(/\r?\n/).find((l) => l.trim().length > 0) ?? text).trim();
+  return trimmed.length > 80 ? `${trimmed.slice(0, 77)}…` : trimmed;
+}
+
+function locString(file: string | null, line: number | null, col: number | null): string {
+  if (!file) return '';
+  if (line == null) return file;
+  if (col == null) return `${file}:${line}`;
+  return `${file}:${line}:${col}`;
 }
 
 function safePath(url: string): string {

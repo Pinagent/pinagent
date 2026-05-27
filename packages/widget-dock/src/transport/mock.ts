@@ -28,6 +28,9 @@ import type {
   CreatePullRequestResult,
   DockProjectSettings,
   DockTransport,
+  HistoryMatchedField,
+  HistorySearchHit,
+  HistorySearchQuery,
   PresentableConnections,
   PruneStaleResult,
 } from './types';
@@ -234,5 +237,58 @@ export class MockTransport implements DockTransport {
     await sleep(SIMULATED_LATENCY_MS * 2);
     this.settings = { ...this.settings, ...patch };
     return this.settings;
+  }
+
+  async searchHistory(query: HistorySearchQuery): Promise<HistorySearchHit[]> {
+    await sleep(SIMULATED_LATENCY_MS);
+    const trimmed = query.query.trim().toLowerCase();
+    if (trimmed.length === 0) return [];
+    const statusFilter = query.status ?? 'all';
+    // Reuse the resolved set from fixtures — the dock's status-derive
+    // marks landed/discarded/error as resolved; for the mock we map back
+    // to the wire shape with a reasonable underlying status guess.
+    return FIXTURE_CONVERSATIONS.filter((c) => {
+      const isResolved = c.status === 'landed' || c.status === 'discarded' || c.status === 'error';
+      if (!isResolved) return false;
+      if (statusFilter === 'landed' && c.status !== 'landed') return false;
+      if (statusFilter === 'discarded' && c.status !== 'discarded' && c.status !== 'error')
+        return false;
+      const haystacks = [c.title, c.lastMessage, c.anchor.loc, c.anchor.selector, c.branch];
+      return haystacks.some((h) => h.toLowerCase().includes(trimmed));
+    }).map((c): HistorySearchHit => {
+      const matched: HistoryMatchedField[] = [];
+      if (c.title.toLowerCase().includes(trimmed) || c.lastMessage.toLowerCase().includes(trimmed))
+        matched.push('comment');
+      if (c.branch.toLowerCase().includes(trimmed)) matched.push('branch');
+      if (c.anchor.loc.toLowerCase().includes(trimmed)) matched.push('anchor');
+      if (c.anchor.selector.toLowerCase().includes(trimmed)) matched.push('selector');
+      // Mock doesn't track `note`; only the four fields above match here.
+      const snippetSource = c.lastMessage.toLowerCase().includes(trimmed) ? c.lastMessage : c.title;
+      const idx = snippetSource.toLowerCase().indexOf(trimmed);
+      const start = Math.max(0, idx - 40);
+      const end = Math.min(snippetSource.length, idx + trimmed.length + 40);
+      const prefix = start > 0 ? '…' : '';
+      const suffix = end < snippetSource.length ? '…' : '';
+      return {
+        id: c.id,
+        comment: c.lastMessage,
+        status: c.status === 'discarded' ? 'wontfix' : 'fixed',
+        worktreeState:
+          c.status === 'landed' ? 'landed' : c.status === 'discarded' ? 'discarded' : 'none',
+        branch: c.branch,
+        file: c.anchor.loc.split(':')[0] ?? null,
+        line: null,
+        col: null,
+        selector: c.anchor.selector,
+        url: c.page,
+        createdAt: c.updatedAt,
+        updatedAt: c.updatedAt,
+        resolvedAt: c.updatedAt,
+        matchedFields: matched.length > 0 ? matched : ['comment'],
+        snippet: matched.includes('comment')
+          ? `${prefix}${snippetSource.slice(start, end)}${suffix}`
+          : '',
+      };
+    });
   }
 }

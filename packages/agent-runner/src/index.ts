@@ -41,6 +41,13 @@ export {
 } from './connection-validators';
 export { type OpenInEditorResult, openInEditor } from './editor';
 export {
+  type HistorySearchHit,
+  type HistorySearchOpts,
+  type HistoryStatusFilter,
+  type MatchedField,
+  searchHistory,
+} from './history';
+export {
   type ComposeOpts,
   ComposeOptsSchema,
   type ComposeResult,

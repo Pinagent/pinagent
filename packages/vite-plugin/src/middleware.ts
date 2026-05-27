@@ -12,6 +12,7 @@ import {
   composePullRequest,
   FeedbackInputSchema,
   getChangeDiff,
+  type HistoryStatusFilter,
   ID_RE,
   listBranches,
   listChanges,
@@ -25,6 +26,7 @@ import {
   SettingsStore,
   type SpawnAgentMode,
   type Storage,
+  searchHistory,
   spawnAgent,
   validateAnthropicKey,
   validateGithubToken,
@@ -206,6 +208,20 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       if (req.method === 'GET' && url === '/__pinagent/prs') {
         const prs = await listPullRequests(storage.root);
         return json(res, 200, prs);
+      }
+
+      // GET /__pinagent/history?q=&status= — server-side full-text
+      // search over resolved conversations. Empty q returns []; the
+      // dock falls back to its conversations-cache filter for that
+      // "show all resolved" case.
+      if (req.method === 'GET' && url.startsWith('/__pinagent/history')) {
+        const parsed = new URL(url, 'http://localhost');
+        const q = parsed.searchParams.get('q') ?? '';
+        const statusParam = parsed.searchParams.get('status');
+        const status: HistoryStatusFilter =
+          statusParam === 'landed' || statusParam === 'discarded' ? statusParam : 'all';
+        const hits = await searchHistory(storage.root, { query: q, status });
+        return json(res, 200, hits);
       }
 
       // POST /__pinagent/prs — compose a PR from multiple conversations.
