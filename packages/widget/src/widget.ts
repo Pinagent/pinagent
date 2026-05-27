@@ -45,6 +45,7 @@ interface WorktreeStateMessage {
   commitSha?: string;
   conflicts?: string[];
   message?: string;
+  changesCount?: number;
 }
 
 interface ServerMessage {
@@ -55,6 +56,7 @@ interface ServerMessage {
   state?: WorktreeWireState;
   commitSha?: string;
   conflicts?: string[];
+  changesCount?: number;
 }
 
 interface FeedbackHandler {
@@ -383,6 +385,9 @@ class WidgetWsClient {
           if (parsed.commitSha) payload.commitSha = parsed.commitSha;
           if (parsed.conflicts) payload.conflicts = parsed.conflicts;
           if (parsed.message) payload.message = parsed.message;
+          if (typeof parsed.changesCount === 'number') {
+            payload.changesCount = parsed.changesCount;
+          }
           h.onWorktreeState(payload);
         }
         return;
@@ -1354,6 +1359,11 @@ function attachStreamHandler(
   let apiKeySource: string | null = null;
   let turnRunning = true;
   let worktreeState: WorktreeWireState = 'none';
+  // Last known uncommitted-file count for this worktree, surfaced by the
+  // server in the `worktree_state` broadcast. `null` means unknown
+  // (server couldn't run `git status`, or the worktree is gone) — the
+  // label omits the count rather than showing a misleading "0 changes".
+  let worktreeChanges: number | null = null;
 
   function setStopVisible(visible: boolean) {
     stopBtn.hidden = !visible;
@@ -1688,6 +1698,16 @@ function attachStreamHandler(
    * after turn transitions (because Land/Discard are disabled while a
    * turn is running). Idempotent — safe to call repeatedly.
    */
+  function branchSummary(): string {
+    // Worktree branches are always named `pinagent/<feedbackId>` (see
+    // `createWorktree` in agent-runner). Show the full branch in the label
+    // so the dev can match it against `git branch` output.
+    const branch = `pinagent/${feedbackId}`;
+    if (worktreeChanges === null) return branch;
+    const noun = worktreeChanges === 1 ? 'change' : 'changes';
+    return `${branch} · ${worktreeChanges} ${noun}`;
+  }
+
   function renderLifecycle(extra?: { commitSha?: string; message?: string }) {
     const { row, label, landBtn, discardBtn } = lifecycle;
     const cls = row.classList;
@@ -1702,7 +1722,7 @@ function attachStreamHandler(
     const canAct = !turnRunning && !pendingAskId;
     switch (worktreeState) {
       case 'active':
-        label.textContent = canAct ? 'Ready to land or discard' : 'Working…';
+        label.textContent = canAct ? branchSummary() : `Working on ${branchSummary()}`;
         landBtn.hidden = false;
         discardBtn.hidden = false;
         landBtn.disabled = !canAct;
@@ -1752,7 +1772,7 @@ function attachStreamHandler(
         discardBtn.textContent = 'Discard';
         break;
       case 'ttl_warning':
-        label.textContent = 'Old worktree — review or discard';
+        label.textContent = `Old worktree · ${branchSummary()} — review or discard`;
         landBtn.hidden = false;
         discardBtn.hidden = false;
         landBtn.disabled = !canAct;
@@ -1815,6 +1835,9 @@ function attachStreamHandler(
     },
     onWorktreeState(payload) {
       worktreeState = payload.state;
+      if (typeof payload.changesCount === 'number') {
+        worktreeChanges = payload.changesCount;
+      }
       if (payload.state === 'conflict' && payload.conflicts && payload.conflicts.length > 0) {
         renderConflicts(payload.conflicts);
       }
