@@ -211,6 +211,10 @@ export class LocalTransport implements DockTransport {
     this.ws()?.sendUserMessage(id, content);
   }
 
+  sendAskResponse(askId: string, answer: string): void {
+    this.ws()?.sendAskResponse(askId, answer);
+  }
+
   landConversation(id: string): void {
     this.ws()?.sendLandRequest(id);
   }

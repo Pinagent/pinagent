@@ -78,6 +78,10 @@ export class MockTransport implements DockTransport {
     // no-op
   }
 
+  sendAskResponse(_askId: string, _answer: string): void {
+    // no-op
+  }
+
   landConversation(_id: string): void {
     // no-op
   }

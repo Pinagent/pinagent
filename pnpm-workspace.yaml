@@ -13,3 +13,10 @@ onlyBuiltDependencies:
   - better-sqlite3
   - esbuild
   - sharp
+# Fail install when a declared peer dependency is unmet. Catches the
+# class of drift where (e.g.) an upstream SDK bumps its zod peer to ^4
+# and our packages keep declaring ^3 — previously this surfaced only
+# as a warning a developer could miss, and we shipped a broken peer
+# version to npm. With this on, every `pnpm install` is also a peer-dep
+# lint pass. Surface the equivalent script as `lint:peer-deps`.
+strictPeerDependencies: true
