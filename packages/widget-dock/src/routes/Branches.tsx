@@ -15,7 +15,6 @@ import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
 import { GitBranch, MessageSquare, Trash2 } from 'lucide-react';
-import { useMemo } from 'react';
 import { TimestampDot } from '../components/TimestampDot';
 import type { Branch } from '../fixtures/types';
 import { useBranches } from '../hooks/useBranches';
@@ -47,10 +46,10 @@ export function Branches() {
   const branchesQuery = useBranches();
   const isMock = transport.kind === 'mock';
 
-  // `now` is re-anchored every time the query produces a fresh result,
-  // so the "stale" label tracks actual wall-clock elapsed time rather
-  // than a frozen fixture timestamp.
-  const now = useMemo(() => Date.now(), [branchesQuery.dataUpdatedAt]);
+  // Computed at render time — `isStale` is a single subtraction so the
+  // per-render cost is nothing, and the 7-day threshold makes "now drifts
+  // by a few ms between two row renders" inconsequential.
+  const now = Date.now();
 
   if (branchesQuery.isLoading) return <LoadingState rows={4} />;
 
