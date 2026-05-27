@@ -33,6 +33,7 @@ function readParams(): URLSearchParams {
 export function App() {
   const params = useMemo(readParams, []);
   const useFixtures = params.get('fixtures') === 'on';
+  const embedded = params.get('embedded') === 'on';
   const transport = useMemo<DockTransport>(
     () => (useFixtures ? new MockTransport() : new LocalTransport()),
     [useFixtures],
@@ -41,7 +42,7 @@ export function App() {
   return (
     <QueryProvider>
       <TransportProvider transport={transport}>
-        <DockShell params={params} transportKind={transport.kind} />
+        <DockShell params={params} transportKind={transport.kind} embedded={embedded} />
       </TransportProvider>
     </QueryProvider>
   );
@@ -50,9 +51,11 @@ export function App() {
 function DockShell({
   params,
   transportKind,
+  embedded,
 }: {
   params: URLSearchParams;
   transportKind: DockTransport['kind'];
+  embedded: boolean;
 }) {
   const dock = useDockMode();
   const [activeRoute, setActiveRoute] = useState<RouteKey>('overview');
@@ -87,6 +90,32 @@ function DockShell({
   const expandedNav = dock.mode !== 'panel';
   const ActiveView = ROUTE_VIEWS[activeRoute];
   const context = transportKind === 'mock' ? 'fixtures' : 'pinagent-demo';
+
+  // Embedded mode: render only the FAB + surface; the host page is the
+  // real backdrop. Body is already transparent/click-through via the
+  // [data-pinagent-embedded='true'] CSS in globals.css.
+  if (embedded) {
+    return (
+      <>
+        <DockFAB open={dock.open} count={pendingCount} onToggle={dock.toggle} />
+        <DockSurface open={dock.open} mode={dock.mode} embedded>
+          <DockChrome
+            mode={dock.mode}
+            onModeChange={dock.setMode}
+            onClose={() => dock.setOpen(false)}
+            disconnected={disconnected}
+            context={context}
+          />
+          <div className="flex flex-1 min-h-0">
+            <NavRail active={activeRoute} onSelect={setActiveRoute} expanded={expandedNav} />
+            <main className="flex flex-1 flex-col overflow-auto">
+              <ActiveView />
+            </main>
+          </div>
+        </DockSurface>
+      </>
+    );
+  }
 
   return (
     <div className="min-h-svh bg-background text-foreground antialiased font-sans">

@@ -36,9 +36,37 @@ export interface PinagentOptions {
    * `PINAGENT_AGENT_PERMISSION_MODE`.
    */
   spawnAgent?: 'worktree' | 'inline' | 'off' | false;
+  /**
+   * Mount the project-management dock surface alongside the per-element
+   * widget. Default: false — the widget ships universally, the dock is
+   * opt-in because not every project wants a second floating surface on
+   * every page.
+   *
+   * When true, the plugin:
+   *   - serves @pinagent/widget-dock's static assets from
+   *     `/__pinagent/dock/*`
+   *   - injects a fixed, full-viewport, pointer-events:none iframe
+   *     pointing at `/__pinagent/dock/index.html?embedded=on`
+   *
+   * The iframe captures clicks only on its own FAB and panel; the host
+   * page underneath stays interactive everywhere else.
+   */
+  dock?: boolean;
 }
 
 const SCRIPT_TAG = '<script type="module" src="/__pinagent/widget.js"></script>';
+/**
+ * Iframe loader for the dock surface. Full-viewport so the dock FAB and
+ * panel can position themselves anywhere; pointer-events:none on the
+ * iframe so unrelated host-page clicks pass through. The dock's body
+ * restores pointer-events on its descendants (see widget-dock's
+ * globals.css). z-index sits just under the widget FAB's 2147483647
+ * so neither surface visually steals from the other.
+ */
+const DOCK_IFRAME_TAG =
+  '<iframe src="/__pinagent/dock/index.html?embedded=on" ' +
+  'title="Pinagent dock" ' +
+  'style="position:fixed;inset:0;width:100vw;height:100vh;border:0;background:transparent;pointer-events:none;z-index:2147483646;color-scheme:light"></iframe>';
 const DEFAULT_WS_PORT = 53636;
 
 export default function pinagent(options: PinagentOptions = {}): Plugin {
@@ -113,10 +141,12 @@ export default function pinagent(options: PinagentOptions = {}): Plugin {
         }
       }
 
-      server.middlewares.use(createMiddleware({ storage, spawnMode, wsPort }));
+      const dockEnabled = options.dock === true;
+      server.middlewares.use(createMiddleware({ storage, spawnMode, wsPort, dock: dockEnabled }));
 
+      const dockHint = dockEnabled ? ', dock: on' : '';
       server.config.logger.info(
-        `[pinagent] ready — widget at /__pinagent/widget.js (spawnAgent: ${effective})`,
+        `[pinagent] ready — widget at /__pinagent/widget.js (spawnAgent: ${effective}${dockHint})`,
       );
     },
 
@@ -144,11 +174,20 @@ export default function pinagent(options: PinagentOptions = {}): Plugin {
       order: 'post',
       handler(html) {
         if (!isServe) return html;
-        if (html.includes('/__pinagent/widget.js')) return html;
+        const widgetAlready = html.includes('/__pinagent/widget.js');
+        const dockEnabled = options.dock === true;
+        const dockAlready = html.includes('/__pinagent/dock/');
+        const tags = [
+          widgetAlready ? '' : SCRIPT_TAG,
+          dockEnabled && !dockAlready ? DOCK_IFRAME_TAG : '',
+        ]
+          .filter(Boolean)
+          .join('\n');
+        if (!tags) return html;
         if (html.includes('</body>')) {
-          return html.replace('</body>', `${SCRIPT_TAG}\n</body>`);
+          return html.replace('</body>', `${tags}\n</body>`);
         }
-        return `${html}\n${SCRIPT_TAG}`;
+        return `${html}\n${tags}`;
       },
     },
   };

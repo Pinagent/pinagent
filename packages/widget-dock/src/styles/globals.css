@@ -6,3 +6,29 @@
  * shell, screens, and fixtures.
  */
 @source "../**/*.{ts,tsx}";
+
+/*
+ * Embedded mode — the dock is loaded inside an iframe that covers the
+ * host page's whole viewport. The body needs to be transparent so the
+ * host page shows through, and pointer-events must be off on the body
+ * so unrelated clicks pass through to the host. The FAB and the dock
+ * panel re-enable pointer-events via .pinagent-interactive (see below).
+ */
+html[data-pinagent-embedded="true"] {
+  background: transparent;
+}
+html[data-pinagent-embedded="true"] body {
+  background: transparent;
+  pointer-events: none;
+  /* Keep the dock's color-scheme stable regardless of host page settings. */
+  color-scheme: light;
+}
+html[data-pinagent-embedded="true"] body * {
+  /*
+   * Restore pointer-events on every descendant so the dock chrome,
+   * surface, and FAB all stay interactive. We blanket-restore rather
+   * than tagging each interactive element because every dock element
+   * needs clicks; only the body itself needs the click-through.
+   */
+  pointer-events: auto;
+}
