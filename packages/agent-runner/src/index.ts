@@ -24,6 +24,7 @@ export {
   rejectAsk,
   resolveAsk,
 } from './ask-user';
+export { type BranchRecord, listBranches } from './branches';
 export { type ChangeRecord, getChangeDiff, listChanges } from './changes';
 export { type OpenInEditorResult, openInEditor } from './editor';
 export {

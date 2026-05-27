@@ -12,6 +12,7 @@ import {
   FeedbackInputSchema,
   getChangeDiff,
   ID_RE,
+  listBranches,
   listChanges,
   openInEditor,
   PatchSchema,
@@ -127,6 +128,11 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
   // /__pinagent/changes — per-conversation diff stats for the dock's
   // Changes view. Walks every conversation with a worktree and runs
   // `git diff --shortstat` against the project HEAD.
+  if (slug.length === 1 && slug[0] === 'branches') {
+    const branches = await listBranches(storage.root);
+    return json(200, branches);
+  }
+
   if (slug.length === 1 && slug[0] === 'changes') {
     const changes = await listChanges(storage.root);
     return json(200, changes);

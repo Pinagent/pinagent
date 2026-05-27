@@ -8,8 +8,10 @@
  */
 import type { ProjectEvent } from '@pinagent/shared';
 import {
+  type Branch,
   type Change,
   type Conversation,
+  FIXTURE_BRANCHES,
   FIXTURE_CHANGES,
   FIXTURE_CONVERSATIONS,
 } from '../fixtures';
@@ -66,6 +68,13 @@ export class MockTransport implements DockTransport {
     await sleep(SIMULATED_LATENCY_MS);
     return FIXTURE_CHANGES.slice().sort(
       (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
+    );
+  }
+
+  async listBranches(): Promise<Branch[]> {
+    await sleep(SIMULATED_LATENCY_MS);
+    return FIXTURE_BRANCHES.slice().sort(
+      (a, b) => Date.parse(b.lastActivity) - Date.parse(a.lastActivity),
     );
   }
 

@@ -40,6 +40,7 @@ export function useProjectSubscription({ enabled = true }: UseProjectSubscriptio
         // diff stats). Invalidate both query namespaces.
         void queryClient.invalidateQueries({ queryKey: ['conversations'] });
         void queryClient.invalidateQueries({ queryKey: ['changes'] });
+        void queryClient.invalidateQueries({ queryKey: ['branches'] });
       }
     });
     const unsubStatus = transport.onConnectionStatus(setStatus);
