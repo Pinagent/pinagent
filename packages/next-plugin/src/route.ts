@@ -11,6 +11,7 @@ import {
   composePullRequest,
   FeedbackInputSchema,
   getChangeDiff,
+  type HistoryStatusFilter,
   ID_RE,
   listBranches,
   listChanges,
@@ -24,6 +25,7 @@ import {
   SecretsStore,
   SettingsStore,
   Storage,
+  searchHistory,
   spawnAgent,
   startWsServer,
   validateAnthropicKey,
@@ -83,7 +85,7 @@ async function readSlug(ctx: RouteCtx): Promise<string[]> {
   return p.slug ?? [];
 }
 
-export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
+export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
   const slug = await readSlug(ctx);
 
   // /__pinagent/widget.js
@@ -151,6 +153,19 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
   if (slug.length === 1 && slug[0] === 'prs') {
     const prs = await listPullRequests(storage.root);
     return json(200, prs);
+  }
+
+  // /__pinagent/history?q=&status= — server-side full-text search over
+  // resolved conversations. Empty q returns []; the dock falls back to
+  // its client-side filter for "show all resolved".
+  if (slug.length === 1 && slug[0] === 'history') {
+    const url = new URL(req.url);
+    const q = url.searchParams.get('q') ?? '';
+    const statusParam = url.searchParams.get('status');
+    const status: HistoryStatusFilter =
+      statusParam === 'landed' || statusParam === 'discarded' ? statusParam : 'all';
+    const hits = await searchHistory(storage.root, { query: q, status });
+    return json(200, hits);
   }
 
   // /__pinagent/changes/:id/diff — full unified diff for one

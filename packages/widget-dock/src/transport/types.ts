@@ -180,12 +180,47 @@ export interface DockTransport {
    * report "pruned 5, 1 failed".
    */
   pruneStaleBranches(): Promise<PruneStaleResult>;
+
+  // ---------- History (Phase 6) ----------
+
+  /**
+   * Full-text search over resolved conversations. Returns the matching
+   * rows + which columns matched + a short snippet around comment
+   * matches. Empty query returns []; the dock falls back to the
+   * client-side filter over the conversations cache in that case.
+   */
+  searchHistory(query: HistorySearchQuery): Promise<HistorySearchHit[]>;
 }
 
 export interface PruneStaleResult {
   pruned: string[];
   failed: { feedbackId: string; error: string }[];
   retentionDays: number;
+}
+
+export interface HistorySearchQuery {
+  query: string;
+  status?: 'all' | 'landed' | 'discarded';
+}
+
+export type HistoryMatchedField = 'comment' | 'note' | 'branch' | 'anchor' | 'selector';
+
+export interface HistorySearchHit {
+  id: string;
+  comment: string;
+  status: 'fixed' | 'wontfix' | 'pending' | 'deferred';
+  worktreeState: 'none' | 'active' | 'landed' | 'discarded';
+  branch: string | null;
+  file: string | null;
+  line: number | null;
+  col: number | null;
+  selector: string;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt: string | null;
+  matchedFields: HistoryMatchedField[];
+  snippet: string;
 }
 
 export interface ChangeDiff {

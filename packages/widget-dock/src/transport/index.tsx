@@ -42,6 +42,9 @@ export type {
   CreatePullRequestResult,
   DockProjectSettings,
   DockTransport,
+  HistoryMatchedField,
+  HistorySearchHit,
+  HistorySearchQuery,
   PresentableConnections,
   PruneStaleResult,
 } from './types';
