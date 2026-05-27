@@ -65,6 +65,17 @@ jobs:
       - name: Lint SPDX headers
         run: pnpm lint:spdx
 
+      # Stale-workspace-dep check: every @pinagent/* dep declared in
+      # a package's dependencies or devDependencies must be imported
+      # by at least one file in that package's src/, tests/, scripts/,
+      # or *.config.* roots. Catches the class of bug introduced by
+      # refactors that move code between packages but leave the old
+      # `workspace:*` declarations behind. Legitimate exceptions
+      # (e.g. the widget IIFE consumed via filesystem in prebuild
+      # scripts) live in an explicit ALLOWLIST in the script.
+      - name: Lint workspace deps
+        run: pnpm lint:workspace-deps
+
       # Widget cascade: @pinagent/widget is embedded into next-plugin
       # and vite-plugin at build time, so widget code changes must
       # ship via a changeset that bumps both consumers. PR-only —
