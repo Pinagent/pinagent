@@ -168,7 +168,7 @@ function Footer() {
         <a href="https://github.com/Pinagent/pinagent" className="hover:text-foreground">
           GitHub
         </a>
-        <a href="https://github.com/Pinagent/pinagent#readme" className="hover:text-foreground">
+        <a href="/docs" className="hover:text-foreground">
           Docs
         </a>
         <a href="https://github.com/Pinagent/pinagent/releases" className="hover:text-foreground">
