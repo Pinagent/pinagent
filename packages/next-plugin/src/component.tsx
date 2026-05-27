@@ -62,6 +62,24 @@ export function Pinagent({ dock }: PinagentProps = {}): null {
       ].join(';');
       document.body.appendChild(iframe);
     }
+
+    // Host-side bridge for Cmd/Ctrl + Shift + P. The iframe's own
+    // keydown listener only fires while focus is inside the dock; this
+    // listener catches the shortcut from anywhere on the host page and
+    // postMessages a toggle to the iframe. Mirror of vite-plugin's
+    // inline DOCK_HOST_BRIDGE_TAG.
+    if (!dockEnabled) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        const iframe = document.getElementById('__pinagent-dock');
+        if (iframe instanceof HTMLIFrameElement && iframe.contentWindow) {
+          iframe.contentWindow.postMessage({ source: 'pinagent-host', type: 'toggle-dock' }, '*');
+        }
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
   }, [dockEnabled]);
 
   return null;

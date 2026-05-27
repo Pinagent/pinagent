@@ -68,9 +68,28 @@ const SCRIPT_TAG = '<script type="module" src="/__pinagent/widget.js"></script>'
  * for the future hosted dashboard, not iframed.
  */
 const DOCK_IFRAME_TAG =
-  '<iframe src="/__pinagent/dock/embedded.html" ' +
+  '<iframe id="__pinagent-dock" src="/__pinagent/dock/embedded.html" ' +
   'title="Pinagent dock" ' +
   'style="position:fixed;inset:0;width:100vw;height:100vh;border:0;background:transparent;pointer-events:none;z-index:2147483646;color-scheme:light"></iframe>';
+
+/**
+ * Tiny host-side keydown bridge so `Cmd/Ctrl + Shift + P` toggles the
+ * dock from anywhere on the page — the iframe's own keydown listener
+ * only sees events while focus is inside the dock. The dock listens
+ * for `{ source: 'pinagent-host', type: 'toggle-dock' }` messages and
+ * routes them to the same toggle the FAB click uses.
+ *
+ * Inline rather than a separate file so there's no extra request and
+ * no race with the iframe load. Kept narrow on purpose; future
+ * shortcuts that need cross-frame plumbing get added here too.
+ */
+const DOCK_HOST_BRIDGE_TAG =
+  '<script>(function(){document.addEventListener("keydown",function(e){' +
+  'if((e.metaKey||e.ctrlKey)&&e.shiftKey&&(e.key==="p"||e.key==="P")){' +
+  'e.preventDefault();' +
+  'var f=document.getElementById("__pinagent-dock");' +
+  'if(f&&f.contentWindow){f.contentWindow.postMessage({source:"pinagent-host",type:"toggle-dock"},"*");}' +
+  '}});})();</script>';
 const DEFAULT_WS_PORT = 53636;
 
 export default function pinagent(options: PinagentOptions = {}): Plugin {
@@ -184,6 +203,7 @@ export default function pinagent(options: PinagentOptions = {}): Plugin {
         const tags = [
           widgetAlready ? '' : SCRIPT_TAG,
           dockEnabled && !dockAlready ? DOCK_IFRAME_TAG : '',
+          dockEnabled && !dockAlready ? DOCK_HOST_BRIDGE_TAG : '',
         ]
           .filter(Boolean)
           .join('\n');
