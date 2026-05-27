@@ -43,9 +43,22 @@ export function Pinagent({ dock }: PinagentProps = {}): null {
     // Full-viewport, pointer-events:none, z-index just under the widget
     // FAB's 2147483647 so neither surface visually steals from the other.
     if (dockEnabled && !document.getElementById('__pinagent-dock')) {
+      // Forward an allowlist of dock query params from the parent URL into
+      // the iframe src — mirror of vite-plugin's DOCK_IFRAME_TAG injection.
+      // Without this the iframe sees only its own (static) location and
+      // documented flags like `?fixtures=on` / `?state=disconnected`
+      // silently no-op for every embedded consumer.
+      const allow = ['fixtures', 'state'] as const;
+      const parent = new URLSearchParams(window.location.search);
+      const kept = new URLSearchParams();
+      for (const k of allow) {
+        const v = parent.get(k);
+        if (v !== null) kept.set(k, v);
+      }
+      const qs = kept.toString();
       const iframe = document.createElement('iframe');
       iframe.id = '__pinagent-dock';
-      iframe.src = '/__pinagent/dock/embedded.html';
+      iframe.src = `/__pinagent/dock/embedded.html${qs ? `?${qs}` : ''}`;
       iframe.title = 'Pinagent dock';
       // Use cssText so we set all the positioning rules in one shot
       // without React-style camelCase concerns.
