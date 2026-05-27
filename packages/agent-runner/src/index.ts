@@ -25,6 +25,12 @@ export {
 export { type ChangeRecord, listChanges } from './changes';
 export { type OpenInEditorResult, openInEditor } from './editor';
 export {
+  type ComposeOpts,
+  ComposeOptsSchema,
+  type ComposeResult,
+  composePullRequest,
+} from './pr-composer';
+export {
   type FeedbackInput,
   FeedbackInputSchema,
   type FeedbackRecord,

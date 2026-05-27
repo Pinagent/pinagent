@@ -108,4 +108,36 @@ export interface DockTransport {
 
   /** Throw away the agent's worktree without merging. */
   discardConversation(id: string): void;
+
+  /**
+   * Compose multiple resolved conversations into a single PR. Server
+   * creates a fresh branch off `baseBranch`, replays each selected
+   * worktree's commits in order, pushes, and (if a GitHub token is
+   * configured) opens the PR. Returns the PR URL on full success, or
+   * `manualCompareUrl` when the push succeeded but the PR API call
+   * was skipped or failed.
+   */
+  createPullRequest(input: CreatePullRequestInput): Promise<CreatePullRequestResult>;
+}
+
+export interface CreatePullRequestInput {
+  feedbackIds: string[];
+  branchName: string;
+  title: string;
+  description: string;
+  baseBranch: string;
+}
+
+export interface CreatePullRequestResult {
+  ok: boolean;
+  /** Final PR URL when Octokit opened one. */
+  prUrl?: string;
+  /** True if the push succeeded — set even when the PR API call wasn't made. */
+  branchPushed: boolean;
+  /** When set, the user can click this to open the PR manually on GitHub. */
+  manualCompareUrl?: string;
+  /** Human-readable failure reason. Set when `ok` is false. */
+  error?: string;
+  /** Files in conflict when the failure was a merge conflict. */
+  conflicts?: { feedbackId: string; files: string[] };
 }

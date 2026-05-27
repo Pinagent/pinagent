@@ -7,6 +7,8 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  ComposeOptsSchema,
+  composePullRequest,
   FeedbackInputSchema,
   ID_RE,
   listChanges,
@@ -182,6 +184,19 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
     } catch (e) {
       return json(500, { error: e instanceof Error ? e.message : String(e) });
     }
+  }
+
+  // /__pinagent/prs — compose a PR from multiple conversations. See
+  // composePullRequest for what happens server-side; the dock's
+  // transport calls this exactly the same way it calls the vite-plugin
+  // version.
+  if (slug.length === 1 && slug[0] === 'prs') {
+    const raw = await readJsonBody(req);
+    const parsed = ComposeOptsSchema.safeParse(raw);
+    if (!parsed.success) return json(400, { error: parsed.error.message });
+    const storage = getStorage();
+    const result = await composePullRequest(storage.root, parsed.data);
+    return json(result.ok ? 200 : 422, result);
   }
 
   if (slug.length !== 1 || slug[0] !== 'feedback') {
