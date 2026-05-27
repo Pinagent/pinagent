@@ -22,6 +22,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Octokit } from '@octokit/rest';
 import { z } from 'zod';
+import { recordAuditEvent } from './audit-log';
 import { resolveOriginRemote } from './git-remote';
 import { runGitCapture } from './git-utils';
 import { recordPullRequest } from './pull-requests';
@@ -258,6 +259,16 @@ export async function composePullRequest(
       await runGitCapture(projectRoot, ['branch', '-D', rec.branch]);
     }
     await storage.patch(rec.id, { worktreeState: 'landed' }).catch(() => {});
+    await recordAuditEvent(projectRoot, {
+      conversationId: rec.id,
+      actor: 'user',
+      action: 'conversation_landed',
+      payload: {
+        via: 'pr',
+        branch: rec.branch ?? opts.branchName,
+        composeBranch: opts.branchName,
+      },
+    });
   }
 
   // The compose worktree on disk can go; the branch itself is on the
@@ -309,6 +320,19 @@ export async function composePullRequest(
       body: opts.description,
       conversationIds: opts.feedbackIds,
     }).catch(() => {});
+    await recordAuditEvent(projectRoot, {
+      conversationId: null,
+      actor: 'user',
+      action: 'pr_created',
+      payload: {
+        number: created.data.number,
+        url: created.data.html_url,
+        branch: opts.branchName,
+        baseBranch: opts.baseBranch,
+        title: opts.title,
+        conversationIds: opts.feedbackIds,
+      },
+    });
     return { ok: true, branchPushed: true, prUrl: created.data.html_url };
   } catch (e) {
     // Push succeeded; the PR API call failed (token scope, network,

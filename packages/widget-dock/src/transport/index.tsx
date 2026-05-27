@@ -35,6 +35,9 @@ export function useTransport(): DockTransport {
 }
 
 export type {
+  AuditAction,
+  AuditActor,
+  AuditEvent,
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,
@@ -45,6 +48,7 @@ export type {
   HistoryMatchedField,
   HistorySearchHit,
   HistorySearchQuery,
+  ListAuditEventsQuery,
   PresentableConnections,
   PruneStaleResult,
 } from './types';

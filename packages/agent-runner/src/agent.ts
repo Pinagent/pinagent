@@ -19,6 +19,7 @@ import {
   summariseToolInput,
 } from './agent-render';
 import { ASK_USER_TOOL_NAME, createAskUserMcpServer, rejectAsk } from './ask-user';
+import { recordAuditEvent } from './audit-log';
 import { getOrCreateBus } from './bus';
 import { getDb } from './db/client';
 import { runGitCapture } from './git-utils';
@@ -667,6 +668,12 @@ export async function mergeWorktree(
     await appendLog(logPath, '> [pinagent] no changes to land\n');
     await cleanupWorktreeFiles(rec.worktreePath, rec.branch, projectRoot, logPath);
     await storage.patch(feedbackId, { worktreeState: 'landed' });
+    await recordAuditEvent(projectRoot, {
+      conversationId: feedbackId,
+      actor: 'user',
+      action: 'conversation_landed',
+      payload: { branch: rec.branch, target: targetBranch, noop: true },
+    });
     return { ok: true };
   }
 
@@ -693,6 +700,16 @@ export async function mergeWorktree(
   await storage.patch(feedbackId, {
     worktreeState: 'landed',
     ...(commitSha ? { commitSha } : {}),
+  });
+  await recordAuditEvent(projectRoot, {
+    conversationId: feedbackId,
+    actor: 'user',
+    action: 'conversation_landed',
+    payload: {
+      branch: rec.branch,
+      target: targetBranch,
+      ...(commitSha ? { commitSha } : {}),
+    },
   });
 
   await appendLog(
@@ -723,6 +740,12 @@ export async function discardWorktree(
     await cleanupWorktreeFiles(rec.worktreePath, rec.branch, projectRoot, logPath);
   }
   await storage.patch(feedbackId, { worktreeState: 'discarded' });
+  await recordAuditEvent(projectRoot, {
+    conversationId: feedbackId,
+    actor: 'user',
+    action: 'conversation_discarded',
+    payload: rec.branch ? { branch: rec.branch } : {},
+  });
   return { ok: true };
 }
 

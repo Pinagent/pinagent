@@ -25,6 +25,15 @@ export {
   resolveAsk,
 } from './ask-user';
 export {
+  type AuditAction,
+  type AuditActor,
+  type AuditEventRecord,
+  type ListAuditEventsOpts,
+  listAuditEvents,
+  type RecordAuditEventInput,
+  recordAuditEvent,
+} from './audit-log';
+export {
   type BranchRecord,
   listBranches,
   type PruneResult,

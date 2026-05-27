@@ -14,6 +14,7 @@ import {
   getChangeDiff,
   type HistoryStatusFilter,
   ID_RE,
+  listAuditEvents,
   listBranches,
   listChanges,
   listPullRequests,
@@ -222,6 +223,22 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
           statusParam === 'landed' || statusParam === 'discarded' ? statusParam : 'all';
         const hits = await searchHistory(storage.root, { query: q, status });
         return json(res, 200, hits);
+      }
+
+      // GET /__pinagent/audit-log?limit=&offset=&conversationId= — feed
+      // of agent + user actions, newest first. Backs the dock's
+      // History → Activity tab.
+      if (req.method === 'GET' && url.startsWith('/__pinagent/audit-log')) {
+        const parsed = new URL(url, 'http://localhost');
+        const limit = Number(parsed.searchParams.get('limit') ?? 100);
+        const offset = Number(parsed.searchParams.get('offset') ?? 0);
+        const conversationId = parsed.searchParams.get('conversationId') ?? undefined;
+        const events = await listAuditEvents(storage.root, {
+          limit: Number.isFinite(limit) ? limit : 100,
+          offset: Number.isFinite(offset) ? offset : 0,
+          ...(conversationId ? { conversationId } : {}),
+        });
+        return json(res, 200, events);
       }
 
       // POST /__pinagent/prs — compose a PR from multiple conversations.

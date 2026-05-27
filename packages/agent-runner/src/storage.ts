@@ -5,6 +5,7 @@ import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promi
 import { join, relative, resolve } from 'node:path';
 import { asc, conversations, eq, widgetAnchors } from '@pinagent/db';
 import { z } from 'zod';
+import { recordAuditEvent } from './audit-log';
 import { type Db, getDb } from './db/client';
 import { emitProjectChange } from './project-events';
 
@@ -231,6 +232,15 @@ export class Storage {
     // Notify project subscribers (the dock) that the conversation list
     // changed. Best-effort — emit failures shouldn't break the write.
     emitProjectChange({ type: 'conversations_changed' });
+    await recordAuditEvent(this.root, {
+      conversationId: id,
+      actor: 'user',
+      action: 'conversation_created',
+      payload: {
+        page: input.url,
+        ...(input.loc?.file ? { file: input.loc.file } : {}),
+      },
+    });
     return record;
   }
 

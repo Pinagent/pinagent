@@ -16,6 +16,7 @@ import type { Branch, Change, Conversation, PullRequest } from '../fixtures/type
 import { resolveWsUrl } from '../lib/ws-url';
 import { deriveDockStatus } from './status-derive';
 import type {
+  AuditEvent,
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,
@@ -25,6 +26,7 @@ import type {
   DockTransport,
   HistorySearchHit,
   HistorySearchQuery,
+  ListAuditEventsQuery,
   PresentableConnections,
   PruneStaleResult,
 } from './types';
@@ -403,6 +405,15 @@ export class LocalTransport implements DockTransport {
     params.set('q', query.query);
     if (query.status) params.set('status', query.status);
     return this.jsonGet<HistorySearchHit[]>(`/__pinagent/history?${params.toString()}`);
+  }
+
+  async listAuditEvents(opts: ListAuditEventsQuery = {}): Promise<AuditEvent[]> {
+    const params = new URLSearchParams();
+    if (opts.limit !== undefined) params.set('limit', String(opts.limit));
+    if (opts.offset !== undefined) params.set('offset', String(opts.offset));
+    if (opts.conversationId) params.set('conversationId', opts.conversationId);
+    const qs = params.toString();
+    return this.jsonGet<AuditEvent[]>(`/__pinagent/audit-log${qs ? `?${qs}` : ''}`);
   }
 
   // Internal: shared GET + write helpers so the per-endpoint methods

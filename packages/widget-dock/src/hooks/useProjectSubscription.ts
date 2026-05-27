@@ -45,6 +45,7 @@ export function useProjectSubscription({ enabled = true }: UseProjectSubscriptio
         void queryClient.invalidateQueries({ queryKey: ['changes'] });
         void queryClient.invalidateQueries({ queryKey: ['branches'] });
         void queryClient.invalidateQueries({ queryKey: ['pullRequests'] });
+        void queryClient.invalidateQueries({ queryKey: ['auditLog'] });
       }
     });
     const unsubStatus = transport.onConnectionStatus(setStatus);
