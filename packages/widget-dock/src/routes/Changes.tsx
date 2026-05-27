@@ -3,7 +3,14 @@
 import { StatusBadge } from '@pinagent/ui/components/status-badge';
 import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
-import { ChevronDown, ChevronRight, GitPullRequest, RotateCcw, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  GitPullRequest,
+  RotateCcw,
+  X,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DiffView } from '../components/DiffView';
 import { TimestampDot } from '../components/TimestampDot';
@@ -232,6 +239,20 @@ function ReadyChangeRow({
                 <span className="text-status-error-fg">−{change.deletions}</span>
                 {change.branch && (
                   <span className="truncate font-mono text-[10.5px]">{change.branch}</span>
+                )}
+                {change.externallyModified && (
+                  <span
+                    role="status"
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5',
+                      'text-[10px] font-medium',
+                      'text-status-error-fg bg-status-error-bg border border-status-error-border',
+                    )}
+                    title="The worktree's branch has commits the agent didn't make — someone reached in and committed manually. Review the diff before landing."
+                  >
+                    <AlertTriangle className="h-3 w-3" aria-hidden />
+                    modified externally
+                  </span>
                 )}
               </div>
             </div>

@@ -30,6 +30,17 @@ export interface ChangeRecord {
   filesChanged: number;
   additions: number;
   deletions: number;
+  /**
+   * True when the worktree's branch has commits ahead of the project
+   * HEAD branch — which today only happens if a human reached into the
+   * worktree and committed manually, since the agent intentionally
+   * leaves changes uncommitted (see `buildInitialPrompt` in agent.ts).
+   *
+   * The dock surfaces this as a "modified externally" warning on the
+   * row so the user knows their manual edits exist outside the
+   * conversation's record before they Land or Discard.
+   */
+  externallyModified: boolean;
   updatedAt: string;
 }
 
@@ -43,6 +54,20 @@ async function resolveBaseRef(projectRoot: string): Promise<string> {
   const sym = await runGitCapture(projectRoot, ['symbolic-ref', '--short', 'HEAD']);
   if (sym.code === 0) return sym.stdout.trim();
   return 'HEAD';
+}
+
+/**
+ * Count commits on the worktree's branch that aren't on the base. The
+ * agent never commits (the Land step does it on the user's behalf, see
+ * agent.ts `mergeWorktree`), so any commit here came from the user
+ * reaching into the worktree manually. Returns 0 on git failures —
+ * the warning is best-effort, never worth blocking the Changes view.
+ */
+async function countExternalCommits(worktreePath: string, baseRef: string): Promise<number> {
+  const ahead = await runGitCapture(worktreePath, ['rev-list', '--count', `${baseRef}..HEAD`]);
+  if (ahead.code !== 0) return 0;
+  const n = Number(ahead.stdout.trim());
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 export async function listChanges(projectRoot: string): Promise<ChangeRecord[]> {
@@ -61,14 +86,20 @@ export async function listChanges(projectRoot: string): Promise<ChangeRecord[]> 
   const rows = await Promise.all(
     candidates.map(async (rec): Promise<ChangeRecord | null> => {
       if (!rec.worktreePath) return null;
-      const stats =
-        rec.worktreeState === 'landed'
-          ? // Landed worktrees may be gone from disk; their diff lives
-            // in the commit history but we don't surface it on the
-            // Changes view — landed rows are read-only history here.
-            { filesChanged: 0, additions: 0, deletions: 0 }
-          : await computeWorktreeStats(rec.worktreePath, baseRef);
+      const isActive = rec.worktreeState === 'active';
+      const stats = isActive
+        ? await computeWorktreeStats(rec.worktreePath, baseRef)
+        : // Landed worktrees may be gone from disk; their diff lives
+          // in the commit history but we don't surface it on the
+          // Changes view — landed rows are read-only history here.
+          { filesChanged: 0, additions: 0, deletions: 0 };
       if (!stats) return null;
+      // External-commit check only applies to active worktrees —
+      // landed/discarded worktrees are gone from disk and any divergence
+      // was resolved at land/discard time.
+      const externallyModified = isActive
+        ? (await countExternalCommits(rec.worktreePath, baseRef)) > 0
+        : false;
       return {
         id: rec.id,
         conversationId: rec.id,
@@ -83,6 +114,7 @@ export async function listChanges(projectRoot: string): Promise<ChangeRecord[]> 
         filesChanged: stats.filesChanged,
         additions: stats.additions,
         deletions: stats.deletions,
+        externallyModified,
         updatedAt: rec.updatedAt,
       };
     }),

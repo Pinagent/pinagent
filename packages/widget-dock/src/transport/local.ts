@@ -100,6 +100,10 @@ const ChangeWireSchema = z
     filesChanged: z.number().int().nonnegative(),
     additions: z.number().int().nonnegative(),
     deletions: z.number().int().nonnegative(),
+    // Default for clients hitting a server that predates the flag —
+    // they shouldn't get a parse error just because the field is
+    // missing. Real servers always send it (true | false).
+    externallyModified: z.boolean().default(false),
     updatedAt: z.string(),
   })
   .loose();
@@ -232,6 +236,7 @@ export class LocalTransport implements DockTransport {
         filesChanged: w.filesChanged,
         additions: w.additions,
         deletions: w.deletions,
+        externallyModified: w.externallyModified,
         // Inline diff lives in /__pinagent/changes/:id/diff and is
         // fetched lazily when the row is expanded — the list endpoint
         // intentionally stays lightweight.

@@ -59,6 +59,7 @@
     "prebuild": "node scripts/embed-widget.mjs && node scripts/copy-drizzle.mjs",
     "build": "tsdown",
     "dev": "tsdown --watch",
+    "pretypecheck": "node scripts/embed-widget.mjs",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
