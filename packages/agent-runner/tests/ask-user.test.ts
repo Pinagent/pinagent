@@ -13,8 +13,9 @@ import { ASK_USER_TOOL_NAME, rejectAsk, resolveAsk } from '../src/ask-user';
  * What we CAN test cheaply at the unit level:
  *  - the public tool name shape (the system prompt and allowedTools
  *    list depend on this exact string)
- *  - resolveAsk returns false for unknown ids (so the WS server can
- *    report "no pending ask <id>" upstream)
+ *  - resolveAsk handles unknown ids without throwing (it now emits a
+ *    cross-context process event so the pending ask in another Turbopack
+ *    context can settle)
  *  - rejectAsk is a no-op on feedback ids with no pending entries
  */
 
@@ -30,12 +31,17 @@ describe('ask-user', () => {
   });
 
   describe('resolveAsk', () => {
-    it('returns false for an unknown askId', () => {
-      expect(resolveAsk(`unknown-${Date.now()}`, 'hi')).toBe(false);
+    // resolveAsk now returns true optimistically after emitting a
+    // cross-context process event — it can't synchronously tell whether
+    // the matching pending ask lives in another context. The trade-off:
+    // same-context double-submits no longer surface a "no pending ask"
+    // error frame, but cross-context responses actually settle.
+    it('returns true for an unknown askId (optimistic cross-context)', () => {
+      expect(resolveAsk(`unknown-${Date.now()}`, 'hi')).toBe(true);
     });
 
-    it('returns false for an empty askId', () => {
-      expect(resolveAsk('', 'hi')).toBe(false);
+    it('does not throw on an empty askId', () => {
+      expect(() => resolveAsk('', 'hi')).not.toThrow();
     });
   });
 

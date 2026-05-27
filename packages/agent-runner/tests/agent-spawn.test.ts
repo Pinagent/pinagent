@@ -195,7 +195,7 @@ async function collectUntil(
 async function waitForRunIdle(feedbackId: string, timeoutMs = 2000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (!agent.hasActiveRun(feedbackId)) return;
+    if (!(await agent.hasActiveRun(feedbackId))) return;
     await new Promise((r) => setTimeout(r, 10));
   }
   throw new Error(`run for ${feedbackId} did not idle in time`);
@@ -447,8 +447,8 @@ describe('runFollowUpTurn', () => {
 });
 
 describe('interruptRun', () => {
-  it('returns false when no run is in flight', () => {
-    expect(agent.interruptRun(`unknown-${Date.now()}`)).toBe(false);
+  it('returns false when no run is in flight', async () => {
+    expect(await agent.interruptRun(`unknown-${Date.now()}`)).toBe(false);
   });
 
   it('aborts the in-flight controller and returns true', async () => {
@@ -465,7 +465,7 @@ describe('interruptRun', () => {
     // iterating", which is when activeRuns has the entry.
     await collectUntil(id, (e) => e.type === 'init');
 
-    const interrupted = agent.interruptRun(id);
+    const interrupted = await agent.interruptRun(id);
     expect(interrupted).toBe(true);
     await expect(aborted).resolves.toBeUndefined();
   });

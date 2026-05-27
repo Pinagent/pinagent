@@ -64,13 +64,10 @@ beforeAll(async () => {
   bus = await import('../src/bus');
   storageMod = await import('../src/storage');
   storage = new storageMod.Storage(PROJECT_ROOT);
-  const handle = server.startWsServer();
-  // Wait for the bind to actually complete.
-  await new Promise<void>((resolve, reject) => {
-    if (handle.wss.address()) return resolve();
-    handle.wss.once('listening', () => resolve());
-    handle.wss.once('error', reject);
-  });
+  // startWsServer is async and probes for a free port (falling back from
+  // PINAGENT_WS_PORT if it's busy). Awaiting it is enough — the returned
+  // handle is already listening.
+  await server.startWsServer();
 });
 
 afterAll(async () => {
@@ -294,12 +291,19 @@ describe('ws-server', () => {
     expect(newFrames).toHaveLength(0);
   });
 
-  it('returns an error frame for ask_response with no pending ask', async () => {
+  it('silently swallows an ask_response with no matching pending ask', async () => {
+    // resolveAsk now always returns true after emitting a cross-context
+    // process event (the pending ask may live in a different Turbopack
+    // context). The trade-off: same-context double-submits no longer
+    // produce a "no pending ask" error frame. We verify nothing crashes
+    // and no error frame appears within the polling window.
     const c = newClient();
     await c.opened;
     c.send({ type: 'ask_response', askId: 'never-issued', answer: 'x' });
-    const err = await c.waitFor((m) => (m as { type?: string }).type === 'error');
-    expect((err as { message: string }).message).toMatch(/no pending ask/);
+    // Wait long enough to be confident no error frame is coming.
+    await new Promise((r) => setTimeout(r, 150));
+    const errFrame = c.messages.find((m) => (m as { type?: string }).type === 'error');
+    expect(errFrame).toBeUndefined();
   });
 
   it('interrupt for an id with no live run returns an error frame', async () => {

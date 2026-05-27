@@ -73,6 +73,41 @@ export interface PullRequest {
   conversationIds: string[];
 }
 
+/**
+ * GitHub connection state for the Connections route. Tokens never reach
+ * the dock — the host stores them and serves only the presentable shape.
+ */
+export interface GitHubConnection {
+  connected: boolean;
+  account: string | null;
+  /** Repositories the connection can reach. */
+  repos: { name: string; private: boolean }[];
+}
+
+/** Anthropic key / managed-compute status for the Connections route. */
+export interface AnthropicConnection {
+  /** 'byo' = user-supplied key; 'managed' = Pro+ managed compute. */
+  mode: 'byo' | 'managed' | 'unset';
+  /** True only when mode='byo' and a key is on file. Never the key itself. */
+  keySet: boolean;
+  /** Spend this month in USD, server-aggregated. */
+  monthUsageUsd: number;
+  /** Monthly budget if one is configured, else null. */
+  monthBudgetUsd: number | null;
+}
+
+/** Per-project configuration shown on the Settings route. */
+export interface ProjectSettings {
+  baseBranch: string;
+  /** Days to keep an inactive worktree before pruning. */
+  worktreeRetentionDays: number;
+  /** Hard ceiling per conversation, in USD. */
+  perConversationCapUsd: number;
+  /** Soft project-wide ceiling per month, in USD. Optional. */
+  monthlyBudgetUsd: number | null;
+  permissionMode: 'auto' | 'approve' | 'dry-run';
+}
+
 /** A recent project-wide event for the Overview activity feed. */
 export interface ActivityEvent {
   id: string;
