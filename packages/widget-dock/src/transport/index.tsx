@@ -38,6 +38,7 @@ export type {
   AuditAction,
   AuditActor,
   AuditEvent,
+  BulkArchiveResult,
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,

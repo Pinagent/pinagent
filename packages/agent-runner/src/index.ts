@@ -48,7 +48,14 @@ export {
   validateAnthropicKey,
   validateGithubToken,
 } from './connection-validators';
-export { type ApplyPatchResult, applyConversationPatch } from './conversation-patch';
+export {
+  type ApplyPatchResult,
+  applyBulkArchive,
+  applyConversationPatch,
+  type BulkArchiveResult,
+  type BulkUpdateBody,
+  BulkUpdateBodySchema,
+} from './conversation-patch';
 export { type OpenInEditorResult, openInEditor } from './editor';
 export {
   type HistorySearchHit,

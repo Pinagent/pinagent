@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnchorChip } from '../components/AnchorChip';
 import { ListRow } from '../components/ListRow';
 import { TimestampDot } from '../components/TimestampDot';
+import { useBulkArchive } from '../hooks/useBulkArchive';
 import { useConversation } from '../hooks/useConversation';
 import {
   type ConversationStream,
@@ -66,7 +67,12 @@ export function Conversations() {
   const [filter, setFilter] = useState<StatusKey | 'all'>('all');
   const [query, setQuery] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  // Selection set for bulk archive. Keyed on conversation id. Cleared
+  // on filter / search / show-archived change so the user can't
+  // accidentally bulk-archive rows that have scrolled out of view.
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const transport = useTransport();
+  const bulkArchive = useBulkArchive();
 
   // Query is passed to the transport (small client-side filter today, but
   // semantically a search term). Status filter stays client-side since
@@ -84,6 +90,69 @@ export function Conversations() {
     if (filter === 'all') return data;
     return data.filter((c) => c.status === filter);
   }, [conversationsQuery.data, filter]);
+
+  const toggleSelected = useCallback((id: string, next: boolean) => {
+    setSelected((prev) => {
+      const out = new Set(prev);
+      if (next) out.add(id);
+      else out.delete(id);
+      return out;
+    });
+  }, []);
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
+
+  // Compute select-all state from the currently-visible items. The
+  // bulk bar uses the full `selected` set (which may include rows that
+  // scrolled out of view via a filter change), but the header
+  // checkbox is scoped to what's currently rendered.
+  const visibleSelectedCount = useMemo(
+    () => items.filter((c) => selected.has(c.id)).length,
+    [items, selected],
+  );
+  const allVisibleSelected = items.length > 0 && visibleSelectedCount === items.length;
+  const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected;
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someVisibleSelected;
+    }
+  }, [someVisibleSelected]);
+  const toggleAllVisible = useCallback(() => {
+    setSelected((prev) => {
+      const out = new Set(prev);
+      if (allVisibleSelected) {
+        // All visible were selected → deselect those (keep any not-visible
+        // selections in place).
+        for (const c of items) out.delete(c.id);
+      } else {
+        for (const c of items) out.add(c.id);
+      }
+      return out;
+    });
+  }, [allVisibleSelected, items]);
+
+  // Drive bulk archive direction from the SELECTED rows, not the
+  // visible ones — if every selected row is archived, the user wants
+  // unarchive; if any is unarchived, archive wins (rows already
+  // archived are skipped server-side).
+  const allConversations = conversationsQuery.data ?? [];
+  const selectedConversations = useMemo(
+    () => allConversations.filter((c) => selected.has(c.id)),
+    [allConversations, selected],
+  );
+  const allSelectedArchived =
+    selectedConversations.length > 0 && selectedConversations.every((c) => c.archived);
+
+  const runBulkArchive = (archived: boolean): void => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    bulkArchive.mutate(
+      { ids, archived },
+      {
+        onSuccess: () => clearSelection(),
+      },
+    );
+  };
 
   if (openId) {
     // `key` on the detail view forces a fresh mount per conversation so
@@ -190,14 +259,38 @@ export function Conversations() {
 
         {items.length > 0 && (
           <div className="flex flex-col gap-1.5 p-3">
+            <label className="flex items-center gap-2 px-3 text-[11px] text-muted-foreground">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={toggleAllVisible}
+                aria-label={
+                  allVisibleSelected
+                    ? `Deselect all ${items.length} conversations`
+                    : `Select all ${items.length} conversations`
+                }
+                className="h-3.5 w-3.5 rounded border-border accent-foreground cursor-pointer"
+              />
+              <span>
+                {items.length} conversation{items.length === 1 ? '' : 's'}
+                {visibleSelectedCount > 0 && (
+                  <span className="ml-1 text-foreground">· {visibleSelectedCount} selected</span>
+                )}
+              </span>
+            </label>
             {items.map((c) => (
               <ListRow
                 key={c.id}
                 status={c.status}
                 title={c.title}
                 onClick={() => openConversation(c.id)}
+                selected={selected.has(c.id)}
+                onSelectChange={(next) => toggleSelected(c.id, next)}
+                selectLabel={`Select ${c.title}`}
                 meta={
                   <>
+                    {c.archived && <span className="text-[10px]">archived</span>}
                     {c.anchor.loc && <AnchorChip loc={c.anchor.loc} selector={c.anchor.selector} />}
                     {c.page && (
                       <span className="truncate font-mono text-[10.5px]">{safePath(c.page)}</span>
@@ -213,6 +306,49 @@ export function Conversations() {
           </div>
         )}
       </div>
+
+      {selected.size > 0 && (
+        <section
+          aria-label="Bulk actions"
+          className={cn('border-t border-border bg-card px-3 py-2', 'flex items-center gap-2')}
+        >
+          <span className="text-xs text-muted-foreground">{selected.size} selected</span>
+          <div className="ml-auto flex items-center gap-1.5">
+            {allSelectedArchived ? (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => runBulkArchive(false)}
+                disabled={bulkArchive.isPending}
+                className="h-7 gap-1.5 text-xs"
+              >
+                <ArchiveRestore className="h-3.5 w-3.5" aria-hidden />
+                Unarchive {selected.size}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => runBulkArchive(true)}
+                disabled={bulkArchive.isPending}
+                className="h-7 gap-1.5 text-xs"
+              >
+                <Archive className="h-3.5 w-3.5" aria-hidden />
+                Archive {selected.size}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearSelection}
+              disabled={bulkArchive.isPending}
+              className="h-7 text-xs"
+            >
+              Cancel
+            </Button>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

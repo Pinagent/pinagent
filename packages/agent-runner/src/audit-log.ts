@@ -29,6 +29,14 @@ export type AuditAction =
   | 'conversation_renamed'
   | 'conversation_archived'
   | 'conversation_unarchived'
+  /**
+   * Bulk archive / unarchive from the dock's multi-select. Payload:
+   * `{ ids: string[], count: number }`. Surfaced as a single row in
+   * the History → Activity feed so a 50-row sweep doesn't paper the
+   * feed with 50 individual `conversation_archived` entries.
+   */
+  | 'conversations_bulk_archived'
+  | 'conversations_bulk_unarchived'
   | 'pr_created';
 
 export interface AuditEventRecord {

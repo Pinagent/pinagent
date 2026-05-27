@@ -8,7 +8,9 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  applyBulkArchive,
   applyConversationPatch,
+  BulkUpdateBodySchema,
   ComposeOptsSchema,
   composePullRequest,
   FeedbackInputSchema,
@@ -373,6 +375,21 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
         const result = await applyConversationPatch(storage.root, id, parsed.data);
         if (!result.record) return notFound(res);
         return json(res, 200, result.record);
+      }
+
+      // POST /__pinagent/feedback/bulk-update — multi-row archive flip.
+      // Returns { updated: string[], skipped: string[] } so the dock
+      // can show "Archived 5 (2 skipped — already archived)".
+      if (req.method === 'POST' && url === '/__pinagent/feedback/bulk-update') {
+        const raw = await readJsonBody(req);
+        const parsed = BulkUpdateBodySchema.safeParse(raw);
+        if (!parsed.success) return badRequest(res, parsed.error.message);
+        const result = await applyBulkArchive(
+          storage.root,
+          parsed.data.ids,
+          parsed.data.patch.archived,
+        );
+        return json(res, 200, result);
       }
 
       return notFound(res);

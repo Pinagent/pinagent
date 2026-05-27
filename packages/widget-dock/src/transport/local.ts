@@ -26,6 +26,7 @@ import { resolveWsUrl } from '../lib/ws-url';
 import { deriveDockStatus } from './status-derive';
 import type {
   AuditEvent,
+  BulkArchiveResult,
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,
@@ -141,6 +142,18 @@ type FeedbackRecord = z.infer<typeof FeedbackRecordSchema>;
 const FeedbackRecordWithScreenshotSchema = FeedbackRecordSchema.extend({
   screenshot: z.string().nullable(),
 }).loose();
+
+/**
+ * Wire shape for `POST /__pinagent/feedback/bulk-update`. Mirrors the
+ * server-side `BulkArchiveResult` from `@pinagent/agent-runner`. Local
+ * because the bulk endpoint is dock-specific.
+ */
+const BulkArchiveResultSchema = z
+  .object({
+    updated: z.array(z.string()),
+    skipped: z.array(z.string()),
+  })
+  .loose();
 
 function locString(file: string | null, line: number | null, col: number | null): string {
   if (!file) return '';
@@ -359,6 +372,15 @@ export class LocalTransport implements DockTransport {
       patch,
     );
     return toConversation(rec);
+  }
+
+  async bulkArchive(ids: string[], archived: boolean): Promise<BulkArchiveResult> {
+    return this.jsonWriteValidated(
+      'POST',
+      '/__pinagent/feedback/bulk-update',
+      BulkArchiveResultSchema,
+      { ids, patch: { archived } },
+    );
   }
 
   async createPullRequest(input: CreatePullRequestInput): Promise<CreatePullRequestResult> {

@@ -45,6 +45,17 @@ export interface ConversationUpdate {
   archived?: boolean;
 }
 
+export interface BulkArchiveResult {
+  /** Ids whose archived flag flipped to the requested value. */
+  updated: string[];
+  /**
+   * Ids that didn't change — either the row was missing or it was
+   * already at the requested archived state. Skipped is informational
+   * (the dock can render "5 archived, 2 already archived"); no error.
+   */
+  skipped: string[];
+}
+
 /**
  * Detailed conversation read. Wider than the list-row `Conversation`
  * because the detail view needs the original user comment + the
@@ -153,6 +164,15 @@ export interface DockTransport {
    * `conversation_unarchived` audit events on the transitions.
    */
   updateConversation(id: string, patch: ConversationUpdate): Promise<Conversation>;
+
+  /**
+   * Multi-row archive flip from the Conversations list's multi-select.
+   * Server emits a single `conversations_bulk_archived` /
+   * `conversations_bulk_unarchived` audit event naming every affected
+   * id, regardless of batch size. Returns updated + skipped id arrays
+   * so the UI can show "Archived 5, 2 already archived".
+   */
+  bulkArchive(ids: string[], archived: boolean): Promise<BulkArchiveResult>;
 
   /**
    * Compose multiple resolved conversations into a single PR. Server
