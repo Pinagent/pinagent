@@ -10,8 +10,8 @@ Pinagent is a localhost-only Vite or Next.js plugin. It tags every JSX element w
    browser                      dev server                    agent
 ┌────────────────┐    ┌──────────────────────────┐    ┌──────────────────┐
 │ click element  │    │  /__pinagent middleware  │    │  Claude Code     │
-│ leave comment  │──▶ │  writes                  │──▶ │  + @pinagent/mcp │
-│ widget snaps   │    │  .pinagent/feedback/<id> │    │  reads, edits,   │
+│ leave comment  │──▶ │  writes to               │──▶ │  + @pinagent/mcp │
+│ widget snaps   │    │  .pinagent/db.sqlite     │    │  reads, edits,   │
 │ a screenshot   │    │  + screenshots/<id>.png  │    │  resolves        │
 └────────────────┘    └──────────────────────────┘    └──────────────────┘
         ▲                                                       │
@@ -89,7 +89,7 @@ Each feedback item carries:
 - `screenshot` — PNG, downscaled to ~1280px max width
 - `viewport`, `url`, `userAgent`
 
-The plugin writes JSON to `.pinagent/feedback/<id>.json` and the screenshot to `.pinagent/screenshots/<id>.png`. Add `.pinagent/` to your `.gitignore` — the Vite plugin will warn if you forget.
+The plugin stores records in a local SQLite database at `.pinagent/db.sqlite` and writes the screenshot to `.pinagent/screenshots/<id>.png`. Add `.pinagent/` to your `.gitignore` — the Vite plugin will warn if you forget.
 
 ## Hands-off mode (optional)
 
@@ -131,7 +131,7 @@ pnpm example                                # examples/react-vite at :5173
 pnpm --filter=next-app-example dev          # examples/next-app at :3000
 ```
 
-Open the URL, click 💬, pick something, submit. Check `.pinagent/feedback/`.
+Open the URL, click 💬, pick something, submit. The screenshot lands in `.pinagent/screenshots/`, the record in `.pinagent/db.sqlite`.
 
 ## Licensing
 
