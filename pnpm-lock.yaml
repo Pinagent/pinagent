@@ -320,6 +320,37 @@ importers:
 
   packages/next-plugin:
     dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.3.150
+        version: 0.3.150(@anthropic-ai/sdk@0.98.0(zod@3.25.76))(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(zod@3.25.76)
+      '@babel/parser':
+        specifier: ^7.26.2
+        version: 7.29.7
+      '@babel/traverse':
+        specifier: ^7.29.7
+        version: 7.29.7
+      '@babel/types':
+        specifier: ^7.29.7
+        version: 7.29.7
+      '@sqlite.org/sqlite-wasm':
+        specifier: ^3.50.0-build1
+        version: 3.50.0-build1
+      better-sqlite3:
+        specifier: ^12.10.0
+        version: 12.10.0
+      drizzle-orm:
+        specifier: ^0.38.0
+        version: 0.38.4(@types/better-sqlite3@7.6.13)(@types/react@19.2.15)(better-sqlite3@12.10.0)(react@19.2.6)
+      nanoid:
+        specifier: ^5.0.9
+        version: 5.1.11
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.0
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
       '@pinagent/agent-runner':
         specifier: workspace:*
         version: link:../agent-runner
@@ -329,22 +360,30 @@ importers:
       '@pinagent/browser-runtime':
         specifier: workspace:*
         version: link:../browser-runtime
-      '@sqlite.org/sqlite-wasm':
-        specifier: ^3.50.0-build1
-        version: 3.50.0-build1
-      nanoid:
-        specifier: ^5.0.9
-        version: 5.1.11
-    devDependencies:
+      '@pinagent/db':
+        specifier: workspace:*
+        version: link:../db
+      '@pinagent/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@pinagent/widget':
         specifier: workspace:*
         version: link:../widget
+      '@types/babel__traverse':
+        specifier: ^7.20.6
+        version: 7.28.0
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
       '@types/node':
         specifier: ^22.10.1
         version: 22.19.19
       '@types/react':
         specifier: ^19.2.15
         version: 19.2.15
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
@@ -406,12 +445,21 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
         version: 0.3.150(@anthropic-ai/sdk@0.98.0(zod@3.25.76))(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(zod@3.25.76)
-      '@pinagent/agent-runner':
-        specifier: workspace:*
-        version: link:../agent-runner
-      '@pinagent/babel-plugin':
-        specifier: workspace:*
-        version: link:../babel-plugin
+      '@babel/parser':
+        specifier: ^7.26.2
+        version: 7.29.7
+      '@babel/traverse':
+        specifier: ^7.29.7
+        version: 7.29.7
+      '@babel/types':
+        specifier: ^7.29.7
+        version: 7.29.7
+      better-sqlite3:
+        specifier: ^12.10.0
+        version: 12.10.0
+      drizzle-orm:
+        specifier: ^0.38.0
+        version: 0.38.4(@types/better-sqlite3@7.6.13)(@types/react@19.2.15)(better-sqlite3@12.10.0)(react@19.2.6)
       nanoid:
         specifier: ^5.0.9
         version: 5.1.11
@@ -419,9 +467,27 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
     devDependencies:
+      '@pinagent/agent-runner':
+        specifier: workspace:*
+        version: link:../agent-runner
+      '@pinagent/babel-plugin':
+        specifier: workspace:*
+        version: link:../babel-plugin
+      '@pinagent/db':
+        specifier: workspace:*
+        version: link:../db
+      '@pinagent/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@pinagent/widget':
         specifier: workspace:*
         version: link:../widget
+      '@types/babel__traverse':
+        specifier: ^7.20.6
+        version: 7.28.0
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
       '@types/node':
         specifier: ^22.10.1
         version: 22.19.19
