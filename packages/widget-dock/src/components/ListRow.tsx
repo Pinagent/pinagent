@@ -25,6 +25,15 @@ export interface ListRowProps {
   actions?: ReactNode;
   selected?: boolean;
   onClick?: () => void;
+  /**
+   * When set, renders a left-side multi-select checkbox. Clicking the
+   * checkbox toggles `selected` via `onSelectChange` without firing the
+   * row's `onClick` (the click only triggers detail navigation), so
+   * "open" and "select" stay distinct gestures.
+   */
+  onSelectChange?: (selected: boolean) => void;
+  /** ARIA label for the multi-select checkbox. Falls back to `title`. */
+  selectLabel?: string;
   className?: string;
 }
 
@@ -36,6 +45,8 @@ export function ListRow({
   actions,
   selected = false,
   onClick,
+  onSelectChange,
+  selectLabel,
   className,
 }: ListRowProps) {
   return (
@@ -49,8 +60,8 @@ export function ListRow({
       )}
     >
       {/* Overlay button covers the full row so clicking anywhere triggers
-          onClick — but actions live in a sibling stacked above it, so their
-          clicks don't bubble through to the row. */}
+          onClick — but the checkbox + actions live in siblings stacked
+          above it, so their clicks don't bubble through to the row. */}
       {onClick && (
         <button
           type="button"
@@ -60,6 +71,22 @@ export function ListRow({
           className={cn(
             'absolute inset-0 z-0 rounded-lg cursor-pointer',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+          )}
+        />
+      )}
+
+      {onSelectChange && (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={(e) => onSelectChange(e.target.checked)}
+          // Stop the click from reaching the overlay button below —
+          // toggling a checkbox shouldn't also navigate into detail.
+          onClick={(e) => e.stopPropagation()}
+          aria-label={selectLabel ?? title}
+          className={cn(
+            'mt-1.5 h-3.5 w-3.5 shrink-0 relative z-10 rounded border-border',
+            'accent-foreground cursor-pointer',
           )}
         />
       )}

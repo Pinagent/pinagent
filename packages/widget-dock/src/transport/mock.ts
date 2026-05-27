@@ -22,6 +22,7 @@ import {
 } from '../fixtures';
 import type {
   AuditEvent,
+  BulkArchiveResult,
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,
@@ -211,6 +212,24 @@ export class MockTransport implements DockTransport {
     };
     this.conversations[idx] = next;
     return next;
+  }
+
+  async bulkArchive(ids: string[], archived: boolean): Promise<BulkArchiveResult> {
+    await sleep(SIMULATED_LATENCY_MS);
+    const updated: string[] = [];
+    const skipped: string[] = [];
+    const now = new Date().toISOString();
+    for (const id of ids) {
+      const idx = this.conversations.findIndex((c) => c.id === id);
+      const existing = idx >= 0 ? this.conversations[idx] : undefined;
+      if (!existing || existing.archived === archived) {
+        skipped.push(id);
+        continue;
+      }
+      this.conversations[idx] = { ...existing, archived, updatedAt: now };
+      updated.push(id);
+    }
+    return { updated, skipped };
   }
 
   async createPullRequest(input: CreatePullRequestInput): Promise<CreatePullRequestResult> {
