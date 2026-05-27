@@ -224,7 +224,7 @@ export class DockWsClient {
     // Validate at the boundary so a server-side wire-format drift can't
     // poison the rendering layer. Malformed frames drop silently —
     // logging would be noisy under reconnect storms. Unknown fields
-    // survive (`.passthrough()` on each variant in the schema).
+    // survive (`.loose()` on each variant in the schema).
     const parsed = ServerMessageSchema.safeParse(raw);
     if (!parsed.success) return;
     const m: ServerMessage = parsed.data;

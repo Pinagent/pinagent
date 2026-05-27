@@ -22,7 +22,7 @@ import { z } from 'zod';
  * Zod mirror of the AgentEvent union. Kept alongside the TS type so
  * the wire-boundary parse (ws-client on the dock) catches shape drift
  * the moment the server adds or renames a field — better than React
- * rendering `undefined` at runtime. Use `.passthrough()` on each
+ * rendering `undefined` at runtime. Use `.loose()` on each
  * object so unknown fields survive the parse instead of being
  * stripped; future event-payload additions stay backwards compatible
  * for old clients.
@@ -36,26 +36,26 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
       permissionMode: z.string(),
       apiKeySource: z.string(),
     })
-    .passthrough(),
+    .loose(),
   z
     .object({
       type: z.literal('text'),
       text: z.string(),
     })
-    .passthrough(),
+    .loose(),
   z
     .object({
       type: z.literal('tool_use'),
       name: z.string(),
       summary: z.string(),
     })
-    .passthrough(),
+    .loose(),
   z
     .object({
       type: z.literal('tool_result'),
       ok: z.boolean(),
     })
-    .passthrough(),
+    .loose(),
   z
     .object({
       type: z.literal('ask_user'),
@@ -64,13 +64,13 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
       context: z.string().optional(),
       options: z.array(z.string()).optional(),
     })
-    .passthrough(),
+    .loose(),
   z
     .object({
       type: z.literal('error'),
       message: z.string(),
     })
-    .passthrough(),
+    .loose(),
   z
     .object({
       type: z.literal('result'),
@@ -80,7 +80,7 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
       durationMs: z.number(),
       errors: z.array(z.string()).optional(),
     })
-    .passthrough(),
+    .loose(),
   z
     .object({
       type: z.literal('status_changed'),
@@ -89,7 +89,7 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
       commitSha: z.string().nullable(),
       resolvedAt: z.string().nullable(),
     })
-    .passthrough(),
+    .loose(),
 ]);
 
 export type AgentEvent =
