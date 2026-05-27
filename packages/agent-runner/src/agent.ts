@@ -9,7 +9,7 @@ import {
   query,
   type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk';
-import { type AgentEvent, getOrCreateBus } from '@pinagent/shared';
+import type { AgentEvent } from '@pinagent/shared';
 import {
   renderInitFooter,
   renderMessage,
@@ -17,6 +17,7 @@ import {
   summariseToolInput,
 } from './agent-render';
 import { ASK_USER_TOOL_NAME, createAskUserMcpServer, rejectAsk } from './ask-user';
+import { getOrCreateBus } from './bus';
 import { type FeedbackRecord, Storage } from './storage';
 
 /**
@@ -286,7 +287,7 @@ async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<v
         await persistSessionId(opts.projectRoot, opts.feedbackId, sessionId);
       }
 
-      for (const ev of toAgentEvents(message)) bus.publish(ev);
+      for (const ev of toAgentEvents(message)) await bus.publish(ev);
 
       if (message.type === 'system' && message.subtype === 'init') {
         await appendLog(opts.logPath, renderInitFooter(message));
@@ -309,7 +310,7 @@ async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<v
           const storage = new Storage(opts.projectRoot);
           const rec = await storage.read(opts.feedbackId);
           if (rec && rec.status !== 'pending') {
-            bus.publish({
+            await bus.publish({
               type: 'status_changed',
               status: rec.status,
               note: rec.note,
@@ -329,7 +330,7 @@ async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<v
     }
   } catch (err) {
     const msg = stringifyErr(err);
-    bus.publish({ type: 'error', message: msg });
+    await bus.publish({ type: 'error', message: msg });
     await appendLog(opts.logPath, `\n> [pinagent] agent stream errored: ${msg}\n`);
   } finally {
     if (!resultRendered && opts.isInitial) {

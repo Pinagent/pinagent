@@ -5,7 +5,6 @@ import {
   type AgentEvent,
   type ClientMessage,
   ClientMessageSchema,
-  getOrCreateBus,
   type ProjectEvent,
   type ServerMessage,
   type WorktreeWireState,
@@ -19,6 +18,7 @@ import {
   runFollowUpTurn,
 } from './agent';
 import { resolveAsk } from './ask-user';
+import { getOrCreateBus } from './bus';
 import { enqueue } from './merge-queue';
 import { onProjectChange } from './project-events';
 import { Storage } from './storage';

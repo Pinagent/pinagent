@@ -1,26 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
-/**
- * Per-feedback event bus.
- *
- * Each in-flight (or recently-finished) SDK agent run owns one bus.
- * Producers (`agent.ts::consumeStream`) call `publish(event)` as SDK
- * messages arrive. Consumers (SSE subscribers in `route.ts`) call
- * `subscribe({ onEvent, onClose })` and receive (a) every event already
- * published, then (b) every event published thereafter, then (c) an
- * `onClose` callback when the run finishes.
- *
- * Late subscribers are intentional — the widget opens its EventSource
- * after the agent has already started, and a browser refresh in the
- * middle of a run should still recover the transcript so far.
- *
- * Buses are kept around for a short TTL after `markFinished` so a
- * client that connects right after the agent ends still sees the
- * outcome, then garbage-collected.
- *
- * Storage is per-process, in-memory. An agent-runner restart wipes the
- * bus — and kills the SDK agent — which matches today's lifecycle
- * (Phase J in the v2 plan moves to per-turn process spawn).
- */
+//
+// Types only. The bus implementation lives in
+// `packages/agent-runner/src/bus.ts` (SQLite-backed via `messages`
+// table). This file exists so both server code (agent-runner) and
+// browser code (widget) can share the AgentEvent union without
+// pulling in any runtime — the widget never instantiates a bus, it
+// just deserialises events arriving over WebSocket and reads cached
+// rows from its sqlite-wasm mirror.
+//
+// Why SQLite-backed at all: in-memory storage tied to a `globalThis`
+// Symbol breaks under Vite 8's environment isolation (and any other
+// multi-context dev-server setup). The plugin's module gets evaluated
+// twice — once per environment — and each evaluation gets its own
+// `globalThis` registry. A publish in context B is invisible to a
+// subscriber in context A. SQLite is the natural broker: every
+// context opens the same `.pinagent/db.sqlite` and publish/subscribe
+// flow through the existing `messages` table.
 
 export type AgentEvent =
   | {
@@ -78,96 +73,4 @@ export type AgentEvent =
 export interface BusSubscriber {
   onEvent(event: AgentEvent): void;
   onClose(): void;
-}
-
-const FINISHED_TTL_MS = 5 * 60 * 1000;
-
-class EventBus {
-  private readonly events: AgentEvent[] = [];
-  private readonly subscribers = new Set<BusSubscriber>();
-  private _finished = false;
-
-  publish(event: AgentEvent): void {
-    if (this._finished) return;
-    this.events.push(event);
-    for (const sub of this.subscribers) {
-      try {
-        sub.onEvent(event);
-      } catch {
-        // A throwing subscriber shouldn't block publishing to the rest.
-      }
-    }
-  }
-
-  subscribe(sub: BusSubscriber): () => void {
-    // Replay buffer synchronously so the subscriber sees the
-    // transcript-so-far before any live events.
-    for (const e of this.events) {
-      try {
-        sub.onEvent(e);
-      } catch {
-        // Ignore — late subscribers can fail without taking the bus down.
-      }
-    }
-    if (this._finished) {
-      try {
-        sub.onClose();
-      } catch {
-        // Ignore — subscriber's problem.
-      }
-      return () => {};
-    }
-    this.subscribers.add(sub);
-    return () => this.subscribers.delete(sub);
-  }
-
-  markFinished(onEvict: () => void): void {
-    if (this._finished) return;
-    this._finished = true;
-    for (const sub of this.subscribers) {
-      try {
-        sub.onClose();
-      } catch {
-        // Ignore; we're closing anyway.
-      }
-    }
-    this.subscribers.clear();
-    setTimeout(onEvict, FINISHED_TTL_MS);
-  }
-}
-
-// Singleton across module re-evaluations. Next 16 / Turbopack can
-// re-evaluate route.ts (and its dependency chain — including this
-// module) when files in the chain change, creating fresh `buses`
-// Maps each time. Meanwhile the WS server is singleton on globalThis
-// and outlives module evals. If the buses Map weren't shared, the WS
-// handler would subscribe against one Map while the agent (in a
-// later module instance) publishes to a different Map — same
-// feedbackId, two separate stores, silent UI. A globalThis-keyed
-// Symbol pins the Map across all instances.
-const BUSES_SYMBOL = Symbol.for('pinagent.event-bus.buses');
-const buses: Map<string, EventBus> =
-  ((globalThis as Record<symbol, unknown>)[BUSES_SYMBOL] as Map<string, EventBus> | undefined) ??
-  new Map<string, EventBus>();
-(globalThis as Record<symbol, unknown>)[BUSES_SYMBOL] = buses;
-
-export function getOrCreateBus(id: string): EventBus {
-  let bus = buses.get(id);
-  if (!bus) {
-    bus = new EventBus();
-    buses.set(id, bus);
-  }
-  return bus;
-}
-
-export function getBus(id: string): EventBus | undefined {
-  return buses.get(id);
-}
-
-export function finishBus(id: string): void {
-  const bus = buses.get(id);
-  if (!bus) return;
-  bus.markFinished(() => {
-    buses.delete(id);
-  });
 }

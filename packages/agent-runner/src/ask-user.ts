@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
-import { getOrCreateBus } from '@pinagent/shared';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
+import { getOrCreateBus } from './bus';
 
 /**
  * `ask_user` custom SDK tool — the agent's only blessed way to pause and
@@ -106,7 +106,7 @@ export function createAskUserMcpServer(feedbackId: string) {
           timeout,
         });
 
-        bus.publish({
+        void bus.publish({
           type: 'ask_user',
           askId,
           question: args.question,

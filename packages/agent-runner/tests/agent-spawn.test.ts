@@ -44,7 +44,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', async () => {
 
 // Late imports so the mock is in place before agent.ts pulls the SDK in.
 type AgentMod = typeof import('../src/agent');
-type BusMod = typeof import('@pinagent/shared');
+type BusMod = typeof import('../src/bus');
 type StorageMod = typeof import('../src/storage');
 type SdkMod = typeof import('@anthropic-ai/claude-agent-sdk');
 
@@ -61,7 +61,7 @@ beforeAll(async () => {
   process.env.NODE_ENV = 'production'; // belt-and-suspenders against WS bootstrap
   await mkdir(PROJECT_ROOT, { recursive: true });
   agent = await import('../src/agent');
-  bus = await import('@pinagent/shared');
+  bus = await import('../src/bus');
   storageMod = await import('../src/storage');
   sdk = await import('@anthropic-ai/claude-agent-sdk');
 });
@@ -332,8 +332,9 @@ describe('spawnAgent', () => {
     });
 
     await agent.spawnAgent({ projectRoot: PROJECT_ROOT, feedback: rec!, mode: 'inline' });
-    // Give the consumeStream finally a tick to run.
-    await new Promise((r) => setTimeout(r, 50));
+    // Wait long enough for the SqliteEventBus poll loop (100ms) to deliver
+    // the error event written by the consumeStream finally block.
+    await new Promise((r) => setTimeout(r, 250));
 
     const errorEvent = events.find((e) => e.type === 'error');
     expect(errorEvent).toBeDefined();
