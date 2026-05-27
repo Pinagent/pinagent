@@ -2,6 +2,7 @@
 export const PACKAGE_NAME = '@pinagent/agent-runner';
 
 export {
+  countWorktreeChanges,
   discardWorktree,
   hasActiveRun,
   interruptRun,

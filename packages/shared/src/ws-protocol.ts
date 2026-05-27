@@ -82,5 +82,11 @@ export type ServerMessage =
       conflicts?: string[];
       /** Free-form message for non-conflict errors. */
       message?: string;
+      /**
+       * Count of files with uncommitted changes (`git status --porcelain`)
+       * in the worktree. Only meaningful for active-ish states
+       * (`active`, `landing`, `conflict`, `ttl_warning`); omitted otherwise.
+       */
+      changesCount?: number;
     }
   | { type: 'pong' };
