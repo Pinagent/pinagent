@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createRequire } from 'node:module';
@@ -233,10 +234,20 @@ async function serveSqliteWasm(res: ServerResponse, file: string): Promise<void>
  * `readMigrationFiles`-compatible payload. Mirrors next-plugin/route.ts.
  */
 async function serveDbMigrations(): Promise<string> {
+  // Path-walker mirrors agent-runner/src/db/client.ts and the same
+  // fallback in next-plugin/src/route.ts: first candidate is the
+  // published-tarball layout (drizzle/ sibling to dist/ after the
+  // copy-drizzle prebuild). Fall back to packages/db/drizzle/ for
+  // in-monorepo dev where the consumer's prebuild hasn't run.
   const moduleUrl: string | undefined = import.meta.url;
-  const dir = moduleUrl
-    ? join(dirname(fileURLToPath(moduleUrl)), '..', 'drizzle')
-    : join(process.cwd(), 'drizzle');
+  const base = moduleUrl ? dirname(fileURLToPath(moduleUrl)) : process.cwd();
+  const candidates = [
+    // packages/vite-plugin/{dist,src}/middleware.{js,cjs,ts} → ../drizzle (sibling)
+    join(base, '..', 'drizzle'),
+    // packages/vite-plugin/src/middleware.ts (no prebuild yet) → packages/db/drizzle
+    join(base, '..', '..', 'db', 'drizzle'),
+  ];
+  const dir = candidates.find((p) => existsSync(p)) ?? candidates[0]!;
   try {
     const journalText = await readFile(join(dir, 'meta', '_journal.json'), 'utf8');
     const journal = JSON.parse(journalText) as {
