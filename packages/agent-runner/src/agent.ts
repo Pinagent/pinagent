@@ -9,7 +9,9 @@ import {
   query,
   type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk';
+import { activeRuns as activeRunsTable } from '@pinagent/db';
 import type { AgentEvent } from '@pinagent/shared';
+import { eq } from 'drizzle-orm';
 import {
   renderInitFooter,
   renderMessage,
@@ -18,6 +20,7 @@ import {
 } from './agent-render';
 import { ASK_USER_TOOL_NAME, createAskUserMcpServer, rejectAsk } from './ask-user';
 import { getOrCreateBus } from './bus';
+import { getDb } from './db/client';
 import { type FeedbackRecord, Storage } from './storage';
 
 /**
@@ -68,21 +71,59 @@ interface ActiveRun {
 }
 
 /**
- * One in-flight SDK run per feedback id. The WS interrupt handler reads
- * this; the multi-turn handler rejects a `user_message` if a run is
- * already going (no queueing yet — phase F if we need it).
+ * In-flight runs LOCAL TO THIS CONTEXT. The AbortController is a
+ * process-bound object — there's no way to serialise it across
+ * contexts/processes, so we keep the per-context Map. Cross-context
+ * `interruptRun` calls reach the owning context via `process.emit`
+ * (see INTERRUPT_EVENT below), which all contexts in the same Node
+ * process share.
+ *
+ * Cross-context "is a run in flight?" visibility is handled separately
+ * by the `active_runs` SQLite table — see `hasActiveRun` below.
  */
-// Singleton across module re-evaluations (see event-bus.ts). The
-// WS interrupt handler and the multi-turn user_message handler both
-// look up activeRuns; if the route module re-evaluates between an
-// agent run starting and a user clicking Stop, a fresh activeRuns
-// Map would lose the entry and interrupt would no-op.
-const ACTIVE_RUNS_SYMBOL = Symbol.for('pinagent.agent.activeRuns');
-const activeRuns: Map<string, ActiveRun> =
-  ((globalThis as Record<symbol, unknown>)[ACTIVE_RUNS_SYMBOL] as
-    | Map<string, ActiveRun>
-    | undefined) ?? new Map<string, ActiveRun>();
-(globalThis as Record<symbol, unknown>)[ACTIVE_RUNS_SYMBOL] = activeRuns;
+const activeRuns = new Map<string, ActiveRun>();
+
+/**
+ * Cross-context signalling channel for interrupts. The WS server can
+ * land in a different context than the one running the SDK loop (Next 16
+ * Turbopack, Vite 8 environments), so the in-memory `activeRuns` Map in
+ * the WS server's context wouldn't see the entry. Node's `process`
+ * EventEmitter is shared across all contexts in one process, so emit-ing
+ * here reliably reaches the owning context's listener (registered in
+ * `runQuery`). Same idea as the SQLite-backed bus, but for a transient
+ * signal rather than a stream — no persistence needed.
+ */
+const INTERRUPT_EVENT = 'pinagent:interrupt';
+
+async function recordActiveRun(projectRoot: string, feedbackId: string): Promise<void> {
+  try {
+    const db = getDb(projectRoot);
+    await db
+      .insert(activeRunsTable)
+      .values({
+        conversationId: feedbackId,
+        startedAt: new Date(),
+        currentTurn: 1,
+      })
+      .onConflictDoUpdate({
+        target: activeRunsTable.conversationId,
+        set: { startedAt: new Date() },
+      });
+  } catch {
+    // FK violation or transient DB error — the run itself is still
+    // tracked in-process via `activeRuns`; cross-context visibility
+    // degrades to "broken" but the run proceeds.
+  }
+}
+
+async function clearActiveRun(projectRoot: string, feedbackId: string): Promise<void> {
+  try {
+    const db = getDb(projectRoot);
+    await db.delete(activeRunsTable).where(eq(activeRunsTable.conversationId, feedbackId));
+  } catch {
+    // Same rationale as recordActiveRun.
+  }
+}
 
 /**
  * Run an isolated Claude Agent SDK query for a single freshly-submitted
@@ -140,11 +181,11 @@ export async function spawnAgent(ctx: AgentContext): Promise<void> {
  * or a turn is already in flight (no input queueing yet).
  */
 export async function runFollowUpTurn(feedbackId: string, content: string): Promise<void> {
-  if (activeRuns.has(feedbackId)) {
+  const projectRoot = process.env.PINAGENT_PROJECT_ROOT ?? process.cwd();
+  if (await hasActiveRun(feedbackId, projectRoot)) {
     throw new Error('a turn is already in progress for this feedback');
   }
 
-  const projectRoot = process.env.PINAGENT_PROJECT_ROOT ?? process.cwd();
   const storage = new Storage(projectRoot);
   const rec = await storage.read(feedbackId);
   if (!rec) throw new Error(`feedback not found: ${feedbackId}`);
@@ -181,24 +222,65 @@ export async function runFollowUpTurn(feedbackId: string, content: string): Prom
 }
 
 /**
- * True iff an SDK run is currently in flight for this feedback id.
- * Lightweight read for code that needs to know without mutating
- * anything (tests, status pings, future health endpoints).
+ * True iff an SDK run is currently in flight for this feedback id, in
+ * ANY context. Reads the `active_runs` SQLite row inserted by
+ * `runQuery`. Local-Map check is cheap and short-circuits the common
+ * case where the run was started in the same context.
  */
-export function hasActiveRun(feedbackId: string): boolean {
-  return activeRuns.has(feedbackId);
+export async function hasActiveRun(feedbackId: string, projectRoot?: string): Promise<boolean> {
+  if (activeRuns.has(feedbackId)) return true;
+  const root = projectRoot ?? process.env.PINAGENT_PROJECT_ROOT ?? process.cwd();
+  try {
+    const db = getDb(root);
+    const rows = await db
+      .select()
+      .from(activeRunsTable)
+      .where(eq(activeRunsTable.conversationId, feedbackId))
+      .limit(1);
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Abort an in-flight run for `feedbackId`. Returns false if nothing is
- * running. The SDK should propagate the abort through its tool loop and
- * exit the iterator; consumeStream catches the abort error and writes a
+ * Abort an in-flight run for `feedbackId`. Returns true if the run
+ * either lives in this context (local abort) OR lives in some other
+ * context in this process (cross-context signal sent via `process.emit`
+ * — the owning context's listener will call `abort` on its
+ * AbortController). Returns false if no SQLite row exists for an
+ * active run, i.e. nothing was actually in flight.
+ *
+ * The SDK propagates the abort through its tool loop and exits the
+ * iterator; `consumeStream` catches the abort error and writes a
  * minimal footer.
  */
-export function interruptRun(feedbackId: string): boolean {
-  const run = activeRuns.get(feedbackId);
-  if (!run) return false;
-  run.abort.abort();
+export async function interruptRun(feedbackId: string, projectRoot?: string): Promise<boolean> {
+  const local = activeRuns.get(feedbackId);
+  if (local) {
+    local.abort.abort();
+    return true;
+  }
+  // Not local — was the run started in another context? Check SQLite.
+  // We still emit the event regardless; the owning context's listener
+  // will pick it up. SQLite check governs the return value so callers
+  // (the WS error frame) can distinguish "no run at all" from "run
+  // in a different context".
+  const root = projectRoot ?? process.env.PINAGENT_PROJECT_ROOT ?? process.cwd();
+  let exists = false;
+  try {
+    const db = getDb(root);
+    const rows = await db
+      .select()
+      .from(activeRunsTable)
+      .where(eq(activeRunsTable.conversationId, feedbackId))
+      .limit(1);
+    exists = rows.length > 0;
+  } catch {
+    exists = false;
+  }
+  if (!exists) return false;
+  process.emit(INTERRUPT_EVENT as Parameters<typeof process.emit>[0], feedbackId as never);
   return true;
 }
 
@@ -216,6 +298,19 @@ async function runQuery(opts: RunQueryOpts): Promise<void> {
   const permissionMode = resolvePermissionMode(process.env);
   const abort = new AbortController();
   activeRuns.set(opts.feedbackId, { abort });
+
+  // Register the cross-context interrupt listener BEFORE awaiting
+  // anything async, so an interrupt fired between `activeRuns.set` and
+  // the next tick still reaches us.
+  const onInterrupt = (id: string) => {
+    if (id === opts.feedbackId) abort.abort();
+  };
+  process.on(INTERRUPT_EVENT, onInterrupt);
+
+  // Record cross-context visibility into SQLite. Fire-and-forget — if the
+  // INSERT lags slightly behind a follow-up `hasActiveRun` check the
+  // window is tiny and the local-Map check covers same-context callers.
+  void recordActiveRun(opts.projectRoot, opts.feedbackId);
 
   // The `ask_user` tool can block for up to 10 min waiting for a human
   // response. SDK MCP tool calls time out at 60s by default; bump it to
@@ -258,6 +353,8 @@ async function runQuery(opts: RunQueryOpts): Promise<void> {
     await consumeStream(opts, sdkOptions);
   } finally {
     activeRuns.delete(opts.feedbackId);
+    process.off(INTERRUPT_EVENT, onInterrupt);
+    void clearActiveRun(opts.projectRoot, opts.feedbackId);
     // Any ask_user calls still hanging die with the run; otherwise the
     // SDK Promise would wait until ASK_TTL with no UI to answer.
     rejectAsk(opts.feedbackId, 'agent run ended');

@@ -33,16 +33,21 @@ interface PendingAsk {
   timeout: NodeJS.Timeout;
 }
 
-// Singleton across module re-evaluations — same reason as the event
-// bus. Without this, an ask published by an agent (running in one
-// route-module instance) would never resolve when the WS handler
-// (singleton on globalThis, bound to an earlier instance) tries to
-// look up the askId. See event-bus.ts for the longer note.
-const ASKS_SYMBOL = Symbol.for('pinagent.ask-user.pending');
-const pending: Map<string, PendingAsk> =
-  ((globalThis as Record<symbol, unknown>)[ASKS_SYMBOL] as Map<string, PendingAsk> | undefined) ??
-  new Map<string, PendingAsk>();
-(globalThis as Record<symbol, unknown>)[ASKS_SYMBOL] = pending;
+/**
+ * Pending asks LOCAL TO THIS CONTEXT. The resolve/reject closures are
+ * tied to the agent's Promise — process-bound, not serialisable. The
+ * WS server can land in a different context than the one running the
+ * agent (Next 16 Turbopack, Vite 8), so we route cross-context responses
+ * via `process.emit(ASK_RESPONSE_EVENT, ...)` — see `resolveAsk`.
+ */
+const pending = new Map<string, PendingAsk>();
+
+const ASK_RESPONSE_EVENT = 'pinagent:ask-response';
+
+interface AskResponsePayload {
+  askId: string;
+  answer: string;
+}
 
 const inputSchema = {
   question: z
@@ -88,19 +93,33 @@ export function createAskUserMcpServer(feedbackId: string) {
       const answer = await new Promise<string>((resolve, reject) => {
         const timeout = setTimeout(() => {
           pending.delete(askId);
+          process.off(ASK_RESPONSE_EVENT, onResponse);
           reject(new Error(`ask_user timed out after ${ASK_TTL_MS / 1000}s with no response`));
         }, ASK_TTL_MS);
+
+        // Listener for cross-context ask responses. `resolveAsk` in
+        // another context emits this event when the WS server receives
+        // an ask_response frame; we filter on askId so each pending
+        // promise only fires for its own response.
+        const onResponse = (payload: AskResponsePayload) => {
+          if (payload.askId !== askId) return;
+          const entry = pending.get(askId);
+          if (entry) entry.resolve(payload.answer);
+        };
+        process.on(ASK_RESPONSE_EVENT, onResponse);
 
         pending.set(askId, {
           feedbackId,
           resolve: (a: string) => {
             clearTimeout(timeout);
             pending.delete(askId);
+            process.off(ASK_RESPONSE_EVENT, onResponse);
             resolve(a);
           },
           reject: (reason: string) => {
             clearTimeout(timeout);
             pending.delete(askId);
+            process.off(ASK_RESPONSE_EVENT, onResponse);
             reject(new Error(reason));
           },
           timeout,
@@ -129,13 +148,22 @@ export function createAskUserMcpServer(feedbackId: string) {
 }
 
 /**
- * Resolve the matching pending ask. Returns false if no such ask is
- * pending (stale UI, double-submit, etc.).
+ * Resolve the matching pending ask. Tries the local-context Map first
+ * for the same-context case; otherwise broadcasts via `process.emit`
+ * so the context running the agent (and holding the resolve closure)
+ * can settle the Promise. Returns true optimistically when emitting
+ * cross-context — we can't know synchronously whether another context
+ * had a matching pending entry, but stale UI / double-submits are rare
+ * enough that swallowing the "no pending ask" error is acceptable.
  */
 export function resolveAsk(askId: string, answer: string): boolean {
   const entry = pending.get(askId);
-  if (!entry) return false;
-  entry.resolve(answer);
+  if (entry) {
+    entry.resolve(answer);
+    return true;
+  }
+  const payload: AskResponsePayload = { askId, answer };
+  process.emit(ASK_RESPONSE_EVENT as Parameters<typeof process.emit>[0], payload as never);
   return true;
 }
 

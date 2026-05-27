@@ -30,7 +30,7 @@
     "@modelcontextprotocol/sdk": "^1.0.4",
     "@pinagent/db": "workspace:*",
     "drizzle-orm": "^0.38.0",
-    "zod": "^3.23.8"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
