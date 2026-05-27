@@ -24,12 +24,12 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "zod": "^3.23.8"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3",
-    "zod": "^3.23.8"
+    "zod": "^4.4.3"
   }
 }
