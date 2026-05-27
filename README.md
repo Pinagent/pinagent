@@ -4,6 +4,33 @@ Click a UI element in your dev server, leave a comment, and your coding agent pi
 
 Pinagent is a localhost-only Vite or Next.js plugin. It tags every JSX element with its source location, drops a small 💬 widget into the page, and writes each captured comment to `.pinagent/feedback/`. An MCP server surfaces the queue inside your existing Claude Code session, so the next thing you say can be "fix the pending feedback."
 
+## Try the bundled example in two minutes
+
+The fastest way to see the loop end-to-end is the React + Vite example in this repo:
+
+```bash
+pnpm install                                # from the repo root
+pnpm --filter react-vite-example dev
+```
+
+The example's `predev` hook builds `@pinagent/vite-plugin` (and its upstream packages via turbo) before starting Vite, so the dev server boots with a fresh plugin bundle that has the widget, the migrations, and the agent runtime baked in.
+
+1. **Open** <http://localhost:5173>. You should see a "Pinagent demo" header with three counters.
+2. **Click the Pinagent logo** in the bottom-right corner. A picker activates and your cursor highlights elements as you hover.
+3. **Click a counter** (e.g. "Apples"), type a comment ("rename to Potato"), submit.
+4. **Watch the widget pane** that opens next to the element — the Claude Agent SDK runs against `examples/react-vite/`, streaming text, tool calls, and the resulting edit back into the page.
+5. **Verify** in your editor that `examples/react-vite/src/App.tsx` was changed — Pinagent calls `mcp__pinagent__resolve_feedback` when it's done.
+
+The full feedback record lives at `.pinagent/feedback/<id>.json` and the captured screenshot at `.pinagent/screenshots/<id>.png` (both under the example's project root).
+
+If the dev server returns 500 on `POST /__pinagent/feedback`, the plugin dist is stale — `pnpm build` from the repo root forces a clean rebuild. See [examples/react-vite/README.md](./examples/react-vite/README.md) for more.
+
+The Next.js example works the same way:
+
+```bash
+pnpm --filter next-app-example dev          # :3000
+```
+
 ## How it works
 
 ```
@@ -123,17 +150,6 @@ pinagent(nextConfig, { spawnAgent: 'inline' })
 - **No auth.** The trust boundary is your own machine.
 - **File system is the message bus** between the plugin and the MCP server.
 - **Dev-only.** The loader, widget, and middleware are gated on `NODE_ENV !== 'production'`. Production builds are untouched.
-
-## Try it
-
-```bash
-pnpm install
-pnpm build
-pnpm example                                # examples/react-vite at :5173
-pnpm --filter=next-app-example dev          # examples/next-app at :3000
-```
-
-Open the URL, click 💬, pick something, submit. Check `.pinagent/feedback/`.
 
 ## Licensing
 
