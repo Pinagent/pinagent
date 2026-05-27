@@ -250,7 +250,8 @@ async function serveDbMigrations(): Promise<string> {
   // Check for the journal file specifically, not just the directory.
   // An empty `drizzle/` dir (e.g. left behind by a partial prebuild)
   // would otherwise short-circuit the fallback and fail at readFile.
-  const dir = candidates.find((p) => existsSync(join(p, 'meta', '_journal.json'))) ?? candidates[0]!;
+  const dir =
+    candidates.find((p) => existsSync(join(p, 'meta', '_journal.json'))) ?? candidates[0]!;
   try {
     const journalText = await readFile(join(dir, 'meta', '_journal.json'), 'utf8');
     const journal = JSON.parse(journalText) as {
