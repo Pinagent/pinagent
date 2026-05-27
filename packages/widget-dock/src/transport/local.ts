@@ -63,7 +63,7 @@ const PullRequestWireSchema = z
     createdAt: z.string(),
     updatedAt: z.string(),
   })
-  .passthrough();
+  .loose();
 
 /**
  * Wire shape for `GET /__pinagent/branches`. Mirrors
@@ -82,7 +82,7 @@ const BranchWireSchema = z
     state: z.enum(['clean', 'uncommitted', 'behind-base']),
     diskMb: z.number().nullable(),
   })
-  .passthrough();
+  .loose();
 
 /**
  * Wire shape for `GET /__pinagent/changes`. Mirrors
@@ -102,7 +102,7 @@ const ChangeWireSchema = z
     deletions: z.number().int().nonnegative(),
     updatedAt: z.string(),
   })
-  .passthrough();
+  .loose();
 
 /**
  * Wire shape for `GET /__pinagent/feedback[/:id]`. Mirrors
@@ -126,12 +126,12 @@ const FeedbackRecordSchema = z
     createdAt: z.string(),
     updatedAt: z.string(),
   })
-  .passthrough();
+  .loose();
 type FeedbackRecord = z.infer<typeof FeedbackRecordSchema>;
 
 const FeedbackRecordWithScreenshotSchema = FeedbackRecordSchema.extend({
   screenshot: z.string().nullable(),
-}).passthrough();
+}).loose();
 
 function locString(file: string | null, line: number | null, col: number | null): string {
   if (!file) return '';

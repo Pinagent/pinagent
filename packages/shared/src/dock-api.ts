@@ -8,7 +8,7 @@
  * Phase 7b expanded the coverage to every read endpoint the dock hits.
  * Write endpoints (mutations) reuse the same response schemas.
  *
- * `.passthrough()` everywhere — unknown fields survive the parse so
+ * `.loose()` everywhere — unknown fields survive the parse so
  * additions to a payload don't break old dock builds.
  */
 import { z } from 'zod';
@@ -34,7 +34,7 @@ const AnchorSchema = z
     selector: z.string(),
     snippet: z.string(),
   })
-  .passthrough();
+  .loose();
 
 // ---------- Conversation list ----------
 
@@ -51,13 +51,13 @@ export const ConversationSchema = z
     lastMessage: z.string(),
     messageCount: z.number().int().nonnegative(),
   })
-  .passthrough();
+  .loose();
 export type Conversation = z.infer<typeof ConversationSchema>;
 
 export const ConversationDetailSchema = ConversationSchema.extend({
   comment: z.string(),
   screenshot: z.string().nullable(),
-}).passthrough();
+}).loose();
 export type ConversationDetail = z.infer<typeof ConversationDetailSchema>;
 
 // ---------- Changes ----------
@@ -75,7 +75,7 @@ export const ChangeSchema = z
     preview: z.string(),
     updatedAt: z.string(),
   })
-  .passthrough();
+  .loose();
 export type Change = z.infer<typeof ChangeSchema>;
 
 export const ChangeDiffSchema = z
@@ -83,7 +83,7 @@ export const ChangeDiffSchema = z
     diff: z.string(),
     truncated: z.boolean(),
   })
-  .passthrough();
+  .loose();
 export type ChangeDiff = z.infer<typeof ChangeDiffSchema>;
 
 // ---------- Branches ----------
@@ -99,7 +99,7 @@ export const BranchSchema = z
     state: z.enum(['clean', 'uncommitted', 'behind-base']),
     diskMb: z.number().nullable(),
   })
-  .passthrough();
+  .loose();
 export type Branch = z.infer<typeof BranchSchema>;
 
 // ---------- Pull requests ----------
@@ -116,7 +116,7 @@ export const PullRequestSchema = z
     updatedAt: z.string(),
     conversationIds: z.array(z.string()),
   })
-  .passthrough();
+  .loose();
 export type PullRequest = z.infer<typeof PullRequestSchema>;
 
 // ---------- Connections ----------
@@ -128,14 +128,14 @@ export const PresentableConnectionsSchema = z
         connected: z.boolean(),
         login: z.string().nullable(),
       })
-      .passthrough(),
+      .loose(),
     anthropic: z
       .object({
         keySet: z.boolean(),
       })
-      .passthrough(),
+      .loose(),
   })
-  .passthrough();
+  .loose();
 export type PresentableConnections = z.infer<typeof PresentableConnectionsSchema>;
 
 // ---------- Settings ----------
@@ -151,7 +151,7 @@ export const DockProjectSettingsSchema = z
     monthlyBudgetUsd: z.number().nullable(),
     permissionMode: PermissionModeSchema,
   })
-  .passthrough();
+  .loose();
 export type DockProjectSettings = z.infer<typeof DockProjectSettingsSchema>;
 
 // ---------- Prune result ----------
@@ -165,11 +165,11 @@ export const PruneStaleResultSchema = z
           feedbackId: z.string(),
           error: z.string(),
         })
-        .passthrough(),
+        .loose(),
     ),
     retentionDays: z.number().int().nonnegative(),
   })
-  .passthrough();
+  .loose();
 export type PruneStaleResult = z.infer<typeof PruneStaleResultSchema>;
 
 // ---------- Audit log ----------
@@ -185,7 +185,7 @@ export const AuditEventSchema = z
     payload: z.record(z.string(), z.unknown()),
     createdAt: z.string(),
   })
-  .passthrough();
+  .loose();
 
 export type AuditActor = z.infer<typeof AuditActorSchema>;
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
@@ -218,7 +218,7 @@ export const HistorySearchHitSchema = z
     matchedFields: z.array(HistoryMatchedFieldSchema),
     snippet: z.string(),
   })
-  .passthrough();
+  .loose();
 
 export type HistoryMatchedField = z.infer<typeof HistoryMatchedFieldSchema>;
 export type HistorySearchHit = z.infer<typeof HistorySearchHitSchema>;

@@ -69,7 +69,7 @@ export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 export type ProjectEvent = { type: 'conversations_changed' };
 
 export const ProjectEventSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('conversations_changed') }).passthrough(),
+  z.object({ type: z.literal('conversations_changed') }).loose(),
 ]);
 
 // ---------- Server → client ----------
@@ -124,7 +124,7 @@ export type ServerMessage =
  *
  * Kept separate from the manual `ServerMessage` type union above: the
  * type union narrows cleanly under discriminated-union semantics, and
- * the schema's `.passthrough()` index signatures would block that
+ * the schema's `.loose()` index signatures would block that
  * narrowing for spread-and-mutate constructions on the agent-runner
  * side. Both must stay in sync — when adding a variant, update both.
  */
@@ -135,20 +135,20 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
       feedbackId: z.string(),
       event: AgentEventSchema,
     })
-    .passthrough(),
+    .loose(),
   z
     .object({
       type: z.literal('done'),
       feedbackId: z.string(),
     })
-    .passthrough(),
+    .loose(),
   z
     .object({
       type: z.literal('error'),
       feedbackId: z.string().optional(),
       message: z.string(),
     })
-    .passthrough(),
+    .loose(),
   z
     .object({
       type: z.literal('worktree_state'),
@@ -159,16 +159,16 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
       message: z.string().optional(),
       changesCount: z.number().optional(),
     })
-    .passthrough(),
+    .loose(),
   z
     .object({
       type: z.literal('project_event'),
       event: ProjectEventSchema,
     })
-    .passthrough(),
+    .loose(),
   z
     .object({
       type: z.literal('pong'),
     })
-    .passthrough(),
+    .loose(),
 ]);
