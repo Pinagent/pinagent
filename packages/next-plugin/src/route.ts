@@ -80,6 +80,14 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
     });
   }
 
+  // /__pinagent/dock/<path> — dock static assets. Always served when
+  // the dock package is installed; the `dock: true` opt-in just
+  // controls whether the host page mounts the iframe (see component.tsx).
+  if (slug.length >= 1 && slug[0] === 'dock') {
+    const file = slug.length > 1 ? slug.slice(1).join('/') : 'index.html';
+    return serveDockFile(file);
+  }
+
   // /__pinagent/sqlite-wasm/<file> — proxies the sqlite-wasm jswasm
   // directory so the browser can spawn the Worker + load the WASM. We
   // serve directly out of node_modules rather than copying into dist
@@ -254,6 +262,68 @@ function sqliteWasmDir(): string {
   const pkgJson = req.resolve('@sqlite.org/sqlite-wasm/package.json');
   sqliteWasmDirCache = join(dirname(pkgJson), 'sqlite-wasm', 'jswasm');
   return sqliteWasmDirCache;
+}
+
+/**
+ * Resolve @pinagent/widget-dock's dist directory at runtime. Mirrors
+ * the vite-plugin's resolution pattern — the dock package is a runtime
+ * dep of @pinagent/next-plugin, so its package.json is reachable via
+ * require.resolve regardless of how the consumer installed pinagent.
+ */
+let dockDistDirCache: string | null = null;
+function dockDistDir(): string | null {
+  if (dockDistDirCache) return dockDistDirCache;
+  try {
+    const req = createRequire(import.meta.url ?? `file://${process.cwd()}/__pinagent__.js`);
+    const pkgJson = req.resolve('@pinagent/widget-dock/package.json');
+    dockDistDirCache = join(dirname(pkgJson), 'dist');
+    return dockDistDirCache;
+  } catch {
+    return null;
+  }
+}
+
+const DOCK_MIME_BY_EXT: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+};
+
+async function serveDockFile(requested: string): Promise<Response> {
+  const distDir = dockDistDir();
+  if (!distDir) {
+    // eslint-disable-next-line no-console
+    console.error(
+      '[pinagent] /__pinagent/dock/* requested but @pinagent/widget-dock is not installed.',
+    );
+    return new Response(null, { status: 404 });
+  }
+  // Strip leading slashes and any `..` segments — defense in depth even
+  // though the slug-array shape already restricts what gets here.
+  const safeRel = requested.replace(/^\/+/, '').replace(/\.\.\/?/g, '');
+  const abs = join(distDir, safeRel);
+  if (!abs.startsWith(distDir)) return new Response(null, { status: 404 });
+  const ext = abs.slice(abs.lastIndexOf('.')).toLowerCase();
+  const mime = DOCK_MIME_BY_EXT[ext] ?? 'application/octet-stream';
+  try {
+    const bytes = await readFile(abs);
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        'Content-Type': mime,
+        'Cache-Control': ext === '.woff2' || ext === '.woff' ? 'public, max-age=86400' : 'no-store',
+      },
+    });
+  } catch {
+    return new Response(null, { status: 404 });
+  }
 }
 
 async function serveSqliteWasm(file: string): Promise<Response> {

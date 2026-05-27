@@ -27,6 +27,21 @@ export interface PinagentOptions {
    * Set PINAGENT_AGENT_PERMISSION_MODE to override the default `acceptEdits`.
    */
   spawnAgent?: 'worktree' | 'inline' | 'off' | false;
+  /**
+   * Mount the project-management dock surface alongside the per-element
+   * widget. Default: false — the widget ships universally, the dock is
+   * opt-in because not every project wants a second floating surface on
+   * every page.
+   *
+   * When true, the config sets `NEXT_PUBLIC_PINAGENT_DOCK=1` so the
+   * `<Pinagent />` component injects the dock iframe alongside the
+   * widget script tag (the env var is inlined into the client bundle at
+   * build time by Next's standard NEXT_PUBLIC_ handling). The route
+   * handler serves the dock's static assets from `/__pinagent/dock/*`
+   * regardless — flipping this flag just controls whether the host
+   * page mounts the iframe.
+   */
+  dock?: boolean;
 }
 
 const loaderPath = (() => {
@@ -119,6 +134,16 @@ export default function pinagent(
   // co-located in the same process.
   if (effective !== 'off' && !process.env.PINAGENT_WS_PORT) {
     process.env.PINAGENT_WS_PORT = '53636';
+  }
+
+  // Propagate the dock flag to the client bundle via NEXT_PUBLIC_*. Next
+  // inlines these into client code at build time from process.env as it
+  // exists when bundling kicks off — and next.config.ts runs before
+  // bundling, so this set is visible to webpack/Turbopack's
+  // DefinePlugin. The `<Pinagent />` component reads it to decide
+  // whether to inject the dock iframe.
+  if (options.dock === true) {
+    process.env.NEXT_PUBLIC_PINAGENT_DOCK = '1';
   }
 
   const next: NextConfig = {
