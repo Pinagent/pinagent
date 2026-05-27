@@ -599,6 +599,21 @@ export async function discardWorktree(
   return { ok: true };
 }
 
+/**
+ * Count files with uncommitted changes in a worktree (`git status --porcelain`
+ * line count). Returns `null` if the worktree path doesn't exist or `git`
+ * fails — the caller treats that as "unknown" rather than zero, so the widget
+ * can omit the count from its label instead of showing a misleading "0 changes".
+ */
+export async function countWorktreeChanges(worktreePath: string): Promise<number | null> {
+  if (!existsSync(worktreePath)) return null;
+  const status = await runGitCapture(worktreePath, ['status', '--porcelain']);
+  if (status.code !== 0) return null;
+  const trimmed = status.stdout.trim();
+  if (!trimmed) return 0;
+  return trimmed.split('\n').length;
+}
+
 async function cleanupWorktreeFiles(
   worktreePath: string,
   branch: string,

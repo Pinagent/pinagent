@@ -10,7 +10,13 @@ import {
   type WorktreeWireState,
 } from '@pinagent/shared';
 import { type WebSocket, WebSocketServer } from 'ws';
-import { discardWorktree, interruptRun, mergeWorktree, runFollowUpTurn } from './agent';
+import {
+  countWorktreeChanges,
+  discardWorktree,
+  interruptRun,
+  mergeWorktree,
+  runFollowUpTurn,
+} from './agent';
 import { resolveAsk } from './ask-user';
 import { enqueue } from './merge-queue';
 import { Storage } from './storage';
@@ -338,6 +344,15 @@ async function emitCurrentWorktreeState(socket: WebSocket, feedbackId: string): 
       state,
     };
     if (rec.commitSha) payload.commitSha = rec.commitSha;
+    // Surface the uncommitted-files count for active-ish states so the widget
+    // can render `feedback/<id> · N changes` in the lifecycle label. Skipped
+    // for landed/discarded (the worktree is gone). Best-effort: a `null`
+    // return means we couldn't count (e.g. worktree path doesn't exist) and
+    // the widget falls back to the label without the count.
+    if (rec.worktreePath && (state === 'active' || state === 'ttl_warning')) {
+      const n = await countWorktreeChanges(rec.worktreePath);
+      if (n !== null) payload.changesCount = n;
+    }
     send(socket, payload);
   } catch {
     // Best-effort — the widget will still get state on the next action.
