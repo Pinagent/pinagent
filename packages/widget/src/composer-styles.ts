@@ -2,24 +2,29 @@
 /**
  * Inline CSS for the composer iframe (composerHTML in widget.ts).
  *
- * Extracted out of widget.ts to keep that file from sprawling further
- * and so the visual restyle has an obvious file to land in. The string
- * is templated straight into the iframe's <style> block via srcdoc, so
- * any `${…}` interpolation here must come from constants — no per-call
- * variables.
- *
- * Token values come from @pinagent/ui/tokens so the composer's look
- * stays in sync with the dock without a manual second-source.
+ * Templated from @pinagent/ui/tokens so the composer reads as the same
+ * brand as the dock — cream surfaces, ink text, gold accent, status
+ * colors tuned for cream. Token values inline at module-load time;
+ * the string is dropped into the iframe's <style> block via srcdoc.
  */
+import {
+  BRAND_CREAM,
+  BRAND_GOLD,
+  BRAND_INK,
+  FONT_MONO,
+  FONT_SANS,
+  STATUS,
+} from '@pinagent/ui/tokens';
+
 export const COMPOSER_STYLES = `
   html, body { margin: 0; padding: 0; background: transparent; height: 100%; }
-  * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif; }
-  body { color: #111827; }
+  * { box-sizing: border-box; font-family: ${FONT_SANS}; }
+  body { color: ${BRAND_INK}; }
   .card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
+    background: ${BRAND_CREAM};
+    border: 1px solid #e8dfb0;
     border-radius: 10px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    box-shadow: 0 10px 25px rgba(32, 27, 33, 0.18);
     padding: 12px;
     display: flex;
     flex-direction: column;
@@ -30,8 +35,8 @@ export const COMPOSER_STYLES = `
   .pane[hidden] { display: none; }
   .meta {
     font-size: 11px;
-    color: #6b7280;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #5c5546;
+    font-family: ${FONT_MONO};
     word-break: break-all;
     padding: 2px 4px;
     margin: -2px -4px;
@@ -40,41 +45,56 @@ export const COMPOSER_STYLES = `
     user-select: none;
   }
   .meta.clickable { cursor: pointer; }
-  .meta.clickable:hover { background: #f3f4f6; color: #111827; }
+  .meta.clickable:hover { background: #f5efd0; color: ${BRAND_INK}; }
   .meta.loading { opacity: 0.5; }
-  .meta.ok { background: #d1fae5; color: #065f46; }
-  .meta.err { background: #fee2e2; color: #991b1b; }
+  .meta.ok { background: ${STATUS.landed.bg}; color: ${STATUS.landed.fg}; }
+  .meta.err { background: ${STATUS.error.bg}; color: ${STATUS.error.fg}; }
   textarea {
     width: 100%;
     resize: none;
     padding: 8px;
     font-size: 13px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid #e8dfb0;
     border-radius: 6px;
     outline: none;
     font-family: inherit;
-    background: #fff;
-    color: #111827;
+    background: #fffdf3;
+    color: ${BRAND_INK};
+    transition: border-color 120ms ease, box-shadow 120ms ease;
   }
-  textarea::placeholder { color: #9ca3af; }
-  textarea:focus { border-color: #2563eb; }
-  textarea:disabled { background: #f9fafb; color: #6b7280; }
+  textarea::placeholder { color: #8a8270; }
+  textarea:focus {
+    border-color: ${BRAND_INK};
+    box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.40);
+  }
+  textarea:disabled { background: #f5efd0; color: #5c5546; }
   #pa-ta { flex: 1; min-height: 80px; }
   .row { display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
   .row.spread { justify-content: space-between; }
-  .btn { border: 0; padding: 6px 12px; font-size: 13px; border-radius: 6px; cursor: pointer; font-family: inherit; }
-  .btn.primary { background: #2563eb; color: #fff; }
-  .btn.primary:disabled { background: #93c5fd; cursor: not-allowed; }
-  .btn.ghost { background: transparent; color: #374151; }
+  .btn {
+    border: 0;
+    padding: 6px 12px;
+    font-size: 13px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 500;
+    transition: background 100ms ease, color 100ms ease;
+  }
+  .btn.primary { background: ${BRAND_INK}; color: ${BRAND_CREAM}; }
+  .btn.primary:hover { background: #2a2528; }
+  .btn.primary:disabled { background: #8a8270; cursor: not-allowed; }
+  .btn.ghost { background: transparent; color: ${BRAND_INK}; }
+  .btn.ghost:hover { background: rgba(32, 27, 33, 0.06); }
   .btn.ghost.stop,
-  .btn.ghost.cancel { color: #b91c1c; }
+  .btn.ghost.cancel { color: ${STATUS.error.fg}; }
   .btn.ghost.stop:hover,
-  .btn.ghost.cancel:hover { background: #fef2f2; }
+  .btn.ghost.cancel:hover { background: ${STATUS.error.bg}; }
 
   .header {
     font-size: 12px;
     font-weight: 500;
-    color: #111827;
+    color: ${BRAND_INK};
     display: flex;
     align-items: center;
     gap: 6px;
@@ -88,7 +108,7 @@ export const COMPOSER_STYLES = `
     display: inline-block;
     width: 10px;
     height: 10px;
-    border: 2px solid #2563eb;
+    border: 2px solid ${STATUS.working.fg};
     border-top-color: transparent;
     border-radius: 50%;
     flex-shrink: 0;
@@ -98,23 +118,23 @@ export const COMPOSER_STYLES = `
   .log {
     flex: 1;
     overflow-y: auto;
-    border: 1px solid #e5e7eb;
+    border: 1px solid #e8dfb0;
     border-radius: 6px;
     padding: 8px;
     font-size: 12px;
     line-height: 1.45;
-    background: #fafafa;
+    background: #fffdf3;
     display: flex;
     flex-direction: column;
     gap: 6px;
   }
-  .msg { white-space: pre-wrap; word-break: break-word; color: #111827; }
+  .msg { white-space: pre-wrap; word-break: break-word; color: ${BRAND_INK}; }
   .user-msg {
     white-space: pre-wrap;
     word-break: break-word;
-    color: #111827;
-    background: #eef2ff;
-    border-left: 3px solid #2563eb;
+    color: ${BRAND_INK};
+    background: #f5efd0;
+    border-left: 3px solid ${BRAND_INK};
     padding: 4px 8px;
     border-radius: 0 4px 4px 0;
     align-self: flex-start;
@@ -124,55 +144,71 @@ export const COMPOSER_STYLES = `
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: ${FONT_MONO};
     font-size: 11px;
-    background: #eef2ff;
-    color: #1e3a8a;
+    background: #f5efd0;
+    color: ${BRAND_INK};
     border-radius: 4px;
     padding: 3px 6px;
     align-self: flex-start;
     max-width: 100%;
+    border: 1px solid #e8dfb0;
   }
-  .chip.err { background: #fee2e2; color: #991b1b; }
+  .chip.err {
+    background: ${STATUS.error.bg};
+    color: ${STATUS.error.fg};
+    border-color: ${STATUS.error.border};
+  }
   .chip-name { font-weight: 600; }
   .chip-summary {
-    color: #4338ca;
+    color: #5c5546;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .chip-status { margin-left: auto; opacity: 0.6; }
-  .chip-status.ok { color: #047857; opacity: 1; }
-  .chip-status.err { color: #b91c1c; opacity: 1; }
-  .err-line { color: #b91c1c; font-size: 12px; white-space: pre-wrap; }
-  .footer-note { font-size: 11px; color: #6b7280; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .chip-status.ok { color: ${STATUS.landed.fg}; opacity: 1; }
+  .chip-status.err { color: ${STATUS.error.fg}; opacity: 1; }
+  .err-line { color: ${STATUS.error.fg}; font-size: 12px; white-space: pre-wrap; }
+  .footer-note { font-size: 11px; color: #5c5546; font-family: ${FONT_MONO}; }
 
-  /* Phase H — worktree lifecycle row, shown only when the conversation has
-     an active worktree to act on. The text label on the left echoes the
-     current state ("Working on pinagent/abc · 3 changes" while active,
-     "Landed as 1a2b3c4d" after) and the buttons on the right give the
-     terminal actions. */
+  /* Phase H — worktree lifecycle row. The text label on the left
+     describes the current state; buttons on the right are the terminal
+     actions. Default (working) uses the working palette; landed uses
+     ready/landed; conflict uses error; discarded fades to muted. */
   .lifecycle {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
     padding: 4px 6px;
-    background: #f5f3ff;
-    border: 1px solid #ddd6fe;
+    background: ${STATUS.working.bg};
+    border: 1px solid ${STATUS.working.border};
     border-radius: 6px;
     font-size: 11px;
-    color: #4c1d95;
+    color: ${STATUS.working.fg};
   }
   .lifecycle[hidden] { display: none; }
-  .lifecycle.landed { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
-  .lifecycle.discarded { background: #f3f4f6; border-color: #e5e7eb; color: #6b7280; }
-  .lifecycle.conflict { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+  .lifecycle.landed {
+    background: ${STATUS.landed.bg};
+    border-color: ${STATUS.landed.border};
+    color: ${STATUS.landed.fg};
+  }
+  .lifecycle.discarded {
+    background: ${STATUS.discarded.bg};
+    border-color: ${STATUS.discarded.border};
+    color: ${STATUS.discarded.fg};
+  }
+  .lifecycle.conflict {
+    background: ${STATUS.error.bg};
+    border-color: ${STATUS.error.border};
+    color: ${STATUS.error.fg};
+  }
   .lifecycle.busy { opacity: 0.7; }
   .lifecycle-label {
     flex: 1;
     min-width: 0;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: ${FONT_MONO};
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -182,63 +218,77 @@ export const COMPOSER_STYLES = `
   .lifecycle-btn[hidden] { display: none; }
 
   .conflict-block {
-    background: #fef2f2;
-    border-left: 3px solid #fca5a5;
+    background: ${STATUS.error.bg};
+    border-left: 3px solid ${STATUS.error.border};
     padding: 6px 8px;
     border-radius: 0 4px 4px 0;
     font-size: 11px;
-    color: #991b1b;
+    color: ${STATUS.error.fg};
     display: flex;
     flex-direction: column;
     gap: 2px;
   }
   .conflict-block .conflict-title { font-weight: 600; }
   .conflict-block .conflict-file {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    color: #7f1d1d;
+    font-family: ${FONT_MONO};
+    color: ${STATUS.error.fg};
+    opacity: 0.85;
   }
 
+  /* Ask-form = agent is waiting on a clarifying answer. Mapped to the
+     awaitingClarification palette so it visually echoes the same
+     "needs reply" badge in the dock. */
   .ask-form {
-    background: #fffbeb;
-    border: 1px solid #fde68a;
+    background: ${STATUS.awaitingClarification.bg};
+    border: 1px solid ${STATUS.awaitingClarification.border};
     border-radius: 6px;
     padding: 8px;
     display: flex;
     flex-direction: column;
     gap: 6px;
   }
-  .ask-question { font-weight: 600; color: #92400e; font-size: 12px; white-space: pre-wrap; }
+  .ask-question {
+    font-weight: 600;
+    color: ${STATUS.awaitingClarification.fg};
+    font-size: 12px;
+    white-space: pre-wrap;
+  }
   .ask-options { display: flex; flex-wrap: wrap; gap: 4px; }
   .ask-option {
-    background: #fff;
-    border: 1px solid #fcd34d;
-    color: #92400e;
+    background: ${BRAND_CREAM};
+    border: 1px solid ${STATUS.awaitingClarification.border};
+    color: ${STATUS.awaitingClarification.fg};
     padding: 3px 8px;
     font-size: 11px;
     border-radius: 4px;
     cursor: pointer;
     font-family: inherit;
+    transition: background 100ms ease;
   }
-  .ask-option:hover { background: #fef3c7; }
+  .ask-option:hover { background: #fffdf3; box-shadow: 0 0 0 2px ${BRAND_GOLD}; }
   .ask-row { display: flex; gap: 4px; align-items: stretch; }
   .ask-input { font-size: 12px; min-height: 0; }
   .ask-resolved {
-    background: #f3f4f6;
-    border-left: 3px solid #9ca3af;
+    background: ${STATUS.discarded.bg};
+    border-left: 3px solid ${STATUS.discarded.border};
     padding: 4px 8px;
     border-radius: 0 4px 4px 0;
     display: flex;
     flex-direction: column;
     gap: 2px;
   }
-  .ask-resolved .ask-question { color: #6b7280; font-size: 11px; font-weight: 500; }
-  .ask-answer { color: #111827; font-size: 12px; white-space: pre-wrap; }
+  .ask-resolved .ask-question {
+    color: ${STATUS.discarded.fg};
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .ask-answer { color: ${BRAND_INK}; font-size: 12px; white-space: pre-wrap; }
 
   .follow {
     display: flex;
     gap: 6px;
     align-items: stretch;
-    border-top: 1px solid #f3f4f6;
+    border-top: 1px solid #e8dfb0;
     padding-top: 8px;
   }
   #pa-follow-input { font-size: 12px; min-height: 0; }

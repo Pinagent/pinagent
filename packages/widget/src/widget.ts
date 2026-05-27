@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { WorktreeWireState } from '@pinagent/shared';
-import { BRAND_CREAM, BRAND_VIEWBOX, PICKER_CURSOR_DATA_URL, PIN_PATH } from './brand';
+import { BRAND_GOLD, FONT_SANS, STATUS } from '@pinagent/ui/tokens';
+import { BRAND_CREAM, BRAND_INK, BRAND_VIEWBOX, PICKER_CURSOR_DATA_URL, PIN_PATH } from './brand';
 import { COMPOSER_STYLES } from './composer-styles';
 import { flushBrowserDb, getBrowserDb, initBrowserDb } from './db/client';
 import { getConversationMessages, listPendingForCurrentPage, type PendingRow } from './db/reads';
@@ -168,30 +169,42 @@ const DOC_STYLES = `
   width: ${BUBBLE_SIZE}px;
   height: ${BUBBLE_SIZE}px;
   border-radius: 50%;
-  background: #fff;
-  border: 2px solid #cbd5e1;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+  background: ${BRAND_CREAM};
+  border: 2px solid #e8dfb0;
+  box-shadow: 0 4px 12px rgba(32, 27, 33, 0.16);
   cursor: pointer;
   z-index: 2147483645;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  color: #4338ca;
+  color: ${BRAND_INK};
   transition: transform 120ms ease, box-shadow 120ms ease;
-  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  font-family: ${FONT_SANS};
 }
-.pa-bubble:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(0,0,0,0.24); }
+.pa-bubble:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(32, 27, 33, 0.22); }
 .pa-bubble[hidden] { display: none; }
 
-.pa-bubble.running { border-color: #2563eb; color: #2563eb; }
+/* Status-driven bubble variants. Color palette comes from
+   @pinagent/ui/tokens.STATUS so the bubble visually matches the
+   dock's status badges. */
+.pa-bubble.pending {
+  border-color: ${STATUS.pending.border};
+  background: ${STATUS.pending.bg};
+  color: ${STATUS.pending.fg};
+}
+.pa-bubble.running {
+  border-color: ${STATUS.working.border};
+  background: ${STATUS.working.bg};
+  color: ${STATUS.working.fg};
+}
 .pa-bubble.running::after {
   content: '';
   position: absolute;
   inset: -3px;
   border-radius: 50%;
-  border: 2px solid #2563eb;
-  opacity: 0.5;
+  border: 2px solid ${STATUS.working.fg};
+  opacity: 0.55;
   animation: pa-bubble-pulse 1.6s ease-out infinite;
   pointer-events: none;
 }
@@ -199,16 +212,23 @@ const DOC_STYLES = `
   0%   { transform: scale(1);    opacity: 0.55; }
   100% { transform: scale(1.55); opacity: 0; }
 }
-.pa-bubble.done  { border-color: #10b981; color: #10b981; background: #ecfdf5; }
-.pa-bubble.error { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
-.pa-bubble.pending { border-color: #94a3b8; color: #94a3b8; }
-/* Phase G — anchor lost. Dashed amber ring so it reads as "needs attention"
+.pa-bubble.done {
+  border-color: ${STATUS.readyToLand.border};
+  background: ${STATUS.readyToLand.bg};
+  color: ${STATUS.readyToLand.fg};
+}
+.pa-bubble.error {
+  border-color: ${STATUS.error.border};
+  background: ${STATUS.error.bg};
+  color: ${STATUS.error.fg};
+}
+/* Phase G — anchor lost. Dashed olive ring so it reads as "needs attention"
    without claiming an outright error. Click retries the re-anchor lookup. */
 .pa-bubble.anchor-lost {
   border-style: dashed;
-  border-color: #d97706;
-  color: #d97706;
-  background: #fffbeb;
+  border-color: ${STATUS.anchorLost.border};
+  background: ${STATUS.anchorLost.bg};
+  color: ${STATUS.anchorLost.fg};
 }
 
 .pa-bubble-spinner {
@@ -225,24 +245,29 @@ const DOC_STYLES = `
   position: absolute;
   width: 28px;
   height: 24px;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background: ${BRAND_CREAM};
+  border: 1px solid #e8dfb0;
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: grab;
   z-index: 2147483646;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.10);
+  box-shadow: 0 2px 6px rgba(32, 27, 33, 0.10);
   user-select: none;
-  color: #6b7280;
+  color: #5c5546;
   font-size: 16px;
   line-height: 1;
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  transition: background 100ms ease, color 100ms ease;
+  font-family: ${FONT_SANS};
+  transition: background 100ms ease, color 100ms ease, box-shadow 100ms ease;
 }
-.pa-drag-handle:hover { background: #f3f4f6; color: #111827; }
-.pa-drag-handle.dragging { cursor: grabbing; background: #e0e7ff; color: #1e3a8a; }
+.pa-drag-handle:hover { background: #f5efd0; color: ${BRAND_INK}; }
+.pa-drag-handle.dragging {
+  cursor: grabbing;
+  background: #f5efd0;
+  color: ${BRAND_INK};
+  box-shadow: 0 0 0 3px ${BRAND_GOLD}, 0 2px 6px rgba(32, 27, 33, 0.10);
+}
 .pa-drag-handle[hidden] { display: none; }
 
 .pa-pointer {
