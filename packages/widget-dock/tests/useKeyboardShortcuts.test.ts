@@ -1,5 +1,5 @@
-// @vitest-environment happy-dom
 // SPDX-License-Identifier: Apache-2.0
+// @vitest-environment happy-dom
 /**
  * Pin the pure matching logic in `matchKeyboardShortcut`. The hook
  * itself is a thin lifecycle wrapper around this function — covered
