@@ -17,6 +17,8 @@ import {
   openInEditor,
   PatchSchema,
   ProjectSettingsPatchSchema,
+  pruneBranch,
+  pruneStaleBranches,
   resolveAgentMode,
   SecretsStore,
   SettingsStore,
@@ -223,6 +225,14 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
     }
   }
 
+  // /__pinagent/branches/prune-stale — bulk-prune worktrees older
+  // than `worktreeRetentionDays` (read server-side from settings).
+  if (slug.length === 2 && slug[0] === 'branches' && slug[1] === 'prune-stale') {
+    const storage = getStorage();
+    const result = await pruneStaleBranches(storage.root);
+    return json(200, result);
+  }
+
   // /__pinagent/prs — compose a PR from multiple conversations. See
   // composePullRequest for what happens server-side; the dock's
   // transport calls this exactly the same way it calls the vite-plugin
@@ -335,14 +345,23 @@ export async function PUT(req: Request, ctx: RouteCtx): Promise<Response> {
   return json(404, { error: 'not found' });
 }
 
-/** DELETE — connection clear. */
+/** DELETE — connection clear + branch prune. */
 export async function DELETE(_req: Request, ctx: RouteCtx): Promise<Response> {
   const slug = await readSlug(ctx);
+  const storage = getStorage();
+
+  // /__pinagent/branches/:id — prune one worktree.
+  if (slug.length === 2 && slug[0] === 'branches') {
+    const id = slug[1] ?? '';
+    if (!ID_RE.test(id)) return json(400, { error: 'invalid id' });
+    const result = await pruneBranch(storage.root, id);
+    return json(result.ok ? 200 : 422, result);
+  }
+
   if (slug.length !== 2 || slug[0] !== 'connections') {
     return json(404, { error: 'not found' });
   }
   const kind = slug[1];
-  const storage = getStorage();
   const secrets = new SecretsStore(storage.root);
   if (kind === 'github') {
     await secrets.clearGithub();

@@ -1,27 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Branches — read-only view of active worktrees and their git state.
- * Reads from `GET /__pinagent/branches` (server-side: walks Storage
- * for conversations with worktreePath set, runs `git status` + `du`
- * for each).
+ * Branches — live view of worktrees with prune actions. Reads from
+ * `GET /__pinagent/branches`; per-row prune issues `DELETE /__pinagent/branches/:id`;
+ * the header's "Prune stale" button issues `POST /__pinagent/branches/prune-stale`,
+ * which uses the server's `worktreeRetentionDays` setting as the cutoff.
  *
- * Discard surfaces the same `discard_request` WS call the Conversations
- * detail view uses — that's the existing path for "tear down this
- * worktree." We use the same verb everywhere instead of inventing a
- * separate "prune" for the same action.
+ * Stale threshold mirrors the server: read `worktreeRetentionDays` from
+ * `useSettings` and fall back to 7 days while the read is in flight or
+ * fails. Keeps "X stale" in the header matching what the bulk prune
+ * actually targets.
  */
 
 import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
-import { GitBranch, MessageSquare, Trash2 } from 'lucide-react';
+import { AlertTriangle, GitBranch, MessageSquare, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { TimestampDot } from '../components/TimestampDot';
 import type { Branch } from '../fixtures/types';
-import { useBranches } from '../hooks/useBranches';
+import { useBranches, usePruneBranch, usePruneStaleBranches } from '../hooks/useBranches';
+import { useSettings } from '../hooks/useSettings';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
-import { useTransport } from '../transport';
+import { type PruneStaleResult, useTransport } from '../transport';
 
 const STATE_LABEL: Record<Branch['state'], string> = {
   clean: 'Clean',
@@ -35,21 +37,24 @@ const STATE_TONE: Record<Branch['state'], string> = {
   'behind-base': 'text-status-awaiting-fg border-status-awaiting-border bg-status-awaiting-bg',
 };
 
-const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
+const DEFAULT_RETENTION_DAYS = 7;
 
-function isStale(lastActivity: string, now: number): boolean {
-  return now - Date.parse(lastActivity) > STALE_THRESHOLD_MS;
+function isStale(lastActivity: string, now: number, retentionDays: number): boolean {
+  return now - Date.parse(lastActivity) > retentionDays * 24 * 60 * 60 * 1000;
 }
 
 export function Branches() {
   const transport = useTransport();
   const branchesQuery = useBranches();
+  const settingsQuery = useSettings();
+  const pruneStaleMutation = usePruneStaleBranches();
+  const [staleResult, setStaleResult] = useState<PruneStaleResult | null>(null);
   const isMock = transport.kind === 'mock';
 
-  // Computed at render time — `isStale` is a single subtraction so the
-  // per-render cost is nothing, and the 7-day threshold makes "now drifts
-  // by a few ms between two row renders" inconsequential.
+  // Read-time, not load-time — the 7-day cutoff makes "now drifts by a
+  // few ms between two row renders" inconsequential.
   const now = Date.now();
+  const retentionDays = settingsQuery.data?.worktreeRetentionDays ?? DEFAULT_RETENTION_DAYS;
 
   if (branchesQuery.isLoading) return <LoadingState rows={4} />;
 
@@ -86,7 +91,17 @@ export function Branches() {
   }
 
   const totalDiskMb = branches.reduce((sum, b) => sum + (b.diskMb ?? 0), 0);
-  const staleCount = branches.filter((b) => isStale(b.lastActivity, now)).length;
+  const stale = branches.filter((b) => isStale(b.lastActivity, now, retentionDays));
+
+  const handlePruneStale = async (): Promise<void> => {
+    setStaleResult(null);
+    try {
+      const result = await pruneStaleMutation.mutateAsync();
+      setStaleResult(result);
+    } catch {
+      // Mutation error already surfaces via `pruneStaleMutation.error`.
+    }
+  };
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -95,23 +110,41 @@ export function Branches() {
         <span className="text-[11px] text-muted-foreground">
           {branches.length} active{totalDiskMb > 0 ? ` · ${totalDiskMb} MB on disk` : ''}
         </span>
-        {staleCount > 0 && (
-          <span className="ml-auto text-[11px] text-status-anchor-lost-fg tabular-nums">
-            {staleCount} stale
-          </span>
-        )}
+        <div className="ml-auto flex items-center gap-1.5">
+          {stale.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5 text-xs"
+              onClick={handlePruneStale}
+              disabled={pruneStaleMutation.isPending}
+              title={`Older than ${retentionDays} days`}
+            >
+              <Trash2 className="h-3 w-3" />
+              {pruneStaleMutation.isPending ? 'Pruning…' : `Prune stale (${stale.length})`}
+            </Button>
+          )}
+        </div>
       </div>
+
+      {(staleResult || pruneStaleMutation.isError) && (
+        <PruneStaleBanner
+          result={staleResult}
+          error={pruneStaleMutation.error?.message ?? null}
+          onDismiss={() => {
+            setStaleResult(null);
+            pruneStaleMutation.reset();
+          }}
+        />
+      )}
 
       <div className="flex-1 overflow-auto p-3 space-y-1.5">
         {branches.map((b) => (
           <BranchRow
             key={b.id}
             branch={b}
-            stale={isStale(b.lastActivity, now)}
-            onDiscard={
-              b.conversationId ? () => transport.discardConversation(b.conversationId!) : undefined
-            }
-            disableDiscard={isMock || !b.conversationId}
+            stale={isStale(b.lastActivity, now, retentionDays)}
+            isMock={isMock}
           />
         ))}
       </div>
@@ -120,24 +153,69 @@ export function Branches() {
         <p className="text-[11px] text-muted-foreground">
           {isMock
             ? 'Fixtures · switch off ?fixtures=on for live worktree data.'
-            : 'Discard tears down the worktree and the local branch. The conversation row stays for history.'}
+            : `Prune tears down the worktree + local branch. Stale = older than ${retentionDays} days (Settings → Worktree retention).`}
         </p>
       </div>
     </div>
   );
 }
 
-function BranchRow({
-  branch,
-  stale,
-  onDiscard,
-  disableDiscard,
+function PruneStaleBanner({
+  result,
+  error,
+  onDismiss,
 }: {
-  branch: Branch;
-  stale: boolean;
-  onDiscard?: () => void;
-  disableDiscard: boolean;
+  result: PruneStaleResult | null;
+  error: string | null;
+  onDismiss: () => void;
 }) {
+  if (error) {
+    return (
+      <div className="border-b border-status-error-border bg-status-error-bg px-3 py-2 flex items-start gap-2 text-[12px] text-status-error-fg">
+        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span className="flex-1 leading-snug">Bulk prune failed: {error}</span>
+        <button
+          type="button"
+          className="text-[11px] underline hover:opacity-80"
+          onClick={onDismiss}
+        >
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+  if (!result) return null;
+  const okCount = result.pruned.length;
+  const failCount = result.failed.length;
+  return (
+    <div
+      className={cn(
+        'border-b px-3 py-2 flex items-start gap-2 text-[12px]',
+        failCount === 0
+          ? 'border-status-landed-border bg-status-landed-bg text-status-landed-fg'
+          : 'border-status-awaiting-border bg-status-awaiting-bg text-status-awaiting-fg',
+      )}
+    >
+      <span className="flex-1 leading-snug">
+        Pruned {okCount} worktree{okCount === 1 ? '' : 's'} older than {result.retentionDays} days
+        {failCount > 0 && ` · ${failCount} failed`}
+        {failCount > 0 && '.'}
+      </span>
+      <button type="button" className="text-[11px] underline hover:opacity-80" onClick={onDismiss}>
+        Dismiss
+      </button>
+    </div>
+  );
+}
+
+function BranchRow({ branch, stale, isMock }: { branch: Branch; stale: boolean; isMock: boolean }) {
+  const pruneMutation = usePruneBranch();
+  const disabled = isMock || !branch.conversationId || pruneMutation.isPending;
+  const handlePrune = (): void => {
+    if (!branch.conversationId) return;
+    pruneMutation.mutate(branch.conversationId);
+  };
+
   return (
     <article
       className={cn(
@@ -176,17 +254,28 @@ function BranchRow({
               stale
             </Badge>
           )}
+          {pruneMutation.isError && (
+            <span className="text-[10px] text-status-error-fg" title={pruneMutation.error.message}>
+              · prune failed
+            </span>
+          )}
         </div>
       </div>
       <Button
         size="sm"
         variant="ghost"
-        disabled={disableDiscard}
-        onClick={onDiscard}
+        disabled={disabled}
+        onClick={handlePrune}
         className="h-7 px-2 text-xs text-muted-foreground hover:text-status-error-fg"
-        title={disableDiscard ? 'Mock mode — no real action' : 'Discard worktree'}
+        title={
+          isMock
+            ? 'Mock mode — fake prune'
+            : pruneMutation.isPending
+              ? 'Pruning…'
+              : 'Prune worktree'
+        }
       >
-        <Trash2 className="h-3 w-3" />
+        {pruneMutation.isPending ? '…' : <Trash2 className="h-3 w-3" />}
       </Button>
     </article>
   );

@@ -18,6 +18,8 @@ import {
   openInEditor,
   PatchSchema,
   ProjectSettingsPatchSchema,
+  pruneBranch,
+  pruneStaleBranches,
   SecretsStore,
   SettingsStore,
   type SpawnAgentMode,
@@ -176,6 +178,25 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       if (req.method === 'GET' && url === '/__pinagent/branches') {
         const branches = await listBranches(storage.root);
         return json(res, 200, branches);
+      }
+
+      // POST /__pinagent/branches/prune-stale — bulk-prune every
+      // worktree older than `worktreeRetentionDays` (from settings).
+      // Returns { pruned, failed, retentionDays }.
+      if (req.method === 'POST' && url === '/__pinagent/branches/prune-stale') {
+        const result = await pruneStaleBranches(storage.root);
+        return json(res, 200, result);
+      }
+
+      // DELETE /__pinagent/branches/:id — prune one worktree. Same
+      // lifecycle as the WS discard_request; this is the HTTP entry
+      // the Branches view uses so the dock can await the result.
+      const pruneMatch = req.method === 'DELETE' && /^\/__pinagent\/branches\/([^/]+)$/.exec(url);
+      if (pruneMatch) {
+        const id = pruneMatch[1] ?? '';
+        if (!ID_RE.test(id)) return badRequest(res, 'invalid id');
+        const result = await pruneBranch(storage.root, id);
+        return json(res, result.ok ? 200 : 422, result);
       }
 
       // POST /__pinagent/prs — compose a PR from multiple conversations.

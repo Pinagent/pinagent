@@ -24,6 +24,7 @@ import type {
   DockProjectSettings,
   DockTransport,
   PresentableConnections,
+  PruneStaleResult,
 } from './types';
 import { type ConnectionStatus, type ConversationHandlers, DockWsClient } from './ws-client';
 
@@ -336,6 +337,21 @@ export class LocalTransport implements DockTransport {
 
   async updateSettings(patch: Partial<DockProjectSettings>): Promise<DockProjectSettings> {
     return this.jsonWrite<DockProjectSettings>('PATCH', '/__pinagent/settings', patch);
+  }
+
+  async pruneBranch(feedbackId: string): Promise<void> {
+    const response = await fetch(
+      this.url(`/__pinagent/branches/${encodeURIComponent(feedbackId)}`),
+      { method: 'DELETE', headers: { Accept: 'application/json' } },
+    );
+    if (response.ok) return;
+    // 422 returns the structured PruneResult shape; surface its `error`.
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `${response.status} ${response.statusText}`);
+  }
+
+  async pruneStaleBranches(): Promise<PruneStaleResult> {
+    return this.jsonWrite<PruneStaleResult>('POST', '/__pinagent/branches/prune-stale');
   }
 
   // Internal: shared GET + write helpers so the per-endpoint methods

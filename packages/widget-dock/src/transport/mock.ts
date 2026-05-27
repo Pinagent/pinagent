@@ -27,6 +27,7 @@ import type {
   DockProjectSettings,
   DockTransport,
   PresentableConnections,
+  PruneStaleResult,
 } from './types';
 import type { ConnectionStatus, ConversationHandlers } from './ws-client';
 
@@ -39,6 +40,10 @@ function sleep(ms: number): Promise<void> {
 
 export class MockTransport implements DockTransport {
   readonly kind = 'mock' as const;
+
+  // Mutable per-instance branches list so the prune flows have something
+  // observable to remove. Seeded from the fixtures on construction.
+  private branches: Branch[] = FIXTURE_BRANCHES.slice();
 
   // In-memory copies of the connection + settings fixtures so the
   // dock's set/clear/patch flows mutate something observable. Resets
@@ -93,9 +98,31 @@ export class MockTransport implements DockTransport {
 
   async listBranches(): Promise<Branch[]> {
     await sleep(SIMULATED_LATENCY_MS);
-    return FIXTURE_BRANCHES.slice().sort(
-      (a, b) => Date.parse(b.lastActivity) - Date.parse(a.lastActivity),
-    );
+    return this.branches
+      .slice()
+      .sort((a, b) => Date.parse(b.lastActivity) - Date.parse(a.lastActivity));
+  }
+
+  async pruneBranch(feedbackId: string): Promise<void> {
+    await sleep(SIMULATED_LATENCY_MS * 2);
+    const before = this.branches.length;
+    this.branches = this.branches.filter((b) => b.conversationId !== feedbackId);
+    if (this.branches.length === before) {
+      throw new Error('Branch already pruned (mock validation)');
+    }
+  }
+
+  async pruneStaleBranches(): Promise<PruneStaleResult> {
+    await sleep(SIMULATED_LATENCY_MS * 2);
+    const retentionDays = this.settings.worktreeRetentionDays;
+    const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+    const stale = this.branches.filter((b) => Date.parse(b.lastActivity) < cutoff);
+    this.branches = this.branches.filter((b) => Date.parse(b.lastActivity) >= cutoff);
+    return {
+      pruned: stale.map((b) => b.conversationId).filter((id): id is string => id !== null),
+      failed: [],
+      retentionDays,
+    };
   }
 
   async getConversation(id: string): Promise<ConversationDetail | null> {

@@ -24,7 +24,14 @@ export {
   rejectAsk,
   resolveAsk,
 } from './ask-user';
-export { type BranchRecord, listBranches } from './branches';
+export {
+  type BranchRecord,
+  listBranches,
+  type PruneResult,
+  type PruneStaleResult,
+  pruneBranch,
+  pruneStaleBranches,
+} from './branches';
 export { type ChangeRecord, getChangeDiff, listChanges } from './changes';
 export {
   type AnthropicValidation,
