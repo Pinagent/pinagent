@@ -49,6 +49,18 @@ JSX is tagged at dev-build time by `@pinagent/babel-plugin` (Vite) or a webpack/
 
 ## Install
 
+```sh
+pnpm add -D @pinagent/vite-plugin    # or @pinagent/next-plugin
+```
+
+If pnpm warns that **`better-sqlite3` build script was ignored**, approve it once — the agent runner uses better-sqlite3 server-side and needs its native binding compiled:
+
+```sh
+pnpm approve-builds                  # interactive; select better-sqlite3
+```
+
+(npm/yarn build native binaries by default, no approval needed.)
+
 **Vite** (`vite.config.ts`)
 
 ```ts
