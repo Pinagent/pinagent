@@ -12,8 +12,8 @@
  *     something to look like it's embedded in.
  */
 import { PinMark } from '@pinagent/ui/components/pin-mark';
-import { Outlet } from '@tanstack/react-router';
-import { useMemo } from 'react';
+import { Outlet, useLocation } from '@tanstack/react-router';
+import { Suspense, useMemo } from 'react';
 import { useConversations } from '../hooks/useConversations';
 import { useProjectSubscription } from '../hooks/useProjectSubscription';
 import type { DockTransport } from '../transport';
@@ -22,7 +22,8 @@ import { DockChrome } from './DockChrome';
 import { useDockEnvironment } from './DockEnvironment';
 import { DockFAB } from './DockFAB';
 import { DockSurface } from './DockSurface';
-import { NavRail } from './NavRail';
+import { NavRail, ROUTES } from './NavRail';
+import { RouteFallback } from './RouteFallback';
 import { useDockMode } from './useDockMode';
 
 export function DockShell() {
@@ -59,6 +60,15 @@ export function DockShell() {
   const expandedNav = dock.mode !== 'panel';
   const context = transport.kind === 'mock' ? 'fixtures' : 'pinagent-demo';
 
+  // Announce route changes to assistive tech. The visual `aria-current`
+  // on the nav rail tells you what's selected; the live region tells
+  // you you've arrived. `polite` because route changes are user-driven.
+  const location = useLocation();
+  const activeLabel = useMemo(
+    () => ROUTES.find((r) => r.path === location.pathname)?.label ?? '',
+    [location.pathname],
+  );
+
   const surface = (
     <>
       <DockFAB open={dock.open} count={pendingCount} onToggle={dock.toggle} />
@@ -72,9 +82,14 @@ export function DockShell() {
         />
         <div className="flex flex-1 min-h-0">
           <NavRail expanded={expandedNav} />
-          <main className="flex flex-1 flex-col overflow-auto">
-            <Outlet />
+          <main aria-label="Dock content" className="flex flex-1 flex-col overflow-auto">
+            <Suspense fallback={<RouteFallback />}>
+              <Outlet />
+            </Suspense>
           </main>
+        </div>
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {activeLabel && `${activeLabel} view`}
         </div>
       </DockSurface>
     </>

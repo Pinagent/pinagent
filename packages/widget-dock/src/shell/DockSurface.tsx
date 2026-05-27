@@ -81,6 +81,10 @@ export function DockSurface({
       <section
         role="dialog"
         aria-label="Pinagent dock"
+        // Floating / fullscreen overlay everything else, so they're
+        // semantically modal. Panel mode coexists with the host page
+        // (host stays interactive next to it) — not modal.
+        aria-modal={mode !== 'panel' ? true : undefined}
         data-open={open}
         data-embedded={embedded}
         data-mode={mode}

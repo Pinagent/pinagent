@@ -134,6 +134,8 @@ function ConversationsTab() {
             aria-hidden
           />
           <Input
+            type="search"
+            aria-label="Search history"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search comments, files, branches, selectors…"

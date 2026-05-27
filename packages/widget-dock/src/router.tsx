@@ -9,6 +9,11 @@
  * (URL doesn't belong to the user), browser history in the future
  * standalone dashboard build (deep-linkable).
  *
+ * Code-split per route: every screen except Overview (the default
+ * landing) is loaded on demand via React.lazy. A single Suspense
+ * boundary inside DockShell catches the pending state and shows a
+ * tiny loading indicator. Drops the initial bundle by ~40 KB gz.
+ *
  * `Router` type is re-exported under our own name so consumers don't
  * have to learn TanStack's internal generic-stamping ritual.
  */
@@ -19,15 +24,27 @@ import {
   type RouterHistory,
   type Router as TsrRouter,
 } from '@tanstack/react-router';
-import { Branches } from './routes/Branches';
-import { Changes } from './routes/Changes';
-import { Connections } from './routes/Connections';
-import { Conversations } from './routes/Conversations';
-import { History } from './routes/History';
+import { lazy } from 'react';
 import { Overview } from './routes/Overview';
-import { PRs } from './routes/PRs';
-import { Settings } from './routes/Settings';
 import { DockShell } from './shell/DockShell';
+
+// Eager: Overview is the default landing route — splitting it would
+// just delay first paint without saving anything on the typical open.
+//
+// Lazy: every other screen. Bundled per-route by Vite/rollup; the
+// Suspense boundary lives in DockShell so swapping routes shows a
+// uniform pending state instead of seven different fallbacks.
+const Conversations = lazy(() =>
+  import('./routes/Conversations').then((m) => ({ default: m.Conversations })),
+);
+const Changes = lazy(() => import('./routes/Changes').then((m) => ({ default: m.Changes })));
+const Branches = lazy(() => import('./routes/Branches').then((m) => ({ default: m.Branches })));
+const PRs = lazy(() => import('./routes/PRs').then((m) => ({ default: m.PRs })));
+const Connections = lazy(() =>
+  import('./routes/Connections').then((m) => ({ default: m.Connections })),
+);
+const Settings = lazy(() => import('./routes/Settings').then((m) => ({ default: m.Settings })));
+const History = lazy(() => import('./routes/History').then((m) => ({ default: m.History })));
 
 export const ROUTE_PATHS = {
   overview: '/',
