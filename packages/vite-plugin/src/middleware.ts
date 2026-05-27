@@ -29,16 +29,31 @@ interface CreateMiddlewareOpts {
   spawnMode: SpawnAgentMode;
   /** WebSocket port the widget should connect to. */
   wsPort: number | null;
+  /**
+   * When true, the middleware serves the @pinagent/widget-dock static
+   * assets from /__pinagent/dock/*. Disabled by default — see the
+   * `dock` option in `PinagentOptions`.
+   */
+  dock: boolean;
 }
 
 export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandleFunction {
-  const { storage, spawnMode, wsPort } = opts;
+  const { storage, spawnMode, wsPort, dock } = opts;
 
   return async function pinagentMiddleware(req, res, next) {
     const url = req.url ?? '';
     if (!url.startsWith('/__pinagent')) return next();
 
     try {
+      // GET /__pinagent/dock/<path> — dock static assets (only when opted in).
+      // Strips query strings (Vite's HMR adds ?v=hash to asset requests).
+      const dockMatch =
+        dock && req.method === 'GET' && /^\/__pinagent\/dock(?:\/(.*?))?(?:\?.*)?$/.exec(url);
+      if (dockMatch) {
+        const file = dockMatch[1] && dockMatch[1].length > 0 ? dockMatch[1] : 'index.html';
+        return serveDockFile(res, file);
+      }
+
       // GET /__pinagent/widget.js — IIFE bundle + a prelude that hands the
       // widget its dynamic config (WS URL today). Mirrors `buildWidgetBundle`
       // in next-plugin/route.ts.
@@ -205,6 +220,79 @@ function sqliteWasmDir(): string {
   const pkgJson = req.resolve('@sqlite.org/sqlite-wasm/package.json');
   sqliteWasmDirCache = join(dirname(pkgJson), 'sqlite-wasm', 'jswasm');
   return sqliteWasmDirCache;
+}
+
+/**
+ * Resolve @pinagent/widget-dock's dist directory at runtime. The dock
+ * package is a runtime dep of @pinagent/vite-plugin, so its package.json
+ * is reachable via require.resolve regardless of how the consumer
+ * installed pinagent. Cached after first call.
+ */
+let dockDistDirCache: string | null = null;
+function dockDistDir(): string | null {
+  if (dockDistDirCache) return dockDistDirCache;
+  try {
+    const req = createRequire(import.meta.url ?? `file://${process.cwd()}/__pinagent__.js`);
+    const pkgJson = req.resolve('@pinagent/widget-dock/package.json');
+    dockDistDirCache = join(dirname(pkgJson), 'dist');
+    return dockDistDirCache;
+  } catch {
+    return null;
+  }
+}
+
+const DOCK_MIME_BY_EXT: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+};
+
+async function serveDockFile(res: ServerResponse, requested: string): Promise<void> {
+  const distDir = dockDistDir();
+  if (!distDir) {
+    // The dock package isn't installed alongside the plugin. This
+    // happens if `dock: true` is set but the consumer didn't install
+    // @pinagent/widget-dock — log a helpful hint and 404.
+    // eslint-disable-next-line no-console
+    console.error('[pinagent] dock: true was set but @pinagent/widget-dock could not be resolved.');
+    res.statusCode = 404;
+    res.end();
+    return;
+  }
+  // Normalize and clamp the requested path inside distDir to block any
+  // `..`-style traversal even though the URL pattern already restricts
+  // it — defense in depth.
+  const safeRel = requested.replace(/^\/+/, '').replace(/\.\.\/?/g, '');
+  const abs = join(distDir, safeRel);
+  if (!abs.startsWith(distDir)) {
+    res.statusCode = 404;
+    res.end();
+    return;
+  }
+  const ext = abs.slice(abs.lastIndexOf('.')).toLowerCase();
+  const mime = DOCK_MIME_BY_EXT[ext] ?? 'application/octet-stream';
+  try {
+    const bytes = await readFile(abs);
+    res.statusCode = 200;
+    res.setHeader('Content-Type', mime);
+    // Dev assets — fonts can cache for the session but mark JS/CSS as
+    // no-store so HMR-style reloads pick up rebuilds.
+    res.setHeader(
+      'Cache-Control',
+      ext === '.woff2' || ext === '.woff' ? 'public, max-age=86400' : 'no-store',
+    );
+    res.end(bytes);
+  } catch {
+    res.statusCode = 404;
+    res.end();
+  }
 }
 
 async function serveSqliteWasm(res: ServerResponse, file: string): Promise<void> {
