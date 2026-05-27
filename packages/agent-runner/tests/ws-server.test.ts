@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
+import { mkdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { nanoid } from 'nanoid';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 
@@ -16,22 +20,50 @@ import WebSocket from 'ws';
 
 const TEST_PORT = 53700;
 const WS_URL = `ws://127.0.0.1:${TEST_PORT}/__pinagent/ws`;
+const PROJECT_ROOT = join(tmpdir(), `pa-ws-${nanoid(8)}`);
 
 // Symbol the ws-server uses to cache the singleton. Cleared in
 // beforeAll so a previous run's stale handle (if any) is dropped.
 const SINGLETON_KEY = Symbol.for('pinagent.ws-server');
 
 type ServerMod = typeof import('../src/ws-server');
-type BusMod = typeof import('@pinagent/shared');
+type BusMod = typeof import('../src/bus');
+type StorageMod = typeof import('../src/storage');
 
 let server: ServerMod;
 let bus: BusMod;
+let storageMod: StorageMod;
+let storage: InstanceType<StorageMod['Storage']>;
+
+/**
+ * The SqliteEventBus inserts into `messages` which has a FK on
+ * `conversations.id`. Tests publish events to ad-hoc feedback ids;
+ * without a parent row, publish silently drops (FK violation). This
+ * helper materialises a conversation row so the bus events stick.
+ */
+async function ensureConversation(id: string): Promise<void> {
+  await storage.create(id, {
+    comment: 'ws-server test fixture',
+    loc: { file: 'x.tsx', line: 1, col: 1 },
+    selector: 'button',
+    url: 'http://localhost/',
+    viewport: { w: 1280, h: 720 },
+    userAgent: 'vitest',
+    screenshot:
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+    createdAt: new Date().toISOString(),
+  });
+}
 
 beforeAll(async () => {
   process.env.PINAGENT_WS_PORT = String(TEST_PORT);
+  process.env.PINAGENT_PROJECT_ROOT = PROJECT_ROOT;
+  await mkdir(PROJECT_ROOT, { recursive: true });
   (globalThis as Record<symbol, unknown>)[SINGLETON_KEY] = undefined;
   server = await import('../src/ws-server');
-  bus = await import('@pinagent/shared');
+  bus = await import('../src/bus');
+  storageMod = await import('../src/storage');
+  storage = new storageMod.Storage(PROJECT_ROOT);
   const handle = server.startWsServer();
   // Wait for the bind to actually complete.
   await new Promise<void>((resolve, reject) => {
@@ -41,10 +73,11 @@ beforeAll(async () => {
   });
 });
 
-afterAll(() => {
+afterAll(async () => {
   const handle = (globalThis as Record<symbol, { wss?: { close: () => void } }>)[SINGLETON_KEY];
   handle?.wss?.close();
   (globalThis as Record<symbol, unknown>)[SINGLETON_KEY] = undefined;
+  await rm(PROJECT_ROOT, { recursive: true, force: true });
 });
 
 /**
@@ -156,12 +189,13 @@ describe('ws-server', () => {
     const c = newClient();
     await c.opened;
     const id = newId();
+    await ensureConversation(id);
 
     c.send({ type: 'subscribe', feedbackId: id });
     // Give the subscribe a microtask to register before we publish.
     await new Promise((r) => setTimeout(r, 10));
 
-    bus.getOrCreateBus(id).publish({ type: 'text', text: 'hello' });
+    await bus.getOrCreateBus(id).publish({ type: 'text', text: 'hello' });
 
     const event = await c.waitFor(
       (m) =>
@@ -179,10 +213,11 @@ describe('ws-server', () => {
     const c = newClient();
     await c.opened;
     const id = newId();
+    await ensureConversation(id);
 
     const b = bus.getOrCreateBus(id);
-    b.publish({ type: 'text', text: 'one' });
-    b.publish({ type: 'text', text: 'two' });
+    await b.publish({ type: 'text', text: 'one' });
+    await b.publish({ type: 'text', text: 'two' });
 
     c.send({ type: 'subscribe', feedbackId: id });
 
@@ -208,12 +243,13 @@ describe('ws-server', () => {
     const c = newClient();
     await c.opened;
     const id = newId();
+    await ensureConversation(id);
 
     bus.getOrCreateBus(id); // touch so it exists
     c.send({ type: 'subscribe', feedbackId: id });
     await new Promise((r) => setTimeout(r, 10));
 
-    bus.finishBus(id);
+    await bus.finishBus(id);
 
     const done = await c.waitFor(
       (m) =>
@@ -227,11 +263,12 @@ describe('ws-server', () => {
     const c = newClient();
     await c.opened;
     const id = newId();
+    await ensureConversation(id);
 
     c.send({ type: 'subscribe', feedbackId: id });
     await new Promise((r) => setTimeout(r, 10));
 
-    bus.getOrCreateBus(id).publish({ type: 'text', text: 'before' });
+    await bus.getOrCreateBus(id).publish({ type: 'text', text: 'before' });
     await c.waitFor(
       (m) =>
         (m as { type?: string }).type === 'event' &&
@@ -243,8 +280,9 @@ describe('ws-server', () => {
 
     // Snapshot the count, then publish + wait.
     const before = c.messages.length;
-    bus.getOrCreateBus(id).publish({ type: 'text', text: 'after' });
-    await new Promise((r) => setTimeout(r, 50));
+    await bus.getOrCreateBus(id).publish({ type: 'text', text: 'after' });
+    // Wait longer than the poll interval to confirm nothing arrives.
+    await new Promise((r) => setTimeout(r, 200));
     // After unsubscribe, no new event frames should arrive.
     const newFrames = c.messages
       .slice(before)
@@ -278,6 +316,7 @@ describe('ws-server', () => {
     const c = newClient();
     await c.opened;
     const id = newId();
+    await ensureConversation(id);
     c.send({ type: 'subscribe', feedbackId: id });
     await new Promise((r) => setTimeout(r, 10));
 
@@ -287,8 +326,8 @@ describe('ws-server', () => {
     // Publishing after close should not throw on the server, and we
     // can't observe receive (socket gone) — just check the bus has
     // no live subscribers by publishing without crashing.
-    expect(() =>
+    await expect(
       bus.getOrCreateBus(id).publish({ type: 'text', text: 'after-close' }),
-    ).not.toThrow();
+    ).resolves.not.toThrow();
   });
 });
