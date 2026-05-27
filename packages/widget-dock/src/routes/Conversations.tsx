@@ -376,12 +376,16 @@ function StreamView({ stream, isMock }: { stream: ConversationStream; isMock: bo
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Pin scroll to the bottom whenever new items arrive so live updates
-  // stay in view without the user having to scroll.
+  // stay in view without the user having to scroll. The length read
+  // inside the effect body is what biome's useExhaustiveDependencies
+  // needs to see — the effect is triggered by `count` changing.
+  const count = stream.items.length;
   useEffect(() => {
+    if (count === 0) return;
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [stream.items.length]);
+  }, [count]);
 
   if (stream.items.length === 0) {
     return (
@@ -400,8 +404,8 @@ function StreamView({ stream, isMock }: { stream: ConversationStream; isMock: bo
 
   return (
     <div ref={scrollRef} className="space-y-2">
-      {stream.items.map((item, i) => (
-        <StreamRow key={`${item.receivedAt}-${i}`} item={item} />
+      {stream.items.map((item) => (
+        <StreamRow key={item.id} item={item} />
       ))}
       {stream.done && (
         <div className="text-center text-[11px] text-muted-foreground pt-1">

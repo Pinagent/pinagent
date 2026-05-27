@@ -14,12 +14,20 @@
  * previous subscription is cleaned up and state resets.
  */
 import type { AgentEvent } from '@pinagent/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { type ConversationHandlers, useTransport, type WorktreeStatePayload } from '../transport';
 
+/**
+ * Each stream item carries a monotonic `id` assigned at push time so
+ * React keys don't depend on render-time array index. Biome's
+ * noArrayIndexKey flags `key={i}` (and anything derived from it) — and
+ * for live streams the warning is real: when the bus replays then
+ * starts streaming, item ordering relative to the index changes if we
+ * ever filter / reorder.
+ */
 export type StreamItem =
-  | { kind: 'event'; event: AgentEvent; receivedAt: string }
-  | { kind: 'error'; message: string; receivedAt: string };
+  | { kind: 'event'; id: number; event: AgentEvent; receivedAt: string }
+  | { kind: 'error'; id: number; message: string; receivedAt: string };
 
 export interface ConversationStream {
   items: StreamItem[];
@@ -34,24 +42,36 @@ const EMPTY_STREAM: ConversationStream = { items: [], worktree: null, done: fals
 export function useConversationStream(id: string | null): ConversationStream {
   const transport = useTransport();
   const [stream, setStream] = useState<ConversationStream>(EMPTY_STREAM);
+  // Monotonic counter for stable React keys on each pushed item. Held
+  // in a ref so it survives re-renders without re-triggering effects.
+  const nextIdRef = useRef(0);
 
   useEffect(() => {
     setStream(EMPTY_STREAM);
+    nextIdRef.current = 0;
     if (!id) return;
     const handlers: ConversationHandlers = {
       onEvent(event) {
+        const itemId = ++nextIdRef.current;
         setStream((prev) => ({
           ...prev,
-          items: [...prev.items, { kind: 'event', event, receivedAt: new Date().toISOString() }],
+          items: [
+            ...prev.items,
+            { kind: 'event', id: itemId, event, receivedAt: new Date().toISOString() },
+          ],
         }));
       },
       onWorktreeState(state) {
         setStream((prev) => ({ ...prev, worktree: state }));
       },
       onError(message) {
+        const itemId = ++nextIdRef.current;
         setStream((prev) => ({
           ...prev,
-          items: [...prev.items, { kind: 'error', message, receivedAt: new Date().toISOString() }],
+          items: [
+            ...prev.items,
+            { kind: 'error', id: itemId, message, receivedAt: new Date().toISOString() },
+          ],
         }));
       },
       onDone() {
