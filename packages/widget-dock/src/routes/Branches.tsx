@@ -1,18 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Branches — read-only view of active worktrees and their git state.
- * Backed by fixtures for Phase 1; the Prune actions land with Phase 4
- * (worktree management), so they render disabled here with an inline
- * note pointing at the eventual capability.
+ * Reads from `GET /__pinagent/branches` (server-side: walks Storage
+ * for conversations with worktreePath set, runs `git status` + `du`
+ * for each).
+ *
+ * Discard surfaces the same `discard_request` WS call the Conversations
+ * detail view uses — that's the existing path for "tear down this
+ * worktree." We use the same verb everywhere instead of inventing a
+ * separate "prune" for the same action.
  */
 
 import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
 import { GitBranch, MessageSquare, Trash2 } from 'lucide-react';
+import { useMemo } from 'react';
 import { TimestampDot } from '../components/TimestampDot';
-import { type Branch, FIXTURE_BRANCHES } from '../fixtures';
-import { EmptyState } from '../shell/states';
+import type { Branch } from '../fixtures/types';
+import { useBranches } from '../hooks/useBranches';
+import { EmptyState } from '../shell/states/EmptyState';
+import { ErrorState } from '../shell/states/ErrorState';
+import { LoadingState } from '../shell/states/LoadingState';
+import { useTransport } from '../transport';
 
 const STATE_LABEL: Record<Branch['state'], string> = {
   clean: 'Clean',
@@ -27,66 +37,108 @@ const STATE_TONE: Record<Branch['state'], string> = {
 };
 
 const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
-const FIXTURE_NOW = Date.parse('2026-05-26T22:30:00Z');
 
-function isStale(lastActivity: string): boolean {
-  return FIXTURE_NOW - Date.parse(lastActivity) > STALE_THRESHOLD_MS;
+function isStale(lastActivity: string, now: number): boolean {
+  return now - Date.parse(lastActivity) > STALE_THRESHOLD_MS;
 }
 
-// Module-level: fixture data is constant, no need to recompute per render.
-const TOTAL_DISK_MB = FIXTURE_BRANCHES.reduce((sum, b) => sum + (b.diskMb ?? 0), 0);
-const STALE_COUNT = FIXTURE_BRANCHES.filter((b) => isStale(b.lastActivity)).length;
-
 export function Branches() {
-  const branches = FIXTURE_BRANCHES;
+  const transport = useTransport();
+  const branchesQuery = useBranches();
+  const isMock = transport.kind === 'mock';
+
+  // `now` is re-anchored every time the query produces a fresh result,
+  // so the "stale" label tracks actual wall-clock elapsed time rather
+  // than a frozen fixture timestamp.
+  const now = useMemo(() => Date.now(), [branchesQuery.dataUpdatedAt]);
+
+  if (branchesQuery.isLoading) return <LoadingState rows={4} />;
+
+  if (branchesQuery.isError) {
+    return (
+      <ErrorState
+        title="Couldn't load branches"
+        description={
+          <>
+            The dock couldn't reach the local pinagent dev-server. Make sure your host app is
+            running with the pinagent plugin, or append{' '}
+            <code className="font-mono">?fixtures=on</code> to use the demo dataset.
+          </>
+        }
+        onRetry={() => branchesQuery.refetch()}
+      />
+    );
+  }
+
+  const branches = branchesQuery.data ?? [];
 
   if (branches.length === 0) {
     return (
       <EmptyState
         Icon={GitBranch}
         title="No worktrees yet"
-        description="When a conversation starts, the agent spins up a worktree off your base branch. You'll see it here."
+        description={
+          isMock
+            ? '(Mock mode — switch off ?fixtures=on for real data.)'
+            : "When a conversation starts in worktree mode, the agent spins up a fresh worktree off your base branch. You'll see it here."
+        }
       />
     );
   }
+
+  const totalDiskMb = branches.reduce((sum, b) => sum + (b.diskMb ?? 0), 0);
+  const staleCount = branches.filter((b) => isStale(b.lastActivity, now)).length;
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <div className="border-b border-border bg-card px-3 py-2.5 flex items-center gap-2">
         <h2 className="text-sm font-semibold tracking-tight">Branches</h2>
         <span className="text-[11px] text-muted-foreground">
-          {branches.length} active · {TOTAL_DISK_MB} MB on disk
+          {branches.length} active{totalDiskMb > 0 ? ` · ${totalDiskMb} MB on disk` : ''}
         </span>
-        <div className="ml-auto flex items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled
-            className="h-7 gap-1.5 text-xs"
-            title="Prune actions land in Phase 4"
-          >
-            <Trash2 className="h-3 w-3" />
-            Prune stale ({STALE_COUNT})
-          </Button>
-        </div>
+        {staleCount > 0 && (
+          <span className="ml-auto text-[11px] text-status-anchor-lost-fg tabular-nums">
+            {staleCount} stale
+          </span>
+        )}
       </div>
 
       <div className="flex-1 overflow-auto p-3 space-y-1.5">
         {branches.map((b) => (
-          <BranchRow key={b.id} branch={b} stale={isStale(b.lastActivity)} />
+          <BranchRow
+            key={b.id}
+            branch={b}
+            stale={isStale(b.lastActivity, now)}
+            onDiscard={
+              b.conversationId ? () => transport.discardConversation(b.conversationId!) : undefined
+            }
+            disableDiscard={isMock || !b.conversationId}
+          />
         ))}
       </div>
 
       <div className="border-t border-border bg-secondary/30 px-3 py-2">
         <p className="text-[11px] text-muted-foreground">
-          Read-only · prune + discard ship with Phase 4 (worktree management).
+          {isMock
+            ? 'Fixtures · switch off ?fixtures=on for live worktree data.'
+            : 'Discard tears down the worktree and the local branch. The conversation row stays for history.'}
         </p>
       </div>
     </div>
   );
 }
 
-function BranchRow({ branch, stale }: { branch: Branch; stale: boolean }) {
+function BranchRow({
+  branch,
+  stale,
+  onDiscard,
+  disableDiscard,
+}: {
+  branch: Branch;
+  stale: boolean;
+  onDiscard?: () => void;
+  disableDiscard: boolean;
+}) {
   return (
     <article
       className={cn(
@@ -130,11 +182,12 @@ function BranchRow({ branch, stale }: { branch: Branch; stale: boolean }) {
       <Button
         size="sm"
         variant="ghost"
-        disabled
-        className="h-7 px-2 text-xs text-muted-foreground"
-        title="Prune lands in Phase 4"
+        disabled={disableDiscard}
+        onClick={onDiscard}
+        className="h-7 px-2 text-xs text-muted-foreground hover:text-status-error-fg"
+        title={disableDiscard ? 'Mock mode — no real action' : 'Discard worktree'}
       >
-        Prune
+        <Trash2 className="h-3 w-3" />
       </Button>
     </article>
   );

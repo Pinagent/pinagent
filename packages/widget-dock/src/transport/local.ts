@@ -12,7 +12,7 @@
  * returns FeedbackRecord[]".
  */
 import type { ProjectEvent } from '@pinagent/shared';
-import type { Change, Conversation } from '../fixtures/types';
+import type { Branch, Change, Conversation } from '../fixtures/types';
 import { resolveWsUrl } from '../lib/ws-url';
 import { deriveDockStatus } from './status-derive';
 import type {
@@ -24,6 +24,23 @@ import type {
   DockTransport,
 } from './types';
 import { type ConnectionStatus, type ConversationHandlers, DockWsClient } from './ws-client';
+
+/**
+ * Wire shape for `GET /__pinagent/branches`. Mirrors
+ * `@pinagent/agent-runner.BranchRecord`. The Branch type the dock
+ * already had carries the same fields plus `id` (= conversationId
+ * server-side).
+ */
+interface BranchWire {
+  id: string;
+  name: string;
+  conversationId: string;
+  conversationTitle: string | null;
+  createdAt: string;
+  lastActivity: string;
+  state: 'clean' | 'uncommitted' | 'behind-base';
+  diskMb: number | null;
+}
 
 /**
  * Wire shape for `GET /__pinagent/changes`. Mirrors
@@ -188,6 +205,28 @@ export class LocalTransport implements DockTransport {
       throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
     }
     return (await response.json()) as ChangeDiff;
+  }
+
+  async listBranches(): Promise<Branch[]> {
+    const response = await fetch(this.url('/__pinagent/branches'), {
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) {
+      throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
+    }
+    const wire = (await response.json()) as BranchWire[];
+    return wire.map(
+      (w): Branch => ({
+        id: w.id,
+        name: w.name,
+        conversationId: w.conversationId,
+        conversationTitle: w.conversationTitle,
+        createdAt: w.createdAt,
+        lastActivity: w.lastActivity,
+        state: w.state,
+        diskMb: w.diskMb,
+      }),
+    );
   }
 
   async getConversation(id: string): Promise<ConversationDetail | null> {

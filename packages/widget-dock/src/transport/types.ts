@@ -20,7 +20,7 @@
  * of these, never `fetch` or `new WebSocket()` directly.
  */
 import type { ProjectEvent } from '@pinagent/shared';
-import type { Change, Conversation } from '../fixtures/types';
+import type { Branch, Change, Conversation } from '../fixtures/types';
 import type { ConnectionStatus, ConversationHandlers } from './ws-client';
 
 export interface ConversationFilters {
@@ -72,6 +72,12 @@ export interface DockTransport {
    * disk, no such record, etc).
    */
   getChangeDiff(id: string): Promise<ChangeDiff | null>;
+
+  /**
+   * List every active worktree with its git cleanliness state and
+   * disk usage, for the dock's Branches view. Newest activity first.
+   */
+  listBranches(): Promise<Branch[]>;
 
   // ---------- Live subscriptions ----------
 

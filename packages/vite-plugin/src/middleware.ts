@@ -13,6 +13,7 @@ import {
   FeedbackInputSchema,
   getChangeDiff,
   ID_RE,
+  listBranches,
   listChanges,
   openInEditor,
   PatchSchema,
@@ -162,6 +163,14 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
         const result = await getChangeDiff(storage.root, id);
         if (!result) return notFound(res);
         return json(res, 200, result);
+      }
+
+      // GET /__pinagent/branches — every conversation with an active or
+      // landed worktree, plus its git cleanliness state + disk usage.
+      // Drives the dock's Branches view.
+      if (req.method === 'GET' && url === '/__pinagent/branches') {
+        const branches = await listBranches(storage.root);
+        return json(res, 200, branches);
       }
 
       // POST /__pinagent/prs — compose a PR from multiple conversations.
