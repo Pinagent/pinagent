@@ -158,6 +158,28 @@ export interface DockTransport {
 
   /** Partial update; whole record echoed back. */
   updateSettings(patch: Partial<DockProjectSettings>): Promise<DockProjectSettings>;
+
+  // ---------- Branches (Phase 4) ----------
+
+  /**
+   * Tear down one worktree + branch by conversation id. Same lifecycle
+   * as `discardConversation`, but awaitable so the Branches view can
+   * surface pending + error states instead of fire-and-forget.
+   */
+  pruneBranch(feedbackId: string): Promise<void>;
+
+  /**
+   * Bulk-prune every worktree older than the project's configured
+   * `worktreeRetentionDays`. Returns the per-row outcome so the UI can
+   * report "pruned 5, 1 failed".
+   */
+  pruneStaleBranches(): Promise<PruneStaleResult>;
+}
+
+export interface PruneStaleResult {
+  pruned: string[];
+  failed: { feedbackId: string; error: string }[];
+  retentionDays: number;
 }
 
 export interface ChangeDiff {

@@ -43,6 +43,7 @@ export type {
   DockProjectSettings,
   DockTransport,
   PresentableConnections,
+  PruneStaleResult,
 } from './types';
 export type {
   ConnectionStatus,

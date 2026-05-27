@@ -17,7 +17,12 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { discardWorktree } from './agent';
 import { runGitCapture } from './git-utils';
+import { enqueue } from './merge-queue';
+import { SettingsStore } from './settings-store';
 import { Storage } from './storage';
 
 export interface BranchRecord {
@@ -132,4 +137,79 @@ function titleOf(comment: string): string | null {
   if (!first) return null;
   const t = first.trim();
   return t.length > 80 ? `${t.slice(0, 77)}…` : t;
+}
+
+export interface PruneResult {
+  ok: boolean;
+  /** Conv id that was pruned, even on failure (caller may need to refetch). */
+  feedbackId: string;
+  error?: string;
+}
+
+/**
+ * Tear down one conversation's worktree + branch by name. Same lifecycle
+ * as `discardConversation` from the Conversations detail view — the
+ * Branches view just calls into the same path so "discard" / "prune"
+ * stay one verb at the storage layer.
+ *
+ * Goes through the merge queue so it serializes with any concurrent
+ * land/discard on the same project.
+ */
+export async function pruneBranch(projectRoot: string, feedbackId: string): Promise<PruneResult> {
+  const storage = new Storage(projectRoot);
+  const rec = await storage.read(feedbackId);
+  if (!rec) {
+    return { ok: false, feedbackId, error: 'conversation not found' };
+  }
+
+  // Reuse the per-feedback log so the prune is recorded alongside the
+  // conversation's history (matches `discardConversation` from WS).
+  const logPath = join(projectRoot, '.pinagent', 'logs', `${feedbackId}.md`);
+  await mkdir(join(projectRoot, '.pinagent', 'logs'), { recursive: true });
+
+  try {
+    await enqueue(projectRoot, () => discardWorktree(projectRoot, feedbackId, logPath));
+    return { ok: true, feedbackId };
+  } catch (e) {
+    return {
+      ok: false,
+      feedbackId,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+export interface PruneStaleResult {
+  pruned: string[];
+  failed: { feedbackId: string; error: string }[];
+  /** Retention threshold (days) that was applied. Echoed for UI clarity. */
+  retentionDays: number;
+}
+
+/**
+ * Bulk-prune every branch whose `lastActivity` is older than the
+ * project's configured `worktreeRetentionDays`. Reads the retention
+ * from SettingsStore so the threshold matches what the dock displays
+ * — no risk of "the dock said 9 stale, the server only pruned 7."
+ */
+export async function pruneStaleBranches(projectRoot: string): Promise<PruneStaleResult> {
+  const settings = await new SettingsStore(projectRoot).read();
+  const thresholdMs = settings.worktreeRetentionDays * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - thresholdMs;
+
+  const branches = await listBranches(projectRoot);
+  const stale = branches.filter((b) => Date.parse(b.lastActivity) < cutoff);
+
+  const pruned: string[] = [];
+  const failed: { feedbackId: string; error: string }[] = [];
+  // Serial — each prune already goes through `enqueue`, so racing them
+  // wouldn't gain anything and the linear loop keeps the result order
+  // predictable for the caller's "pruned 3 worktrees" toast.
+  for (const b of stale) {
+    const result = await pruneBranch(projectRoot, b.conversationId);
+    if (result.ok) pruned.push(result.feedbackId);
+    else failed.push({ feedbackId: result.feedbackId, error: result.error ?? 'unknown' });
+  }
+
+  return { pruned, failed, retentionDays: settings.worktreeRetentionDays };
 }
