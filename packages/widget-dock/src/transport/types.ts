@@ -190,6 +190,43 @@ export interface DockTransport {
    * client-side filter over the conversations cache in that case.
    */
   searchHistory(query: HistorySearchQuery): Promise<HistorySearchHit[]>;
+
+  /**
+   * Chronological feed of meaningful project actions (conversation
+   * created, landed, discarded; PR opened). Newest first. Backs the
+   * dock's History → Activity tab.
+   */
+  listAuditEvents(opts?: ListAuditEventsQuery): Promise<AuditEvent[]>;
+}
+
+export interface ListAuditEventsQuery {
+  /** Max rows. Server caps at 500; default 100. */
+  limit?: number;
+  /** Pagination offset; pairs with `limit`. */
+  offset?: number;
+  /** Drill down to one conversation's history. */
+  conversationId?: string;
+}
+
+export type AuditActor = 'agent' | 'user' | 'system';
+
+/**
+ * Action discriminator. Open set — the server can emit actions the dock
+ * doesn't render specifically; those fall back to a generic label.
+ */
+export type AuditAction =
+  | 'conversation_created'
+  | 'conversation_landed'
+  | 'conversation_discarded'
+  | 'pr_created';
+
+export interface AuditEvent {
+  id: string;
+  conversationId: string | null;
+  actor: AuditActor;
+  action: AuditAction | string;
+  payload: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface PruneStaleResult {

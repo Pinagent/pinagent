@@ -29,6 +29,13 @@
       "when": 1779903993486,
       "tag": "0003_flowery_zodiak",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1779907416042,
+      "tag": "0004_abandoned_toro",
+      "breakpoints": true
     }
   ]
 }

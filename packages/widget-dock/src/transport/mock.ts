@@ -21,6 +21,7 @@ import {
   type PullRequest,
 } from '../fixtures';
 import type {
+  AuditEvent,
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,
@@ -31,6 +32,7 @@ import type {
   HistoryMatchedField,
   HistorySearchHit,
   HistorySearchQuery,
+  ListAuditEventsQuery,
   PresentableConnections,
   PruneStaleResult,
 } from './types';
@@ -291,4 +293,52 @@ export class MockTransport implements DockTransport {
       };
     });
   }
+
+  async listAuditEvents(opts: ListAuditEventsQuery = {}): Promise<AuditEvent[]> {
+    await sleep(SIMULATED_LATENCY_MS);
+    const limit = Math.min(Math.max(opts.limit ?? 100, 1), 500);
+    const offset = Math.max(opts.offset ?? 0, 0);
+    const filtered = opts.conversationId
+      ? FIXTURE_AUDIT_EVENTS.filter((e) => e.conversationId === opts.conversationId)
+      : FIXTURE_AUDIT_EVENTS;
+    return filtered.slice(offset, offset + limit);
+  }
 }
+
+// Synthetic audit feed for the fixtures preview. Derived from the
+// FIXTURE_CONVERSATIONS list so the timeline lines up with the rows the
+// dock already shows. Newest first.
+const FIXTURE_AUDIT_EVENTS: AuditEvent[] = (() => {
+  const events: AuditEvent[] = [];
+  let nextId = 1;
+  for (const c of FIXTURE_CONVERSATIONS) {
+    events.push({
+      id: String(nextId++),
+      conversationId: c.id,
+      actor: 'user',
+      action: 'conversation_created',
+      payload: { page: c.page, file: c.anchor.loc.split(':')[0] ?? null },
+      createdAt: c.updatedAt,
+    });
+    if (c.status === 'landed') {
+      events.push({
+        id: String(nextId++),
+        conversationId: c.id,
+        actor: 'user',
+        action: 'conversation_landed',
+        payload: { branch: c.branch, target: 'main' },
+        createdAt: c.updatedAt,
+      });
+    } else if (c.status === 'discarded') {
+      events.push({
+        id: String(nextId++),
+        conversationId: c.id,
+        actor: 'user',
+        action: 'conversation_discarded',
+        payload: { branch: c.branch },
+        createdAt: c.updatedAt,
+      });
+    }
+  }
+  return events.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+})();

@@ -190,6 +190,33 @@ export const pullRequests = sqliteTable('pull_requests', {
     .default(sql`(unixepoch() * 1000)`),
 });
 
+/**
+ * Append-only audit trail of meaningful project actions. Backs the
+ * History route's Activity tab. Rows are derived from explicit emit
+ * sites (Storage.create, mergeWorktree, discardWorktree,
+ * composePullRequest); the table isn't a generic event sink and isn't
+ * trying to mirror every WS event.
+ *
+ * `conversationId` is nullable so project-wide events (e.g. future
+ * settings changes) can live here too, but every action emitted today
+ * has one. `action` is kept as text — not an enum — so new actions can
+ * land without a migration. `payload` is opaque JSON, shaped per-action
+ * (e.g. `{ branch, commitSha }` for `conversation_landed`).
+ */
+export const auditEvents = sqliteTable('audit_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  conversationId: text('conversation_id'),
+  actor: text('actor', { enum: ['agent', 'user', 'system'] }).notNull(),
+  action: text('action').notNull(),
+  payload: text('payload', { mode: 'json' })
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default(sql`('{}')`),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+});
+
 export type Conversation = typeof conversations.$inferSelect;
 export type NewConversation = typeof conversations.$inferInsert;
 export type WidgetAnchor = typeof widgetAnchors.$inferSelect;
@@ -200,3 +227,5 @@ export type ActiveRun = typeof activeRuns.$inferSelect;
 export type NewActiveRun = typeof activeRuns.$inferInsert;
 export type PullRequest = typeof pullRequests.$inferSelect;
 export type NewPullRequest = typeof pullRequests.$inferInsert;
+export type AuditEvent = typeof auditEvents.$inferSelect;
+export type NewAuditEvent = typeof auditEvents.$inferInsert;

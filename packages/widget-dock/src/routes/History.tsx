@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * History — resolved conversations (landed, discarded, errored). Two
- * modes share the same view:
+ * History — two tabs:
  *
- *   - Empty search input: client-side filter over the conversations
- *     cache, so the default "show me everything resolved" stays free
- *     of network round-trips and benefits from any live invalidation.
+ *   - Conversations: resolved conversations (landed, discarded,
+ *     errored). Empty search → client-side filter over the
+ *     conversations cache. Non-empty search → server-side full-text
+ *     search via GET /__pinagent/history with matched-field hints.
  *
- *   - Non-empty search input: server-side full-text search via
- *     GET /__pinagent/history. Returns matched fields + a snippet so
- *     the row can show "matched: comment" with the surrounding context.
- *
- * Status filter applies to both modes.
+ *   - Activity: chronological audit feed of agent + user actions
+ *     (created, landed, discarded, pr_created). Backed by
+ *     GET /__pinagent/audit-log; invalidated alongside conversations
+ *     so a land/discard shows up in the feed instantly.
  */
 
 import { StatusBadge } from '@pinagent/ui/components/status-badge';
@@ -19,15 +18,25 @@ import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Input } from '@pinagent/ui/components/ui/input';
 import { cn } from '@pinagent/ui/lib/utils';
 import type { StatusKey } from '@pinagent/ui/tokens';
-import { History as HistoryIcon, Search } from 'lucide-react';
+import {
+  CheckCircle2,
+  GitPullRequest,
+  History as HistoryIcon,
+  MessageSquarePlus,
+  Search,
+  XCircle,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AnchorChip } from '../components/AnchorChip';
 import { ListRow } from '../components/ListRow';
 import { TimestampDot } from '../components/TimestampDot';
+import { useAuditLog } from '../hooks/useAuditLog';
 import { useConversations } from '../hooks/useConversations';
 import { useDebouncedValue, useHistorySearch } from '../hooks/useHistorySearch';
 import { EmptyState, ErrorState, LoadingState } from '../shell/states';
-import type { HistoryMatchedField, HistorySearchHit } from '../transport';
+import type { AuditEvent, HistoryMatchedField, HistorySearchHit } from '../transport';
+
+type Tab = 'conversations' | 'activity';
 
 type HistoryFilter = 'all' | 'landed' | 'discarded' | 'error';
 type StatusParam = 'all' | 'landed' | 'discarded';
@@ -51,6 +60,49 @@ const MATCH_LABEL: Record<HistoryMatchedField, string> = {
 };
 
 export function History() {
+  const [tab, setTab] = useState<Tab>('conversations');
+  return (
+    <div className="flex flex-1 flex-col min-h-0">
+      <div className="border-b border-border bg-card px-3 pt-3 pb-2 flex items-center gap-1">
+        <TabButton active={tab === 'conversations'} onClick={() => setTab('conversations')}>
+          Conversations
+        </TabButton>
+        <TabButton active={tab === 'activity'} onClick={() => setTab('activity')}>
+          Activity
+        </TabButton>
+      </div>
+      {tab === 'conversations' ? <ConversationsTab /> : <ActivityTab />}
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+        active
+          ? 'bg-secondary text-foreground'
+          : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ConversationsTab() {
   const [filter, setFilter] = useState<HistoryFilter>('all');
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query);
@@ -74,7 +126,7 @@ export function History() {
   );
 
   return (
-    <div className="flex flex-1 flex-col min-h-0">
+    <>
       <div className="border-b border-border bg-card px-3 pt-3 pb-2.5 space-y-2.5">
         <div className="relative">
           <Search
@@ -130,7 +182,7 @@ export function History() {
             : 'Showing the conversations cache · type to search the whole history.'}
         </p>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -260,6 +312,170 @@ function HitRow({ hit }: { hit: HistorySearchHit }) {
       </div>
     </article>
   );
+}
+
+function ActivityTab() {
+  const auditQuery = useAuditLog({ limit: 200 });
+  const events = auditQuery.data ?? [];
+
+  return (
+    <>
+      <div className="flex-1 overflow-auto">
+        {auditQuery.isLoading ? (
+          <LoadingState rows={5} />
+        ) : auditQuery.isError ? (
+          <ErrorState
+            title="Couldn't load activity"
+            description={
+              auditQuery.error instanceof Error
+                ? auditQuery.error.message
+                : "The dock couldn't reach the local pinagent dev-server."
+            }
+            onRetry={() => auditQuery.refetch()}
+          />
+        ) : events.length === 0 ? (
+          <EmptyState
+            Icon={HistoryIcon}
+            title="No activity yet"
+            description="Conversations created, landed, and discarded — plus PRs the composer opens — will appear here."
+          />
+        ) : (
+          <ol className="flex flex-col gap-1 p-3">
+            {events.map((e) => (
+              <ActivityRow key={e.id} event={e} />
+            ))}
+          </ol>
+        )}
+      </div>
+
+      <div className="border-t border-border bg-secondary/30 px-3 py-2">
+        <p className="text-[11px] text-muted-foreground">
+          {events.length === 0
+            ? 'Audit feed updates live as the agent and you work.'
+            : `${events.length} action${events.length === 1 ? '' : 's'} · newest first.`}
+        </p>
+      </div>
+    </>
+  );
+}
+
+interface ActivityVisual {
+  Icon: typeof HistoryIcon;
+  status: StatusKey;
+  label: string;
+}
+
+function describeEvent(event: AuditEvent): ActivityVisual {
+  switch (event.action) {
+    case 'conversation_created':
+      return { Icon: MessageSquarePlus, status: 'pending', label: 'Conversation opened' };
+    case 'conversation_landed': {
+      const via = (event.payload.via as string | undefined) === 'pr' ? ' via PR' : '';
+      const target = event.payload.target as string | undefined;
+      return {
+        Icon: CheckCircle2,
+        status: 'landed',
+        label: `Landed${via}${target ? ` onto ${target}` : ''}`,
+      };
+    }
+    case 'conversation_discarded':
+      return { Icon: XCircle, status: 'discarded', label: 'Discarded' };
+    case 'pr_created': {
+      const number = event.payload.number as number | undefined;
+      const title = event.payload.title as string | undefined;
+      return {
+        Icon: GitPullRequest,
+        status: 'landed',
+        label: number ? `PR #${number}${title ? ` — ${title}` : ''}` : 'Pull request opened',
+      };
+    }
+    default:
+      return { Icon: HistoryIcon, status: 'pending', label: event.action.replace(/_/g, ' ') };
+  }
+}
+
+function ActivityRow({ event }: { event: AuditEvent }) {
+  const visual = describeEvent(event);
+  const meta = activityMeta(event);
+  const Icon = visual.Icon;
+  return (
+    <li className="group flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+      <StatusBadge status={visual.status} variant="dot" className="mt-1.5 pointer-events-none" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start gap-2">
+          <Icon className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" aria-hidden />
+          <span className="flex-1 text-sm font-medium leading-tight text-foreground truncate">
+            {visual.label}
+          </span>
+          <TimestampDot iso={event.createdAt} className="mt-0.5" />
+        </div>
+        {meta && (
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+            {meta}
+          </div>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function activityMeta(event: AuditEvent): React.ReactNode | null {
+  const parts: React.ReactNode[] = [];
+  const branch = event.payload.branch as string | undefined;
+  const file = event.payload.file as string | undefined;
+  const page = event.payload.page as string | undefined;
+  const commitSha = event.payload.commitSha as string | undefined;
+  const url = event.payload.url as string | undefined;
+  if (commitSha) {
+    parts.push(
+      <span key="sha" className="font-mono text-[10.5px]">
+        {commitSha.slice(0, 12)}
+      </span>,
+    );
+  }
+  if (branch) {
+    parts.push(
+      <span key="branch" className="truncate font-mono text-[10.5px]">
+        {branch}
+      </span>,
+    );
+  }
+  if (file) {
+    parts.push(
+      <span key="file" className="truncate font-mono text-[10.5px]">
+        {file}
+      </span>,
+    );
+  }
+  if (page) {
+    parts.push(
+      <span key="page" className="truncate font-mono text-[10.5px]">
+        {safePath(page)}
+      </span>,
+    );
+  }
+  if (url && event.action === 'pr_created') {
+    parts.push(
+      <a
+        key="prurl"
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="underline decoration-dotted underline-offset-2 hover:text-foreground"
+      >
+        open on GitHub
+      </a>,
+    );
+  }
+  if (event.conversationId && event.action !== 'pr_created') {
+    parts.push(
+      <Badge key="cid" variant="outline" className="text-[10px]">
+        {event.conversationId.slice(0, 8)}
+      </Badge>,
+    );
+  }
+  if (parts.length === 0) return null;
+  return parts;
 }
 
 function firstLine(text: string): string {

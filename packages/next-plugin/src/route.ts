@@ -13,6 +13,7 @@ import {
   getChangeDiff,
   type HistoryStatusFilter,
   ID_RE,
+  listAuditEvents,
   listBranches,
   listChanges,
   listPullRequests,
@@ -166,6 +167,22 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
       statusParam === 'landed' || statusParam === 'discarded' ? statusParam : 'all';
     const hits = await searchHistory(storage.root, { query: q, status });
     return json(200, hits);
+  }
+
+  // /__pinagent/audit-log?limit=&offset=&conversationId= — feed of
+  // agent + user actions, newest first. Backs the dock's History →
+  // Activity tab.
+  if (slug.length === 1 && slug[0] === 'audit-log') {
+    const url = new URL(req.url);
+    const limit = Number(url.searchParams.get('limit') ?? 100);
+    const offset = Number(url.searchParams.get('offset') ?? 0);
+    const conversationId = url.searchParams.get('conversationId') ?? undefined;
+    const events = await listAuditEvents(storage.root, {
+      limit: Number.isFinite(limit) ? limit : 100,
+      offset: Number.isFinite(offset) ? offset : 0,
+      ...(conversationId ? { conversationId } : {}),
+    });
+    return json(200, events);
   }
 
   // /__pinagent/changes/:id/diff — full unified diff for one
