@@ -1,0 +1,28 @@
+{
+  "name": "@pinagent/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pinagent marketing site.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3030",
+    "build": "next build",
+    "start": "next start --port 3030",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pinagent/ui": "workspace:*",
+    "@tailwindcss/postcss": "^4.0.0",
+    "next": "^16.0.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "tailwindcss": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.6.3"
+  }
+}

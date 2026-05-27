@@ -23,11 +23,12 @@
 //     not consumed imports.
 //
 // Detection:
-//   For each package, walk its src/, tests/, scripts/ subtrees plus any
-//   root-level *.config.{ts,js,mjs,cjs}. A dep counts as used if any
-//   file contains `from '<dep>'`, `from "<dep>"`, `require('<dep>')`,
-//   or `import('<dep>')` — including subpath imports like `from
-//   '@pinagent/foo/bar'`.
+//   For each package, walk its src/, tests/, scripts/, app/ subtrees
+//   plus any root-level *.config.{ts,js,mjs,cjs}. A dep counts as used
+//   if any file contains `from '<dep>'`, `from "<dep>"`,
+//   `require('<dep>')`, or `import('<dep>')` — including subpath imports
+//   like `from '@pinagent/foo/bar'`. `app/` is included so Next.js App
+//   Router packages don't trip the linter.
 //
 // Allowlist:
 //   An explicit allowlist below covers any case where a `dependencies`
@@ -60,7 +61,7 @@ const ALLOWLIST = new Set([
 ]);
 
 const WORKSPACE_TREES = ['packages', 'apps', 'ee/packages'];
-const SOURCE_SUBDIRS = ['src', 'tests', 'scripts'];
+const SOURCE_SUBDIRS = ['src', 'tests', 'scripts', 'app'];
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', '__generated__']);
 const SOURCE_EXTENSIONS = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
 const ROOT_CONFIG_PATTERN = /\.config\.(ts|js|mjs|cjs)$/;
@@ -156,7 +157,7 @@ if (stale.length === 0) {
 console.error(`Found ${stale.length} stale workspace dep declaration(s):\n`);
 for (const s of stale) {
   console.error(`  ${s.pkg} declares ${s.dep}`);
-  console.error(`    (${s.pkgJson} — no import found in src/, tests/, scripts/, or *.config.*)`);
+  console.error(`    (${s.pkgJson} — no import found in src/, tests/, scripts/, app/, or *.config.*)`);
 }
 console.error('');
 console.error('Either remove the declaration from `dependencies`, move it to');
