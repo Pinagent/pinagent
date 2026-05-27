@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "pnpm exec turbo run build --filter=@pinagent/vite-plugin",
     "dev": "vite",
+    "prebuild": "pnpm exec turbo run build --filter=@pinagent/vite-plugin",
     "build": "vite build",
     "preview": "vite preview"
   },

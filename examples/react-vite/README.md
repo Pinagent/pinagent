@@ -7,11 +7,23 @@ This example is the smoke test for the Vite integration and the reference a new 
 ## Run it
 
 ```sh
-pnpm install            # from the repo root
+pnpm install                                # from the repo root
 pnpm --filter react-vite-example dev
 ```
 
+The example's `predev` hook builds `@pinagent/vite-plugin` (and its upstream packages via turbo) before starting Vite, so the bundled plugin — including the inlined widget IIFE and the migrations copied from `@pinagent/db/drizzle/` — is what gets loaded. First start takes a couple of seconds; subsequent starts are turbo cache hits.
+
 Open <http://localhost:5173>, click the Pinagent logo in the bottom-right, pick an element, leave a comment. The widget streams the agent's response back inline.
+
+### If the dev server returns 500 on `/__pinagent/feedback`
+
+That means `@pinagent/vite-plugin/dist/` is stale — typically after pulling a refactor that changed the agent runtime or the migrations layout. The `predev` hook should make this rare, but if it slips through, force a rebuild from the repo root:
+
+```sh
+pnpm build
+```
+
+then re-run `pnpm --filter react-vite-example dev`.
 
 ## What it demonstrates
 
