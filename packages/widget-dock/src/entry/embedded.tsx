@@ -29,7 +29,10 @@ import { startLayoutBroadcaster } from './layout-broadcaster';
 document.documentElement.dataset.pinagentEmbedded = 'true';
 
 const params = new URLSearchParams(window.location.search);
-const useFixtures = params.get('fixtures') === 'on';
+// Accept `on`, `true`, `1` so the documented `?fixtures=on` works and the
+// common typo `?fixtures=true` no longer silently no-ops.
+const fixturesParam = params.get('fixtures');
+const useFixtures = fixturesParam === 'on' || fixturesParam === 'true' || fixturesParam === '1';
 const forcedDisconnected = params.get('state') === 'disconnected';
 
 const transport: DockTransport = useFixtures ? new MockTransport() : new LocalTransport();

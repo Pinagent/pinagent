@@ -31,8 +31,12 @@ function readParams(): URLSearchParams {
 
 export function App() {
   const params = useMemo(readParams, []);
-  const useFixtures = params.get('fixtures') === 'on';
-  const embedded = params.get('embedded') === 'on';
+  // Accept `on`, `true`, `1` so the documented `?fixtures=on` works and the
+  // common typo `?fixtures=true` no longer silently no-ops. Same for embedded.
+  const fixturesParam = params.get('fixtures');
+  const useFixtures = fixturesParam === 'on' || fixturesParam === 'true' || fixturesParam === '1';
+  const embeddedParam = params.get('embedded');
+  const embedded = embeddedParam === 'on' || embeddedParam === 'true' || embeddedParam === '1';
   const forcedDisconnected = params.get('state') === 'disconnected';
 
   const transport = useMemo<DockTransport>(
