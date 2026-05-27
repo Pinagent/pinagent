@@ -25,6 +25,7 @@ import { DockSurface } from './DockSurface';
 import { NavRail, ROUTES } from './NavRail';
 import { RouteFallback } from './RouteFallback';
 import { useDockMode } from './useDockMode';
+import { useKeyboardShortcuts } from './useKeyboardShortcuts';
 
 export function DockShell() {
   const { embedded, forcedDisconnected } = useDockEnvironment();
@@ -56,6 +57,15 @@ export function DockShell() {
   const httpDown = transport.kind === 'local' && conversations.isError && !conversations.isLoading;
   const wsDown = subscriptionEnabled && subscription.status === 'closed';
   const disconnected = forcedDisconnected || httpDown || wsDown;
+
+  // Cmd+Shift+P toggle (also from host page via postMessage), g c / g h
+  // / g s nav chord, / focuses the active search input. Esc-to-close
+  // stays in useDockMode (panel mode only).
+  useKeyboardShortcuts({
+    onToggle: dock.toggle,
+    open: () => dock.setOpen(true),
+    isOpen: dock.open,
+  });
 
   const expandedNav = dock.mode !== 'panel';
   const context = transport.kind === 'mock' ? 'fixtures' : 'pinagent-demo';
