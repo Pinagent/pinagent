@@ -580,6 +580,9 @@ importers:
       '@pinagent/ui':
         specifier: workspace:*
         version: link:../ui
+      lucide-react:
+        specifier: ^1.16.0
+        version: 1.16.0(react@19.2.6)
       react:
         specifier: ^19.2.6
         version: 19.2.6
