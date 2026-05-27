@@ -75,6 +75,18 @@ jobs:
       - name: Lint workspace deps
         run: pnpm lint:workspace-deps
 
+      # Undeclared-imports check (inverse of the above): every
+      # @pinagent/* import in a package's source must correspond to a
+      # declaration in its package.json (dependencies, devDependencies,
+      # or peerDependencies). The monorepo's hoisted node_modules
+      # makes undeclared workspace imports "work" locally, but they
+      # fail to resolve for downstream consumers of the published
+      # tarball. Catches the class of bug where a concurrent PR adds
+      # an import but the matching dep declaration gets lost in a
+      # rebase/auto-merge.
+      - name: Lint undeclared imports
+        run: pnpm lint:undeclared-imports
+
       # Widget cascade: @pinagent/widget is embedded into next-plugin
       # and vite-plugin at build time, so widget code changes must
       # ship via a changeset that bumps both consumers. PR-only —

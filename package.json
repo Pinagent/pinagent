@@ -15,6 +15,7 @@
     "lint:spdx": "node scripts/check-spdx.mjs",
     "lint:widget-cascade": "node scripts/widget-cascade-check.mjs",
     "lint:workspace-deps": "node scripts/check-workspace-deps.mjs",
+    "lint:undeclared-imports": "node scripts/check-undeclared-imports.mjs",
     "format": "biome format --write .",
     "test": "vitest run",
     "test:watch": "vitest",
