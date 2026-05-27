@@ -63,14 +63,30 @@ const SCRIPT_TAG = '<script type="module" src="/__pinagent/widget.js"></script>'
  * globals.css). z-index sits just under the widget FAB's 2147483647
  * so neither surface visually steals from the other.
  *
- * `embedded.html` is the production embedded entry — assumes embedded
- * mode without a query flag. The matching `standalone.html` entry is
- * for the future hosted dashboard, not iframed.
+ * `embedded.html` is the production embedded entry. We forward an
+ * allowlist of dock query params (`fixtures`, `state`) from the parent
+ * URL into the iframe `src` — without this the iframe sees only its
+ * own location (the static path below) and flags like `?fixtures=on`
+ * silently no-op for every embedded consumer. Inline script so the
+ * iframe is built with the right src on first paint.
+ *
+ * The matching `standalone.html` entry is for the future hosted
+ * dashboard, not iframed.
  */
 const DOCK_IFRAME_TAG =
-  '<iframe id="__pinagent-dock" src="/__pinagent/dock/embedded.html" ' +
-  'title="Pinagent dock" ' +
-  'style="position:fixed;inset:0;width:100vw;height:100vh;border:0;background:transparent;pointer-events:none;z-index:2147483646;color-scheme:light"></iframe>';
+  '<script>(function(){' +
+  'var allow=["fixtures","state"];' +
+  'var p=new URLSearchParams(window.location.search);' +
+  'var kept=new URLSearchParams();' +
+  'allow.forEach(function(k){var v=p.get(k);if(v!==null)kept.set(k,v);});' +
+  'var qs=kept.toString();' +
+  'var src="/__pinagent/dock/embedded.html"+(qs?"?"+qs:"");' +
+  'var f=document.createElement("iframe");' +
+  'f.id="__pinagent-dock";f.src=src;f.title="Pinagent dock";' +
+  'f.style.cssText="position:fixed;inset:0;width:100vw;height:100vh;border:0;' +
+  'background:transparent;pointer-events:none;z-index:2147483646;color-scheme:light";' +
+  'document.body.appendChild(f);' +
+  '})();</script>';
 
 /**
  * Tiny host-side bridge:

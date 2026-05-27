@@ -24,7 +24,9 @@ import { LocalTransport, MockTransport, TransportProvider } from '../transport';
 import '../styles/globals.css';
 
 const params = new URLSearchParams(window.location.search);
-const useFixtures = params.get('fixtures') === 'on';
+// Accept `on`, `true`, `1` — see embedded.tsx for the rationale.
+const fixturesParam = params.get('fixtures');
+const useFixtures = fixturesParam === 'on' || fixturesParam === 'true' || fixturesParam === '1';
 const forcedDisconnected = params.get('state') === 'disconnected';
 
 const transport: DockTransport = useFixtures ? new MockTransport() : new LocalTransport();
