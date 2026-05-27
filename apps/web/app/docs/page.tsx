@@ -8,9 +8,20 @@ import remarkGfm from 'remark-gfm';
 // next build's cwd is the package root (apps/web); two up = repo root.
 const README = readFileSync(join(process.cwd(), '..', '..', 'README.md'), 'utf8');
 
+const DOCS_TITLE = 'Docs · Pinagent';
+const DOCS_DESCRIPTION = 'How to install Pinagent and connect it to your coding agent.';
+
 export const metadata = {
-  title: 'Docs · Pinagent',
-  description: 'How to install Pinagent and connect it to your coding agent.',
+  title: DOCS_TITLE,
+  description: DOCS_DESCRIPTION,
+  openGraph: {
+    title: DOCS_TITLE,
+    description: DOCS_DESCRIPTION,
+  },
+  twitter: {
+    title: DOCS_TITLE,
+    description: DOCS_DESCRIPTION,
+  },
 };
 
 export default function DocsPage() {
