@@ -24,6 +24,7 @@
   };
 }
 
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -142,8 +143,12 @@ function runMigrations(raw: DatabaseSync, migrationsDir: string): void {
   }
 
   // Track applied migrations the same way drizzle's stock migrator
-  // does: a `__drizzle_migrations` table keyed by sha256(hash) so
-  // re-running is a no-op.
+  // does: a `__drizzle_migrations` table keyed by sha256(rawSql) so
+  // re-running is a no-op AND so DBs created by the stock migrator
+  // (or by the browser-side mirror in @pinagent/widget) interop with
+  // this one. Storing `entry.tag` here instead silently re-runs every
+  // migration on existing DBs and crashes on `CREATE TABLE … already
+  // exists`.
   raw.exec(
     `CREATE TABLE IF NOT EXISTS __drizzle_migrations (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -162,7 +167,8 @@ function runMigrations(raw: DatabaseSync, migrationsDir: string): void {
   for (const entry of sortedEntries) {
     const sqlPath = join(migrationsDir, `${entry.tag}.sql`);
     const sql = readFileSync(sqlPath, 'utf8');
-    if (applied.has(entry.tag)) continue;
+    const hash = createHash('sha256').update(sql).digest('hex');
+    if (applied.has(hash)) continue;
     const statements = sql
       .split('--> statement-breakpoint')
       .map((s) => s.trim())
@@ -172,7 +178,7 @@ function runMigrations(raw: DatabaseSync, migrationsDir: string): void {
     }
     raw
       .prepare('INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)')
-      .run(entry.tag, entry.when);
+      .run(hash, entry.when);
   }
 }
 

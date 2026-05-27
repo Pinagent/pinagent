@@ -24,7 +24,7 @@
  */
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect } from 'react';
-import { ROUTE_PATHS } from '../router';
+import { ROUTE_PATHS } from '../route-paths';
 import { G_CHORD_TIMEOUT_MS, matchKeyboardShortcut, type ShortcutAction } from './shortcut-match';
 
 export interface KeyboardShortcutOptions {

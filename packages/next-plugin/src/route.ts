@@ -216,6 +216,10 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
   // /__pinagent/feedback
   if (slug.length === 1 && slug[0] === 'feedback') {
     const items = await storage.list();
+    // Keep this shallow projection in sync with `FeedbackRecordSchema`
+    // in `@pinagent/widget-dock/transport/local.ts` — the dock zod-
+    // parses the response and a missing field surfaces to users as
+    // "Couldn't load conversations".
     const shallow = items.map((r) => ({
       id: r.id,
       comment: r.comment,
@@ -225,7 +229,10 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
       selector: r.selector,
       url: r.url,
       status: r.status,
+      worktreeState: r.worktreeState,
+      branch: r.branch,
       createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
       resolvedAt: r.resolvedAt,
     }));
     return json(200, shallow);

@@ -24,6 +24,7 @@ import { DockEnvironmentProvider } from '../shell/DockEnvironment';
 import type { DockTransport } from '../transport';
 import { LocalTransport, MockTransport, TransportProvider } from '../transport';
 import '../styles/globals.css';
+import { startLayoutBroadcaster } from './layout-broadcaster';
 
 document.documentElement.dataset.pinagentEmbedded = 'true';
 
@@ -48,3 +49,9 @@ ReactDOM.createRoot(root).render(
     </QueryProvider>
   </React.StrictMode>,
 );
+
+// Broadcast the FAB / surface / backdrop rects to the host bridge so it
+// can toggle the iframe's pointer-events. Without this, the iframe is
+// either always click-through (FAB unreachable) or always interactive
+// (host clicks blocked) — neither acceptable.
+startLayoutBroadcaster();

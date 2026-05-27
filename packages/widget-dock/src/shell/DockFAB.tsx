@@ -35,6 +35,7 @@ export const DockFAB = forwardRef<HTMLButtonElement, DockFABProps>(
         onClick={drag.guardClick(onToggle)}
         aria-label={open ? 'Close Pinagent dock' : 'Open Pinagent dock'}
         aria-pressed={open}
+        data-pinagent-rect=""
         style={{ ...drag.style, position: 'fixed' }}
         className={cn(
           'z-[2147483647]',

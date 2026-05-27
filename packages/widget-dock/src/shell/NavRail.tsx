@@ -21,7 +21,7 @@ import {
   Settings,
 } from 'lucide-react';
 import type { ComponentType, SVGAttributes } from 'react';
-import { ROUTE_PATHS, type RouteKey, type RoutePath } from '../router';
+import { ROUTE_PATHS, type RouteKey, type RoutePath } from '../route-paths';
 
 export interface RouteDescriptor {
   key: RouteKey;
