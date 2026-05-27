@@ -8,10 +8,10 @@
 import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { asc, conversations, eq, widgetAnchors } from '@pinagent/db';
 import * as schema from '@pinagent/db/schema';
-import Database from 'better-sqlite3';
-import { type BetterSQLite3Database, drizzle } from 'drizzle-orm/better-sqlite3';
+import { drizzle, type SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy';
 import { z } from 'zod';
 
 export const ID_RE = /^[A-Za-z0-9_-]{8,16}$/;
@@ -38,7 +38,7 @@ export interface FeedbackRecord {
   resolvedAt: string | null;
 }
 
-type Db = BetterSQLite3Database<typeof schema>;
+type Db = SqliteRemoteDatabase<typeof schema>;
 
 export class Storage {
   readonly root: string;
@@ -60,16 +60,37 @@ export class Storage {
   private db(): Db {
     if (this.dbHandle) return this.dbHandle;
     const dbPath = join(this.root, '.pinagent', 'db.sqlite');
-    const raw = new Database(dbPath, { fileMustExist: false });
-    raw.pragma('journal_mode = WAL');
-    raw.pragma('foreign_keys = ON');
+    // Uses Node's built-in node:sqlite (stable since Node 22.13) so
+    // installing @pinagent/mcp doesn't require a native build step.
+    // Same SQLite engine and on-disk format as the dev server.
+    const raw = new DatabaseSync(dbPath);
+    raw.exec('PRAGMA journal_mode = WAL');
+    raw.exec('PRAGMA foreign_keys = ON');
     // The route process owns migrations. MCP may start before the
     // route, in which case the DB file might not have the schema yet.
     // We only READ + occasionally UPDATE, and the route applies
     // migrations on its first connect — but if MCP is alone in the
     // wild (no dev server yet), we won't have tables. That's fine:
     // queries return empty results until the route runs.
-    this.dbHandle = drizzle(raw, { schema });
+    this.dbHandle = drizzle(
+      async (sql, params, method) => {
+        const stmt = raw.prepare(sql);
+        if (method === 'run') {
+          const info = stmt.run(...(params as (string | number | bigint | Uint8Array | null)[]));
+          return {
+            rows: [{ changes: Number(info.changes), lastInsertRowid: info.lastInsertRowid }],
+          };
+        }
+        const rows = stmt.all(
+          ...(params as (string | number | bigint | Uint8Array | null)[]),
+        ) as Record<string, unknown>[];
+        const columns = stmt.columns().map((c) => c.column ?? c.name);
+        const projected = rows.map((r) => columns.map((c) => r[c as string] ?? null));
+        if (method === 'get') return { rows: projected[0] ?? [] };
+        return { rows: projected };
+      },
+      { schema },
+    );
     return this.dbHandle;
   }
 
