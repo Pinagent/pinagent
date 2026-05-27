@@ -553,6 +553,9 @@ importers:
 
   packages/widget-dock:
     dependencies:
+      '@pinagent/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@pinagent/ui':
         specifier: workspace:*
         version: link:../ui
