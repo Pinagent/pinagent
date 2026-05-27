@@ -1,0 +1,32 @@
+{
+  "name": "@pinagent/widget-dock",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Pinagent dock surface — project-management UI complementing the per-element widget. Visual + components layer; transport and routes will be wired in a later phase.",
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm exec turbo run build --filter=@pinagent/widget",
+    "dev": "vite",
+    "prebuild": "pnpm exec turbo run build --filter=@pinagent/widget",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pinagent/ui": "workspace:*",
+    "@pinagent/widget": "workspace:*",
+    "lucide-react": "^1.16.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^6.0.3",
+    "vite": "^6.0.0"
+  }
+}

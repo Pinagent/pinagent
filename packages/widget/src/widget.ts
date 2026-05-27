@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { WorktreeWireState } from '@pinagent/shared';
-import { BRAND_CREAM, BRAND_VIEWBOX, PICKER_CURSOR_DATA_URL, PIN_PATH } from './brand';
+import { BRAND_GOLD, FONT_SANS, STATUS } from '@pinagent/ui/tokens';
+import { BRAND_CREAM, BRAND_INK, BRAND_VIEWBOX, PICKER_CURSOR_DATA_URL, PIN_PATH } from './brand';
+import { COMPOSER_STYLES } from './composer-styles';
 import { flushBrowserDb, getBrowserDb, initBrowserDb } from './db/client';
 import { getConversationMessages, listPendingForCurrentPage, type PendingRow } from './db/reads';
 import {
@@ -167,30 +169,42 @@ const DOC_STYLES = `
   width: ${BUBBLE_SIZE}px;
   height: ${BUBBLE_SIZE}px;
   border-radius: 50%;
-  background: #fff;
-  border: 2px solid #cbd5e1;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+  background: ${BRAND_CREAM};
+  border: 2px solid #e8dfb0;
+  box-shadow: 0 4px 12px rgba(32, 27, 33, 0.16);
   cursor: pointer;
   z-index: 2147483645;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  color: #4338ca;
+  color: ${BRAND_INK};
   transition: transform 120ms ease, box-shadow 120ms ease;
-  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  font-family: ${FONT_SANS};
 }
-.pa-bubble:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(0,0,0,0.24); }
+.pa-bubble:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(32, 27, 33, 0.22); }
 .pa-bubble[hidden] { display: none; }
 
-.pa-bubble.running { border-color: #2563eb; color: #2563eb; }
+/* Status-driven bubble variants. Color palette comes from
+   @pinagent/ui/tokens.STATUS so the bubble visually matches the
+   dock's status badges. */
+.pa-bubble.pending {
+  border-color: ${STATUS.pending.border};
+  background: ${STATUS.pending.bg};
+  color: ${STATUS.pending.fg};
+}
+.pa-bubble.running {
+  border-color: ${STATUS.working.border};
+  background: ${STATUS.working.bg};
+  color: ${STATUS.working.fg};
+}
 .pa-bubble.running::after {
   content: '';
   position: absolute;
   inset: -3px;
   border-radius: 50%;
-  border: 2px solid #2563eb;
-  opacity: 0.5;
+  border: 2px solid ${STATUS.working.fg};
+  opacity: 0.55;
   animation: pa-bubble-pulse 1.6s ease-out infinite;
   pointer-events: none;
 }
@@ -198,16 +212,23 @@ const DOC_STYLES = `
   0%   { transform: scale(1);    opacity: 0.55; }
   100% { transform: scale(1.55); opacity: 0; }
 }
-.pa-bubble.done  { border-color: #10b981; color: #10b981; background: #ecfdf5; }
-.pa-bubble.error { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
-.pa-bubble.pending { border-color: #94a3b8; color: #94a3b8; }
-/* Phase G — anchor lost. Dashed amber ring so it reads as "needs attention"
+.pa-bubble.done {
+  border-color: ${STATUS.readyToLand.border};
+  background: ${STATUS.readyToLand.bg};
+  color: ${STATUS.readyToLand.fg};
+}
+.pa-bubble.error {
+  border-color: ${STATUS.error.border};
+  background: ${STATUS.error.bg};
+  color: ${STATUS.error.fg};
+}
+/* Phase G — anchor lost. Dashed olive ring so it reads as "needs attention"
    without claiming an outright error. Click retries the re-anchor lookup. */
 .pa-bubble.anchor-lost {
   border-style: dashed;
-  border-color: #d97706;
-  color: #d97706;
-  background: #fffbeb;
+  border-color: ${STATUS.anchorLost.border};
+  background: ${STATUS.anchorLost.bg};
+  color: ${STATUS.anchorLost.fg};
 }
 
 .pa-bubble-spinner {
@@ -224,24 +245,29 @@ const DOC_STYLES = `
   position: absolute;
   width: 28px;
   height: 24px;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background: ${BRAND_CREAM};
+  border: 1px solid #e8dfb0;
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: grab;
   z-index: 2147483646;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.10);
+  box-shadow: 0 2px 6px rgba(32, 27, 33, 0.10);
   user-select: none;
-  color: #6b7280;
+  color: #5c5546;
   font-size: 16px;
   line-height: 1;
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  transition: background 100ms ease, color 100ms ease;
+  font-family: ${FONT_SANS};
+  transition: background 100ms ease, color 100ms ease, box-shadow 100ms ease;
 }
-.pa-drag-handle:hover { background: #f3f4f6; color: #111827; }
-.pa-drag-handle.dragging { cursor: grabbing; background: #e0e7ff; color: #1e3a8a; }
+.pa-drag-handle:hover { background: #f5efd0; color: ${BRAND_INK}; }
+.pa-drag-handle.dragging {
+  cursor: grabbing;
+  background: #f5efd0;
+  color: ${BRAND_INK};
+  box-shadow: 0 0 0 3px ${BRAND_GOLD}, 0 2px 6px rgba(32, 27, 33, 0.10);
+}
 .pa-drag-handle[hidden] { display: none; }
 
 .pa-pointer {
@@ -253,6 +279,27 @@ const DOC_STYLES = `
   overflow: visible;
 }
 .pa-pointer[hidden] { display: none; }
+
+/* Smooth the bubble's color transition when the anchor is lost — the
+   class flips on suddenly during HMR / DOM rewrites, so a brief fade
+   reads less like an error spike. */
+.pa-bubble {
+  transition: transform 120ms ease,
+              box-shadow 120ms ease,
+              background 220ms ease,
+              border-color 220ms ease,
+              color 220ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pa-bubble, .pa-bubble:hover,
+  .pa-drag-handle, .pa-drag-handle.dragging {
+    transition: none !important;
+    transform: none !important;
+  }
+  .pa-bubble.running::after { animation: none; opacity: 0.3; }
+  .pa-bubble-spinner { animation: none; }
+}
 `;
 
 /**
@@ -1951,239 +1998,7 @@ function composerHTML(metaText: string): string {
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   return `<!doctype html>
-<html><head><meta charset="utf-8"><style>
-  html, body { margin: 0; padding: 0; background: transparent; height: 100%; }
-  * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif; }
-  body { color: #111827; }
-  .card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    height: calc(100% - 2px);
-  }
-  .pane { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
-  .pane[hidden] { display: none; }
-  .meta {
-    font-size: 11px;
-    color: #6b7280;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    word-break: break-all;
-    padding: 2px 4px;
-    margin: -2px -4px;
-    border-radius: 4px;
-    transition: background 100ms ease, color 100ms ease;
-    user-select: none;
-  }
-  .meta.clickable { cursor: pointer; }
-  .meta.clickable:hover { background: #f3f4f6; color: #111827; }
-  .meta.loading { opacity: 0.5; }
-  .meta.ok { background: #d1fae5; color: #065f46; }
-  .meta.err { background: #fee2e2; color: #991b1b; }
-  textarea {
-    width: 100%;
-    resize: none;
-    padding: 8px;
-    font-size: 13px;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    outline: none;
-    font-family: inherit;
-    background: #fff;
-    color: #111827;
-  }
-  textarea::placeholder { color: #9ca3af; }
-  textarea:focus { border-color: #2563eb; }
-  textarea:disabled { background: #f9fafb; color: #6b7280; }
-  #pa-ta { flex: 1; min-height: 80px; }
-  .row { display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
-  .row.spread { justify-content: space-between; }
-  .btn { border: 0; padding: 6px 12px; font-size: 13px; border-radius: 6px; cursor: pointer; font-family: inherit; }
-  .btn.primary { background: #2563eb; color: #fff; }
-  .btn.primary:disabled { background: #93c5fd; cursor: not-allowed; }
-  .btn.ghost { background: transparent; color: #374151; }
-  .btn.ghost.stop,
-  .btn.ghost.cancel { color: #b91c1c; }
-  .btn.ghost.stop:hover,
-  .btn.ghost.cancel:hover { background: #fef2f2; }
-
-  .header {
-    font-size: 12px;
-    font-weight: 500;
-    color: #111827;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 2px 0;
-  }
-  /* Spinner shown while a turn is in flight. The pseudo-element
-     survives textContent updates so we don't have to re-insert
-     the spinner each time the header copy changes. */
-  .header.running::before {
-    content: '';
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border: 2px solid #2563eb;
-    border-top-color: transparent;
-    border-radius: 50%;
-    flex-shrink: 0;
-    animation: pa-header-spin 0.9s linear infinite;
-  }
-  @keyframes pa-header-spin { to { transform: rotate(360deg); } }
-  .log {
-    flex: 1;
-    overflow-y: auto;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    padding: 8px;
-    font-size: 12px;
-    line-height: 1.45;
-    background: #fafafa;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .msg { white-space: pre-wrap; word-break: break-word; color: #111827; }
-  .user-msg {
-    white-space: pre-wrap;
-    word-break: break-word;
-    color: #111827;
-    background: #eef2ff;
-    border-left: 3px solid #2563eb;
-    padding: 4px 8px;
-    border-radius: 0 4px 4px 0;
-    align-self: flex-start;
-    max-width: 100%;
-  }
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-    background: #eef2ff;
-    color: #1e3a8a;
-    border-radius: 4px;
-    padding: 3px 6px;
-    align-self: flex-start;
-    max-width: 100%;
-  }
-  .chip.err { background: #fee2e2; color: #991b1b; }
-  .chip-name { font-weight: 600; }
-  .chip-summary {
-    color: #4338ca;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .chip-status { margin-left: auto; opacity: 0.6; }
-  .chip-status.ok { color: #047857; opacity: 1; }
-  .chip-status.err { color: #b91c1c; opacity: 1; }
-  .err-line { color: #b91c1c; font-size: 12px; white-space: pre-wrap; }
-  .footer-note { font-size: 11px; color: #6b7280; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-
-  /* Phase H — worktree lifecycle row, shown only when the conversation has
-     an active worktree to act on. The text label on the left echoes the
-     current state ("Working on pinagent/abc · 3 changes" while active,
-     "Landed as 1a2b3c4d" after) and the buttons on the right give the
-     terminal actions. */
-  .lifecycle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 4px 6px;
-    background: #f5f3ff;
-    border: 1px solid #ddd6fe;
-    border-radius: 6px;
-    font-size: 11px;
-    color: #4c1d95;
-  }
-  .lifecycle[hidden] { display: none; }
-  .lifecycle.landed { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
-  .lifecycle.discarded { background: #f3f4f6; border-color: #e5e7eb; color: #6b7280; }
-  .lifecycle.conflict { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
-  .lifecycle.busy { opacity: 0.7; }
-  .lifecycle-label {
-    flex: 1;
-    min-width: 0;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .lifecycle-actions { display: flex; gap: 4px; flex-shrink: 0; }
-  .lifecycle-btn { font-size: 11px; padding: 3px 8px; }
-  .lifecycle-btn[hidden] { display: none; }
-
-  .conflict-block {
-    background: #fef2f2;
-    border-left: 3px solid #fca5a5;
-    padding: 6px 8px;
-    border-radius: 0 4px 4px 0;
-    font-size: 11px;
-    color: #991b1b;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .conflict-block .conflict-title { font-weight: 600; }
-  .conflict-block .conflict-file {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    color: #7f1d1d;
-  }
-
-  .ask-form {
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    border-radius: 6px;
-    padding: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .ask-question { font-weight: 600; color: #92400e; font-size: 12px; white-space: pre-wrap; }
-  .ask-options { display: flex; flex-wrap: wrap; gap: 4px; }
-  .ask-option {
-    background: #fff;
-    border: 1px solid #fcd34d;
-    color: #92400e;
-    padding: 3px 8px;
-    font-size: 11px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-family: inherit;
-  }
-  .ask-option:hover { background: #fef3c7; }
-  .ask-row { display: flex; gap: 4px; align-items: stretch; }
-  .ask-input { font-size: 12px; min-height: 0; }
-  .ask-resolved {
-    background: #f3f4f6;
-    border-left: 3px solid #9ca3af;
-    padding: 4px 8px;
-    border-radius: 0 4px 4px 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .ask-resolved .ask-question { color: #6b7280; font-size: 11px; font-weight: 500; }
-  .ask-answer { color: #111827; font-size: 12px; white-space: pre-wrap; }
-
-  .follow {
-    display: flex;
-    gap: 6px;
-    align-items: stretch;
-    border-top: 1px solid #f3f4f6;
-    padding-top: 8px;
-  }
-  #pa-follow-input { font-size: 12px; min-height: 0; }
-  #pa-follow-send { white-space: nowrap; }
-</style></head><body>
+<html><head><meta charset="utf-8"><style>${COMPOSER_STYLES}</style></head><body>
   <div class="card">
     <div class="meta" id="pa-meta">${esc(metaText)}</div>
 

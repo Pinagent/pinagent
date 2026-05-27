@@ -1,0 +1,8 @@
+@import "@pinagent/ui/styles/globals.css";
+
+/*
+ * Scan this package's own source for Tailwind utility usage. The base
+ * scan in @pinagent/ui covers its own components; this adds the dock's
+ * shell, screens, and fixtures.
+ */
+@source "../**/*.{ts,tsx}";
