@@ -8,6 +8,8 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  ComposeOptsSchema,
+  composePullRequest,
   FeedbackInputSchema,
   ID_RE,
   listChanges,
@@ -147,6 +149,19 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       if (req.method === 'GET' && url === '/__pinagent/changes') {
         const changes = await listChanges(storage.root);
         return json(res, 200, changes);
+      }
+
+      // POST /__pinagent/prs — compose a PR from multiple conversations.
+      // Bundles the selected worktrees onto a fresh branch in a throwaway
+      // worktree, pushes, and (if GITHUB_TOKEN is set + origin is GitHub)
+      // opens the PR. Returns prUrl, branchPushed, manualCompareUrl, or
+      // error per ComposeResult.
+      if (req.method === 'POST' && url === '/__pinagent/prs') {
+        const raw = await readJsonBody(req);
+        const parsed = ComposeOptsSchema.safeParse(raw);
+        if (!parsed.success) return badRequest(res, parsed.error.message);
+        const result = await composePullRequest(storage.root, parsed.data);
+        return json(res, result.ok ? 200 : 422, result);
       }
 
       // GET /__pinagent/feedback

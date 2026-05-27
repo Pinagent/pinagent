@@ -13,7 +13,13 @@ import {
   FIXTURE_CHANGES,
   FIXTURE_CONVERSATIONS,
 } from '../fixtures';
-import type { ConversationDetail, ConversationFilters, DockTransport } from './types';
+import type {
+  ConversationDetail,
+  ConversationFilters,
+  CreatePullRequestInput,
+  CreatePullRequestResult,
+  DockTransport,
+} from './types';
 import type { ConnectionStatus, ConversationHandlers } from './ws-client';
 
 /** Small artificial latency so loading states are visible while reviewing. */
@@ -88,5 +94,17 @@ export class MockTransport implements DockTransport {
 
   discardConversation(_id: string): void {
     // no-op
+  }
+
+  async createPullRequest(input: CreatePullRequestInput): Promise<CreatePullRequestResult> {
+    // Simulated success — return a plausible PR URL so the composer's
+    // happy-path UI can be reviewed without a host backend. Slight delay
+    // mimics the real round-trip so the submit spinner is visible.
+    await sleep(SIMULATED_LATENCY_MS * 4);
+    return {
+      ok: true,
+      branchPushed: true,
+      prUrl: `https://github.com/example/repo/pull/999?branch=${encodeURIComponent(input.branchName)}`,
+    };
   }
 }

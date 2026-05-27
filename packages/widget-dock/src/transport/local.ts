@@ -15,7 +15,13 @@ import type { ProjectEvent } from '@pinagent/shared';
 import type { Change, Conversation } from '../fixtures/types';
 import { resolveWsUrl } from '../lib/ws-url';
 import { deriveDockStatus } from './status-derive';
-import type { ConversationDetail, ConversationFilters, DockTransport } from './types';
+import type {
+  ConversationDetail,
+  ConversationFilters,
+  CreatePullRequestInput,
+  CreatePullRequestResult,
+  DockTransport,
+} from './types';
 import { type ConnectionStatus, type ConversationHandlers, DockWsClient } from './ws-client';
 
 /**
@@ -221,5 +227,27 @@ export class LocalTransport implements DockTransport {
 
   discardConversation(id: string): void {
     this.ws()?.sendDiscardRequest(id);
+  }
+
+  async createPullRequest(input: CreatePullRequestInput): Promise<CreatePullRequestResult> {
+    const response = await fetch(this.url('/__pinagent/prs'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(input),
+    });
+    // The server returns the ComposeResult shape on both 200 (ok) and
+    // 422 (validation / composer failure). Anything else is unexpected.
+    if (response.status === 200 || response.status === 422) {
+      return (await response.json()) as CreatePullRequestResult;
+    }
+    if (response.status === 400) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      return {
+        ok: false,
+        branchPushed: false,
+        error: body.error ?? `Bad request (${response.status})`,
+      };
+    }
+    throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
   }
 }

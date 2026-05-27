@@ -12,9 +12,11 @@ import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
 import { useTransport } from '../transport';
+import { Composer } from './Composer';
 
 export function Changes() {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [composing, setComposing] = useState(false);
   const transport = useTransport();
   const changesQuery = useChanges();
 
@@ -37,6 +39,34 @@ export function Changes() {
 
   const isMock = transport.kind === 'mock';
 
+  // When composing, resolve the selection against the latest changes
+  // list — the user may have dropped one between selecting and clicking
+  // "Create PR" (e.g., it auto-landed). Stale ids just no-op.
+  const selectedChanges = useMemo(() => {
+    if (!composing) return [];
+    const byId = new Map(ready.map((c) => [c.id, c] as const));
+    return [...selected].map((id) => byId.get(id)).filter((c): c is Change => c !== undefined);
+  }, [composing, selected, ready]);
+
+  if (composing && selectedChanges.length > 0) {
+    return (
+      <Composer
+        selected={selectedChanges}
+        onCancel={() => setComposing(false)}
+        onSuccess={() => {
+          // Conversations included in the PR are marked landed server-side
+          // and will fall out of the next changes refetch. Drop them from
+          // the selection so a re-enter doesn't try to compose them again.
+          setSelected((prev) => {
+            const next = new Set(prev);
+            for (const c of selectedChanges) next.delete(c.id);
+            return next;
+          });
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <div className="border-b border-border bg-card px-3 py-2.5 flex items-center gap-2">
@@ -55,7 +85,7 @@ export function Changes() {
             disabled={selected.size === 0}
             className="h-7 gap-1.5"
             variant={selected.size > 0 ? 'accent' : 'outline'}
-            title="PR composer lands in PR-D2"
+            onClick={() => setComposing(true)}
           >
             <GitPullRequest className="h-3.5 w-3.5" />
             Create PR
