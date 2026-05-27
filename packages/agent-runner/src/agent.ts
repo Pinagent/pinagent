@@ -21,6 +21,7 @@ import {
 import { ASK_USER_TOOL_NAME, createAskUserMcpServer, rejectAsk } from './ask-user';
 import { getOrCreateBus } from './bus';
 import { getDb } from './db/client';
+import { runGitCapture } from './git-utils';
 import { type FeedbackRecord, Storage } from './storage';
 
 /**
@@ -719,6 +720,62 @@ export async function discardWorktree(
 }
 
 /**
+ * Diff summary for a worktree vs a base ref. Used by the dock's Changes
+ * view to render filesChanged / additions / deletions per conversation
+ * without the dock having to learn git itself.
+ *
+ * `filesChanged` includes both committed and uncommitted changes (we
+ * `git add -A` mentally — the worktree-state machine will commit them
+ * during `mergeWorktree` anyway, so showing them as part of the diff
+ * matches what `Land` will produce).
+ *
+ * Returns null when the worktree path doesn't exist or git fails. The
+ * caller treats that as "unknown" and omits the row from the changes
+ * list rather than showing zeroes.
+ */
+export interface WorktreeStats {
+  filesChanged: number;
+  additions: number;
+  deletions: number;
+}
+
+export async function computeWorktreeStats(
+  worktreePath: string,
+  baseRef: string,
+): Promise<WorktreeStats | null> {
+  if (!existsSync(worktreePath)) return null;
+  // `--shortstat` gives us the one-line summary we want, e.g.
+  //   " 3 files changed, 27 insertions(+), 9 deletions(-)"
+  // Compare against the merge-base of baseRef so renames + cherry-picks
+  // count once. Fall back to a plain diff against baseRef if merge-base
+  // can't be computed (worktree was created off a branch that's since
+  // been deleted, etc).
+  const mb = await runGitCapture(worktreePath, ['merge-base', baseRef, 'HEAD']);
+  const compareTo = mb.code === 0 ? mb.stdout.trim() : baseRef;
+  // Include both committed (`HEAD..compareTo` semantics) and the working
+  // tree by passing only `compareTo` — `git diff <ref>` diffs the
+  // working tree against <ref>, picking up uncommitted edits too.
+  const diff = await runGitCapture(worktreePath, ['diff', '--shortstat', compareTo]);
+  if (diff.code !== 0) return null;
+  const line = diff.stdout.trim();
+  if (!line) return { filesChanged: 0, additions: 0, deletions: 0 };
+  return parseShortStat(line);
+}
+
+function parseShortStat(line: string): WorktreeStats {
+  // Format: " N files changed, X insertions(+), Y deletions(-)"
+  // Any of files/insertions/deletions can be missing if zero.
+  const files = /(\d+)\s+files?\s+changed/.exec(line);
+  const ins = /(\d+)\s+insertions?\(\+\)/.exec(line);
+  const del = /(\d+)\s+deletions?\(-\)/.exec(line);
+  return {
+    filesChanged: files ? Number(files[1]) : 0,
+    additions: ins ? Number(ins[1]) : 0,
+    deletions: del ? Number(del[1]) : 0,
+  };
+}
+
+/**
  * Count files with uncommitted changes in a worktree (`git status --porcelain`
  * line count). Returns `null` if the worktree path doesn't exist or `git`
  * fails — the caller treats that as "unknown" rather than zero, so the widget
@@ -800,33 +857,9 @@ function runGit(cwd: string, args: string[], logPath: string): Promise<void> {
   });
 }
 
-interface GitCapture {
-  code: number;
-  stdout: string;
-  stderr: string;
-}
-
-/**
- * Variant of `runGit` for commands whose non-zero exit codes are
- * meaningful (e.g. `git merge` returns 1 on conflict, not an error). Never
- * rejects on a non-zero exit — only on spawn errors. Captures stdout so we
- * can parse SHAs, branch names, and conflict file lists.
- */
-function runGitCapture(cwd: string, args: string[]): Promise<GitCapture> {
-  return new Promise((res, rej) => {
-    const child = spawn('git', args, { cwd, stdio: 'pipe' });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d: Buffer) => {
-      stdout += d.toString('utf8');
-    });
-    child.stderr.on('data', (d: Buffer) => {
-      stderr += d.toString('utf8');
-    });
-    child.on('error', rej);
-    child.on('exit', (code) => res({ code: code ?? -1, stdout, stderr }));
-  });
-}
+// `runGitCapture` and its `GitCapture` type now live in ./git-utils so
+// changes.ts (and the future PR-composer module) can share them
+// without pulling in agent.ts's heavy SDK imports.
 
 async function appendLog(path: string, text: string): Promise<void> {
   if (!text) return;

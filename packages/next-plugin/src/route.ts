@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import {
   FeedbackInputSchema,
   ID_RE,
+  listChanges,
   openInEditor,
   PatchSchema,
   resolveAgentMode,
@@ -119,6 +120,14 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
   }
 
   const storage = getStorage();
+
+  // /__pinagent/changes — per-conversation diff stats for the dock's
+  // Changes view. Walks every conversation with a worktree and runs
+  // `git diff --shortstat` against the project HEAD.
+  if (slug.length === 1 && slug[0] === 'changes') {
+    const changes = await listChanges(storage.root);
+    return json(200, changes);
+  }
 
   // /__pinagent/feedback
   if (slug.length === 1 && slug[0] === 'feedback') {

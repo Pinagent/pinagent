@@ -12,11 +12,28 @@
  * returns FeedbackRecord[]".
  */
 import type { ProjectEvent } from '@pinagent/shared';
-import type { Conversation } from '../fixtures/types';
+import type { Change, Conversation } from '../fixtures/types';
 import { resolveWsUrl } from '../lib/ws-url';
 import { deriveDockStatus } from './status-derive';
 import type { ConversationDetail, ConversationFilters, DockTransport } from './types';
 import { type ConnectionStatus, type ConversationHandlers, DockWsClient } from './ws-client';
+
+/**
+ * Wire shape for `GET /__pinagent/changes`. Mirrors
+ * `@pinagent/agent-runner.ChangeRecord` without pulling Node-only
+ * deps into the browser bundle.
+ */
+interface ChangeWire {
+  id: string;
+  conversationId: string;
+  conversationTitle: string;
+  status: 'pending' | 'readyToLand' | 'landed' | 'error';
+  branch: string;
+  filesChanged: number;
+  additions: number;
+  deletions: number;
+  updatedAt: string;
+}
 
 /**
  * Shape of one row from `GET /__pinagent/feedback`. Mirrors
@@ -126,6 +143,31 @@ export class LocalTransport implements DockTransport {
         return c.title.toLowerCase().includes(q) || c.anchor.loc.toLowerCase().includes(q);
       })
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+  }
+
+  async listChanges(): Promise<Change[]> {
+    const response = await fetch(this.url('/__pinagent/changes'), {
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) {
+      throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
+    }
+    const wire = (await response.json()) as ChangeWire[];
+    return wire.map(
+      (w): Change => ({
+        id: w.id,
+        conversationId: w.conversationId,
+        conversationTitle: w.conversationTitle,
+        status: w.status,
+        branch: w.branch,
+        filesChanged: w.filesChanged,
+        additions: w.additions,
+        deletions: w.deletions,
+        // Inline diff preview comes in PR-D3; empty for now.
+        preview: '',
+        updatedAt: w.updatedAt,
+      }),
+    );
   }
 
   async getConversation(id: string): Promise<ConversationDetail | null> {

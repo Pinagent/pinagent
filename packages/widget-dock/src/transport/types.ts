@@ -20,7 +20,7 @@
  * of these, never `fetch` or `new WebSocket()` directly.
  */
 import type { ProjectEvent } from '@pinagent/shared';
-import type { Conversation } from '../fixtures/types';
+import type { Change, Conversation } from '../fixtures/types';
 import type { ConnectionStatus, ConversationHandlers } from './ws-client';
 
 export interface ConversationFilters {
@@ -57,6 +57,13 @@ export interface DockTransport {
 
   /** Fetch the full detail for one conversation; null if not found. */
   getConversation(id: string): Promise<ConversationDetail | null>;
+
+  /**
+   * List per-conversation diff data for the Changes view: which
+   * conversations have a worktree, how many files / lines changed,
+   * etc. Newest first.
+   */
+  listChanges(): Promise<Change[]>;
 
   // ---------- Live subscriptions ----------
 
