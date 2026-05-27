@@ -111,10 +111,8 @@ function bareName(specifier) {
 function extractPinagentImports(filePath) {
   const content = readFileSync(filePath, 'utf8');
   const seen = new Set();
-  let m;
-  IMPORT_RE.lastIndex = 0;
-  while ((m = IMPORT_RE.exec(content)) !== null) {
-    seen.add(bareName(m[1]));
+  for (const match of content.matchAll(IMPORT_RE)) {
+    seen.add(bareName(match[1]));
   }
   return seen;
 }
