@@ -371,7 +371,7 @@ async function handleClientMessage(
       return;
     }
     case 'interrupt': {
-      const interrupted = interruptRun(msg.feedbackId);
+      const interrupted = await interruptRun(msg.feedbackId);
       if (!interrupted) {
         sendError(socket, msg.feedbackId, 'no in-flight run to interrupt');
       }
