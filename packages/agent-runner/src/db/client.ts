@@ -24,22 +24,26 @@ interface GlobalHolder {
   [SINGLETON_KEY]?: Map<string, Db>;
 }
 
-// Migrations live at `packages/next-plugin/drizzle/` — they ship with the
-// published @pinagent/next-plugin package via its `files` array. agent-runner
-// is bundled into next-plugin's dist, so the relative paths below cover both
-// the bundled runtime and the in-monorepo dev/test layout.
+// Migrations are generated in `packages/db/drizzle/` (the source of
+// truth — next to the schema they're derived from). At publish time
+// each framework adapter's `scripts/copy-drizzle.mjs` mirrors them
+// into the adapter's own `drizzle/` tree so they ship in the npm
+// tarball. agent-runner is bundled into the adapter's dist, so the
+// first candidate below covers the published-tarball runtime; the
+// remaining ones cover the in-monorepo dev/test layout where this
+// file runs from packages/agent-runner/{dist,src}/db/client.ts.
 const moduleUrl: string | undefined = import.meta.url;
 const MIGRATIONS_DIR = (() => {
   const base = moduleUrl ? dirname(fileURLToPath(moduleUrl)) : __dirname;
   const candidates = [
-    // Bundled into next-plugin: packages/next-plugin/dist/route.{js,cjs} → ../drizzle
+    // Bundled into next-plugin / vite-plugin: <plugin>/dist/route.{js,cjs} → ../drizzle.
     resolve(base, '..', 'drizzle'),
-    // agent-runner's own dist: packages/agent-runner/dist/index.{js,cjs} →
-    // packages/next-plugin/drizzle (when consumers import @pinagent/agent-runner).
-    resolve(base, '..', '..', 'next-plugin', 'drizzle'),
+    // agent-runner's own dist (consumers importing @pinagent/agent-runner directly):
+    // packages/agent-runner/dist/index.{js,cjs} → ../../db/drizzle.
+    resolve(base, '..', '..', 'db', 'drizzle'),
     // agent-runner source (tests, ts-node): packages/agent-runner/src/db/client.ts →
-    // packages/next-plugin/drizzle
-    resolve(base, '..', '..', '..', 'next-plugin', 'drizzle'),
+    // packages/db/drizzle.
+    resolve(base, '..', '..', '..', 'db', 'drizzle'),
   ];
   return candidates.find((p) => existsSync(p)) ?? candidates[0]!;
 })();
@@ -73,7 +77,7 @@ export function getDb(projectRoot: string): Db {
     // (no down-migration story) but fine for the dev-only DB.
     // eslint-disable-next-line no-console
     console.warn(
-      `[pinagent:db] no migrations dir at ${MIGRATIONS_DIR}; skipping migrate(). Run \`pnpm --filter @pinagent/next-plugin drizzle:gen\` to generate.`,
+      `[pinagent:db] no migrations dir at ${MIGRATIONS_DIR}; skipping migrate(). Run \`pnpm --filter @pinagent/db drizzle:gen\` to generate.`,
     );
   }
 

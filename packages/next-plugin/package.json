@@ -56,12 +56,10 @@
     "drizzle"
   ],
   "scripts": {
-    "prebuild": "node scripts/embed-widget.mjs",
+    "prebuild": "node scripts/embed-widget.mjs && node scripts/copy-drizzle.mjs",
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "typecheck": "tsc --noEmit",
-    "drizzle:gen": "drizzle-kit generate",
-    "drizzle:check": "drizzle-kit check"
+    "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "next": ">=14",
@@ -91,7 +89,6 @@
     "@types/node": "^22.10.1",
     "@types/react": "^19.2.15",
     "@types/ws": "^8.18.1",
-    "drizzle-kit": "^0.31.10",
     "next": "^16.0.0",
     "react": "^19.2.6",
     "tsdown": "^0.22.0",

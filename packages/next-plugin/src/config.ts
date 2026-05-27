@@ -8,8 +8,8 @@ type RewritesReturn = Awaited<ReturnType<RewritesFn>>;
 
 export interface PinagentOptions {
   /**
-   * When a feedback is submitted, automatically spawn an isolated `claude -p`
-   * agent to address it.
+   * When a feedback is submitted, automatically spawn an isolated Claude
+   * Agent SDK run to address it.
    *
    * - `'inline'` (default): each submit runs a Claude Agent SDK query in the
    *   main project directory, streaming events back to the widget. Cheaper

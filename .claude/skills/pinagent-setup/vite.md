@@ -76,30 +76,22 @@ pinagent({
   // Vite's `server.config.root`.
   root: '/explicit/path',
 
-  // Optional: run a Claude Agent SDK query() on each submit (alternative to
-  // channel mode). Don't combine with channel mode — pick one.
-  autoTrigger: true,
-  // or fine-grained:
-  autoTrigger: {
-    permissionMode: 'acceptEdits',  // | 'bypassPermissions' | 'default' | 'plan'
-    model: 'claude-sonnet-4-6',     // any model the SDK accepts; optional
-    maxTurns: 30,                   // optional cap
-  },
+  // Optional: how each submit should be addressed. Default is `'inline'`.
+  //   'inline'    — Claude Agent SDK query() runs against the project root;
+  //                 events stream into the widget over WebSocket.
+  //   'worktree'  — same, but in a fresh git worktree at
+  //                 `.pinagent/worktrees/<id>` on a `pinagent/<id>` branch.
+  //                 True parallel agents; review each branch like a PR.
+  //   'off'/false — no per-submit spawn. Use with channel mode or with
+  //                 `@pinagent/cli mcp` to drive the loop from your own agent.
+  spawnAgent: 'inline',
 });
 ```
 
+Override the permission mode with `PINAGENT_AGENT_PERMISSION_MODE` (default `acceptEdits`; other values: `bypassPermissions`, `default`, `plan`). Override the WebSocket port with `PINAGENT_WS_PORT` (default `53636`).
+
 Auth: by default uses the OAuth session from `claude login` (billed against your subscription). Set `ANTHROPIC_API_KEY` to bill the API account instead, or `CLAUDE_CODE_USE_BEDROCK` / `_VERTEX` / `_FOUNDRY` for provider-backed auth.
 
-The Vite plugin's `autoTrigger` serializes submits — if multiple comments arrive while a query is running, they're batched into one follow-up turn. No risk of parallel agents racing on the same files.
-
-If neither autoTrigger nor channel mode is on, feedback sits on disk and the developer manually asks the agent ("what's pending?") — that's the spec-default pull mode.
-
-## Features available in @pinagent/next-plugin but NOT yet in @pinagent/vite-plugin
-
-These are roadmap items. If a user explicitly needs one of these in a Vite project, that's a real porting task:
-
-- **Worktree spawn mode** (`spawnAgent: 'worktree'`) — true parallel agents in isolated git worktrees.
-- **Click-to-open editor** — the `/__pinagent/open` endpoint that spawns the developer's editor at file:line:col.
-- **Hotkey customization via `window.__pinagentHotkey`** — actually this IS in the widget, so works for both, but only documented for Next currently.
+If `spawnAgent` is off and channel mode isn't set, feedback sits on disk and the developer manually asks the agent ("what's pending?") — that's the spec-default pull mode.
 
 Everything else (screenshot pipeline, hotkey defaults, Esc-to-close, focus-isolated iframe composer, file:line attribution) is identical across both runtimes because they share the same widget IIFE.

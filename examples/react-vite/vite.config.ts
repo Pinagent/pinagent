@@ -4,11 +4,13 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [pinagent(), react()],
-  // Note: prefer running Claude Code with the channel flag so feedback is
-  // pushed into your existing session — no spawn-per-submit cost:
+  // Defaults to `spawnAgent: 'inline'` — every submit runs a Claude Agent SDK
+  // query and streams progress into the widget over WS. Override with
+  // `pinagent({ spawnAgent: 'worktree' })` for isolated git worktrees per
+  // submit, or `pinagent({ spawnAgent: 'off' })` to disable per-submit
+  // spawning entirely (then use `@pinagent/cli mcp` or
   //   claude --dangerously-load-development-channels server:pinagent
-  // If you'd rather spawn a fresh `claude -p` per submit, pass
-  // `pinagent({ autoTrigger: true })` above instead.
+  // to drive the loop from your own agent session).
   server: {
     host: '127.0.0.1',
     port: 5173,

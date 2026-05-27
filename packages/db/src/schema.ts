@@ -10,7 +10,7 @@
  * server state if it ever diverges.
  *
  * Naming follows the v2 plan (`pinagent-v2-plan.md` §4.2). When you
- * change a column here, run `pnpm --filter @pinagent/next-plugin drizzle:gen`
+ * change a column here, run `pnpm --filter @pinagent/db drizzle:gen`
  * to produce a new migration; the server applies migrations on
  * connect.
  */
@@ -106,7 +106,7 @@ export const widgetAnchors = sqliteTable('widget_anchors', {
  * and for the "Turn N" sections in the markdown log file.
  *
  * Note: the source-of-truth for live event streaming is still the
- * in-memory event bus (`packages/next-plugin/src/event-bus.ts`). The SQLite
+ * in-memory event bus (`packages/shared/src/event-bus.ts`). The SQLite
  * table is the durable record + the browser cache. Bus → SQLite
  * write-through happens in Phase 2 of this migration.
  */

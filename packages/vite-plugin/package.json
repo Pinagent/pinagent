@@ -23,10 +23,11 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "drizzle"
   ],
   "scripts": {
-    "prebuild": "node scripts/embed-widget.mjs",
+    "prebuild": "node scripts/embed-widget.mjs && node scripts/copy-drizzle.mjs",
     "build": "tsdown",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit"
@@ -39,20 +40,25 @@
     "@babel/parser": "^7.26.2",
     "@babel/traverse": "^7.29.7",
     "@babel/types": "^7.29.7",
+    "@sqlite.org/sqlite-wasm": "^3.50.0-build1",
     "better-sqlite3": "^12.10.0",
     "drizzle-orm": "^0.38.0",
     "nanoid": "^5.0.9",
+    "ws": "^8.21.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@pinagent/agent-runner": "workspace:*",
     "@pinagent/babel-plugin": "workspace:*",
+    "@pinagent/browser-runtime": "workspace:*",
     "@pinagent/db": "workspace:*",
+    "@pinagent/next-plugin": "workspace:*",
     "@pinagent/shared": "workspace:*",
     "@pinagent/widget": "workspace:*",
     "@types/babel__traverse": "^7.20.6",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.1",
+    "@types/ws": "^8.18.1",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3",
     "vite": "^6.0.0"
