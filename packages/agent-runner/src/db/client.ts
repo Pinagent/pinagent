@@ -1,13 +1,37 @@
 // SPDX-License-Identifier: Apache-2.0
-import { existsSync, mkdirSync } from 'node:fs';
+//
+// Suppress Node's ExperimentalWarning for `node:sqlite`. The module is
+// stable in Node 22.13+ (and we require 22.18+), but the warning text
+// hasn't been removed yet. Filter it out before the first import below
+// so users / CI don't see the noise. Other warnings still pass through.
+{
+  // biome-ignore lint/suspicious/noExplicitAny: process.emit's overloaded variadic signature defeats narrower typing here.
+  const proc = process as any;
+  const originalEmit = proc.emit.bind(proc);
+  // biome-ignore lint/suspicious/noExplicitAny: same.
+  proc.emit = (event: string | symbol, ...args: any[]): boolean => {
+    if (event === 'warning') {
+      const warning = args[0];
+      if (
+        warning instanceof Error &&
+        warning.name === 'ExperimentalWarning' &&
+        warning.message.startsWith('SQLite is an experimental feature')
+      ) {
+        return false;
+      }
+    }
+    return originalEmit(event, ...args);
+  };
+}
+
+import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import * as schema from '@pinagent/db/schema';
-import Database from 'better-sqlite3';
-import { type BetterSQLite3Database, drizzle } from 'drizzle-orm/better-sqlite3';
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { drizzle, type SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy';
 
-export type Db = BetterSQLite3Database<typeof schema>;
+export type Db = SqliteRemoteDatabase<typeof schema>;
 
 /**
  * One Drizzle handle per dev process, keyed by project root so a
@@ -15,13 +39,25 @@ export type Db = BetterSQLite3Database<typeof schema>;
  *
  * Storage is per-process and held on a globalThis Symbol so Next 16's
  * route module re-evaluations don't open the same DB file twice. The
- * underlying better-sqlite3 handle is cheap to keep open for the
- * lifetime of `next dev`.
+ * underlying node:sqlite handle is cheap to keep open for the lifetime
+ * of `next dev`.
+ *
+ * We use Node's built-in `node:sqlite` (stable since Node 22.13) rather
+ * than `better-sqlite3` to avoid the native-build install step (pnpm
+ * 10+ blocks postinstall by default; users were hitting
+ * `Could not locate the bindings file` after fresh installs). Same
+ * underlying SQLite engine, same on-disk format — no data migration.
+ *
+ * `drizzle-orm/sqlite-proxy` is the right adapter shape: it takes a
+ * callback that executes SQL against any backend. We thread node:sqlite
+ * synchronous calls through it. Drizzle exposes an async API to
+ * consumers but our storage layer already `await`s everything, so call
+ * sites are unchanged.
  */
 const SINGLETON_KEY = Symbol.for('pinagent.db');
 
 interface GlobalHolder {
-  [SINGLETON_KEY]?: Map<string, Db>;
+  [SINGLETON_KEY]?: Map<string, { db: Db; raw: DatabaseSync }>;
 }
 
 // Migrations are generated in `packages/db/drizzle/` (the source of
@@ -51,41 +87,136 @@ const MIGRATIONS_DIR = (() => {
   return candidates.find((p) => existsSync(resolve(p, 'meta', '_journal.json'))) ?? candidates[0]!;
 })();
 
+/**
+ * Wrap a `node:sqlite` DatabaseSync in the drizzle-orm/sqlite-proxy
+ * callback shape. `method` distinguishes 'run' (no rows expected,
+ * returns changes / lastInsertRowid) from 'all' / 'get' / 'values'
+ * (rows). The proxy callback is declared async; we just call the sync
+ * primitives and return synchronously — Drizzle awaits the result.
+ */
+function makeDrizzle(raw: DatabaseSync): Db {
+  return drizzle(
+    async (sql, params, method) => {
+      const stmt = raw.prepare(sql);
+      if (method === 'run') {
+        const info = stmt.run(...(params as (string | number | bigint | Uint8Array | null)[]));
+        return {
+          rows: [
+            {
+              changes: Number(info.changes),
+              lastInsertRowid: info.lastInsertRowid,
+            },
+          ],
+        };
+      }
+      const rows = stmt.all(
+        ...(params as (string | number | bigint | Uint8Array | null)[]),
+      ) as Record<string, unknown>[];
+      // sqlite-proxy expects rows as arrays of column values, not
+      // objects. Project each row through the column-name order
+      // returned by `stmt.columns()`.
+      const columns = stmt.columns().map((c) => c.column ?? c.name);
+      const projected = rows.map((r) => columns.map((c) => r[c as string] ?? null));
+      if (method === 'get') return { rows: projected[0] ?? [] };
+      return { rows: projected };
+    },
+    { schema },
+  );
+}
+
+/**
+ * Apply every `.sql` migration in journal order. Replaces
+ * `drizzle-orm/better-sqlite3/migrator` (which is bound to the
+ * better-sqlite3 driver) with a tiny equivalent that drives node:sqlite
+ * directly. Mirrors the browser-side migrator pattern in
+ * `packages/widget/src/db/migrations.ts`.
+ */
+function runMigrations(raw: DatabaseSync, migrationsDir: string): void {
+  const journalPath = join(migrationsDir, 'meta', '_journal.json');
+  if (!existsSync(journalPath)) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[pinagent:db] no migrations dir at ${migrationsDir}; skipping migrate(). Run \`pnpm --filter @pinagent/db drizzle:gen\` to generate.`,
+    );
+    return;
+  }
+
+  // Track applied migrations the same way drizzle's stock migrator
+  // does: a `__drizzle_migrations` table keyed by sha256(hash) so
+  // re-running is a no-op.
+  raw.exec(
+    `CREATE TABLE IF NOT EXISTS __drizzle_migrations (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       hash TEXT NOT NULL,
+       created_at NUMERIC
+     )`,
+  );
+
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as {
+    entries: { idx: number; when: number; tag: string }[];
+  };
+  const sortedEntries = journal.entries.slice().sort((a, b) => a.idx - b.idx);
+  const appliedStmt = raw.prepare('SELECT hash FROM __drizzle_migrations');
+  const applied = new Set((appliedStmt.all() as { hash: string }[]).map((r) => r.hash));
+
+  for (const entry of sortedEntries) {
+    const sqlPath = join(migrationsDir, `${entry.tag}.sql`);
+    const sql = readFileSync(sqlPath, 'utf8');
+    if (applied.has(entry.tag)) continue;
+    const statements = sql
+      .split('--> statement-breakpoint')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const stmt of statements) {
+      raw.exec(stmt);
+    }
+    raw
+      .prepare('INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)')
+      .run(entry.tag, entry.when);
+  }
+}
+
 export function getDb(projectRoot: string): Db {
   const g = globalThis as GlobalHolder;
   if (!g[SINGLETON_KEY]) g[SINGLETON_KEY] = new Map();
   const cache = g[SINGLETON_KEY];
   const root = resolve(projectRoot);
   const existing = cache.get(root);
-  if (existing) return existing;
+  if (existing) return existing.db;
 
   const dbPath = join(root, '.pinagent', 'db.sqlite');
   mkdirSync(dirname(dbPath), { recursive: true });
 
-  const raw = new Database(dbPath);
+  const raw = new DatabaseSync(dbPath);
   // WAL gives concurrent readers (the eventual MCP server, the dev
   // server, agent processes) without serialising on writes. Default
   // (rollback journal) blocks all readers while the writer holds the
   // file. Cheap to enable, expensive to wish for later.
-  raw.pragma('journal_mode = WAL');
-  raw.pragma('foreign_keys = ON');
+  raw.exec('PRAGMA journal_mode = WAL');
+  raw.exec('PRAGMA foreign_keys = ON');
 
-  const db = drizzle(raw, { schema });
+  runMigrations(raw, MIGRATIONS_DIR);
 
-  if (existsSync(MIGRATIONS_DIR)) {
-    migrate(db, { migrationsFolder: MIGRATIONS_DIR });
-  } else {
-    // First-run convenience for development: if migrations haven't
-    // been generated yet, push the schema directly. Not safe for prod
-    // (no down-migration story) but fine for the dev-only DB.
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[pinagent:db] no migrations dir at ${MIGRATIONS_DIR}; skipping migrate(). Run \`pnpm --filter @pinagent/db drizzle:gen\` to generate.`,
-    );
-  }
-
-  cache.set(root, db);
+  const db = makeDrizzle(raw);
+  cache.set(root, { db, raw });
   return db;
 }
 
 export { schema };
+
+/**
+ * Walk `migrationsDir` even if it's not the discovered MIGRATIONS_DIR
+ * — useful for the test helper or anything that wants to verify the
+ * migrator picks up new SQL files. Re-exported for symmetry with the
+ * old better-sqlite3 migrator's standalone export.
+ */
+export function applyMigrations(raw: DatabaseSync, migrationsDir: string): void {
+  runMigrations(raw, migrationsDir);
+}
+
+// Allow consumers (and the test suite) to confirm the underlying
+// engine when they need to bypass the Drizzle proxy. We keep this
+// narrow on purpose — the proxy is the supported interface.
+export function readdirSorted(p: string): string[] {
+  return readdirSync(p).sort();
+}
