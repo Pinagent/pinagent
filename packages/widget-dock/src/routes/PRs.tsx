@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * PRs — read-only view of pull requests originating from pinagent.
- * Phase 1 lists PRs with state badges and links out to GitHub. Phase 3
- * adds /prs/new (the composer); the New PR button is shown disabled to
- * preview that capability.
+ * Reads from `GET /__pinagent/prs`, which serves rows the PR composer
+ * wrote on its success path. No GitHub round-trip on read; `state`
+ * reflects what the composer knew at insert time and may lag the
+ * upstream PR.
  */
 
 import { Badge } from '@pinagent/ui/components/ui/badge';
@@ -11,8 +12,12 @@ import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
 import { ExternalLink, GitPullRequest, Plus } from 'lucide-react';
 import { TimestampDot } from '../components/TimestampDot';
-import { FIXTURE_PRS, type PullRequest } from '../fixtures';
-import { EmptyState } from '../shell/states';
+import type { PullRequest } from '../fixtures';
+import { usePullRequests } from '../hooks/usePullRequests';
+import { EmptyState } from '../shell/states/EmptyState';
+import { ErrorState } from '../shell/states/ErrorState';
+import { LoadingState } from '../shell/states/LoadingState';
+import { useTransport } from '../transport';
 
 const STATE_TONE: Record<PullRequest['state'], string> = {
   open: 'text-status-working-fg border-status-working-border bg-status-working-bg',
@@ -29,18 +34,45 @@ const STATE_LABEL: Record<PullRequest['state'], string> = {
 };
 
 export function PRs() {
-  const prs = FIXTURE_PRS;
-  const openCount = prs.filter((p) => p.state === 'open' || p.state === 'draft').length;
+  const transport = useTransport();
+  const prsQuery = usePullRequests();
+  const isMock = transport.kind === 'mock';
+
+  if (prsQuery.isLoading) return <LoadingState rows={4} />;
+
+  if (prsQuery.isError) {
+    return (
+      <ErrorState
+        title="Couldn't load PRs"
+        description={
+          <>
+            The dock couldn't reach the local pinagent dev-server. Make sure your host app is
+            running with the pinagent plugin, or append{' '}
+            <code className="font-mono">?fixtures=on</code> to use the demo dataset.
+          </>
+        }
+        onRetry={() => prsQuery.refetch()}
+      />
+    );
+  }
+
+  const prs = prsQuery.data ?? [];
 
   if (prs.length === 0) {
     return (
       <EmptyState
         Icon={GitPullRequest}
         title="No PRs yet"
-        description="Once you batch a few resolved conversations into a PR from the Changes view, they'll appear here."
+        description={
+          isMock
+            ? '(Mock mode — switch off ?fixtures=on for real data.)'
+            : "Once you batch a few resolved conversations into a PR from the Changes view, they'll appear here."
+        }
       />
     );
   }
+
+  const openCount = prs.filter((p) => p.state === 'open' || p.state === 'draft').length;
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -55,7 +87,7 @@ export function PRs() {
             variant="outline"
             disabled
             className="h-7 gap-1.5 text-xs"
-            title="PR composer ships with Phase 3"
+            title="Use the Changes view's compose button to open a new PR"
           >
             <Plus className="h-3 w-3" />
             New PR
@@ -71,7 +103,9 @@ export function PRs() {
 
       <div className="border-t border-border bg-secondary/30 px-3 py-2">
         <p className="text-[11px] text-muted-foreground">
-          Read-only · the PR composer (batch conversations → one PR) ships with Phase 3.
+          {isMock
+            ? 'Fixtures · switch off ?fixtures=on for live PR data.'
+            : 'Read-only · state may lag GitHub. Use the Changes view to compose new PRs.'}
         </p>
       </div>
     </div>
