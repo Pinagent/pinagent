@@ -16,6 +16,7 @@
     "lint:widget-cascade": "node scripts/widget-cascade-check.mjs",
     "lint:workspace-deps": "node scripts/check-workspace-deps.mjs",
     "lint:undeclared-imports": "node scripts/check-undeclared-imports.mjs",
+    "lint:peer-deps": "pnpm install --frozen-lockfile --offline --strict-peer-dependencies",
     "format": "biome format --write .",
     "test": "vitest run",
     "test:watch": "vitest",
