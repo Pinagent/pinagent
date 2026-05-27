@@ -164,4 +164,11 @@ export const STYLES = `
 }
 .toast.error { background: ${STATUS.error.fg}; color: ${BRAND_CREAM}; }
 
+@media (prefers-reduced-motion: reduce) {
+  .fab, .fab:hover, .fab.dragging,
+  .outline, .composer textarea {
+    transition: none !important;
+  }
+  .fab:hover { transform: none; }
+}
 `;

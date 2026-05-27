@@ -293,4 +293,9 @@ export const COMPOSER_STYLES = `
   }
   #pa-follow-input { font-size: 12px; min-height: 0; }
   #pa-follow-send { white-space: nowrap; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .meta, textarea, .btn, .ask-option { transition: none !important; }
+    .header.running::before { animation: none; border-color: ${STATUS.working.fg}; }
+  }
 `;

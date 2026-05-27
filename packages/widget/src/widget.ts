@@ -279,6 +279,27 @@ const DOC_STYLES = `
   overflow: visible;
 }
 .pa-pointer[hidden] { display: none; }
+
+/* Smooth the bubble's color transition when the anchor is lost — the
+   class flips on suddenly during HMR / DOM rewrites, so a brief fade
+   reads less like an error spike. */
+.pa-bubble {
+  transition: transform 120ms ease,
+              box-shadow 120ms ease,
+              background 220ms ease,
+              border-color 220ms ease,
+              color 220ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pa-bubble, .pa-bubble:hover,
+  .pa-drag-handle, .pa-drag-handle.dragging {
+    transition: none !important;
+    transform: none !important;
+  }
+  .pa-bubble.running::after { animation: none; opacity: 0.3; }
+  .pa-bubble-spinner { animation: none; }
+}
 `;
 
 /**

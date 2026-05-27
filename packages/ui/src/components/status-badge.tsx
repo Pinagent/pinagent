@@ -73,7 +73,7 @@ export const StatusBadge = forwardRef<HTMLSpanElement, StatusBadgeProps>(
           className={cn(
             'inline-block h-2 w-2 shrink-0 rounded-full',
             DOT_TONE_CLASS[status],
-            pulse && 'animate-pulse',
+            pulse && 'animate-pulse motion-reduce:animate-none',
             className,
           )}
           {...rest}
@@ -94,7 +94,7 @@ export const StatusBadge = forwardRef<HTMLSpanElement, StatusBadgeProps>(
           className={cn(
             'inline-block h-1.5 w-1.5 shrink-0 rounded-full',
             DOT_TONE_CLASS[status],
-            pulse && 'animate-pulse',
+            pulse && 'animate-pulse motion-reduce:animate-none',
           )}
         />
         {label ?? LABEL[status]}

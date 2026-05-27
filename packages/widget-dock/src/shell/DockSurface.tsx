@@ -28,6 +28,7 @@ const MODE_WRAPPER: Record<DockMode, string> = {
     'flex flex-col bg-card text-foreground border-border',
     'shadow-[0_24px_56px_rgba(32,27,33,0.28)]',
     'transition-transform duration-[220ms] ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+    'motion-reduce:transition-none',
   ),
   floating: cn(
     'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2',
@@ -35,11 +36,13 @@ const MODE_WRAPPER: Record<DockMode, string> = {
     'flex flex-col bg-card text-foreground rounded-xl border border-border overflow-hidden',
     'shadow-[0_24px_56px_rgba(32,27,33,0.32)]',
     'transition-opacity duration-[220ms] ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+    'motion-reduce:transition-none',
   ),
   fullscreen: cn(
     'fixed inset-0',
     'flex flex-col bg-background text-foreground',
     'transition-opacity duration-[220ms] ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+    'motion-reduce:transition-none',
   ),
 };
 
