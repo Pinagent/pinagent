@@ -8,13 +8,6 @@ import { usePathname } from 'next/navigation';
 const items = [
   { href: '/', label: 'Home' },
   { href: '/docs', label: 'Docs' },
-  { href: '/examples', label: 'Examples' },
-  { href: '/changelog', label: 'Changelog' },
-  { href: '/roadmap', label: 'Roadmap' },
-  { href: '/pricing', label: 'Pricing' },
-  { href: '/blog', label: 'Blog' },
-  { href: '/issues', label: 'Issues' },
-  { href: '/contact', label: 'Contact' },
 ];
 
 export function SideNav() {
