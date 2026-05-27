@@ -64,13 +64,10 @@ beforeAll(async () => {
   bus = await import('../src/bus');
   storageMod = await import('../src/storage');
   storage = new storageMod.Storage(PROJECT_ROOT);
-  const handle = server.startWsServer();
-  // Wait for the bind to actually complete.
-  await new Promise<void>((resolve, reject) => {
-    if (handle.wss.address()) return resolve();
-    handle.wss.once('listening', () => resolve());
-    handle.wss.once('error', reject);
-  });
+  // startWsServer is async and probes for a free port (falling back from
+  // PINAGENT_WS_PORT if it's busy). Awaiting it is enough — the returned
+  // handle is already listening.
+  await server.startWsServer();
 });
 
 afterAll(async () => {

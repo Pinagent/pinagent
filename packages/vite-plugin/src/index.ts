@@ -129,7 +129,7 @@ export default function pinagent(options: PinagentOptions = {}): Plugin {
       // for the port.
       if (spawnMode !== false) {
         try {
-          const handle = startWsServer();
+          const handle = await startWsServer();
           wsPort = handle.port;
           server.config.logger.info(
             `[pinagent] WebSocket server on ws://127.0.0.1:${wsPort}/__pinagent/ws`,
