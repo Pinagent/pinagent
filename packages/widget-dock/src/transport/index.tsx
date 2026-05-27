@@ -34,5 +34,10 @@ export function useTransport(): DockTransport {
   return transport;
 }
 
-export type { ConversationFilters, DockTransport } from './types';
+export type { ConversationDetail, ConversationFilters, DockTransport } from './types';
+export type {
+  ConnectionStatus,
+  ConversationHandlers,
+  WorktreeStatePayload,
+} from './ws-client';
 export { LocalTransport, MockTransport };
