@@ -11,7 +11,8 @@
  * this implementation only assumes "same origin /__pinagent/feedback
  * returns FeedbackRecord[]".
  */
-import type { ProjectEvent } from '@pinagent/shared';
+import { AuditEventSchema, HistorySearchHitSchema, type ProjectEvent } from '@pinagent/shared';
+import { z } from 'zod';
 import type { Branch, Change, Conversation, PullRequest } from '../fixtures/types';
 import { resolveWsUrl } from '../lib/ws-url';
 import { deriveDockStatus } from './status-derive';
@@ -404,7 +405,10 @@ export class LocalTransport implements DockTransport {
     const params = new URLSearchParams();
     params.set('q', query.query);
     if (query.status) params.set('status', query.status);
-    return this.jsonGet<HistorySearchHit[]>(`/__pinagent/history?${params.toString()}`);
+    return this.jsonGetValidated(
+      `/__pinagent/history?${params.toString()}`,
+      z.array(HistorySearchHitSchema),
+    );
   }
 
   async listAuditEvents(opts: ListAuditEventsQuery = {}): Promise<AuditEvent[]> {
@@ -413,7 +417,10 @@ export class LocalTransport implements DockTransport {
     if (opts.offset !== undefined) params.set('offset', String(opts.offset));
     if (opts.conversationId) params.set('conversationId', opts.conversationId);
     const qs = params.toString();
-    return this.jsonGet<AuditEvent[]>(`/__pinagent/audit-log${qs ? `?${qs}` : ''}`);
+    return this.jsonGetValidated(
+      `/__pinagent/audit-log${qs ? `?${qs}` : ''}`,
+      z.array(AuditEventSchema),
+    );
   }
 
   // Internal: shared GET + write helpers so the per-endpoint methods
@@ -425,6 +432,25 @@ export class LocalTransport implements DockTransport {
       throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
     }
     return (await response.json()) as T;
+  }
+
+  /**
+   * Schema-validated GET. Same as `jsonGet` but parses the body through a
+   * zod schema before returning. Surfaces wire drift as a thrown
+   * `ZodError` instead of letting an `as T` cast paper over a renamed
+   * field downstream.
+   *
+   * Phase 7 wires this on the newer endpoints (audit-log, history search);
+   * older endpoints stay on the unchecked `jsonGet` until their schemas
+   * land in @pinagent/shared.
+   */
+  private async jsonGetValidated<T>(path: string, schema: z.ZodType<T>): Promise<T> {
+    const response = await fetch(this.url(path), { headers: { Accept: 'application/json' } });
+    if (!response.ok) {
+      throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
+    }
+    const raw: unknown = await response.json();
+    return schema.parse(raw);
   }
 
   private async jsonWrite<T>(method: string, path: string, body?: unknown): Promise<T> {

@@ -3,11 +3,13 @@
  * Left-side icon nav rail for the dock. Icon-only at panel widths
  * (≤480px); icon + label at ≥640px (floating, fullscreen).
  *
- * Routes are local UI state, not a real router — Phase 5+ will swap in
- * TanStack Router behind the same component contract.
+ * Routes navigate through TanStack Router so URL state stays in sync —
+ * embedded mode uses memory history (no leak into the iframe URL bar),
+ * standalone uses browser history so deep links work.
  */
 
 import { cn } from '@pinagent/ui/lib/utils';
+import { Link, useLocation } from '@tanstack/react-router';
 import {
   Activity,
   GitBranch,
@@ -19,19 +21,11 @@ import {
   Settings,
 } from 'lucide-react';
 import type { ComponentType, SVGAttributes } from 'react';
-
-export type RouteKey =
-  | 'overview'
-  | 'conversations'
-  | 'changes'
-  | 'branches'
-  | 'prs'
-  | 'connections'
-  | 'settings'
-  | 'history';
+import { ROUTE_PATHS, type RouteKey, type RoutePath } from '../router';
 
 export interface RouteDescriptor {
   key: RouteKey;
+  path: RoutePath;
   label: string;
   Icon: ComponentType<SVGAttributes<SVGSVGElement>>;
   /** Optional indicator value (e.g. pending change count). */
@@ -39,25 +33,29 @@ export interface RouteDescriptor {
 }
 
 export const ROUTES: readonly RouteDescriptor[] = [
-  { key: 'overview', label: 'Overview', Icon: LayoutDashboard },
-  { key: 'conversations', label: 'Conversations', Icon: MessageSquare },
-  { key: 'changes', label: 'Changes', Icon: Activity },
-  { key: 'branches', label: 'Branches', Icon: GitBranch },
-  { key: 'prs', label: 'PRs', Icon: GitPullRequest },
-  { key: 'connections', label: 'Connections', Icon: Plug },
-  { key: 'settings', label: 'Settings', Icon: Settings },
-  { key: 'history', label: 'History', Icon: HistoryIcon },
+  { key: 'overview', path: ROUTE_PATHS.overview, label: 'Overview', Icon: LayoutDashboard },
+  {
+    key: 'conversations',
+    path: ROUTE_PATHS.conversations,
+    label: 'Conversations',
+    Icon: MessageSquare,
+  },
+  { key: 'changes', path: ROUTE_PATHS.changes, label: 'Changes', Icon: Activity },
+  { key: 'branches', path: ROUTE_PATHS.branches, label: 'Branches', Icon: GitBranch },
+  { key: 'prs', path: ROUTE_PATHS.prs, label: 'PRs', Icon: GitPullRequest },
+  { key: 'connections', path: ROUTE_PATHS.connections, label: 'Connections', Icon: Plug },
+  { key: 'settings', path: ROUTE_PATHS.settings, label: 'Settings', Icon: Settings },
+  { key: 'history', path: ROUTE_PATHS.history, label: 'History', Icon: HistoryIcon },
 ] as const;
 
 export interface NavRailProps {
-  active: RouteKey;
-  onSelect: (key: RouteKey) => void;
   /** Show labels alongside icons (force on for floating/fullscreen). */
   expanded?: boolean;
   className?: string;
 }
 
-export function NavRail({ active, onSelect, expanded = false, className }: NavRailProps) {
+export function NavRail({ expanded = false, className }: NavRailProps) {
+  const location = useLocation();
   return (
     <nav
       aria-label="Dock navigation"
@@ -67,17 +65,16 @@ export function NavRail({ active, onSelect, expanded = false, className }: NavRa
         className,
       )}
     >
-      {ROUTES.map(({ key, label, Icon, count }) => {
-        const isActive = key === active;
+      {ROUTES.map(({ key, path, label, Icon, count }) => {
+        const isActive = location.pathname === path;
         return (
-          <button
+          <Link
             key={key}
-            type="button"
-            onClick={() => onSelect(key)}
+            to={path}
             aria-current={isActive ? 'page' : undefined}
             title={expanded ? undefined : label}
             className={cn(
-              'group flex items-center gap-2.5 rounded-md text-sm font-medium',
+              'group flex items-center gap-2.5 rounded-md text-sm font-medium relative',
               'transition-colors',
               expanded ? 'h-9 w-full px-2.5 justify-start' : 'h-10 w-10 justify-center',
               isActive
@@ -108,7 +105,7 @@ export function NavRail({ active, onSelect, expanded = false, className }: NavRa
                 {count > 99 ? '99+' : count}
               </span>
             )}
-          </button>
+          </Link>
         );
       })}
     </nav>

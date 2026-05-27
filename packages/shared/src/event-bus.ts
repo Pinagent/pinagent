@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Types only. The bus implementation lives in
+// Types + zod schemas. The bus implementation lives in
 // `packages/agent-runner/src/bus.ts` (SQLite-backed via `messages`
 // table). This file exists so both server code (agent-runner) and
 // browser code (widget) can share the AgentEvent union without
@@ -16,6 +16,81 @@
 // subscriber in context A. SQLite is the natural broker: every
 // context opens the same `.pinagent/db.sqlite` and publish/subscribe
 // flow through the existing `messages` table.
+import { z } from 'zod';
+
+/**
+ * Zod mirror of the AgentEvent union. Kept alongside the TS type so
+ * the wire-boundary parse (ws-client on the dock) catches shape drift
+ * the moment the server adds or renames a field — better than React
+ * rendering `undefined` at runtime. Use `.passthrough()` on each
+ * object so unknown fields survive the parse instead of being
+ * stripped; future event-payload additions stay backwards compatible
+ * for old clients.
+ */
+export const AgentEventSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      type: z.literal('init'),
+      sessionId: z.string(),
+      model: z.string(),
+      permissionMode: z.string(),
+      apiKeySource: z.string(),
+    })
+    .passthrough(),
+  z
+    .object({
+      type: z.literal('text'),
+      text: z.string(),
+    })
+    .passthrough(),
+  z
+    .object({
+      type: z.literal('tool_use'),
+      name: z.string(),
+      summary: z.string(),
+    })
+    .passthrough(),
+  z
+    .object({
+      type: z.literal('tool_result'),
+      ok: z.boolean(),
+    })
+    .passthrough(),
+  z
+    .object({
+      type: z.literal('ask_user'),
+      askId: z.string(),
+      question: z.string(),
+      context: z.string().optional(),
+      options: z.array(z.string()).optional(),
+    })
+    .passthrough(),
+  z
+    .object({
+      type: z.literal('error'),
+      message: z.string(),
+    })
+    .passthrough(),
+  z
+    .object({
+      type: z.literal('result'),
+      subtype: z.string(),
+      numTurns: z.number(),
+      totalCostUsd: z.number(),
+      durationMs: z.number(),
+      errors: z.array(z.string()).optional(),
+    })
+    .passthrough(),
+  z
+    .object({
+      type: z.literal('status_changed'),
+      status: z.enum(['pending', 'fixed', 'wontfix', 'deferred']),
+      note: z.string().nullable(),
+      commitSha: z.string().nullable(),
+      resolvedAt: z.string().nullable(),
+    })
+    .passthrough(),
+]);
 
 export type AgentEvent =
   | {

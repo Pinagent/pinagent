@@ -4,11 +4,34 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
+/**
+ * Three entry points share this Vite config:
+ *
+ *   - `index.html`      — dev preview (vite dev), points at src/main.tsx.
+ *                         NOT part of the production build; it's the
+ *                         designer's local UX with the host backdrop.
+ *   - `embedded.html`   — production iframe build (consumed by
+ *                         @pinagent/vite-plugin + @pinagent/next-plugin).
+ *                         Memory history, no host backdrop.
+ *   - `standalone.html` — production hosted-dashboard build (future
+ *                         app.pinagent.io). Browser history.
+ *
+ * `rollupOptions.input` lists only the two production entries so dist/
+ * doesn't pick up the dev preview.
+ */
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
+    },
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        embedded: resolve(__dirname, 'embedded.html'),
+        standalone: resolve(__dirname, 'standalone.html'),
+      },
     },
   },
   server: {

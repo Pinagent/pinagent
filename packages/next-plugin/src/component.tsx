@@ -45,7 +45,7 @@ export function Pinagent({ dock }: PinagentProps = {}): null {
     if (dockEnabled && !document.getElementById('__pinagent-dock')) {
       const iframe = document.createElement('iframe');
       iframe.id = '__pinagent-dock';
-      iframe.src = '/__pinagent/dock/index.html?embedded=on';
+      iframe.src = '/__pinagent/dock/embedded.html';
       iframe.title = 'Pinagent dock';
       // Use cssText so we set all the positioning rules in one shot
       // without React-style camelCase concerns.

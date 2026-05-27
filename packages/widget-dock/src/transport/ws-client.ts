@@ -13,7 +13,9 @@
  * abstraction later that both widget and dock consume; until then,
  * keeping the dock copy small and dependency-free is the cheaper move.
  */
+
 import type { AgentEvent, ProjectEvent, ServerMessage } from '@pinagent/shared';
+import { ServerMessageSchema } from '@pinagent/shared';
 
 const RECONNECT_MIN_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
@@ -213,14 +215,19 @@ export class DockWsClient {
   }
 
   private onMessage(event: MessageEvent): void {
-    let msg: unknown;
+    let raw: unknown;
     try {
-      msg = JSON.parse(String(event.data));
+      raw = JSON.parse(String(event.data));
     } catch {
       return;
     }
-    if (!msg || typeof msg !== 'object') return;
-    const m = msg as ServerMessage;
+    // Validate at the boundary so a server-side wire-format drift can't
+    // poison the rendering layer. Malformed frames drop silently —
+    // logging would be noisy under reconnect storms. Unknown fields
+    // survive (`.passthrough()` on each variant in the schema).
+    const parsed = ServerMessageSchema.safeParse(raw);
+    if (!parsed.success) return;
+    const m: ServerMessage = parsed.data;
     switch (m.type) {
       case 'project_event':
         for (const l of this.projectListeners) {

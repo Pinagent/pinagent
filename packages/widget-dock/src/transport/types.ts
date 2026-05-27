@@ -208,11 +208,11 @@ export interface ListAuditEventsQuery {
   conversationId?: string;
 }
 
-export type AuditActor = 'agent' | 'user' | 'system';
-
 /**
  * Action discriminator. Open set — the server can emit actions the dock
  * doesn't render specifically; those fall back to a generic label.
+ * Kept here (not in @pinagent/shared) because it documents the dock's
+ * rendering contract, not the wire format.
  */
 export type AuditAction =
   | 'conversation_created'
@@ -220,14 +220,14 @@ export type AuditAction =
   | 'conversation_discarded'
   | 'pr_created';
 
-export interface AuditEvent {
-  id: string;
-  conversationId: string | null;
-  actor: AuditActor;
-  action: AuditAction | string;
-  payload: Record<string, unknown>;
-  createdAt: string;
-}
+// AuditEvent + AuditActor live in @pinagent/shared (dock-api). Re-export
+// here so the rest of the dock keeps importing them from '../transport'.
+import type {
+  AuditActor as SharedAuditActor,
+  AuditEvent as SharedAuditEvent,
+} from '@pinagent/shared';
+export type AuditActor = SharedAuditActor;
+export type AuditEvent = SharedAuditEvent;
 
 export interface PruneStaleResult {
   pruned: string[];
@@ -240,25 +240,14 @@ export interface HistorySearchQuery {
   status?: 'all' | 'landed' | 'discarded';
 }
 
-export type HistoryMatchedField = 'comment' | 'note' | 'branch' | 'anchor' | 'selector';
-
-export interface HistorySearchHit {
-  id: string;
-  comment: string;
-  status: 'fixed' | 'wontfix' | 'pending' | 'deferred';
-  worktreeState: 'none' | 'active' | 'landed' | 'discarded';
-  branch: string | null;
-  file: string | null;
-  line: number | null;
-  col: number | null;
-  selector: string;
-  url: string;
-  createdAt: string;
-  updatedAt: string;
-  resolvedAt: string | null;
-  matchedFields: HistoryMatchedField[];
-  snippet: string;
-}
+// HistoryMatchedField + HistorySearchHit live in @pinagent/shared (dock-api).
+// Re-export here so existing imports from '../transport' keep working.
+import type {
+  HistoryMatchedField as SharedHistoryMatchedField,
+  HistorySearchHit as SharedHistorySearchHit,
+} from '@pinagent/shared';
+export type HistoryMatchedField = SharedHistoryMatchedField;
+export type HistorySearchHit = SharedHistorySearchHit;
 
 export interface ChangeDiff {
   /** Unified diff text. Possibly truncated — see `truncated`. */

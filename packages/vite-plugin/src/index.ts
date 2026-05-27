@@ -46,7 +46,7 @@ export interface PinagentOptions {
    *   - serves @pinagent/widget-dock's static assets from
    *     `/__pinagent/dock/*`
    *   - injects a fixed, full-viewport, pointer-events:none iframe
-   *     pointing at `/__pinagent/dock/index.html?embedded=on`
+   *     pointing at `/__pinagent/dock/embedded.html`
    *
    * The iframe captures clicks only on its own FAB and panel; the host
    * page underneath stays interactive everywhere else.
@@ -62,9 +62,13 @@ const SCRIPT_TAG = '<script type="module" src="/__pinagent/widget.js"></script>'
  * restores pointer-events on its descendants (see widget-dock's
  * globals.css). z-index sits just under the widget FAB's 2147483647
  * so neither surface visually steals from the other.
+ *
+ * `embedded.html` is the production embedded entry — assumes embedded
+ * mode without a query flag. The matching `standalone.html` entry is
+ * for the future hosted dashboard, not iframed.
  */
 const DOCK_IFRAME_TAG =
-  '<iframe src="/__pinagent/dock/index.html?embedded=on" ' +
+  '<iframe src="/__pinagent/dock/embedded.html" ' +
   'title="Pinagent dock" ' +
   'style="position:fixed;inset:0;width:100vw;height:100vh;border:0;background:transparent;pointer-events:none;z-index:2147483646;color-scheme:light"></iframe>';
 const DEFAULT_WS_PORT = 53636;
