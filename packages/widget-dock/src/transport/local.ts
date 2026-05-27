@@ -11,7 +11,15 @@
  * this implementation only assumes "same origin /__pinagent/feedback
  * returns FeedbackRecord[]".
  */
-import { AuditEventSchema, HistorySearchHitSchema, type ProjectEvent } from '@pinagent/shared';
+import {
+  AuditEventSchema,
+  ChangeDiffSchema,
+  DockProjectSettingsSchema,
+  HistorySearchHitSchema,
+  PresentableConnectionsSchema,
+  type ProjectEvent,
+  PruneStaleResultSchema,
+} from '@pinagent/shared';
 import { z } from 'zod';
 import type { Branch, Change, Conversation, PullRequest } from '../fixtures/types';
 import { resolveWsUrl } from '../lib/ws-url';
@@ -37,74 +45,93 @@ import { type ConnectionStatus, type ConversationHandlers, DockWsClient } from '
  * Wire shape for `GET /__pinagent/prs`. Mirrors
  * `@pinagent/agent-runner.PullRequestRecord`. PR list-row only — no PR
  * body / diff. Server orders newest-first by `updatedAt`.
+ *
+ * Local schema (not shared) because the dock drops `body` + `createdAt`
+ * before storing; the display PullRequest shape is the narrower one.
  */
-interface PullRequestWire {
-  id: string;
-  number: number;
-  url: string;
-  branch: string;
-  baseBranch: string;
-  title: string;
-  body: string;
-  state: 'open' | 'merged' | 'closed' | 'draft';
-  conversationIds: string[];
-  createdAt: string;
-  updatedAt: string;
-}
+const PullRequestWireSchema = z
+  .object({
+    id: z.string(),
+    number: z.number().int(),
+    url: z.string(),
+    branch: z.string(),
+    baseBranch: z.string(),
+    title: z.string(),
+    body: z.string(),
+    state: z.enum(['open', 'merged', 'closed', 'draft']),
+    conversationIds: z.array(z.string()),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .passthrough();
 
 /**
  * Wire shape for `GET /__pinagent/branches`. Mirrors
- * `@pinagent/agent-runner.BranchRecord`. The Branch type the dock
- * already had carries the same fields plus `id` (= conversationId
- * server-side).
+ * `@pinagent/agent-runner.BranchRecord`. Local because the wire's
+ * `conversationId` is always non-null but the display type (`Branch`)
+ * widens to nullable for inline-mode rows the dock surfaces elsewhere.
  */
-interface BranchWire {
-  id: string;
-  name: string;
-  conversationId: string;
-  conversationTitle: string | null;
-  createdAt: string;
-  lastActivity: string;
-  state: 'clean' | 'uncommitted' | 'behind-base';
-  diskMb: number | null;
-}
+const BranchWireSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    conversationId: z.string(),
+    conversationTitle: z.string().nullable(),
+    createdAt: z.string(),
+    lastActivity: z.string(),
+    state: z.enum(['clean', 'uncommitted', 'behind-base']),
+    diskMb: z.number().nullable(),
+  })
+  .passthrough();
 
 /**
  * Wire shape for `GET /__pinagent/changes`. Mirrors
- * `@pinagent/agent-runner.ChangeRecord` without pulling Node-only
- * deps into the browser bundle.
+ * `@pinagent/agent-runner.ChangeRecord`. Local because the display
+ * `Change` adds a `preview` field the list endpoint doesn't populate
+ * (fetched lazily via getChangeDiff when a row expands).
  */
-interface ChangeWire {
-  id: string;
-  conversationId: string;
-  conversationTitle: string;
-  status: 'pending' | 'readyToLand' | 'landed' | 'error';
-  branch: string;
-  filesChanged: number;
-  additions: number;
-  deletions: number;
-  updatedAt: string;
-}
+const ChangeWireSchema = z
+  .object({
+    id: z.string(),
+    conversationId: z.string(),
+    conversationTitle: z.string(),
+    status: z.enum(['pending', 'readyToLand', 'landed', 'error']),
+    branch: z.string(),
+    filesChanged: z.number().int().nonnegative(),
+    additions: z.number().int().nonnegative(),
+    deletions: z.number().int().nonnegative(),
+    updatedAt: z.string(),
+  })
+  .passthrough();
 
 /**
- * Shape of one row from `GET /__pinagent/feedback`. Mirrors
- * `@pinagent/agent-runner.FeedbackRecord` without pulling that package
- * (and Node-only deps) into the browser bundle.
+ * Wire shape for `GET /__pinagent/feedback[/:id]`. Mirrors
+ * `@pinagent/agent-runner.FeedbackRecord`. The transform to the dock's
+ * display `Conversation` (title derived from comment, status derived
+ * from status + worktreeState, etc.) lives in `toConversation` below.
+ * Local because that transform is LocalTransport-specific.
  */
-interface FeedbackRecord {
-  id: string;
-  comment: string;
-  file: string | null;
-  line: number | null;
-  col: number | null;
-  selector: string;
-  url: string;
-  status: 'pending' | 'fixed' | 'wontfix' | 'deferred';
-  worktreeState: 'none' | 'active' | 'landed' | 'discarded';
-  branch: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+const FeedbackRecordSchema = z
+  .object({
+    id: z.string(),
+    comment: z.string(),
+    file: z.string().nullable(),
+    line: z.number().nullable(),
+    col: z.number().nullable(),
+    selector: z.string(),
+    url: z.string(),
+    status: z.enum(['pending', 'fixed', 'wontfix', 'deferred']),
+    worktreeState: z.enum(['none', 'active', 'landed', 'discarded']),
+    branch: z.string().nullable(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .passthrough();
+type FeedbackRecord = z.infer<typeof FeedbackRecordSchema>;
+
+const FeedbackRecordWithScreenshotSchema = FeedbackRecordSchema.extend({
+  screenshot: z.string().nullable(),
+}).passthrough();
 
 function locString(file: string | null, line: number | null, col: number | null): string {
   if (!file) return '';
@@ -174,13 +201,10 @@ export class LocalTransport implements DockTransport {
   }
 
   async listConversations(filters?: ConversationFilters): Promise<Conversation[]> {
-    const response = await fetch(this.url('/__pinagent/feedback'), {
-      headers: { Accept: 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
-    }
-    const records = (await response.json()) as FeedbackRecord[];
+    const records = await this.jsonGetValidated(
+      '/__pinagent/feedback',
+      z.array(FeedbackRecordSchema),
+    );
     const conversations = records.map(toConversation);
 
     // Filtering happens client-side because the list endpoint is small
@@ -197,13 +221,7 @@ export class LocalTransport implements DockTransport {
   }
 
   async listChanges(): Promise<Change[]> {
-    const response = await fetch(this.url('/__pinagent/changes'), {
-      headers: { Accept: 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
-    }
-    const wire = (await response.json()) as ChangeWire[];
+    const wire = await this.jsonGetValidated('/__pinagent/changes', z.array(ChangeWireSchema));
     return wire.map(
       (w): Change => ({
         id: w.id,
@@ -231,17 +249,11 @@ export class LocalTransport implements DockTransport {
     if (!response.ok) {
       throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
     }
-    return (await response.json()) as ChangeDiff;
+    return ChangeDiffSchema.parse(await response.json());
   }
 
   async listBranches(): Promise<Branch[]> {
-    const response = await fetch(this.url('/__pinagent/branches'), {
-      headers: { Accept: 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
-    }
-    const wire = (await response.json()) as BranchWire[];
+    const wire = await this.jsonGetValidated('/__pinagent/branches', z.array(BranchWireSchema));
     return wire.map(
       (w): Branch => ({
         id: w.id,
@@ -257,13 +269,7 @@ export class LocalTransport implements DockTransport {
   }
 
   async listPullRequests(): Promise<PullRequest[]> {
-    const response = await fetch(this.url('/__pinagent/prs'), {
-      headers: { Accept: 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
-    }
-    const wire = (await response.json()) as PullRequestWire[];
+    const wire = await this.jsonGetValidated('/__pinagent/prs', z.array(PullRequestWireSchema));
     return wire.map(
       (w): PullRequest => ({
         id: w.id,
@@ -287,7 +293,7 @@ export class LocalTransport implements DockTransport {
     if (!response.ok) {
       throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
     }
-    const rec = (await response.json()) as FeedbackRecord & { screenshot: string | null };
+    const rec = FeedbackRecordWithScreenshotSchema.parse(await response.json());
     return {
       ...toConversation(rec),
       comment: rec.comment,
@@ -355,35 +361,54 @@ export class LocalTransport implements DockTransport {
   }
 
   async getConnections(): Promise<PresentableConnections> {
-    return this.jsonGet<PresentableConnections>('/__pinagent/connections');
+    return this.jsonGetValidated('/__pinagent/connections', PresentableConnectionsSchema);
   }
 
   async setGithubConnection(token: string): Promise<PresentableConnections> {
-    return this.jsonWrite<PresentableConnections>('PUT', '/__pinagent/connections/github', {
-      token,
-    });
+    return this.jsonWriteValidated(
+      'PUT',
+      '/__pinagent/connections/github',
+      PresentableConnectionsSchema,
+      { token },
+    );
   }
 
   async clearGithubConnection(): Promise<PresentableConnections> {
-    return this.jsonWrite<PresentableConnections>('DELETE', '/__pinagent/connections/github');
+    return this.jsonWriteValidated(
+      'DELETE',
+      '/__pinagent/connections/github',
+      PresentableConnectionsSchema,
+    );
   }
 
   async setAnthropicConnection(key: string): Promise<PresentableConnections> {
-    return this.jsonWrite<PresentableConnections>('PUT', '/__pinagent/connections/anthropic', {
-      key,
-    });
+    return this.jsonWriteValidated(
+      'PUT',
+      '/__pinagent/connections/anthropic',
+      PresentableConnectionsSchema,
+      { key },
+    );
   }
 
   async clearAnthropicConnection(): Promise<PresentableConnections> {
-    return this.jsonWrite<PresentableConnections>('DELETE', '/__pinagent/connections/anthropic');
+    return this.jsonWriteValidated(
+      'DELETE',
+      '/__pinagent/connections/anthropic',
+      PresentableConnectionsSchema,
+    );
   }
 
   async getSettings(): Promise<DockProjectSettings> {
-    return this.jsonGet<DockProjectSettings>('/__pinagent/settings');
+    return this.jsonGetValidated('/__pinagent/settings', DockProjectSettingsSchema);
   }
 
   async updateSettings(patch: Partial<DockProjectSettings>): Promise<DockProjectSettings> {
-    return this.jsonWrite<DockProjectSettings>('PATCH', '/__pinagent/settings', patch);
+    return this.jsonWriteValidated(
+      'PATCH',
+      '/__pinagent/settings',
+      DockProjectSettingsSchema,
+      patch,
+    );
   }
 
   async pruneBranch(feedbackId: string): Promise<void> {
@@ -398,7 +423,11 @@ export class LocalTransport implements DockTransport {
   }
 
   async pruneStaleBranches(): Promise<PruneStaleResult> {
-    return this.jsonWrite<PruneStaleResult>('POST', '/__pinagent/branches/prune-stale');
+    return this.jsonWriteValidated(
+      'POST',
+      '/__pinagent/branches/prune-stale',
+      PruneStaleResultSchema,
+    );
   }
 
   async searchHistory(query: HistorySearchQuery): Promise<HistorySearchHit[]> {
@@ -423,26 +452,12 @@ export class LocalTransport implements DockTransport {
     );
   }
 
-  // Internal: shared GET + write helpers so the per-endpoint methods
-  // stay declarative. Errors carry the upstream body so the UI can show
-  // "GitHub rejected the token: <message>" instead of just "422".
-  private async jsonGet<T>(path: string): Promise<T> {
-    const response = await fetch(this.url(path), { headers: { Accept: 'application/json' } });
-    if (!response.ok) {
-      throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
-    }
-    return (await response.json()) as T;
-  }
-
   /**
-   * Schema-validated GET. Same as `jsonGet` but parses the body through a
-   * zod schema before returning. Surfaces wire drift as a thrown
-   * `ZodError` instead of letting an `as T` cast paper over a renamed
-   * field downstream.
-   *
-   * Phase 7 wires this on the newer endpoints (audit-log, history search);
-   * older endpoints stay on the unchecked `jsonGet` until their schemas
-   * land in @pinagent/shared.
+   * Schema-validated GET. Parses the body through a zod schema before
+   * returning so wire drift surfaces as a thrown `ZodError` instead of
+   * letting an `as T` cast paper over a renamed field downstream.
+   * Errors carry the upstream body so the UI can show "GitHub rejected
+   * the token: <message>" instead of just "422".
    */
   private async jsonGetValidated<T>(path: string, schema: z.ZodType<T>): Promise<T> {
     const response = await fetch(this.url(path), { headers: { Accept: 'application/json' } });
@@ -453,13 +468,26 @@ export class LocalTransport implements DockTransport {
     return schema.parse(raw);
   }
 
-  private async jsonWrite<T>(method: string, path: string, body?: unknown): Promise<T> {
+  /**
+   * Schema-validated write. Same shape as `jsonGetValidated` for PUT /
+   * PATCH / POST / DELETE — server returns the post-mutation resource,
+   * dock parses with the same schema it uses on the read side.
+   */
+  private async jsonWriteValidated<T>(
+    method: string,
+    path: string,
+    schema: z.ZodType<T>,
+    body?: unknown,
+  ): Promise<T> {
     const response = await fetch(this.url(path), {
       method,
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    if (response.ok) return (await response.json()) as T;
+    if (response.ok) {
+      const raw: unknown = await response.json();
+      return schema.parse(raw);
+    }
     const parsed = (await response.json().catch(() => ({}))) as { error?: string };
     throw new Error(parsed.error ?? `${response.status} ${response.statusText}`);
   }

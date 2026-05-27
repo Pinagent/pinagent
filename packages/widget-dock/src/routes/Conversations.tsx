@@ -69,6 +69,8 @@ export function Conversations() {
               aria-hidden
             />
             <Input
+              type="search"
+              aria-label="Search conversations"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search conversations"
