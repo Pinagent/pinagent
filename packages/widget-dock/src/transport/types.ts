@@ -89,6 +89,13 @@ export interface DockTransport {
   /** Send a follow-up user message to an in-flight conversation. */
   sendUserMessage(id: string, content: string): void;
 
+  /**
+   * Answer a specific `ask_user` tool call. Correlated by `askId` so the
+   * agent's awaiting Promise resolves with the right answer even if the
+   * user sent unrelated messages in between.
+   */
+  sendAskResponse(askId: string, answer: string): void;
+
   /** Land the agent's worktree onto the project's base branch. */
   landConversation(id: string): void;
 

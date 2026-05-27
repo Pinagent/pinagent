@@ -8,7 +8,7 @@ import { Input } from '@pinagent/ui/components/ui/input';
 import { Textarea } from '@pinagent/ui/components/ui/textarea';
 import { cn } from '@pinagent/ui/lib/utils';
 import type { StatusKey } from '@pinagent/ui/tokens';
-import { ArrowLeft, Filter, Search, Send } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, Filter, Search, Send } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnchorChip } from '../components/AnchorChip';
 import { ListRow } from '../components/ListRow';
@@ -53,7 +53,10 @@ export function Conversations() {
   }, [conversationsQuery.data, filter]);
 
   if (openId) {
-    return <ConversationDetailView id={openId} onBack={() => setOpenId(null)} />;
+    // `key` on the detail view forces a fresh mount per conversation so
+    // optimistic state, answered ask ids, and lifecycle intent from one
+    // conversation can't leak into another.
+    return <ConversationDetailView key={openId} id={openId} onBack={() => setOpenId(null)} />;
   }
 
   return (
@@ -177,20 +180,130 @@ function safePath(url: string): string {
  * transcript with a placeholder — adding a persisted-messages HTTP
  * endpoint is follow-up work.
  */
+/**
+ * One locally-pushed item that hasn't come back over the WS yet. Used
+ * so user actions feel instantaneous instead of waiting on the agent's
+ * next bus emission. Rendered inline in the transcript next to the real
+ * stream items, ordered by `receivedAt`.
+ */
+type OptimisticItem =
+  | { kind: 'user_message'; id: number; content: string; receivedAt: string }
+  | { kind: 'ask_response'; id: number; askId: string; answer: string; receivedAt: string };
+
+type LifecycleIntent = { kind: 'land' | 'discard'; sentAt: number } | null;
+type LifecycleError = { kind: 'land' | 'discard'; message: string } | null;
+
+const LIFECYCLE_TIMEOUT_MS = 10_000;
+
 function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void }) {
   const transport = useTransport();
   const detailQuery = useConversation(id);
   const stream = useConversationStream(id);
   const isMock = transport.kind === 'mock';
 
-  // Track whether we've sent at least one user message in this session
-  // so the "no transcript" placeholder shows the right copy.
   const [reply, setReply] = useState('');
+  const [optimisticItems, setOptimisticItems] = useState<OptimisticItem[]>([]);
+  const [answeredAskIds, setAnsweredAskIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [intent, setIntent] = useState<LifecycleIntent>(null);
+  const [lifecycleError, setLifecycleError] = useState<LifecycleError>(null);
+  const optimisticIdRef = useRef(0);
+
   const handleSend = (): void => {
     const trimmed = reply.trim();
     if (!trimmed) return;
     transport.sendUserMessage(id, trimmed);
+    const optimisticId = ++optimisticIdRef.current;
+    setOptimisticItems((prev) => [
+      ...prev,
+      {
+        kind: 'user_message',
+        id: optimisticId,
+        content: trimmed,
+        receivedAt: new Date().toISOString(),
+      },
+    ]);
     setReply('');
+  };
+
+  const handleAnswerAsk = (askId: string, answer: string): void => {
+    transport.sendAskResponse(askId, answer);
+    setAnsweredAskIds((prev) => {
+      const next = new Set(prev);
+      next.add(askId);
+      return next;
+    });
+    const optimisticId = ++optimisticIdRef.current;
+    setOptimisticItems((prev) => [
+      ...prev,
+      {
+        kind: 'ask_response',
+        id: optimisticId,
+        askId,
+        answer,
+        receivedAt: new Date().toISOString(),
+      },
+    ]);
+  };
+
+  // Watch worktree-state transitions to clear or fail any pending
+  // land/discard intent. Server broadcasts transient `landing` /
+  // `discarding` states first, then a terminal state (`landed` /
+  // `discarded` / `conflict`). We clear intent on any terminal state for
+  // our kind; on a conflict we additionally surface a lifecycle error.
+  const worktreeState = stream.worktree?.state ?? null;
+  useEffect(() => {
+    if (!intent) return;
+    if (intent.kind === 'land') {
+      if (worktreeState === 'landed') {
+        setIntent(null);
+        setLifecycleError(null);
+      } else if (worktreeState === 'conflict') {
+        setIntent(null);
+        const count = stream.worktree?.conflicts?.length ?? 0;
+        setLifecycleError({
+          kind: 'land',
+          message: `Land failed — ${count} file${count === 1 ? '' : 's'} in conflict.`,
+        });
+      }
+    } else if (intent.kind === 'discard' && worktreeState === 'discarded') {
+      setIntent(null);
+      setLifecycleError(null);
+    }
+  }, [intent, worktreeState, stream.worktree]);
+
+  // Timeout watchdog: if 10s elapse without a confirming transition,
+  // assume the request was lost and surface a Retry option.
+  useEffect(() => {
+    if (!intent) return;
+    const remaining = LIFECYCLE_TIMEOUT_MS - (Date.now() - intent.sentAt);
+    if (remaining <= 0) {
+      setLifecycleError({
+        kind: intent.kind,
+        message: `No response from the dev-server within ${LIFECYCLE_TIMEOUT_MS / 1000}s.`,
+      });
+      setIntent(null);
+      return;
+    }
+    const handle = setTimeout(() => {
+      setLifecycleError({
+        kind: intent.kind,
+        message: `No response from the dev-server within ${LIFECYCLE_TIMEOUT_MS / 1000}s.`,
+      });
+      setIntent(null);
+    }, remaining);
+    return () => clearTimeout(handle);
+  }, [intent]);
+
+  const performLand = (): void => {
+    setLifecycleError(null);
+    setIntent({ kind: 'land', sentAt: Date.now() });
+    transport.landConversation(id);
+  };
+
+  const performDiscard = (): void => {
+    setLifecycleError(null);
+    setIntent({ kind: 'discard', sentAt: Date.now() });
+    transport.discardConversation(id);
   };
 
   if (detailQuery.isLoading) return <LoadingState rows={3} />;
@@ -213,24 +326,56 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
   }
 
   const detail = detailQuery.data;
-  const worktreeState = stream.worktree?.state ?? null;
   const canLand = worktreeState === 'active' || worktreeState === 'ttl_warning';
   const canDiscard = canLand;
-  const showLifecycleBusy = worktreeState === 'landing' || worktreeState === 'discarding';
+  const wsBusy = worktreeState === 'landing' || worktreeState === 'discarding';
+  const showLifecycleBusy = wsBusy || intent !== null;
+  const showActionRow = canLand || canDiscard || showLifecycleBusy || lifecycleError !== null;
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <DetailHeader detail={detail} onBack={onBack} worktreeState={stream.worktree} />
+      <StatusTimeline
+        status={detail.status}
+        worktreeState={stream.worktree}
+        createdAt={detail.updatedAt}
+      />
 
       <div className="flex-1 overflow-auto p-3 space-y-2">
         <OriginalComment comment={detail.comment} createdAt={detail.updatedAt} />
-        <StreamView stream={stream} isMock={isMock} />
+        <StreamView
+          stream={stream}
+          isMock={isMock}
+          optimistic={optimisticItems}
+          answeredAskIds={answeredAskIds}
+          onAnswerAsk={handleAnswerAsk}
+          askDisabled={isMock || stream.done}
+        />
       </div>
 
-      {(canLand || canDiscard || showLifecycleBusy) && (
+      {lifecycleError && (
+        <div className="border-t border-status-error-border bg-status-error-bg px-3 py-2 flex items-center gap-2 text-[12px] text-status-error-fg">
+          <AlertTriangle aria-hidden className="h-3.5 w-3.5 shrink-0" />
+          <span className="flex-1 leading-snug">{lifecycleError.message}</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 text-[11px]"
+            onClick={lifecycleError.kind === 'land' ? performLand : performDiscard}
+          >
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {showActionRow && (
         <div className="border-t border-border bg-card px-3 py-2 flex items-center justify-between gap-2">
           <span className="text-[11px] text-muted-foreground font-mono truncate">
-            {lifecycleLabel(stream.worktree)}
+            {intent
+              ? intent.kind === 'land'
+                ? 'Landing…'
+                : 'Discarding…'
+              : lifecycleLabel(stream.worktree)}
           </span>
           <div className="flex items-center gap-1.5">
             <Button
@@ -238,7 +383,7 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
               variant="outline"
               className="h-7 text-xs"
               disabled={!canDiscard || showLifecycleBusy}
-              onClick={() => transport.discardConversation(id)}
+              onClick={performDiscard}
             >
               Discard
             </Button>
@@ -247,7 +392,7 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
               variant="accent"
               className="h-7 text-xs"
               disabled={!canLand || showLifecycleBusy}
-              onClick={() => transport.landConversation(id)}
+              onClick={performLand}
             >
               Land
             </Button>
@@ -360,6 +505,106 @@ function DetailHeader({
   );
 }
 
+/**
+ * Horizontal stepper showing where this conversation is in its lifecycle.
+ * Derived from the read-side status + the live worktree state — both
+ * accurate without polling.
+ *
+ * Steps are coarse on purpose: the dock surfaces five user-meaningful
+ * phases (submitted → working → awaiting → ready → resolved). Anchor-lost
+ * + error states are rendered as a destination indicator on the current
+ * step rather than a separate phase, since they're conditions to act on,
+ * not stages to progress through.
+ */
+function StatusTimeline({
+  status,
+  worktreeState,
+  createdAt,
+}: {
+  status: StatusKey;
+  worktreeState: WorktreeStatePayload | null;
+  createdAt: string;
+}) {
+  type Phase = 'submitted' | 'working' | 'awaiting' | 'ready' | 'resolved';
+  const PHASES: { key: Phase; label: string }[] = [
+    { key: 'submitted', label: 'Submitted' },
+    { key: 'working', label: 'Working' },
+    { key: 'awaiting', label: 'Awaiting reply' },
+    { key: 'ready', label: 'Ready' },
+    { key: 'resolved', label: 'Resolved' },
+  ];
+
+  const PHASE_BY_STATUS: Record<StatusKey, Phase> = {
+    pending: 'submitted',
+    working: 'working',
+    anchorLost: 'working',
+    awaitingClarification: 'awaiting',
+    readyToLand: 'ready',
+    landed: 'resolved',
+    discarded: 'resolved',
+    error: 'resolved',
+  };
+  const currentPhase = PHASE_BY_STATUS[status];
+  const currentIdx = PHASES.findIndex((p) => p.key === currentPhase);
+
+  const resolvedLabel =
+    status === 'landed'
+      ? worktreeState?.state === 'landed' && worktreeState.commitSha
+        ? `Landed · ${worktreeState.commitSha.slice(0, 7)}`
+        : 'Landed'
+      : status === 'discarded'
+        ? 'Discarded'
+        : status === 'error'
+          ? 'Errored'
+          : 'Resolved';
+
+  return (
+    <ol
+      aria-label="Conversation status timeline"
+      className="flex items-center gap-1.5 border-b border-border bg-secondary/30 px-3 py-2 overflow-x-auto"
+    >
+      {PHASES.map((phase, idx) => {
+        const isPast = idx < currentIdx;
+        const isCurrent = idx === currentIdx;
+        const isFuture = idx > currentIdx;
+        const label = phase.key === 'resolved' && isCurrent ? resolvedLabel : phase.label;
+        return (
+          <li key={phase.key} className="flex items-center gap-1.5 shrink-0">
+            <span
+              aria-hidden
+              className={cn(
+                'inline-block h-1.5 w-1.5 rounded-full',
+                isCurrent && 'h-2 w-2 ring-2 ring-offset-1 ring-offset-secondary',
+                isPast && 'bg-foreground/80',
+                isCurrent && status === 'error'
+                  ? 'bg-status-error-fg ring-status-error-border'
+                  : isCurrent && status === 'working'
+                    ? 'bg-status-working-fg ring-status-working-border animate-pulse motion-reduce:animate-none'
+                    : isCurrent && 'bg-status-ready-fg ring-status-ready-border',
+                isFuture && 'bg-border',
+              )}
+            />
+            <span
+              className={cn(
+                'text-[11px] tracking-tight whitespace-nowrap',
+                isPast && 'text-muted-foreground',
+                isCurrent && 'font-semibold text-foreground',
+                isFuture && 'text-muted-foreground/50',
+              )}
+            >
+              {label}
+            </span>
+            {phase.key === 'submitted' && isPast && (
+              <TimestampDot iso={createdAt} className="text-[10px]" />
+            )}
+            {idx < PHASES.length - 1 && <span aria-hidden className="h-px w-4 bg-border ml-1" />}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function OriginalComment({ comment, createdAt }: { comment: string; createdAt: string }) {
   return (
     <div className="rounded-lg border border-foreground/20 bg-secondary/40 px-3 py-2 text-[12.5px] leading-relaxed">
@@ -372,14 +617,57 @@ function OriginalComment({ comment, createdAt }: { comment: string; createdAt: s
   );
 }
 
-function StreamView({ stream, isMock }: { stream: ConversationStream; isMock: boolean }) {
+interface StreamViewProps {
+  stream: ConversationStream;
+  isMock: boolean;
+  optimistic: OptimisticItem[];
+  answeredAskIds: ReadonlySet<string>;
+  onAnswerAsk: (askId: string, answer: string) => void;
+  /** Disable ask-user reply input — set when the run is done or mock. */
+  askDisabled: boolean;
+}
+
+type DisplayItem =
+  | { kind: 'stream'; key: string; receivedAt: string; item: StreamItem }
+  | { kind: 'optimistic'; key: string; receivedAt: string; item: OptimisticItem };
+
+function StreamView({
+  stream,
+  isMock,
+  optimistic,
+  answeredAskIds,
+  onAnswerAsk,
+  askDisabled,
+}: StreamViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Merge live + optimistic items by timestamp so user-sent messages
+  // appear in-flow as soon as they're sent, before any agent echo.
+  const merged = useMemo<DisplayItem[]>(() => {
+    const all: DisplayItem[] = [
+      ...stream.items.map(
+        (item): DisplayItem => ({
+          kind: 'stream',
+          key: `s-${item.id}`,
+          receivedAt: item.receivedAt,
+          item,
+        }),
+      ),
+      ...optimistic.map(
+        (item): DisplayItem => ({
+          kind: 'optimistic',
+          key: `o-${item.id}`,
+          receivedAt: item.receivedAt,
+          item,
+        }),
+      ),
+    ];
+    return all.sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
+  }, [stream.items, optimistic]);
+
   // Pin scroll to the bottom whenever new items arrive so live updates
-  // stay in view without the user having to scroll. The length read
-  // inside the effect body is what biome's useExhaustiveDependencies
-  // needs to see — the effect is triggered by `count` changing.
-  const count = stream.items.length;
+  // stay in view without the user having to scroll.
+  const count = merged.length;
   useEffect(() => {
     if (count === 0) return;
     const el = scrollRef.current;
@@ -387,7 +675,7 @@ function StreamView({ stream, isMock }: { stream: ConversationStream; isMock: bo
     el.scrollTop = el.scrollHeight;
   }, [count]);
 
-  if (stream.items.length === 0) {
+  if (merged.length === 0) {
     return (
       <div
         ref={scrollRef}
@@ -404,9 +692,19 @@ function StreamView({ stream, isMock }: { stream: ConversationStream; isMock: bo
 
   return (
     <div ref={scrollRef} className="space-y-2">
-      {stream.items.map((item) => (
-        <StreamRow key={item.id} item={item} />
-      ))}
+      {merged.map((d) =>
+        d.kind === 'stream' ? (
+          <StreamRow
+            key={d.key}
+            item={d.item}
+            answeredAskIds={answeredAskIds}
+            onAnswerAsk={onAnswerAsk}
+            askDisabled={askDisabled}
+          />
+        ) : (
+          <OptimisticRow key={d.key} item={d.item} />
+        ),
+      )}
       {stream.done && (
         <div className="text-center text-[11px] text-muted-foreground pt-1">
           — agent run finished —
@@ -416,7 +714,31 @@ function StreamView({ stream, isMock }: { stream: ConversationStream; isMock: bo
   );
 }
 
-function StreamRow({ item }: { item: StreamItem }) {
+function OptimisticRow({ item }: { item: OptimisticItem }) {
+  // Both kinds render as "you said this" — keeps the transcript honest
+  // about who spoke without forcing the user to wait for the agent to
+  // echo their message back over the bus.
+  return (
+    <RowFrame speaker={item.kind === 'ask_response' ? 'You (answer)' : 'You'} at={item.receivedAt}>
+      <p className="text-foreground whitespace-pre-wrap break-words">
+        {item.kind === 'user_message' ? item.content : item.answer}
+      </p>
+      <p className="mt-1 flex items-center gap-1 text-[10.5px] text-muted-foreground">
+        <Check className="h-3 w-3" />
+        Sent · waiting for the agent to reply.
+      </p>
+    </RowFrame>
+  );
+}
+
+interface StreamRowProps {
+  item: StreamItem;
+  answeredAskIds: ReadonlySet<string>;
+  onAnswerAsk: (askId: string, answer: string) => void;
+  askDisabled: boolean;
+}
+
+function StreamRow({ item, answeredAskIds, onAnswerAsk, askDisabled }: StreamRowProps) {
   if (item.kind === 'error') {
     return (
       <div className="rounded-lg border border-status-error-border bg-status-error-bg px-3 py-2 text-[12px] text-status-error-fg">
@@ -424,10 +746,26 @@ function StreamRow({ item }: { item: StreamItem }) {
       </div>
     );
   }
-  return <EventRow event={item.event} at={item.receivedAt} />;
+  return (
+    <EventRow
+      event={item.event}
+      at={item.receivedAt}
+      answeredAskIds={answeredAskIds}
+      onAnswerAsk={onAnswerAsk}
+      disabled={askDisabled}
+    />
+  );
 }
 
-function EventRow({ event, at }: { event: AgentEvent; at: string }) {
+interface EventRowProps {
+  event: AgentEvent;
+  at: string;
+  answeredAskIds: ReadonlySet<string>;
+  onAnswerAsk: (askId: string, answer: string) => void;
+  disabled: boolean;
+}
+
+function EventRow({ event, at, answeredAskIds, onAnswerAsk, disabled }: EventRowProps) {
   switch (event.type) {
     case 'init':
       return (
@@ -477,9 +815,13 @@ function EventRow({ event, at }: { event: AgentEvent; at: string }) {
               {event.context}
             </p>
           )}
-          <p className="mt-1 text-[11px] text-muted-foreground italic">
-            (Responding to ask_user inline lands in a follow-up — use the reply box below for now.)
-          </p>
+          <AskUserReply
+            askId={event.askId}
+            options={event.options}
+            answered={answeredAskIds.has(event.askId)}
+            disabled={disabled}
+            onAnswer={(answer) => onAnswerAsk(event.askId, answer)}
+          />
         </RowFrame>
       );
     case 'error':
@@ -533,6 +875,86 @@ function RowFrame({
         <TimestampDot iso={at} className="ml-auto" />
       </div>
       {children}
+    </div>
+  );
+}
+
+interface AskUserReplyProps {
+  askId: string;
+  options?: string[];
+  answered: boolean;
+  disabled: boolean;
+  onAnswer: (answer: string) => void;
+}
+
+/**
+ * Inline reply form for an `ask_user` event. Renders a quick-pick row
+ * when the agent supplies `options`, otherwise a small textarea. Once
+ * answered, the form collapses to a confirmation so the user can scroll
+ * back and see what they replied without losing the question context.
+ */
+function AskUserReply({ askId, options, answered, disabled, onAnswer }: AskUserReplyProps) {
+  const [draft, setDraft] = useState('');
+
+  if (answered) {
+    return (
+      <p className="mt-2 text-[11px] text-muted-foreground italic">
+        Reply sent · the agent will continue on its next turn.
+      </p>
+    );
+  }
+
+  if (options && options.length > 0) {
+    return (
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {options.map((opt) => (
+          <Button
+            key={`${askId}-${opt}`}
+            size="sm"
+            variant="outline"
+            disabled={disabled}
+            className="h-7 text-xs"
+            onClick={() => onAnswer(opt)}
+          >
+            {opt}
+          </Button>
+        ))}
+      </div>
+    );
+  }
+
+  const submit = (): void => {
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    onAnswer(trimmed);
+    setDraft('');
+  };
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      <Textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        placeholder="Answer the agent…"
+        disabled={disabled}
+        className="min-h-[48px] resize-y text-xs bg-card/70"
+      />
+      <div className="flex items-center justify-end">
+        <Button
+          size="sm"
+          className="h-7 text-xs"
+          disabled={disabled || !draft.trim()}
+          onClick={submit}
+        >
+          Answer
+        </Button>
+      </div>
     </div>
   );
 }
