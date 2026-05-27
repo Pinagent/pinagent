@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -97,6 +98,19 @@ const SourceInput = z.object({
   line: z.number().int().min(1),
   radius: z.number().int().min(0).max(2000).optional(),
 });
+
+/**
+ * Boot the Pinagent stdio MCP server. Resolves once the server is connected
+ * to stdio and the channel watcher is running; never returns under normal
+ * operation (the transport keeps the event loop alive).
+ *
+ * Exposed so `@pinagent/cli`'s `pinagent mcp` subcommand can drive the server
+ * in-process. The package's `bin` entry calls this directly via the auto-start
+ * block at the bottom of this file.
+ */
+export async function startMcpServer(): Promise<void> {
+  await main();
+}
 
 async function main() {
   const root = resolveRoot(process.env, process.cwd());
@@ -285,8 +299,13 @@ function formatFeedback(r: {
   ].join('\n');
 }
 
-main().catch((err) => {
-  // eslint-disable-next-line no-console
-  console.error('[pinagent-mcp] fatal:', err);
-  process.exit(1);
-});
+// Auto-start when invoked as a script (bin entry). Skipped when imported as
+// a library — `@pinagent/cli`'s `pinagent mcp` subcommand imports
+// `startMcpServer` and drives the lifecycle itself.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error('[pinagent-mcp] fatal:', err);
+    process.exit(1);
+  });
+}
