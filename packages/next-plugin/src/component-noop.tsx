@@ -10,6 +10,14 @@
 // layouts behave identically.
 'use client';
 
-export function Pinagent(): null {
+export interface PinagentProps {
+  /**
+   * Accepted for prop-signature parity with the dev component; ignored
+   * in production builds (the dock, like the widget, is dev-only).
+   */
+  dock?: boolean;
+}
+
+export function Pinagent(_props: PinagentProps = {}): null {
   return null;
 }

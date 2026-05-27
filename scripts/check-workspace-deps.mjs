@@ -55,6 +55,8 @@ const ALLOWLIST = new Set([
   // alongside the plugin to consumers; otherwise `dock: true` would fail
   // to resolve in any installed project.
   '@pinagent/vite-plugin -> @pinagent/widget-dock',
+  // Same runtime-resolve pattern in next-plugin's route handler.
+  '@pinagent/next-plugin -> @pinagent/widget-dock',
 ]);
 
 const WORKSPACE_TREES = ['packages', 'apps', 'ee/packages'];

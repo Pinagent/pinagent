@@ -327,6 +327,9 @@ importers:
       '@babel/types':
         specifier: ^7.29.7
         version: 7.29.7
+      '@pinagent/widget-dock':
+        specifier: workspace:*
+        version: link:../widget-dock
       '@sqlite.org/sqlite-wasm':
         specifier: ^3.50.0-build1
         version: 3.50.0-build1
