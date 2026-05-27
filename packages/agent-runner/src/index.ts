@@ -2,6 +2,7 @@
 export const PACKAGE_NAME = '@pinagent/agent-runner';
 
 export {
+  computeWorktreeStats,
   countWorktreeChanges,
   discardWorktree,
   hasActiveRun,
@@ -13,6 +14,7 @@ export {
   runFollowUpTurn,
   type SpawnAgentMode,
   spawnAgent,
+  type WorktreeStats,
 } from './agent';
 export {
   ASK_USER_TOOL_NAME,
@@ -20,6 +22,7 @@ export {
   rejectAsk,
   resolveAsk,
 } from './ask-user';
+export { type ChangeRecord, listChanges } from './changes';
 export { type OpenInEditorResult, openInEditor } from './editor';
 export {
   type FeedbackInput,

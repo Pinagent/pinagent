@@ -35,7 +35,11 @@ export function useProjectSubscription({ enabled = true }: UseProjectSubscriptio
     }
     const unsubEvents = transport.subscribeProject((event) => {
       if (event.type === 'conversations_changed') {
+        // Any conversation change can affect both the list view AND
+        // the Changes view (worktree-state transitions ripple into
+        // diff stats). Invalidate both query namespaces.
         void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+        void queryClient.invalidateQueries({ queryKey: ['changes'] });
       }
     });
     const unsubStatus = transport.onConnectionStatus(setStatus);

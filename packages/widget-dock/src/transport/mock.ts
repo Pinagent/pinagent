@@ -7,7 +7,12 @@
  * Enabled via `?fixtures=on` in the URL; see App.tsx for the gate.
  */
 import type { ProjectEvent } from '@pinagent/shared';
-import { type Conversation, FIXTURE_CONVERSATIONS } from '../fixtures';
+import {
+  type Change,
+  type Conversation,
+  FIXTURE_CHANGES,
+  FIXTURE_CONVERSATIONS,
+} from '../fixtures';
 import type { ConversationDetail, ConversationFilters, DockTransport } from './types';
 import type { ConnectionStatus, ConversationHandlers } from './ws-client';
 
@@ -31,6 +36,13 @@ export class MockTransport implements DockTransport {
         return c.title.toLowerCase().includes(q) || c.anchor.loc.toLowerCase().includes(q);
       })
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+  }
+
+  async listChanges(): Promise<Change[]> {
+    await sleep(SIMULATED_LATENCY_MS);
+    return FIXTURE_CHANGES.slice().sort(
+      (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
+    );
   }
 
   async getConversation(id: string): Promise<ConversationDetail | null> {

@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import {
   FeedbackInputSchema,
   ID_RE,
+  listChanges,
   openInEditor,
   PatchSchema,
   type SpawnAgentMode,
@@ -138,6 +139,14 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
         }
 
         return json(res, 200, { id: rec.id, agentSpawned });
+      }
+
+      // GET /__pinagent/changes — per-conversation diff stats for the
+      // dock's Changes view. Walks every conversation with a worktree
+      // and runs `git diff --shortstat` against the project HEAD.
+      if (req.method === 'GET' && url === '/__pinagent/changes') {
+        const changes = await listChanges(storage.root);
+        return json(res, 200, changes);
       }
 
       // GET /__pinagent/feedback

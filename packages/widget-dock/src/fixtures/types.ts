@@ -34,16 +34,21 @@ export interface Conversation {
   messageCount: number;
 }
 
-/** A pending code change produced by an agent for a conversation. */
+/** A pending or landed code change produced by an agent for a conversation. */
 export interface Change {
   id: string;
   conversationId: string;
   conversationTitle: string;
-  status: Extract<StatusKey, 'readyToLand' | 'pending' | 'error'>;
+  status: Extract<StatusKey, 'readyToLand' | 'pending' | 'landed' | 'error'>;
+  branch: string;
   filesChanged: number;
   additions: number;
   deletions: number;
-  /** Truncated diff preview for the row — full diff loads on expand. */
+  /**
+   * Truncated diff preview for the row. PR-D3 wires the inline diff
+   * renderer; for now this stays empty on real data and is just
+   * populated in fixtures for the design demo.
+   */
   preview: string;
   updatedAt: string;
 }
