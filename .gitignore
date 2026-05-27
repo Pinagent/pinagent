@@ -9,6 +9,7 @@ packages/vite-plugin/drizzle
 *.log
 .turbo
 .next
+*.tsbuildinfo
 coverage
 .cache
 .env
