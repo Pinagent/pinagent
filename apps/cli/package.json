@@ -20,6 +20,9 @@
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@pinagent/mcp": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^22.10.1",
     "tsdown": "^0.22.0",
