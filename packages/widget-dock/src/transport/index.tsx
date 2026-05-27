@@ -40,7 +40,9 @@ export type {
   ConversationFilters,
   CreatePullRequestInput,
   CreatePullRequestResult,
+  DockProjectSettings,
   DockTransport,
+  PresentableConnections,
 } from './types';
 export type {
   ConnectionStatus,

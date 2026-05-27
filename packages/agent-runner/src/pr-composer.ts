@@ -24,6 +24,7 @@ import { Octokit } from '@octokit/rest';
 import { z } from 'zod';
 import { resolveOriginRemote } from './git-remote';
 import { runGitCapture } from './git-utils';
+import { SecretsStore } from './secrets-store';
 import { Storage } from './storage';
 
 export const ComposeOptsSchema = z.object({
@@ -265,7 +266,11 @@ export async function composePullRequest(
   await runGitCapture(projectRoot, ['worktree', 'prune']);
 
   // Open the PR if Octokit is configured + the remote is GitHub.
-  const token = process.env.GITHUB_TOKEN ?? process.env.PINAGENT_GITHUB_TOKEN;
+  // Token precedence: dock-stored secret (set via Connections route) →
+  // GITHUB_TOKEN env → PINAGENT_GITHUB_TOKEN env. The Connections path
+  // is the new Phase 5 route; env vars stay for CI / scripting.
+  const stored = await new SecretsStore(projectRoot).getGithubToken();
+  const token = stored ?? process.env.GITHUB_TOKEN ?? process.env.PINAGENT_GITHUB_TOKEN;
   const remote = await resolveOriginRemote(projectRoot);
   const manualCompareUrl = remote
     ? `https://github.com/${remote.owner}/${remote.repo}/compare/${encodeURIComponent(

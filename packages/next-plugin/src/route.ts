@@ -16,10 +16,15 @@ import {
   listChanges,
   openInEditor,
   PatchSchema,
+  ProjectSettingsPatchSchema,
   resolveAgentMode,
+  SecretsStore,
+  SettingsStore,
   Storage,
   spawnAgent,
   startWsServer,
+  validateAnthropicKey,
+  validateGithubToken,
 } from '@pinagent/agent-runner';
 import { DB_WORKER_SOURCE } from '@pinagent/browser-runtime';
 import { nanoid } from 'nanoid';
@@ -54,7 +59,7 @@ if (process.env.NODE_ENV !== 'production' && resolveAgentMode(process.env) !== f
 //
 //   export const dynamic = 'force-dynamic';
 //   export const runtime = 'nodejs';
-//   export { GET, POST, PATCH } from '@pinagent/next-plugin/route';
+//   export { GET, POST, PATCH, PUT, DELETE } from '@pinagent/next-plugin/route';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -147,6 +152,20 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
     const result = await getChangeDiff(storage.root, id);
     if (!result) return json(404, { error: 'not found' });
     return json(200, result);
+  }
+
+  // /__pinagent/connections — presentable connection state. Never
+  // returns raw tokens; the dock's transport calls this and renders
+  // off the presentable shape only.
+  if (slug.length === 1 && slug[0] === 'connections') {
+    const secrets = new SecretsStore(storage.root);
+    return json(200, await secrets.presentable());
+  }
+
+  // /__pinagent/settings — current project config.
+  if (slug.length === 1 && slug[0] === 'settings') {
+    const settings = new SettingsStore(storage.root);
+    return json(200, await settings.read());
   }
 
   // /__pinagent/feedback
@@ -254,6 +273,16 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
 
 export async function PATCH(req: Request, ctx: RouteCtx): Promise<Response> {
   const slug = await readSlug(ctx);
+
+  // /__pinagent/settings — partial update.
+  if (slug.length === 1 && slug[0] === 'settings') {
+    const raw = await readJsonBody(req);
+    const parsed = ProjectSettingsPatchSchema.safeParse(raw);
+    if (!parsed.success) return json(400, { error: parsed.error.message });
+    const settings = new SettingsStore(getStorage().root);
+    return json(200, await settings.patch(parsed.data));
+  }
+
   if (slug.length !== 2 || slug[0] !== 'feedback') {
     return json(404, { error: 'not found' });
   }
@@ -267,6 +296,63 @@ export async function PATCH(req: Request, ctx: RouteCtx): Promise<Response> {
   const rec = await getStorage().patch(id, parsed.data);
   if (!rec) return json(404, { error: 'not found' });
   return json(200, rec);
+}
+
+/**
+ * PUT — connection set/replace. The two connection kinds (github,
+ * anthropic) share the same shape: validate the credential upstream,
+ * persist on success, surface the upstream error on failure.
+ */
+export async function PUT(req: Request, ctx: RouteCtx): Promise<Response> {
+  const slug = await readSlug(ctx);
+  if (slug.length !== 2 || slug[0] !== 'connections') {
+    return json(404, { error: 'not found' });
+  }
+  const kind = slug[1];
+  const storage = getStorage();
+  const secrets = new SecretsStore(storage.root);
+
+  if (kind === 'github') {
+    const body = (await readJsonBody(req)) as { token?: unknown };
+    if (typeof body.token !== 'string' || body.token.length === 0) {
+      return json(400, { error: 'token required' });
+    }
+    const v = await validateGithubToken(body.token);
+    if (!v.ok || !v.login) return json(422, { error: v.error ?? 'invalid token' });
+    await secrets.setGithub(body.token, v.login);
+    return json(200, await secrets.presentable());
+  }
+  if (kind === 'anthropic') {
+    const body = (await readJsonBody(req)) as { key?: unknown };
+    if (typeof body.key !== 'string' || body.key.length === 0) {
+      return json(400, { error: 'key required' });
+    }
+    const v = await validateAnthropicKey(body.key);
+    if (!v.ok) return json(422, { error: v.error ?? 'invalid key' });
+    await secrets.setAnthropic(body.key);
+    return json(200, await secrets.presentable());
+  }
+  return json(404, { error: 'not found' });
+}
+
+/** DELETE — connection clear. */
+export async function DELETE(_req: Request, ctx: RouteCtx): Promise<Response> {
+  const slug = await readSlug(ctx);
+  if (slug.length !== 2 || slug[0] !== 'connections') {
+    return json(404, { error: 'not found' });
+  }
+  const kind = slug[1];
+  const storage = getStorage();
+  const secrets = new SecretsStore(storage.root);
+  if (kind === 'github') {
+    await secrets.clearGithub();
+    return json(200, await secrets.presentable());
+  }
+  if (kind === 'anthropic') {
+    await secrets.clearAnthropic();
+    return json(200, await secrets.presentable());
+  }
+  return json(404, { error: 'not found' });
 }
 
 /**

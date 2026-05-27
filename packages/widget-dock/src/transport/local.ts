@@ -21,7 +21,9 @@ import type {
   ConversationFilters,
   CreatePullRequestInput,
   CreatePullRequestResult,
+  DockProjectSettings,
   DockTransport,
+  PresentableConnections,
 } from './types';
 import { type ConnectionStatus, type ConversationHandlers, DockWsClient } from './ws-client';
 
@@ -302,5 +304,59 @@ export class LocalTransport implements DockTransport {
       };
     }
     throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
+  }
+
+  async getConnections(): Promise<PresentableConnections> {
+    return this.jsonGet<PresentableConnections>('/__pinagent/connections');
+  }
+
+  async setGithubConnection(token: string): Promise<PresentableConnections> {
+    return this.jsonWrite<PresentableConnections>('PUT', '/__pinagent/connections/github', {
+      token,
+    });
+  }
+
+  async clearGithubConnection(): Promise<PresentableConnections> {
+    return this.jsonWrite<PresentableConnections>('DELETE', '/__pinagent/connections/github');
+  }
+
+  async setAnthropicConnection(key: string): Promise<PresentableConnections> {
+    return this.jsonWrite<PresentableConnections>('PUT', '/__pinagent/connections/anthropic', {
+      key,
+    });
+  }
+
+  async clearAnthropicConnection(): Promise<PresentableConnections> {
+    return this.jsonWrite<PresentableConnections>('DELETE', '/__pinagent/connections/anthropic');
+  }
+
+  async getSettings(): Promise<DockProjectSettings> {
+    return this.jsonGet<DockProjectSettings>('/__pinagent/settings');
+  }
+
+  async updateSettings(patch: Partial<DockProjectSettings>): Promise<DockProjectSettings> {
+    return this.jsonWrite<DockProjectSettings>('PATCH', '/__pinagent/settings', patch);
+  }
+
+  // Internal: shared GET + write helpers so the per-endpoint methods
+  // stay declarative. Errors carry the upstream body so the UI can show
+  // "GitHub rejected the token: <message>" instead of just "422".
+  private async jsonGet<T>(path: string): Promise<T> {
+    const response = await fetch(this.url(path), { headers: { Accept: 'application/json' } });
+    if (!response.ok) {
+      throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
+    }
+    return (await response.json()) as T;
+  }
+
+  private async jsonWrite<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const response = await fetch(this.url(path), {
+      method,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (response.ok) return (await response.json()) as T;
+    const parsed = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(parsed.error ?? `${response.status} ${response.statusText}`);
   }
 }

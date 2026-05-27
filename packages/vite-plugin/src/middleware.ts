@@ -17,9 +17,14 @@ import {
   listChanges,
   openInEditor,
   PatchSchema,
+  ProjectSettingsPatchSchema,
+  SecretsStore,
+  SettingsStore,
   type SpawnAgentMode,
   type Storage,
   spawnAgent,
+  validateAnthropicKey,
+  validateGithubToken,
 } from '@pinagent/agent-runner';
 import { DB_WORKER_SOURCE } from '@pinagent/browser-runtime';
 import { nanoid } from 'nanoid';
@@ -184,6 +189,72 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
         if (!parsed.success) return badRequest(res, parsed.error.message);
         const result = await composePullRequest(storage.root, parsed.data);
         return json(res, result.ok ? 200 : 422, result);
+      }
+
+      // GET /__pinagent/connections — presentable connection state
+      // (connected? account? key set?). Never returns the raw token.
+      if (req.method === 'GET' && url === '/__pinagent/connections') {
+        const secrets = new SecretsStore(storage.root);
+        return json(res, 200, await secrets.presentable());
+      }
+
+      // PUT /__pinagent/connections/github — accepts a personal access
+      // token, verifies it via `GET /user` on github.com, and stores it.
+      // Rejects (422) if the token doesn't validate.
+      if (req.method === 'PUT' && url === '/__pinagent/connections/github') {
+        const raw = await readJsonBody(req);
+        const body = raw as { token?: unknown };
+        if (typeof body.token !== 'string' || body.token.length === 0) {
+          return badRequest(res, 'token required');
+        }
+        const v = await validateGithubToken(body.token);
+        if (!v.ok || !v.login) return json(res, 422, { error: v.error ?? 'invalid token' });
+        const secrets = new SecretsStore(storage.root);
+        await secrets.setGithub(body.token, v.login);
+        return json(res, 200, await secrets.presentable());
+      }
+
+      // DELETE /__pinagent/connections/github
+      if (req.method === 'DELETE' && url === '/__pinagent/connections/github') {
+        const secrets = new SecretsStore(storage.root);
+        await secrets.clearGithub();
+        return json(res, 200, await secrets.presentable());
+      }
+
+      // PUT /__pinagent/connections/anthropic — same shape as github.
+      if (req.method === 'PUT' && url === '/__pinagent/connections/anthropic') {
+        const raw = await readJsonBody(req);
+        const body = raw as { key?: unknown };
+        if (typeof body.key !== 'string' || body.key.length === 0) {
+          return badRequest(res, 'key required');
+        }
+        const v = await validateAnthropicKey(body.key);
+        if (!v.ok) return json(res, 422, { error: v.error ?? 'invalid key' });
+        const secrets = new SecretsStore(storage.root);
+        await secrets.setAnthropic(body.key);
+        return json(res, 200, await secrets.presentable());
+      }
+
+      // DELETE /__pinagent/connections/anthropic
+      if (req.method === 'DELETE' && url === '/__pinagent/connections/anthropic') {
+        const secrets = new SecretsStore(storage.root);
+        await secrets.clearAnthropic();
+        return json(res, 200, await secrets.presentable());
+      }
+
+      // GET /__pinagent/settings — current project config.
+      if (req.method === 'GET' && url === '/__pinagent/settings') {
+        const settings = new SettingsStore(storage.root);
+        return json(res, 200, await settings.read());
+      }
+
+      // PATCH /__pinagent/settings — partial update; whole record echoed back.
+      if (req.method === 'PATCH' && url === '/__pinagent/settings') {
+        const raw = await readJsonBody(req);
+        const parsed = ProjectSettingsPatchSchema.safeParse(raw);
+        if (!parsed.success) return badRequest(res, parsed.error.message);
+        const settings = new SettingsStore(storage.root);
+        return json(res, 200, await settings.patch(parsed.data));
       }
 
       // GET /__pinagent/feedback
