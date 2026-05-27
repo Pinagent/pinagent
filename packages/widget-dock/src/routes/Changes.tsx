@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
+
+import { StatusBadge } from '@pinagent/ui/components/status-badge';
+import { Button } from '@pinagent/ui/components/ui/button';
+import { cn } from '@pinagent/ui/lib/utils';
 import { GitPullRequest, RotateCcw, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Button } from '@pinagent/ui/components/ui/button';
-import { StatusBadge } from '@pinagent/ui/components/status-badge';
-import { cn } from '@pinagent/ui/lib/utils';
 import { TimestampDot } from '../components/TimestampDot';
 import { FIXTURE_CHANGES } from '../fixtures';
 
@@ -80,7 +81,9 @@ export function Changes() {
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
                     <StatusBadge status={c.status} variant="dot" />
-                    <span>{c.filesChanged} file{c.filesChanged === 1 ? '' : 's'}</span>
+                    <span>
+                      {c.filesChanged} file{c.filesChanged === 1 ? '' : 's'}
+                    </span>
                     <span className="text-status-ready-fg">+{c.additions}</span>
                     <span className="text-status-error-fg">−{c.deletions}</span>
                   </div>

@@ -7,14 +7,8 @@
  * Cream-on-ink by default; pass `tone="ink"` for ink-on-cream surfaces.
  */
 import { forwardRef, type SVGAttributes } from 'react';
-import {
-  BRAND_CREAM,
-  BRAND_GOLD,
-  BRAND_INK,
-  BRAND_VIEWBOX,
-  PIN_PATH,
-} from '../tokens';
 import { cn } from '../lib/utils';
+import { BRAND_CREAM, BRAND_GOLD, BRAND_INK, BRAND_VIEWBOX, PIN_PATH } from '../tokens';
 
 const SIZE = {
   xs: 14,

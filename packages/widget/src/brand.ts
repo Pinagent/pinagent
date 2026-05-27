@@ -7,13 +7,7 @@
  * needs the pre-encoded `cursor: url(...)` form.
  */
 
-import {
-  BRAND_CREAM,
-  BRAND_GOLD,
-  BRAND_INK,
-  BRAND_VIEWBOX,
-  PIN_PATH,
-} from '@pinagent/ui/tokens';
+import { BRAND_CREAM, BRAND_GOLD, BRAND_INK, BRAND_VIEWBOX, PIN_PATH } from '@pinagent/ui/tokens';
 
 export { BRAND_CREAM, BRAND_GOLD, BRAND_INK, BRAND_VIEWBOX, PIN_PATH };
 

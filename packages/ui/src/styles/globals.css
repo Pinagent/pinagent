@@ -1,4 +1,12 @@
 @import "tailwindcss";
+/*
+ * Geist variable fonts. The @fontsource-variable packages bundle the
+ * Latin subset; consumers that need additional subsets can layer them.
+ * CSS spec requires every @import to precede other at-rules and rules,
+ * so these sit at the top alongside the tailwindcss import.
+ */
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
 
 /*
  * Scan this package's own components so consumers automatically pick up
@@ -6,13 +14,6 @@
  * resolved relative to this CSS file (packages/ui/src/styles/).
  */
 @source "../components/**/*.{ts,tsx}";
-
-/*
- * Geist variable fonts. The @fontsource-variable packages bundle the
- * Latin subset; consumers that need additional subsets can layer them.
- */
-@import "@fontsource-variable/geist";
-@import "@fontsource-variable/geist-mono";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -70,10 +71,12 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.5);
 
-  --font-sans: "Geist Variable", "Geist", "Geist Fallback", -apple-system,
-    BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
-  --font-mono: "Geist Mono Variable", "Geist Mono", "Geist Mono Fallback",
-    ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans:
+    "Geist Variable", "Geist", "Geist Fallback", -apple-system, BlinkMacSystemFont, "Inter",
+    "Segoe UI", Roboto, sans-serif;
+  --font-mono:
+    "Geist Mono Variable", "Geist Mono", "Geist Mono Fallback", ui-monospace, SFMono-Regular, Menlo,
+    Consolas, monospace;
 }
 
 /*

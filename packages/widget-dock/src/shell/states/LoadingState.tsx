@@ -11,10 +11,9 @@ export interface LoadingStateProps {
 export function LoadingState({ rows = 4, className }: LoadingStateProps) {
   return (
     <div className={cn('flex flex-col gap-2 p-3', className)} aria-busy>
-      {Array.from({ length: rows }).map((_, i) => (
+      {Array.from({ length: rows }, (_, i) => `skel-${i}`).map((id) => (
         <div
-          // biome-ignore lint/suspicious/noArrayIndexKey: skeletons are intentionally non-keyed
-          key={i}
+          key={id}
           className="flex items-center gap-3 rounded-md border border-border bg-card p-3"
         >
           <Skeleton className="h-2 w-2 rounded-full" />

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-import { Terminal, WifiOff } from 'lucide-react';
+
 import { cn } from '@pinagent/ui/lib/utils';
+import { Terminal, WifiOff } from 'lucide-react';
 
 export interface DisconnectedStateProps {
   /** Override the suggested command shown in the code block. */
@@ -8,10 +9,7 @@ export interface DisconnectedStateProps {
   className?: string;
 }
 
-export function DisconnectedState({
-  command = 'pnpm dev',
-  className,
-}: DisconnectedStateProps) {
+export function DisconnectedState({ command = 'pnpm dev', className }: DisconnectedStateProps) {
   return (
     <div
       role="status"

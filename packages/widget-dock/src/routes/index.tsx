@@ -7,8 +7,9 @@
  * AnchorChip), so the build-out is straightforward once Phase 5
  * lands.
  */
-import type { ReactElement } from 'react';
+
 import { Activity, GitBranch, GitPullRequest, History, Plug, Settings } from 'lucide-react';
+import type { ReactElement } from 'react';
 import type { RouteKey } from '../shell/NavRail';
 import { ROUTES } from '../shell/NavRail';
 import { EmptyState } from '../shell/states';
@@ -36,8 +37,8 @@ function Placeholder({ routeKey }: { routeKey: RouteKey }) {
       title={route?.label ?? routeKey}
       description={
         <>
-          This view shares the same primitives as Overview, Conversations, and Changes.
-          Designing it out is a follow-up once the visual language is approved.
+          This view shares the same primitives as Overview, Conversations, and Changes. Designing it
+          out is a follow-up once the visual language is approved.
         </>
       }
     />

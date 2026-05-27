@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
+
+import { Button } from '@pinagent/ui/components/ui/button';
+import { cn } from '@pinagent/ui/lib/utils';
 import {
   CheckCheck,
   GitMerge,
@@ -8,16 +11,14 @@ import {
   Trash2,
 } from 'lucide-react';
 import type { ComponentType, ReactNode, SVGAttributes } from 'react';
-import { Button } from '@pinagent/ui/components/ui/button';
-import { cn } from '@pinagent/ui/lib/utils';
-import { ListRow } from '../components/ListRow';
 import { AnchorChip } from '../components/AnchorChip';
+import { ListRow } from '../components/ListRow';
 import { TimestampDot } from '../components/TimestampDot';
 import {
+  type ActivityEvent,
   CURRENT_PAGE,
   FIXTURE_ACTIVITY,
   FIXTURE_CONVERSATIONS,
-  type ActivityEvent,
 } from '../fixtures';
 
 const EVENT_ICON: Record<ActivityEvent['type'], ComponentType<SVGAttributes<SVGSVGElement>>> = {
@@ -160,8 +161,8 @@ export function Overview() {
 
       <div className="mt-auto border-t border-border bg-secondary/30 px-3 py-2">
         <p className="text-[11px] text-muted-foreground">
-          Visual demo · {recent.length} conversations loaded from fixtures. Phase 5 of the
-          redesign — real transport lands later.
+          Visual demo · {recent.length} conversations loaded from fixtures. Phase 5 of the redesign
+          — real transport lands later.
         </p>
       </div>
     </div>

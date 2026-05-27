@@ -6,6 +6,8 @@
  * Routes are local UI state, not a real router — Phase 5+ will swap in
  * TanStack Router behind the same component contract.
  */
+
+import { cn } from '@pinagent/ui/lib/utils';
 import {
   Activity,
   GitBranch,
@@ -17,7 +19,6 @@ import {
   Settings,
 } from 'lucide-react';
 import type { ComponentType, SVGAttributes } from 'react';
-import { cn } from '@pinagent/ui/lib/utils';
 
 export type RouteKey =
   | 'overview'
@@ -95,6 +96,7 @@ export function NavRail({ active, onSelect, expanded = false, className }: NavRa
             {expanded && <span className="truncate">{label}</span>}
             {count !== undefined && count > 0 && (
               <span
+                role="status"
                 aria-label={`${count} pending`}
                 className={cn(
                   'ml-auto inline-flex items-center justify-center rounded-full',

@@ -6,7 +6,8 @@
  * Kept thin — anything that's per-route lives in the route component,
  * not here.
  */
-import { Maximize2, Minimize2, MoreHorizontal, PanelRight, WifiOff } from 'lucide-react';
+
+import { PinMark } from '@pinagent/ui/components/pin-mark';
 import { Button } from '@pinagent/ui/components/ui/button';
 import {
   DropdownMenu,
@@ -16,8 +17,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@pinagent/ui/components/ui/dropdown-menu';
-import { PinMark } from '@pinagent/ui/components/pin-mark';
 import { cn } from '@pinagent/ui/lib/utils';
+import { Maximize2, Minimize2, MoreHorizontal, PanelRight, WifiOff } from 'lucide-react';
 import type { DockMode } from './useDockMode';
 
 export interface DockChromeProps {
@@ -62,7 +63,9 @@ export function DockChrome({
         <span className="text-sm font-semibold tracking-tight truncate">Pinagent</span>
         {context && (
           <>
-            <span aria-hidden className="text-muted-foreground/60">·</span>
+            <span aria-hidden className="text-muted-foreground/60">
+              ·
+            </span>
             <span className="text-xs text-muted-foreground truncate font-mono">{context}</span>
           </>
         )}

@@ -9,9 +9,10 @@
  * the user should look at. Reads `count` as a number; renders the
  * badge for any value > 0.
  */
-import { forwardRef } from 'react';
+
 import { PinMark } from '@pinagent/ui/components/pin-mark';
 import { cn } from '@pinagent/ui/lib/utils';
+import { forwardRef } from 'react';
 import { type FabCorner, useDraggableFAB } from './useDraggableFAB';
 
 export interface DockFABProps {
@@ -51,6 +52,7 @@ export const DockFAB = forwardRef<HTMLButtonElement, DockFABProps>(
         <PinMark size={22} tone="cream" />
         {hasBadge && (
           <span
+            role="status"
             aria-label={`${count} pending`}
             className={cn(
               'absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1.5 rounded-full',

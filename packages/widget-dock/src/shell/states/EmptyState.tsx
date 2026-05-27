@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { ComponentType, ReactNode, SVGAttributes } from 'react';
-import { Inbox } from 'lucide-react';
+
 import { cn } from '@pinagent/ui/lib/utils';
+import { Inbox } from 'lucide-react';
+import type { ComponentType, ReactNode, SVGAttributes } from 'react';
 
 export interface EmptyStateProps {
   title: string;

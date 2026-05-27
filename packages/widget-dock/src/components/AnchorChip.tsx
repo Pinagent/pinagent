@@ -4,8 +4,9 @@
  * filename) with optional selector preview underneath. Used in list
  * rows and conversation headers.
  */
-import { FileCode } from 'lucide-react';
+
 import { cn } from '@pinagent/ui/lib/utils';
+import { FileCode } from 'lucide-react';
 
 export interface AnchorChipProps {
   loc: string;

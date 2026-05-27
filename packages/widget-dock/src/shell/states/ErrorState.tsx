@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-import { TriangleAlert } from 'lucide-react';
-import type { ReactNode } from 'react';
+
 import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
+import { TriangleAlert } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 export interface ErrorStateProps {
   title?: string;

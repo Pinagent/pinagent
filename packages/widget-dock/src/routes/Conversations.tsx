@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
-import { ArrowLeft, Filter, Search, Send } from 'lucide-react';
-import { useMemo, useState } from 'react';
+
+import { StatusBadge } from '@pinagent/ui/components/status-badge';
 import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Button } from '@pinagent/ui/components/ui/button';
 import { Input } from '@pinagent/ui/components/ui/input';
 import { Textarea } from '@pinagent/ui/components/ui/textarea';
-import { StatusBadge } from '@pinagent/ui/components/status-badge';
 import { cn } from '@pinagent/ui/lib/utils';
 import type { StatusKey } from '@pinagent/ui/tokens';
-import { ListRow } from '../components/ListRow';
+import { ArrowLeft, Filter, Search, Send } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { AnchorChip } from '../components/AnchorChip';
+import { ListRow } from '../components/ListRow';
 import { TimestampDot } from '../components/TimestampDot';
-import { FIXTURE_CONVERSATIONS, type Conversation } from '../fixtures';
+import { type Conversation, FIXTURE_CONVERSATIONS } from '../fixtures';
 
 const STATUS_FILTERS: { label: string; status: StatusKey | 'all' }[] = [
   { label: 'All', status: 'all' },
@@ -30,18 +31,14 @@ export function Conversations() {
     const q = query.trim().toLowerCase();
     return FIXTURE_CONVERSATIONS.filter((c) => {
       if (filter !== 'all' && c.status !== filter) return false;
-      if (
-        q &&
-        !c.title.toLowerCase().includes(q) &&
-        !c.anchor.loc.toLowerCase().includes(q)
-      ) {
+      if (q && !c.title.toLowerCase().includes(q) && !c.anchor.loc.toLowerCase().includes(q)) {
         return false;
       }
       return true;
     }).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
   }, [filter, query]);
 
-  const active = openId ? FIXTURE_CONVERSATIONS.find((c) => c.id === openId) ?? null : null;
+  const active = openId ? (FIXTURE_CONVERSATIONS.find((c) => c.id === openId) ?? null) : null;
 
   if (active) return <ConversationDetail conversation={active} onBack={() => setOpenId(null)} />;
 
@@ -165,10 +162,7 @@ function ConversationDetail({
       </div>
 
       <div className="border-t border-border bg-card p-3 space-y-2">
-        <Textarea
-          placeholder="Reply to the agent…"
-          className="min-h-[64px] resize-y text-xs"
-        />
+        <Textarea placeholder="Reply to the agent…" className="min-h-[64px] resize-y text-xs" />
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-muted-foreground">
             Shift + Enter for newline · Enter to send

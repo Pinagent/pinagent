@@ -9,8 +9,9 @@
  * for the embedded-iframe case (extra shadow, rounded corners). When
  * the dock ships standalone, set embedded={false}.
  */
-import type { ReactNode } from 'react';
+
 import { cn } from '@pinagent/ui/lib/utils';
+import type { ReactNode } from 'react';
 import type { DockMode } from './useDockMode';
 
 export interface DockSurfaceProps {
@@ -64,11 +65,7 @@ export function DockSurface({
 
   const sideClass = mode === 'panel' ? PANEL_SIDE[side] : '';
   const closedClass =
-    mode === 'panel'
-      ? ''
-      : open
-        ? 'opacity-100'
-        : 'opacity-0 pointer-events-none';
+    mode === 'panel' ? '' : open ? 'opacity-100' : 'opacity-0 pointer-events-none';
 
   return (
     <>

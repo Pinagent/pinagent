@@ -50,7 +50,7 @@ export const FIXTURE_CHANGES: Change[] = [
     filesChanged: 0,
     additions: 0,
     deletions: 0,
-    preview: '(no changes yet — agent hasn\'t started this conversation)',
+    preview: "(no changes yet — agent hasn't started this conversation)",
     updatedAt: isoDelta(3 * HOURS),
   },
   {

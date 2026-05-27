@@ -10,8 +10,8 @@
  * without a tooltip.
  */
 import { forwardRef, type HTMLAttributes } from 'react';
-import type { StatusKey } from '../tokens';
 import { cn } from '../lib/utils';
+import type { StatusKey } from '../tokens';
 
 const LABEL: Record<StatusKey, string> = {
   pending: 'Pending',
@@ -25,17 +25,13 @@ const LABEL: Record<StatusKey, string> = {
 };
 
 const TONE_CLASS: Record<StatusKey, string> = {
-  pending:
-    'bg-status-pending-bg text-status-pending-fg border-status-pending-border',
-  working:
-    'bg-status-working-bg text-status-working-fg border-status-working-border',
+  pending: 'bg-status-pending-bg text-status-pending-fg border-status-pending-border',
+  working: 'bg-status-working-bg text-status-working-fg border-status-working-border',
   awaitingClarification:
     'bg-status-awaiting-bg text-status-awaiting-fg border-status-awaiting-border',
-  readyToLand:
-    'bg-status-ready-bg text-status-ready-fg border-status-ready-border',
+  readyToLand: 'bg-status-ready-bg text-status-ready-fg border-status-ready-border',
   landed: 'bg-status-landed-bg text-status-landed-fg border-status-landed-border',
-  discarded:
-    'bg-status-discarded-bg text-status-discarded-fg border-status-discarded-border',
+  discarded: 'bg-status-discarded-bg text-status-discarded-fg border-status-discarded-border',
   error: 'bg-status-error-bg text-status-error-fg border-status-error-border',
   anchorLost:
     'bg-status-anchor-lost-bg text-status-anchor-lost-fg border-status-anchor-lost-border border-dashed',
