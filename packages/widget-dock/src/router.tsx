@@ -25,6 +25,7 @@ import {
   type Router as TsrRouter,
 } from '@tanstack/react-router';
 import { lazy } from 'react';
+import { ROUTE_PATHS } from './route-paths';
 import { validateConversationsSearch } from './routes/conversations-search';
 import { Overview } from './routes/Overview';
 import { DockShell } from './shell/DockShell';
@@ -47,19 +48,7 @@ const Connections = lazy(() =>
 const Settings = lazy(() => import('./routes/Settings').then((m) => ({ default: m.Settings })));
 const History = lazy(() => import('./routes/History').then((m) => ({ default: m.History })));
 
-export const ROUTE_PATHS = {
-  overview: '/',
-  conversations: '/conversations',
-  changes: '/changes',
-  branches: '/branches',
-  prs: '/prs',
-  connections: '/connections',
-  settings: '/settings',
-  history: '/history',
-} as const;
-
-export type RouteKey = keyof typeof ROUTE_PATHS;
-export type RoutePath = (typeof ROUTE_PATHS)[RouteKey];
+export { ROUTE_PATHS, type RouteKey, type RoutePath } from './route-paths';
 
 const rootRoute = createRootRoute({
   component: DockShell,

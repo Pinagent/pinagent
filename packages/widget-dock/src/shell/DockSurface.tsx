@@ -72,6 +72,7 @@ export function DockSurface({
       {(mode === 'floating' || mode === 'fullscreen') && open && (
         <div
           aria-hidden
+          data-pinagent-rect=""
           className={cn(
             'fixed inset-0 z-[2147483645]',
             mode === 'fullscreen' ? 'bg-background' : 'bg-foreground/20 backdrop-blur-sm',
@@ -88,6 +89,7 @@ export function DockSurface({
         data-open={open}
         data-embedded={embedded}
         data-mode={mode}
+        data-pinagent-rect=""
         className={cn(
           'z-[2147483646]',
           MODE_WRAPPER[mode],

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { nanoid } from 'nanoid';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 /**
  * Route-handler integration tests.
@@ -158,6 +159,67 @@ describe('GET /feedback', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as unknown[];
     expect(Array.isArray(body)).toBe(true);
+  });
+
+  it('projects every field the dock parses with `FeedbackRecordSchema`', async () => {
+    // Mirror of `FeedbackRecordSchema` in
+    // `@pinagent/widget-dock/src/transport/local.ts`. Pinned inline so a
+    // server-side projection that drops a field (the regression: an
+    // earlier shallow projection forgot `worktreeState`, `branch`, and
+    // `updatedAt`, which surfaced to users as "Couldn't load
+    // conversations") fails this test, NOT just a silent zod parse
+    // somewhere deep in the dock. Keep the field list and types in
+    // sync with that file.
+    const FeedbackRecordWireSchema = z
+      .object({
+        id: z.string(),
+        comment: z.string(),
+        file: z.string().nullable(),
+        line: z.number().nullable(),
+        col: z.number().nullable(),
+        selector: z.string(),
+        url: z.string(),
+        status: z.enum(['pending', 'fixed', 'wontfix', 'deferred']),
+        worktreeState: z.enum(['none', 'active', 'landed', 'discarded']),
+        branch: z.string().nullable(),
+        createdAt: z.string(),
+        updatedAt: z.string(),
+      })
+      .loose();
+
+    // Seed one feedback row so the projection actually has a payload
+    // to validate — the empty-array case can't catch a missing field.
+    const created = await route.POST(
+      makeRequest('/__pinagent/feedback', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(validFeedbackPayload()),
+      }),
+      ctx(['feedback']),
+    );
+    expect(created.status).toBe(200);
+    const { id } = (await created.json()) as { id: string };
+
+    const res = await route.GET(makeRequest('/__pinagent/feedback'), ctx(['feedback']));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as unknown;
+    const parsed = z.array(FeedbackRecordWireSchema).safeParse(body);
+    if (!parsed.success) {
+      throw new Error(
+        `feedback projection drifted from FeedbackRecordSchema:\n${JSON.stringify(parsed.error.issues, null, 2)}`,
+      );
+    }
+    expect(parsed.data.length).toBeGreaterThan(0);
+
+    // Cleanup so the seeded row doesn't pollute later list views.
+    await route.PATCH(
+      makeRequest(`/__pinagent/feedback/${id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'wontfix' }),
+      }),
+      ctx(['feedback', id]),
+    );
   });
 });
 

@@ -63,23 +63,71 @@ export function Pinagent({ dock }: PinagentProps = {}): null {
       document.body.appendChild(iframe);
     }
 
-    // Host-side bridge for Cmd/Ctrl + Shift + P. The iframe's own
-    // keydown listener only fires while focus is inside the dock; this
-    // listener catches the shortcut from anywhere on the host page and
-    // postMessages a toggle to the iframe. Mirror of vite-plugin's
-    // inline DOCK_HOST_BRIDGE_TAG.
+    // Host-side bridge. Mirror of vite-plugin's inline
+    // DOCK_HOST_BRIDGE_TAG — see that file for the contract.
+    //
+    //   - Cmd/Ctrl + Shift + P toggles the dock from anywhere on the
+    //     page (the iframe's own keydown listener only fires while
+    //     focus is inside the dock).
+    //   - Pointer-events passthrough: the dock broadcasts its
+    //     interactive rects via postMessage; we toggle the iframe's
+    //     `pointer-events` on every mousemove so the FAB is reachable
+    //     but the host page stays clickable everywhere the dock isn't.
     if (!dockEnabled) return;
+    let rects: Array<{ left: number; top: number; right: number; bottom: number }> = [];
+    const getIframe = (): HTMLIFrameElement | null => {
+      const el = document.getElementById('__pinagent-dock');
+      return el instanceof HTMLIFrameElement ? el : null;
+    };
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
         e.preventDefault();
-        const iframe = document.getElementById('__pinagent-dock');
-        if (iframe instanceof HTMLIFrameElement && iframe.contentWindow) {
+        const iframe = getIframe();
+        if (iframe?.contentWindow) {
           iframe.contentWindow.postMessage({ source: 'pinagent-host', type: 'toggle-dock' }, '*');
         }
       }
     };
+    const toggle = (x: number, y: number) => {
+      const iframe = getIframe();
+      if (!iframe) return;
+      let inside = false;
+      for (const r of rects) {
+        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+          inside = true;
+          break;
+        }
+      }
+      iframe.style.pointerEvents = inside ? 'auto' : 'none';
+    };
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data as {
+        source?: string;
+        type?: string;
+        rects?: unknown;
+        x?: number;
+        y?: number;
+      } | null;
+      if (!d || d.source !== 'pinagent-dock') return;
+      if (d.type === 'layout') {
+        rects = Array.isArray(d.rects) ? (d.rects as typeof rects) : [];
+      } else if (d.type === 'pointer-move' && typeof d.x === 'number' && typeof d.y === 'number') {
+        // Once the iframe is `pointer-events: auto`, the host doc no
+        // longer sees mousemoves over the iframe's region. The dock
+        // forwards them so we can toggle back to `none` when the
+        // cursor sits over an empty area of the iframe.
+        toggle(d.x, d.y);
+      }
+    };
+    const onMove = (e: MouseEvent) => toggle(e.clientX, e.clientY);
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    window.addEventListener('message', onMessage);
+    document.addEventListener('mousemove', onMove, true);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('message', onMessage);
+      document.removeEventListener('mousemove', onMove, true);
+    };
   }, [dockEnabled]);
 
   return null;
