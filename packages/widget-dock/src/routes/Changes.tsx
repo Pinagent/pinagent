@@ -3,10 +3,12 @@
 import { StatusBadge } from '@pinagent/ui/components/status-badge';
 import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
-import { GitPullRequest, RotateCcw, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, GitPullRequest, RotateCcw, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { DiffView } from '../components/DiffView';
 import { TimestampDot } from '../components/TimestampDot';
 import type { Change } from '../fixtures';
+import { useChangeDiff } from '../hooks/useChangeDiff';
 import { useChanges } from '../hooks/useChanges';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
@@ -171,6 +173,9 @@ function ReadyChangeRow({
   onLand: () => void;
   onDiscard: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const diffQuery = useChangeDiff(change.conversationId, { enabled: expanded });
+
   return (
     <article
       className={cn(
@@ -191,33 +196,66 @@ function ReadyChangeRow({
           )}
         />
         <div className="flex-1 min-w-0">
-          <div className="flex items-start gap-2">
-            <h3 className="flex-1 text-sm font-medium leading-tight text-foreground truncate">
-              {change.conversationTitle}
-            </h3>
-            <TimestampDot iso={change.updatedAt} />
-          </div>
-          <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-            <StatusBadge status={change.status} variant="dot" />
-            <span>
-              {change.filesChanged} file{change.filesChanged === 1 ? '' : 's'}
-            </span>
-            <span className="text-status-ready-fg">+{change.additions}</span>
-            <span className="text-status-error-fg">−{change.deletions}</span>
-            {change.branch && (
-              <span className="truncate font-mono text-[10.5px]">{change.branch}</span>
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className={cn(
+              'group flex w-full items-start gap-1.5 text-left',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 rounded',
             )}
-          </div>
-          {change.preview && (
-            <pre
-              className={cn(
-                'mt-2 rounded-md bg-secondary/50 border border-border',
-                'px-2.5 py-2 font-mono text-[11px] leading-relaxed text-foreground/85',
-                'overflow-x-auto whitespace-pre',
+            aria-expanded={expanded}
+          >
+            {expanded ? (
+              <ChevronDown
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                aria-hidden
+              />
+            ) : (
+              <ChevronRight
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-foreground"
+                aria-hidden
+              />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start gap-2">
+                <h3 className="flex-1 text-sm font-medium leading-tight text-foreground truncate">
+                  {change.conversationTitle}
+                </h3>
+                <TimestampDot iso={change.updatedAt} />
+              </div>
+              <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                <StatusBadge status={change.status} variant="dot" />
+                <span>
+                  {change.filesChanged} file{change.filesChanged === 1 ? '' : 's'}
+                </span>
+                <span className="text-status-ready-fg">+{change.additions}</span>
+                <span className="text-status-error-fg">−{change.deletions}</span>
+                {change.branch && (
+                  <span className="truncate font-mono text-[10.5px]">{change.branch}</span>
+                )}
+              </div>
+            </div>
+          </button>
+
+          {expanded && (
+            <div className="mt-2.5">
+              {diffQuery.isLoading && (
+                <p className="text-[11px] text-muted-foreground italic">Loading diff…</p>
               )}
-            >
-              {change.preview}
-            </pre>
+              {diffQuery.isError && (
+                <p className="text-[11px] text-status-error-fg">
+                  Couldn't load diff — {String(diffQuery.error)}
+                </p>
+              )}
+              {diffQuery.isSuccess && diffQuery.data && (
+                <DiffView diff={diffQuery.data.diff} truncated={diffQuery.data.truncated} />
+              )}
+              {diffQuery.isSuccess && !diffQuery.data && (
+                <p className="text-[11px] text-muted-foreground italic">
+                  Diff no longer available — worktree may have landed or been discarded.
+                </p>
+              )}
+            </div>
           )}
         </div>
         <div className="flex flex-col gap-1.5">

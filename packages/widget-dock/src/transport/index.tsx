@@ -35,6 +35,7 @@ export function useTransport(): DockTransport {
 }
 
 export type {
+  ChangeDiff,
   ConversationDetail,
   ConversationFilters,
   CreatePullRequestInput,

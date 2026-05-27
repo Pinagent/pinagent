@@ -14,6 +14,7 @@ import {
   FIXTURE_CONVERSATIONS,
 } from '../fixtures';
 import type {
+  ChangeDiff,
   ConversationDetail,
   ConversationFilters,
   CreatePullRequestInput,
@@ -42,6 +43,23 @@ export class MockTransport implements DockTransport {
         return c.title.toLowerCase().includes(q) || c.anchor.loc.toLowerCase().includes(q);
       })
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+  }
+
+  async getChangeDiff(id: string): Promise<ChangeDiff | null> {
+    await sleep(SIMULATED_LATENCY_MS);
+    const c = FIXTURE_CHANGES.find((c) => c.id === id);
+    if (!c) return null;
+    // Synthesize a small unified-diff body from the fixture's preview so
+    // the expanded UI is reviewable end-to-end in fixtures mode. Real
+    // diffs from the dev-server come through unchanged.
+    const synthetic = [
+      `diff --git a/${c.branch || 'fixture'}/example.tsx b/${c.branch || 'fixture'}/example.tsx`,
+      `--- a/example.tsx`,
+      `+++ b/example.tsx`,
+      `@@ -1,${Math.max(c.deletions, 1)} +1,${Math.max(c.additions, 1)} @@`,
+      ...(c.preview || '+ // fixture: no preview captured').split('\n'),
+    ].join('\n');
+    return { diff: synthetic, truncated: false };
   }
 
   async listChanges(): Promise<Change[]> {

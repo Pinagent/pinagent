@@ -10,6 +10,7 @@ import {
   ComposeOptsSchema,
   composePullRequest,
   FeedbackInputSchema,
+  getChangeDiff,
   ID_RE,
   listChanges,
   openInEditor,
@@ -129,6 +130,17 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<Response> {
   if (slug.length === 1 && slug[0] === 'changes') {
     const changes = await listChanges(storage.root);
     return json(200, changes);
+  }
+
+  // /__pinagent/changes/:id/diff — full unified diff for one
+  // conversation's worktree. Lazily called when the Changes row is
+  // expanded; capped server-side.
+  if (slug.length === 3 && slug[0] === 'changes' && slug[2] === 'diff') {
+    const id = slug[1] ?? '';
+    if (!ID_RE.test(id)) return json(400, { error: 'invalid id' });
+    const result = await getChangeDiff(storage.root, id);
+    if (!result) return json(404, { error: 'not found' });
+    return json(200, result);
   }
 
   // /__pinagent/feedback

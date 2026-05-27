@@ -16,6 +16,7 @@ import type { Change, Conversation } from '../fixtures/types';
 import { resolveWsUrl } from '../lib/ws-url';
 import { deriveDockStatus } from './status-derive';
 import type {
+  ChangeDiff,
   ConversationDetail,
   ConversationFilters,
   CreatePullRequestInput,
@@ -169,11 +170,24 @@ export class LocalTransport implements DockTransport {
         filesChanged: w.filesChanged,
         additions: w.additions,
         deletions: w.deletions,
-        // Inline diff preview comes in PR-D3; empty for now.
+        // Inline diff lives in /__pinagent/changes/:id/diff and is
+        // fetched lazily when the row is expanded — the list endpoint
+        // intentionally stays lightweight.
         preview: '',
         updatedAt: w.updatedAt,
       }),
     );
+  }
+
+  async getChangeDiff(id: string): Promise<ChangeDiff | null> {
+    const response = await fetch(this.url(`/__pinagent/changes/${encodeURIComponent(id)}/diff`), {
+      headers: { Accept: 'application/json' },
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
+    }
+    return (await response.json()) as ChangeDiff;
   }
 
   async getConversation(id: string): Promise<ConversationDetail | null> {
