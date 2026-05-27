@@ -65,6 +65,16 @@ jobs:
       - name: Lint SPDX headers
         run: pnpm lint:spdx
 
+      # Workspace-deps check: every @pinagent/* entry in a package's
+      # `dependencies` must be imported by at least one file in src/,
+      # tests/, scripts/, or *.config.*. Catches stale runtime
+      # declarations left behind by refactors. devDependencies are
+      # intentionally skipped — they're often declared for tsdown
+      # bundling or build-time consumption via filesystem path, and
+      # don't ship to downstream installs anyway.
+      - name: Lint workspace deps
+        run: pnpm lint:workspace-deps
+
       # Widget cascade: @pinagent/widget is embedded into next-plugin
       # and vite-plugin at build time, so widget code changes must
       # ship via a changeset that bumps both consumers. PR-only —
