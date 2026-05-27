@@ -12,7 +12,11 @@ export interface Conversation {
   id: string;
   /** Short slug for URL display, e.g. `cv_4f2a`. */
   shortId: string;
-  /** One-line summary of what the user asked. */
+  /**
+   * Display title. User-supplied override when one is set, otherwise
+   * derived from the conversation's original comment (first non-empty
+   * line, ≤80 chars).
+   */
   title: string;
   status: StatusKey;
   /** Page (URL or path) the original click happened on. */
@@ -26,6 +30,12 @@ export interface Conversation {
     snippet: string;
   };
   branch: string;
+  /**
+   * Soft-archive flag. Archived rows are hidden from the default
+   * Conversations list and excluded from the FAB pending count. The
+   * archive view opts in via the "Show archived" filter.
+   */
+  archived: boolean;
   /** ISO timestamp of the latest activity in this conversation. */
   updatedAt: string;
   /** Single-line preview of the latest agent message. */

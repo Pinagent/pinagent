@@ -25,6 +25,7 @@ import type {
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,
+  ConversationUpdate,
   CreatePullRequestInput,
   CreatePullRequestResult,
   DockProjectSettings,
@@ -52,6 +53,10 @@ export class MockTransport implements DockTransport {
   // observable to remove. Seeded from the fixtures on construction.
   private branches: Branch[] = FIXTURE_BRANCHES.slice();
 
+  // Mutable per-instance conversations list so rename / archive flows
+  // have something observable to mutate. Resets on reload.
+  private conversations: Conversation[] = FIXTURE_CONVERSATIONS.map((c) => ({ ...c }));
+
   // In-memory copies of the connection + settings fixtures so the
   // dock's set/clear/patch flows mutate something observable. Resets
   // whenever the page reloads — by design, since this is review-only.
@@ -69,8 +74,10 @@ export class MockTransport implements DockTransport {
 
   async listConversations(filters?: ConversationFilters): Promise<Conversation[]> {
     await sleep(SIMULATED_LATENCY_MS);
-    return FIXTURE_CONVERSATIONS.slice()
+    return this.conversations
+      .slice()
       .filter((c) => !filters?.page || c.page === filters.page)
+      .filter((c) => filters?.includeArchived || !c.archived)
       .filter((c) => {
         if (!filters?.query) return true;
         const q = filters.query.toLowerCase();
@@ -180,6 +187,30 @@ export class MockTransport implements DockTransport {
 
   discardConversation(_id: string): void {
     // no-op
+  }
+
+  async updateConversation(id: string, patch: ConversationUpdate): Promise<Conversation> {
+    await sleep(SIMULATED_LATENCY_MS);
+    const idx = this.conversations.findIndex((c) => c.id === id);
+    if (idx < 0) throw new Error(`mock: conversation ${id} not found`);
+    const existing = this.conversations[idx];
+    if (!existing) throw new Error(`mock: conversation ${id} not found`);
+    const next: Conversation = {
+      ...existing,
+      // Empty title collapses back to the existing title — for the mock
+      // we don't have access to the original comment, so we approximate
+      // by reusing whatever title is currently shown.
+      title:
+        patch.title === undefined
+          ? existing.title
+          : patch.title && patch.title.trim().length > 0
+            ? patch.title.trim()
+            : existing.title,
+      archived: patch.archived === undefined ? existing.archived : patch.archived,
+      updatedAt: new Date().toISOString(),
+    };
+    this.conversations[idx] = next;
+    return next;
   }
 
   async createPullRequest(input: CreatePullRequestInput): Promise<CreatePullRequestResult> {

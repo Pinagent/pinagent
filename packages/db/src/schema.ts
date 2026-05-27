@@ -60,6 +60,21 @@ export const conversations = sqliteTable('conversations', {
   })
     .notNull()
     .default('none'),
+  /**
+   * User-supplied title override. NULL means the dock falls back to a
+   * title derived from `comment` (first non-empty line, ≤80 chars).
+   * Renaming clears to NULL on empty input so the user can revert to
+   * the agent-derived title without remembering what it was.
+   */
+  title: text('title'),
+  /**
+   * Soft-archive flag. Archived conversations are hidden from the
+   * default Conversations list and excluded from the FAB pending count.
+   * Orthogonal to status + worktreeState — you can archive an active
+   * worktree (the worktree stays on disk) or a landed one (just hides
+   * it from the active surface).
+   */
+  archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .notNull()
     .default(sql`(unixepoch() * 1000)`),

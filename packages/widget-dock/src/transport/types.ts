@@ -28,6 +28,21 @@ export interface ConversationFilters {
   page?: string;
   /** Free-text match against title + anchor location. */
   query?: string;
+  /**
+   * When true, archived conversations are included in the result.
+   * Default false — archived rows are hidden from the active surface.
+   * The dock's history view always sets this `true`.
+   */
+  includeArchived?: boolean;
+}
+
+export interface ConversationUpdate {
+  /**
+   * Title override. Pass `''` (or `null`) to clear back to the
+   * comment-derived title. Server caps at 200 chars.
+   */
+  title?: string | null;
+  archived?: boolean;
 }
 
 /**
@@ -128,6 +143,16 @@ export interface DockTransport {
 
   /** Throw away the agent's worktree without merging. */
   discardConversation(id: string): void;
+
+  /**
+   * Patch user-facing conversation metadata: title override + archived
+   * flag. Both fields optional; passing `title: ''` clears back to the
+   * comment-derived title. Returns the updated list-row shape; callers
+   * should invalidate the detail-view query separately if open. Server
+   * emits `conversation_renamed` / `conversation_archived` /
+   * `conversation_unarchived` audit events on the transitions.
+   */
+  updateConversation(id: string, patch: ConversationUpdate): Promise<Conversation>;
 
   /**
    * Compose multiple resolved conversations into a single PR. Server

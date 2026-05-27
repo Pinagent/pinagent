@@ -41,6 +41,7 @@ export type {
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,
+  ConversationUpdate,
   CreatePullRequestInput,
   CreatePullRequestResult,
   DockProjectSettings,

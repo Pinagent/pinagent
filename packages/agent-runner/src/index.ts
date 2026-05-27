@@ -48,6 +48,7 @@ export {
   validateAnthropicKey,
   validateGithubToken,
 } from './connection-validators';
+export { type ApplyPatchResult, applyConversationPatch } from './conversation-patch';
 export { type OpenInEditorResult, openInEditor } from './editor';
 export {
   type HistorySearchHit,
