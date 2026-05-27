@@ -10,7 +10,7 @@
  * server state if it ever diverges.
  *
  * Naming follows the v2 plan (`pinagent-v2-plan.md` §4.2). When you
- * change a column here, run `pnpm --filter @pinagent/next-plugin drizzle:gen`
+ * change a column here, run `pnpm --filter @pinagent/db drizzle:gen`
  * to produce a new migration; the server applies migrations on
  * connect.
  */
