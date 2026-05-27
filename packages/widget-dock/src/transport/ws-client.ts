@@ -124,6 +124,10 @@ export class DockWsClient {
     this.send({ type: 'user_message', feedbackId, content });
   }
 
+  sendAskResponse(askId: string, answer: string): void {
+    this.send({ type: 'ask_response', askId, answer });
+  }
+
   sendLandRequest(feedbackId: string): void {
     this.send({ type: 'land_request', feedbackId });
   }

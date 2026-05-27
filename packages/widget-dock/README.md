@@ -31,7 +31,8 @@ The Next.js plugin (`@pinagent/next-plugin`) accepts the same `dock: true` optio
 ## What ships today
 
 - **Visual + components layer** — design tokens, brand-tuned shadcn primitives, the FAB + 3 layout modes + chrome + nav rail, four state components.
-- **All eight Phase 1 routes** ship as read-only screens: Overview, Conversations, Changes, Branches, PRs, Connections, Settings, History. Write actions are deferred per spec: Changes batch → Phase 3 (PR composer), Branches prune → Phase 4, Connections / Settings writes → Phase 5, History full-text + audit log → Phase 6. Disabled controls preview the eventual capability in-place so the surface is visually complete.
+- **All eight Phase 1 routes** ship as read-only screens: Overview, Conversations, Changes, Branches, PRs, Connections, Settings, History. Other write actions are deferred per spec: Changes batch → Phase 3 (PR composer), Branches prune → Phase 4, Connections / Settings writes → Phase 5, History full-text + audit log → Phase 6. Disabled controls preview the eventual capability in-place so the surface is visually complete.
+- **Phase 2 — conversation write ops** ship in Conversations: per-conversation Land / Discard with optimistic intent + 10s timeout rollback + Retry; inline `ask_user` reply form (textarea or option chips, correlated by `askId`); optimistic message append so user replies and ask answers appear in-flow instantly; a horizontal status timeline (Submitted → Working → Awaiting → Ready → Resolved) below the detail header.
 - **Transport + live data** — `DockTransport` abstraction with `LocalTransport` (HTTP to dev-server + WS subscriptions) and `MockTransport` (fixtures, `?fixtures=on`). Overview / Conversations / Changes pull from real conversation data and update in real time. Branches / PRs / Connections / Settings render from fixtures pending their server-side read endpoints; History reuses the conversations cache + a client-side resolved-status filter.
 - **No router yet.** Routing is `useState<RouteKey>` in `App.tsx`. TanStack Router lands when the embedded vs standalone entry split (spec §13) does.
 - **No embedded entry** — the two-entry-points split (embedded for iframe, standalone for hosted dashboard) from spec section 13 is also deferred. Today there's a single dev entry at `src/main.tsx`.
@@ -54,4 +55,4 @@ Opens [http://127.0.0.1:5174/](http://127.0.0.1:5174/) with both the dock and th
 pnpm --filter @pinagent/widget-dock build
 ```
 
-Produces a standalone Vite build under `dist/`. Bundle size: ~429 kB JS / ~131 kB gz (within the 200 kB gz spec budget). Geist font subsets are split into per-script woff2s fetched on demand.
+Produces a standalone Vite build under `dist/`. Bundle size: ~434 kB JS / ~132 kB gz (within the 200 kB gz spec budget). Geist font subsets are split into per-script woff2s fetched on demand.
