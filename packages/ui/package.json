@@ -10,16 +10,37 @@
   ],
   "exports": {
     "./styles/globals.css": "./src/styles/globals.css",
+    "./tokens": "./src/tokens.ts",
     "./lib/utils": "./src/lib/utils.ts",
+    "./components/ui/avatar": "./src/components/ui/avatar.tsx",
+    "./components/ui/badge": "./src/components/ui/badge.tsx",
     "./components/ui/button": "./src/components/ui/button.tsx",
-    "./components/ui/card": "./src/components/ui/card.tsx"
+    "./components/ui/card": "./src/components/ui/card.tsx",
+    "./components/ui/command": "./src/components/ui/command.tsx",
+    "./components/ui/dialog": "./src/components/ui/dialog.tsx",
+    "./components/ui/dropdown-menu": "./src/components/ui/dropdown-menu.tsx",
+    "./components/ui/input": "./src/components/ui/input.tsx",
+    "./components/ui/scroll-area": "./src/components/ui/scroll-area.tsx",
+    "./components/ui/separator": "./src/components/ui/separator.tsx",
+    "./components/ui/sheet": "./src/components/ui/sheet.tsx",
+    "./components/ui/skeleton": "./src/components/ui/skeleton.tsx",
+    "./components/ui/tabs": "./src/components/ui/tabs.tsx",
+    "./components/ui/textarea": "./src/components/ui/textarea.tsx",
+    "./components/ui/tooltip": "./src/components/ui/tooltip.tsx",
+    "./components/pin-mark": "./src/components/pin-mark.tsx",
+    "./components/status-badge": "./src/components/status-badge.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource-variable/geist": "^5.2.5",
+    "@fontsource-variable/geist-mono": "^5.2.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "lucide-react": "^1.16.0",
+    "radix-ui": "^1.4.3",
     "tailwind-merge": "^2.6.0"
   },
   "peerDependencies": {
