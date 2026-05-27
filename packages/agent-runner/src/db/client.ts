@@ -45,7 +45,10 @@ const MIGRATIONS_DIR = (() => {
     // packages/db/drizzle.
     resolve(base, '..', '..', '..', 'db', 'drizzle'),
   ];
-  return candidates.find((p) => existsSync(p)) ?? candidates[0]!;
+  // Check for the journal file specifically, not just the directory.
+  // An empty `drizzle/` dir (e.g. left behind by a partial prebuild)
+  // would otherwise short-circuit the fallback and fail at migrate().
+  return candidates.find((p) => existsSync(resolve(p, 'meta', '_journal.json'))) ?? candidates[0]!;
 })();
 
 export function getDb(projectRoot: string): Db {
