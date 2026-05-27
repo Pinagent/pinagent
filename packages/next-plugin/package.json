@@ -2,7 +2,7 @@
   "name": "@pinagent/next-plugin",
   "version": "0.0.20",
   "license": "Apache-2.0",
-  "description": "Next.js adapter for Pinagent: webpack loader for JSX tagging, route handlers for /__pinagent/*, and a <Pinagent /> widget component.",
+  "description": "Next.js plugin for Pinagent — capture in-browser UI feedback with file:line and a screenshot, hand it to your coding agent over MCP.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Pinagent/pinagent.git",
