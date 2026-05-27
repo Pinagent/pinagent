@@ -56,3 +56,42 @@ export function findLoc(start: Element): PaLoc | null {
   }
   return null;
 }
+
+/**
+ * Phase G — re-anchor lookup. Given the metadata captured at pick time,
+ * try to find a live DOM element. `data-pa-loc` is preferred because it
+ * pins to the exact JSX source location (immune to layout shuffles);
+ * the CSS selector is the fallback for elements that lost their attribute
+ * (e.g. compiled-away in production, dynamically inserted, or living in
+ * a third-party component the Babel plugin never visited).
+ *
+ * Returns the first match for `data-pa-loc` (which may be ambiguous if the
+ * same JSX literal is rendered multiple times via `.map()`), then the
+ * first match for `selector`. Returns `null` when neither resolves.
+ */
+export function findReanchorTarget(
+  dataPaLoc: string | null,
+  selector: string | null,
+): Element | null {
+  if (dataPaLoc) {
+    // Iterate rather than escape the value into a CSS attribute selector —
+    // some host paths contain characters (quotes, backslashes, brackets)
+    // that need careful CSS escaping and a `\` rule that happy-dom doesn't
+    // accept the same way real browsers do. Iterating sidesteps that.
+    const candidates = document.querySelectorAll('[data-pa-loc]');
+    for (let i = 0; i < candidates.length; i++) {
+      const el = candidates[i];
+      if (el?.getAttribute('data-pa-loc') === dataPaLoc) return el;
+    }
+  }
+  if (selector) {
+    try {
+      const found = document.querySelector(selector);
+      if (found) return found;
+    } catch {
+      // Selector no longer parses after the page changed shape — e.g.
+      // a `:nth-of-type` chain whose siblings disappeared.
+    }
+  }
+  return null;
+}

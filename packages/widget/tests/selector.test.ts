@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { findLoc, shortSelector } from '../src/selector';
+import { findLoc, findReanchorTarget, shortSelector } from '../src/selector';
 
 beforeEach(() => {
   document.body.innerHTML = '';
@@ -101,5 +101,53 @@ describe('findLoc', () => {
       '<div data-pa-loc="far.tsx:1:1"><div data-pa-loc="near.tsx:2:2"><span>x</span></div></div>';
     const span = document.querySelector('span') as Element;
     expect(findLoc(span)).toEqual({ file: 'near.tsx', line: 2, col: 2 });
+  });
+});
+
+describe('findReanchorTarget', () => {
+  it('returns the element matching data-pa-loc', () => {
+    document.body.innerHTML = '<section><button data-pa-loc="App.tsx:10:5">Go</button></section>';
+    const found = findReanchorTarget('App.tsx:10:5', 'body > section > button');
+    expect(found?.tagName).toBe('BUTTON');
+  });
+
+  it('falls back to the selector when data-pa-loc is null', () => {
+    document.body.innerHTML = '<section><button>Go</button></section>';
+    const found = findReanchorTarget(null, 'body > section > button');
+    expect(found?.tagName).toBe('BUTTON');
+  });
+
+  it('falls back to the selector when data-pa-loc no longer matches', () => {
+    document.body.innerHTML = '<section><button>Go</button></section>';
+    const found = findReanchorTarget('App.tsx:10:5', 'body > section > button');
+    expect(found?.tagName).toBe('BUTTON');
+  });
+
+  it('returns null when neither lookup matches', () => {
+    document.body.innerHTML = '<div>x</div>';
+    expect(findReanchorTarget('App.tsx:10:5', 'body > button')).toBeNull();
+  });
+
+  it('handles selectors that throw without crashing', () => {
+    document.body.innerHTML = '<button>x</button>';
+    expect(findReanchorTarget(null, 'body >')).toBeNull();
+  });
+
+  it('handles quote chars in data-pa-loc without crashing the lookup', () => {
+    // Synthetic — Babel never emits paths with quote chars in practice.
+    // The iteration-based implementation sidesteps CSS-attribute-selector
+    // escaping pitfalls (a real concern because happy-dom and Chromium
+    // disagree on `\"` handling in attribute selectors).
+    document.body.innerHTML = "<button data-pa-loc='weird\".tsx:1:1'>x</button>";
+    const found = findReanchorTarget('weird".tsx:1:1', 'body > button');
+    expect(found?.tagName).toBe('BUTTON');
+  });
+
+  it('returns the data-pa-loc match even if the selector would also work', () => {
+    document.body.innerHTML =
+      '<button data-pa-loc="A.tsx:1:1" id="first">A</button>' +
+      '<button data-pa-loc="B.tsx:2:2" id="second">B</button>';
+    const found = findReanchorTarget('B.tsx:2:2', 'body > button');
+    expect((found as HTMLElement | null)?.id).toBe('second');
   });
 });

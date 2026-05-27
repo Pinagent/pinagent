@@ -11,7 +11,7 @@ import {
   recordUserMessage,
 } from './db/writes';
 import { capturePageScreenshot } from './screenshot';
-import { findLoc, shortSelector } from './selector';
+import { findLoc, findReanchorTarget, shortSelector } from './selector';
 import { STYLES } from './styles';
 
 const ENDPOINT = '/__pinagent/feedback';
@@ -91,6 +91,23 @@ interface Composer {
   iframe: HTMLIFrameElement;
   bubble: HTMLElement;
   dragHandle: HTMLElement;
+  /**
+   * Re-anchor metadata captured at pick time. Used by the rAF loop to
+   * recover a fresh target reference when the original Node disappears
+   * from the DOM (HMR, framework re-render, JS rewrite). `dataPaLoc` is
+   * the precise lookup ("`<file>:<line>:<col>`") embedded by
+   * `@pinagent/babel-plugin`; `selector` is the CSS fallback. See
+   * `tryReanchor` for the lookup order.
+   */
+  dataPaLoc: string | null;
+  selector: string;
+  /**
+   * True when neither `dataPaLoc` nor `selector` resolves to a live
+   * element. The widget stays put at its last known coordinates with a
+   * visible "anchor lost" indicator on the bubble; clicking the bubble
+   * retries the re-anchor lookup.
+   */
+  anchorLost: boolean;
   /**
    * User-applied positional offset relative to the auto-anchored
    * position. Updated by dragging the handle; applied on top of the
@@ -184,6 +201,14 @@ const DOC_STYLES = `
 .pa-bubble.done  { border-color: #10b981; color: #10b981; background: #ecfdf5; }
 .pa-bubble.error { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
 .pa-bubble.pending { border-color: #94a3b8; color: #94a3b8; }
+/* Phase G — anchor lost. Dashed amber ring so it reads as "needs attention"
+   without claiming an outright error. Click retries the re-anchor lookup. */
+.pa-bubble.anchor-lost {
+  border-style: dashed;
+  border-color: #d97706;
+  color: #d97706;
+  background: #fffbeb;
+}
 
 .pa-bubble-spinner {
   width: 14px;
@@ -681,10 +706,25 @@ export function mount(): void {
     composers.add(composer);
   }
 
+  /**
+   * Phase G — try to recover a fresh DOM reference for a composer whose
+   * `target` is no longer in the document. Mutates `composer.target` on
+   * success and returns `true`; returns `false` if the lookup fails,
+   * leaving the original (detached) target in place. The real lookup
+   * lives in `selector.ts::findReanchorTarget` so it can be tested.
+   */
+  function tryReanchor(composer: Composer): boolean {
+    const found = findReanchorTarget(composer.dataPaLoc, composer.selector);
+    if (!found) return false;
+    composer.target = found;
+    return true;
+  }
+
   function createComposer(target: Element, click: { x: number; y: number }): Composer {
     const loc = findLoc(target);
     const selector = shortSelector(target);
     const metaText = loc ? `${loc.file}:${loc.line}:${loc.col}` : selector;
+    const dataPaLoc = loc ? `${loc.file}:${loc.line}:${loc.col}` : null;
 
     // Iframe lives in document.body (not the shadow root) so it scrolls
     // naturally with the page via absolute positioning in page coords.
@@ -760,7 +800,32 @@ export function mount(): void {
       rafHandle = requestAnimationFrame(positionLoop);
     }
     function reposition() {
-      const r = target.getBoundingClientRect();
+      // Phase G — re-anchor on staleness. If the target Node has been
+      // detached (typically because HMR / a framework re-render replaced
+      // it with a new element of the same shape), try to relocate it by
+      // `data-pa-loc` first and CSS selector second. On success, swap
+      // `composer.target` in place and keep going; the user sees no
+      // disruption. On failure, surface a "anchor lost" indicator on the
+      // bubble — re-clicking the bubble retries the lookup.
+      if (!composer.target.isConnected) {
+        if (tryReanchor(composer)) {
+          if (composer.anchorLost) {
+            composer.anchorLost = false;
+            bubble.classList.remove('anchor-lost');
+            bubble.removeAttribute('title');
+          }
+        } else if (!composer.anchorLost) {
+          composer.anchorLost = true;
+          bubble.classList.add('anchor-lost');
+          bubble.title = 'Anchor lost — element removed in last update. Click to retry.';
+        }
+      } else if (composer.anchorLost) {
+        composer.anchorLost = false;
+        bubble.classList.remove('anchor-lost');
+        bubble.removeAttribute('title');
+      }
+
+      const r = composer.target.getBoundingClientRect();
       // Anchor = where the user clicked, expressed in document coords.
       // Moves with the target as it scrolls/layout-shifts.
       const anchorDocX = r.left + window.scrollX + relX;
@@ -826,6 +891,9 @@ export function mount(): void {
       iframe,
       bubble,
       dragHandle,
+      dataPaLoc,
+      selector,
+      anchorLost: false,
       userOffsetX: 0,
       userOffsetY: 0,
       turn: 0,
@@ -907,6 +975,19 @@ export function mount(): void {
     bubble.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      // When the anchor is lost, prioritise re-trying the lookup over
+      // expanding the composer. If the user genuinely deleted the
+      // target, repeated clicks will keep failing — Minimize-then-X
+      // through the open composer is still the dismissal path.
+      if (composer.anchorLost) {
+        if (tryReanchor(composer)) {
+          composer.anchorLost = false;
+          bubble.classList.remove('anchor-lost');
+          bubble.removeAttribute('title');
+          reposition();
+        }
+        return;
+      }
       swapTo(composer);
     });
 
