@@ -1,13 +1,78 @@
 # @pinagent/widget
 
-Browser UI for Pinagent. Renders a fixed 💬 button inside a closed shadow root, lets the user pick a DOM element and write a comment, captures a page screenshot, and POSTs the result to `/__pinagent/feedback` on the same origin.
+Browser UI for Pinagent — the per-element widget. Renders a fixed FAB inside a closed shadow root, lets the user pick any DOM element, captures a page screenshot, and submits a comment. Once submitted, each pinned element grows its own composer iframe that streams the agent's progress back from the WebSocket.
 
-**You should not install this package directly.** It is built as an IIFE and embedded inside `@pinagent/vite-plugin` at publish time. The plugin serves it from `/__pinagent/widget.js`.
+Complements `@pinagent/widget-dock`: where the dock owns the project-management surface (lists, PR composer, branches, settings), this widget owns *one conversation per pinned element*.
+
+**You should not install this package directly.** It's built as an IIFE and served by the host plugins (`@pinagent/vite-plugin`, `@pinagent/next-plugin`) at `/__pinagent/widget.js`. Adopters opt the widget in by adding the plugin; configuration lives there.
+
+## Shadow-root contract
+
+Everything UI ships under a single closed shadow root (`mode: 'closed'`):
+
+- The FAB, picker overlay, and per-element composer iframes mount into descendants of the shadow root.
+- Closed mode means host page styles can't bleed in and host JS can't reach in via `host.shadowRoot`.
+- The composer is an `iframe` because closed shadow can still be pierced by some browser devtools / extensions, and the agent transcript needs strong isolation from host CSS.
+- One mount per page: `window.__pinagentMounted` short-circuits duplicate IIFE loads (dev preview + host plugin both attempting to inject is the common case).
+
+## Picker hotkey
+
+Press `c` outside any text input to enter element-pick mode. Click any element on the page to open the composer pinned to it. The hotkey is configurable via a global:
+
+```js
+window.__pinagentHotkey = 'p';      // pick mode key
+window.__pinagentHotkey = false;    // disable entirely
+```
+
+`shouldIgnoreHotkey` skips the trigger when the keypress is inside `<input>`, `<textarea>`, `<select>`, a `contenteditable` region, or carries a modifier (`Cmd` / `Ctrl` / `Alt`).
+
+A second shortcut, **`Shift + N`**, hops between active in-flight composers — useful when several agents are running concurrently and you want to flip through their streams without clicking each one. The chord is deliberate: bare `n` collides with typing; `Cmd/Ctrl + N` is the browser's "new window".
+
+## Anchoring + re-anchoring
+
+When the user picks an element, the widget records:
+
+- `data-pa-loc` — `file:line:col` injected by `@pinagent/babel-plugin` at build time. Preferred anchor because it survives DOM restructuring as long as the source line doesn't move.
+- A short CSS selector — fallback when `data-pa-loc` isn't present (e.g. third-party markup, or apps not running the babel plugin).
+- Cursor position relative to the element + viewport size, so the composer chrome stays close to the click point across scrolls and layout shifts.
+
+`findReanchorTarget` looks up the live element on reload / HMR. The babel-injected attribute is unique-when-possible but can be ambiguous if the same JSX renders in a loop; the selector fallback breaks ties.
+
+All anchor metadata persists in the `widget_anchors` table (`@pinagent/db`). The browser cache rebuilds itself from the server if it ever diverges.
+
+## Screenshot capture
+
+`screenshot.ts` uses `html-to-image` to snapshot the visible viewport when the user submits a comment. The data URL is sent inline with `POST /__pinagent/feedback`, so the screenshot is the same bytes the dock and agent see. No headless browser, no extension.
+
+Caveats:
+- Cross-origin images render as blanks (browser security).
+- Canvas elements with `preserveDrawingBuffer: false` render blank.
+- The agent gets the screenshot via `mcp__pinagent__get_feedback`, not via DOM access — so a missing capture degrades gracefully.
+
+## Local cache
+
+The widget keeps a per-page mirror of conversation state in SQLite-WASM via `@pinagent/browser-runtime`'s worker. `src/db/` has the typed client:
+
+- `reads.ts` — `listPendingForCurrentPage`, `getConversationMessages`
+- `writes.ts` — `recordConversationStart`, `recordEvent`, `recordUserMessage`, `markConversationResolved`, `deleteConversation`
+
+The schema lives in `@pinagent/db` and is shared with the server's `better-sqlite3` instance. The cache is rebuildable: a divergence from the server triggers a wipe + rehydrate, never a manual reconcile.
 
 ## Build
 
 ```bash
-pnpm build
+pnpm --filter @pinagent/widget build
 ```
 
-Produces `dist/widget.global.js` (single IIFE, no external deps).
+`tsdown` produces:
+
+- `dist/widget.iife.js` — single IIFE, no external deps. Served by host plugins at `/__pinagent/widget.js`.
+- `dist/brand.*` and `dist/logo.*` — small ESM/CJS exports for downstream packages that want the brand palette or the inline logo SVG (the dock uses these in its FAB).
+
+Subpath exports declared in `package.json`:
+
+```ts
+import widgetIifeUrl from '@pinagent/widget/iife?url';  // URL to the IIFE
+import { BRAND_INK } from '@pinagent/widget/brand';
+import { Logo } from '@pinagent/widget/logo';
+```
