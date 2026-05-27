@@ -146,16 +146,16 @@ pinagent(coreConfig, { spawnAgent: 'inline' });
 
 ⚠️ Parallel agents will edit the same files. If you submit two comments in the same minute, they may race. Channel mode + worktree mode are safer for any real workflow.
 
-### Auto-trigger mode (Vite only)
+### Inline / worktree spawn mode (Vite)
 
-Vite plugin runs a Claude Agent SDK `query()` per submit, with internal serialization (submits while another agent is running get batched into one follow-up turn). Equivalent to "inline" mode but with race-prevention built in. Worktree mode is not in the Vite plugin yet.
+Vite plugin shares `@pinagent/agent-runner` with the Next plugin and exposes the same `spawnAgent: 'inline' | 'worktree' | 'off' | false` option (default `'inline'`). Streaming output, follow-up turns, and `ask_user` prompts all render in the widget over WebSocket — identical UX to Next.
 
 Same auth options as the Next spawn modes: `claude login` (subscription, default), `ANTHROPIC_API_KEY` (API account), or a `CLAUDE_CODE_USE_*` provider env var.
 
 ```ts
-pinagent({ autoTrigger: true })
-// or with options:
-pinagent({ autoTrigger: { permissionMode: 'bypassPermissions' } })
+pinagent()                            // default: spawnAgent: 'inline'
+pinagent({ spawnAgent: 'worktree' })  // parallel isolated git worktrees
+pinagent({ spawnAgent: 'off' })       // disable per-submit spawn entirely
 ```
 
 ### Pull mode

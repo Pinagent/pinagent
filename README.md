@@ -93,17 +93,18 @@ The plugin writes JSON to `.pinagent/feedback/<id>.json` and the screenshot to `
 
 ## Hands-off mode (optional)
 
-If you'd rather not bounce into Claude Code for every comment, opt into auto-spawn:
+If you'd rather not bounce into Claude Code for every comment, the per-submit
+spawn flow is on by default in both plugins:
 
 ```ts
-// Vite — off by default
-pinagent({ autoTrigger: true })
+// Vite — defaults to spawnAgent: 'inline'
+pinagent({ spawnAgent: 'inline' })
 
-// Next.js — 'inline' is also the default if you omit the option
+// Next.js — same option, same default
 pinagent(nextConfig, { spawnAgent: 'inline' })
 ```
 
-`inline` runs the Claude Agent SDK against your project root for each comment, streaming events back to the widget. Switch to `worktree` to give each comment its own git worktree at `.pinagent/worktrees/<id>` on branch `pinagent/<id>` — true parallel agents, review each like a PR. See `packages/agent-runner` for the full surface.
+`inline` runs the Claude Agent SDK against your project root for each comment, streaming events back to the widget over WebSocket. Switch to `worktree` to give each comment its own git worktree at `.pinagent/worktrees/<id>` on branch `pinagent/<id>` — true parallel agents, review each like a PR. Pass `'off'` (or `false`) to disable per-submit spawning entirely. See `packages/agent-runner` for the full surface.
 
 ## Project layout
 
@@ -112,7 +113,8 @@ pinagent(nextConfig, { spawnAgent: 'inline' })
 - **`@pinagent/mcp`** — stdio MCP server. Ships the `pinagent-mcp` bin.
 - **`@pinagent/widget`** — the browser UI (shadow-root button → pick → composer). Embedded by the plugins at build time.
 - **`@pinagent/babel-plugin`** — the JSX → `data-pa-loc` transform used by both plugins.
-- **`@pinagent/agent-runner`** — SDK-driven local runtime used by `autoTrigger` and `spawnAgent`.
+- **`@pinagent/agent-runner`** — SDK-driven local runtime that backs `spawnAgent` in both plugins. WebSocket server, storage, worktree management, `ask_user`.
+- **`@pinagent/cli`** — `pinagent` CLI. Currently exposes `pinagent mcp` (stdio MCP server).
 - `@pinagent/browser-runtime`, `@pinagent/db`, `@pinagent/shared`, `@pinagent/ui` — internal.
 
 ## Invariants
