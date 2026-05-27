@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { z } from 'zod';
-import type { AgentEvent } from './event-bus';
+import { type AgentEvent, AgentEventSchema } from './event-bus';
 
 /**
  * Wire-format messages between the browser widget and the dev-side
@@ -68,6 +68,10 @@ export type ClientMessage = z.infer<typeof ClientMessageSchema>;
  */
 export type ProjectEvent = { type: 'conversations_changed' };
 
+export const ProjectEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('conversations_changed') }).passthrough(),
+]);
+
 // ---------- Server → client ----------
 
 /**
@@ -77,15 +81,17 @@ export type ProjectEvent = { type: 'conversations_changed' };
  *   - `conflict` — merge aborted because of conflicts; `conflicts` lists files
  *   - `ttl_warning` — orphan-sweeper found this worktree past TTL
  */
-export type WorktreeWireState =
-  | 'none'
-  | 'active'
-  | 'landing'
-  | 'landed'
-  | 'discarding'
-  | 'discarded'
-  | 'conflict'
-  | 'ttl_warning';
+export const WorktreeWireStateSchema = z.enum([
+  'none',
+  'active',
+  'landing',
+  'landed',
+  'discarding',
+  'discarded',
+  'conflict',
+  'ttl_warning',
+]);
+export type WorktreeWireState = z.infer<typeof WorktreeWireStateSchema>;
 
 export type ServerMessage =
   | { type: 'event'; feedbackId: string; event: AgentEvent }
@@ -103,11 +109,66 @@ export type ServerMessage =
       message?: string;
       /**
        * Count of files with uncommitted changes (`git status --porcelain`)
-       * in the worktree. Only meaningful for active-ish states
-       * (`active`, `landing`, `conflict`, `ttl_warning`); omitted otherwise.
+       * in the worktree. Only meaningful for active-ish states.
        */
       changesCount?: number;
     }
   /** Project-wide event; only delivered to sockets that sent `subscribe_project`. */
   | { type: 'project_event'; event: ProjectEvent }
   | { type: 'pong' };
+
+/**
+ * Runtime guard at the wire boundary. The dock's ws-client `safeParse`s
+ * every incoming frame so drift in the server's wire format surfaces
+ * as a dropped frame, not as `undefined` rendered into React.
+ *
+ * Kept separate from the manual `ServerMessage` type union above: the
+ * type union narrows cleanly under discriminated-union semantics, and
+ * the schema's `.passthrough()` index signatures would block that
+ * narrowing for spread-and-mutate constructions on the agent-runner
+ * side. Both must stay in sync — when adding a variant, update both.
+ */
+export const ServerMessageSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      type: z.literal('event'),
+      feedbackId: z.string(),
+      event: AgentEventSchema,
+    })
+    .passthrough(),
+  z
+    .object({
+      type: z.literal('done'),
+      feedbackId: z.string(),
+    })
+    .passthrough(),
+  z
+    .object({
+      type: z.literal('error'),
+      feedbackId: z.string().optional(),
+      message: z.string(),
+    })
+    .passthrough(),
+  z
+    .object({
+      type: z.literal('worktree_state'),
+      feedbackId: z.string(),
+      state: WorktreeWireStateSchema,
+      commitSha: z.string().optional(),
+      conflicts: z.array(z.string()).optional(),
+      message: z.string().optional(),
+      changesCount: z.number().optional(),
+    })
+    .passthrough(),
+  z
+    .object({
+      type: z.literal('project_event'),
+      event: ProjectEventSchema,
+    })
+    .passthrough(),
+  z
+    .object({
+      type: z.literal('pong'),
+    })
+    .passthrough(),
+]);

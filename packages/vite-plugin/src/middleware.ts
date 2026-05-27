@@ -63,10 +63,13 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
     try {
       // GET /__pinagent/dock/<path> — dock static assets (only when opted in).
       // Strips query strings (Vite's HMR adds ?v=hash to asset requests).
+      // Bare /__pinagent/dock falls back to embedded.html (the production
+      // iframe entry); the standalone build is loaded by the hosted
+      // dashboard, not via this middleware.
       const dockMatch =
         dock && req.method === 'GET' && /^\/__pinagent\/dock(?:\/(.*?))?(?:\?.*)?$/.exec(url);
       if (dockMatch) {
-        const file = dockMatch[1] && dockMatch[1].length > 0 ? dockMatch[1] : 'index.html';
+        const file = dockMatch[1] && dockMatch[1].length > 0 ? dockMatch[1] : 'embedded.html';
         return serveDockFile(res, file);
       }
 

@@ -103,8 +103,11 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
   // /__pinagent/dock/<path> — dock static assets. Always served when
   // the dock package is installed; the `dock: true` opt-in just
   // controls whether the host page mounts the iframe (see component.tsx).
+  // Bare /__pinagent/dock falls back to embedded.html (the production
+  // iframe entry); the standalone build is loaded by the hosted
+  // dashboard, not via this route.
   if (slug.length >= 1 && slug[0] === 'dock') {
-    const file = slug.length > 1 ? slug.slice(1).join('/') : 'index.html';
+    const file = slug.length > 1 ? slug.slice(1).join('/') : 'embedded.html';
     return serveDockFile(file);
   }
 
