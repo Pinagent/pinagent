@@ -64,9 +64,9 @@ describe('db client migrator', () => {
     getDb(root);
 
     const raw = new DatabaseSync(join(root, '.pinagent', 'db.sqlite'));
-    const rows = raw
-      .prepare('SELECT hash FROM __drizzle_migrations ORDER BY id')
-      .all() as { hash: string }[];
+    const rows = raw.prepare('SELECT hash FROM __drizzle_migrations ORDER BY id').all() as {
+      hash: string;
+    }[];
     raw.close();
 
     const journal = await readJournal();
@@ -109,9 +109,7 @@ describe('db client migrator', () => {
          created_at NUMERIC
        )`,
     );
-    const insert = raw.prepare(
-      'INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)',
-    );
+    const insert = raw.prepare('INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)');
     const journal = await readJournal();
     for (const entry of journal) {
       const sql = await readFile(join(DRIZZLE_DIR, `${entry.tag}.sql`), 'utf8');

@@ -20,7 +20,7 @@
  * If this test fails with ENOENT, run
  * `pnpm --filter @pinagent/widget-dock build` first.
  */
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';

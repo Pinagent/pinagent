@@ -101,9 +101,13 @@ export function Pinagent({ dock }: PinagentProps = {}): null {
       iframe.style.pointerEvents = inside ? 'auto' : 'none';
     };
     const onMessage = (e: MessageEvent) => {
-      const d = e.data as
-        | { source?: string; type?: string; rects?: unknown; x?: number; y?: number }
-        | null;
+      const d = e.data as {
+        source?: string;
+        type?: string;
+        rects?: unknown;
+        x?: number;
+        y?: number;
+      } | null;
       if (!d || d.source !== 'pinagent-dock') return;
       if (d.type === 'layout') {
         rects = Array.isArray(d.rects) ? (d.rects as typeof rects) : [];
