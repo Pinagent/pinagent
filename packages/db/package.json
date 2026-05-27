@@ -25,13 +25,16 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "drizzle:gen": "drizzle-kit generate",
+    "drizzle:check": "drizzle-kit check"
   },
   "peerDependencies": {
     "drizzle-orm": "*"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
+    "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.38.0",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3"
