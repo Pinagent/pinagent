@@ -15,6 +15,7 @@ export const FIXTURE_CHANGES: Change[] = [
     filesChanged: 2,
     additions: 34,
     deletions: 4,
+    externallyModified: false,
     preview:
       '+ <a href="https://github.com/pinagent" aria-label="GitHub">\n+   <GithubIcon className="h-4 w-4" />\n+ </a>',
     updatedAt: isoDelta(45 * 60 * 1000),
@@ -28,6 +29,8 @@ export const FIXTURE_CHANGES: Change[] = [
     filesChanged: 1,
     additions: 18,
     deletions: 6,
+    // User reached into the worktree and committed a manual tweak.
+    externallyModified: true,
     preview:
       '- <p className="text-error">Password too short.</p>\n+ <PasswordRules onFocus visible={focused} />',
     updatedAt: isoDelta(2 * HOURS),
@@ -41,6 +44,7 @@ export const FIXTURE_CHANGES: Change[] = [
     filesChanged: 1,
     additions: 12,
     deletions: 0,
+    externallyModified: false,
     preview:
       '+ {\n+   q: "What\'s your refund policy?",\n+   a: "Full refund within 30 days. See /support/refunds.",\n+ }',
     updatedAt: isoDelta(50 * 60 * 1000),
@@ -54,6 +58,7 @@ export const FIXTURE_CHANGES: Change[] = [
     filesChanged: 0,
     additions: 0,
     deletions: 0,
+    externallyModified: false,
     preview: "(no changes yet — agent hasn't started this conversation)",
     updatedAt: isoDelta(3 * HOURS),
   },
@@ -66,6 +71,7 @@ export const FIXTURE_CHANGES: Change[] = [
     filesChanged: 0,
     additions: 0,
     deletions: 0,
+    externallyModified: false,
     preview: '(agent failed before producing changes — see conversation for details)',
     updatedAt: isoDelta(40 * 60 * 1000),
   },

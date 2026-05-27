@@ -45,6 +45,14 @@ export interface Change {
   additions: number;
   deletions: number;
   /**
+   * True when the worktree's branch has commits the agent didn't make
+   * (the agent never commits — Land does it on the user's behalf). A
+   * human reached into the worktree and committed manually. The dock
+   * shows a "modified externally" badge on the row so the user knows
+   * their off-flow edits exist before they Land or Discard.
+   */
+  externallyModified: boolean;
+  /**
    * Truncated diff preview for the row. PR-D3 wires the inline diff
    * renderer; for now this stays empty on real data and is just
    * populated in fixtures for the design demo.
