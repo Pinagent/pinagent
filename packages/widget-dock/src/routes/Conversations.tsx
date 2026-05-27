@@ -8,8 +8,9 @@ import { Input } from '@pinagent/ui/components/ui/input';
 import { Textarea } from '@pinagent/ui/components/ui/textarea';
 import { cn } from '@pinagent/ui/lib/utils';
 import type { StatusKey } from '@pinagent/ui/tokens';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, Check, Filter, Search, Send } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnchorChip } from '../components/AnchorChip';
 import { ListRow } from '../components/ListRow';
 import { TimestampDot } from '../components/TimestampDot';
@@ -34,7 +35,23 @@ const STATUS_FILTERS: { label: string; status: StatusKey | 'all' }[] = [
 ];
 
 export function Conversations() {
-  const [openId, setOpenId] = useState<string | null>(null);
+  // `?id=<conversation-id>` drives the detail view. Sourcing it from
+  // the URL (not local state) makes detail pages share-able as deep
+  // links, integrates with browser back/forward, and survives the
+  // dock's open/close — closing then reopening with the same URL
+  // restores the same conversation.
+  const { id: openId } = useSearch({ from: '/conversations' });
+  const navigate = useNavigate();
+  const openConversation = useCallback(
+    (id: string) => {
+      void navigate({ to: '/conversations', search: { id } });
+    },
+    [navigate],
+  );
+  const closeConversation = useCallback(() => {
+    void navigate({ to: '/conversations', search: {} });
+  }, [navigate]);
+
   const [filter, setFilter] = useState<StatusKey | 'all'>('all');
   const [query, setQuery] = useState('');
   const transport = useTransport();
@@ -56,7 +73,7 @@ export function Conversations() {
     // `key` on the detail view forces a fresh mount per conversation so
     // optimistic state, answered ask ids, and lifecycle intent from one
     // conversation can't leak into another.
-    return <ConversationDetailView key={openId} id={openId} onBack={() => setOpenId(null)} />;
+    return <ConversationDetailView key={openId} id={openId} onBack={closeConversation} />;
   }
 
   return (
@@ -142,7 +159,7 @@ export function Conversations() {
                 key={c.id}
                 status={c.status}
                 title={c.title}
-                onClick={() => setOpenId(c.id)}
+                onClick={() => openConversation(c.id)}
                 meta={
                   <>
                     {c.anchor.loc && <AnchorChip loc={c.anchor.loc} selector={c.anchor.selector} />}

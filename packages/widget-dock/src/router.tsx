@@ -25,6 +25,7 @@ import {
   type Router as TsrRouter,
 } from '@tanstack/react-router';
 import { lazy } from 'react';
+import { validateConversationsSearch } from './routes/conversations-search';
 import { Overview } from './routes/Overview';
 import { DockShell } from './shell/DockShell';
 
@@ -73,6 +74,15 @@ const conversationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: ROUTE_PATHS.conversations,
   component: Conversations,
+  /**
+   * `?id=<conversation-id>` opens the detail view for that conversation
+   * inline. Empty / absent → list view. The route itself stays a single
+   * path so the list+detail share state (filters, query, scroll) when
+   * the user backs out of detail. Logic lives in
+   * `routes/conversations-search.ts` so it can be unit-tested without
+   * the full router tree.
+   */
+  validateSearch: validateConversationsSearch,
 });
 const changesRoute = createRoute({
   getParentRoute: () => rootRoute,
