@@ -7,10 +7,9 @@ export function Footer() {
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div className="font-semibold text-foreground/80">Pinagent · Next demo</div>
         <nav className="flex gap-4">
-          <FooterLink href="https://github.com/JacksonMalloy/pinagent/issues">Issues</FooterLink>
-          <FooterLink href="/docs">Docs</FooterLink>
-          <FooterLink href="/changelog">Changelog</FooterLink>
           <FooterLink href="/">Home</FooterLink>
+          <FooterLink href="/docs">Docs</FooterLink>
+          <FooterLink href="https://github.com/JacksonMalloy/pinagent/issues">Issues</FooterLink>
         </nav>
       </div>
       <p className="m-0 max-w-xl">
