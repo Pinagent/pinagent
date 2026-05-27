@@ -11,7 +11,7 @@ The rationale:
 - The dock is a power-user surface. Many projects don't need a project-management overlay sitting on every page; some teams will prefer to manage conversations from the hosted dashboard at `app.pinagent.io` and keep the host app uncluttered.
 - Giving consumers explicit control over the second surface is friendlier than auto-mounting and asking them to dismiss.
 
-The opt-in API will land alongside the embedded-iframe entry point (spec: `src/entry/embedded.tsx`) in a follow-up. Expected shape:
+Opt in via the Vite plugin:
 
 ```ts
 // vite.config.ts
@@ -26,12 +26,14 @@ export default defineConfig({
 });
 ```
 
-Until that lands, consumers who want to integrate the dock today do so by importing the React components directly (e.g., in a standalone admin route).
+The Next.js plugin (`@pinagent/next-plugin`) accepts the same `dock: true` option.
 
 ## What ships today
 
-- **Visual + components layer** — design tokens, brand-tuned shadcn primitives, the FAB + 3 layout modes + chrome + nav rail, four state components, and three fixture-driven reference screens (Overview, Conversations, Changes). Five route placeholders for screens the visual language will be re-applied to in a follow-up.
-- **No transport, no router, no real data.** This package's React tree currently renders fixtures from `src/fixtures/*.ts`. The `DockTransport` abstraction, TanStack Router/Query setup, and WebSocket subscription bridge from spec Phase 1 are deferred.
+- **Visual + components layer** — design tokens, brand-tuned shadcn primitives, the FAB + 3 layout modes + chrome + nav rail, four state components.
+- **All eight Phase 1 routes** ship as read-only screens: Overview, Conversations, Changes, Branches, PRs, Connections, Settings, History. Write actions are deferred per spec: Changes batch → Phase 3 (PR composer), Branches prune → Phase 4, Connections / Settings writes → Phase 5, History full-text + audit log → Phase 6. Disabled controls preview the eventual capability in-place so the surface is visually complete.
+- **Transport + live data** — `DockTransport` abstraction with `LocalTransport` (HTTP to dev-server + WS subscriptions) and `MockTransport` (fixtures, `?fixtures=on`). Overview / Conversations / Changes pull from real conversation data and update in real time. Branches / PRs / Connections / Settings render from fixtures pending their server-side read endpoints; History reuses the conversations cache + a client-side resolved-status filter.
+- **No router yet.** Routing is `useState<RouteKey>` in `App.tsx`. TanStack Router lands when the embedded vs standalone entry split (spec §13) does.
 - **No embedded entry** — the two-entry-points split (embedded for iframe, standalone for hosted dashboard) from spec section 13 is also deferred. Today there's a single dev entry at `src/main.tsx`.
 
 ## Dev preview
@@ -52,4 +54,4 @@ Opens [http://127.0.0.1:5174/](http://127.0.0.1:5174/) with both the dock and th
 pnpm --filter @pinagent/widget-dock build
 ```
 
-Produces a standalone Vite build under `dist/`. Bundle size: ~346 kB JS / ~109 kB gz (within the 200 kB gz spec budget). Geist font subsets are split into per-script woff2s fetched on demand.
+Produces a standalone Vite build under `dist/`. Bundle size: ~429 kB JS / ~131 kB gz (within the 200 kB gz spec budget). Geist font subsets are split into per-script woff2s fetched on demand.
