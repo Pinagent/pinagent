@@ -11,9 +11,12 @@
  * this implementation only assumes "same origin /__pinagent/feedback
  * returns FeedbackRecord[]".
  */
+import type { ProjectEvent } from '@pinagent/shared';
 import type { Conversation } from '../fixtures/types';
+import { resolveWsUrl } from '../lib/ws-url';
 import { deriveDockStatus } from './status-derive';
-import type { ConversationFilters, DockTransport } from './types';
+import type { ConversationDetail, ConversationFilters, DockTransport } from './types';
+import { type ConnectionStatus, type ConversationHandlers, DockWsClient } from './ws-client';
 
 /**
  * Shape of one row from `GET /__pinagent/feedback`. Mirrors
@@ -80,10 +83,26 @@ function toConversation(rec: FeedbackRecord): Conversation {
 export class LocalTransport implements DockTransport {
   readonly kind = 'local' as const;
 
+  /**
+   * Single multiplexed WS connection shared by every subscription.
+   * Lazily created on first subscribe; idle-closed when nothing's
+   * listening. Reused across project + per-conversation subs so the
+   * dock only ever opens one socket against the dev-server.
+   */
+  private wsClient: DockWsClient | null = null;
+
   constructor(private readonly origin = '') {}
 
   private url(path: string): string {
     return `${this.origin}${path}`;
+  }
+
+  private ws(): DockWsClient | null {
+    if (this.wsClient) return this.wsClient;
+    const url = resolveWsUrl();
+    if (!url) return null;
+    this.wsClient = new DockWsClient(url);
+    return this.wsClient;
   }
 
   async listConversations(filters?: ConversationFilters): Promise<Conversation[]> {
@@ -107,5 +126,54 @@ export class LocalTransport implements DockTransport {
         return c.title.toLowerCase().includes(q) || c.anchor.loc.toLowerCase().includes(q);
       })
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+  }
+
+  async getConversation(id: string): Promise<ConversationDetail | null> {
+    const response = await fetch(this.url(`/__pinagent/feedback/${encodeURIComponent(id)}`), {
+      headers: { Accept: 'application/json' },
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
+    }
+    const rec = (await response.json()) as FeedbackRecord & { screenshot: string | null };
+    return {
+      ...toConversation(rec),
+      comment: rec.comment,
+      screenshot: rec.screenshot ?? null,
+    };
+  }
+
+  subscribeProject(listener: (event: ProjectEvent) => void): () => void {
+    const client = this.ws();
+    if (!client) return () => {};
+    return client.subscribeProject(listener);
+  }
+
+  onConnectionStatus(listener: (status: ConnectionStatus) => void): () => void {
+    const client = this.ws();
+    if (!client) {
+      listener('idle');
+      return () => {};
+    }
+    return client.onStatusChange(listener);
+  }
+
+  subscribeConversation(id: string, handlers: ConversationHandlers): () => void {
+    const client = this.ws();
+    if (!client) return () => {};
+    return client.subscribeConversation(id, handlers);
+  }
+
+  sendUserMessage(id: string, content: string): void {
+    this.ws()?.sendUserMessage(id, content);
+  }
+
+  landConversation(id: string): void {
+    this.ws()?.sendLandRequest(id);
+  }
+
+  discardConversation(id: string): void {
+    this.ws()?.sendDiscardRequest(id);
   }
 }

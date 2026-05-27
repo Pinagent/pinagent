@@ -1,22 +1,39 @@
 // SPDX-License-Identifier: Apache-2.0
+
+import widgetIifeUrl from '@pinagent/widget/iife?url';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import './styles/globals.css';
 
-// Pull the widget IIFE into the dev demo so the per-element picker FAB,
-// the "c" hotkey, and the picker outline all work alongside the dock
-// FAB. The IIFE self-mounts on load (see packages/widget/src/index.ts);
-// Vite's `?url` resolves to the built dist path, and a classic script
-// tag executes it. No WS server runs in this dev preview, so the
-// agent-backend bits will fail gracefully — the UX surfaces still
-// render so you can evaluate both FABs together.
-import widgetIifeUrl from '@pinagent/widget/iife?url';
+// In embedded mode the dock is loaded inside an iframe injected by the
+// vite-plugin / next-plugin onto a host page. The host page has already
+// mounted the widget IIFE separately — so we skip the script load here
+// to avoid a double-mount. (`window.__pinagentMounted` would short-
+// circuit it anyway, but not loading the bytes is cleaner.)
+//
+// Outside embedded mode (the dev preview), pull the widget IIFE in so
+// both FABs and the "c" hotkey are exercisable side-by-side.
+const isEmbedded = isEmbeddedMode();
+if (!isEmbedded) {
+  const widgetScript = document.createElement('script');
+  widgetScript.src = widgetIifeUrl;
+  widgetScript.async = true;
+  document.head.appendChild(widgetScript);
+}
 
-const widgetScript = document.createElement('script');
-widgetScript.src = widgetIifeUrl;
-widgetScript.async = true;
-document.head.appendChild(widgetScript);
+// Flip a data attribute on <html> so globals.css can branch on embedded
+// mode (transparent body, click-through chrome). Set before React mounts
+// so the body styles apply on first paint without a flicker.
+if (isEmbedded) {
+  document.documentElement.dataset.pinagentEmbedded = 'true';
+}
+
+function isEmbeddedMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.get('embedded') === 'on';
+}
 
 const root = document.getElementById('root');
 if (!root) throw new Error('missing #root');

@@ -3,17 +3,21 @@
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
-  "description": "Pinagent dock surface — project-management UI complementing the per-element widget. Visual + components layer; transport and routes will be wired in a later phase.",
+  "description": "Pinagent dock surface — project-management UI complementing the per-element widget. Loaded into host pages by @pinagent/vite-plugin and @pinagent/next-plugin when `dock: true` is passed.",
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "predev": "pnpm exec turbo run build --filter=@pinagent/widget",
     "dev": "vite",
     "prebuild": "pnpm exec turbo run build --filter=@pinagent/widget",
-    "build": "vite build",
+    "build": "vite build --base=/__pinagent/dock/",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@pinagent/shared": "workspace:*",
     "@pinagent/ui": "workspace:*",
     "@pinagent/widget": "workspace:*",
     "@tanstack/react-query": "^5.100.14",

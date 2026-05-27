@@ -47,6 +47,14 @@ const ALLOWLIST = new Set([
   // Add an entry only if a `dependencies` (not devDependencies) entry is
   // genuinely declared without an import in source — with a comment
   // explaining why.
+
+  // The vite-plugin's middleware resolves the dock package at runtime via
+  // `require.resolve('@pinagent/widget-dock/package.json')` and serves the
+  // dist files from disk — there's no static import the scanner can see.
+  // The dep must be in `dependencies` (not devDependencies) so it ships
+  // alongside the plugin to consumers; otherwise `dock: true` would fail
+  // to resolve in any installed project.
+  '@pinagent/vite-plugin -> @pinagent/widget-dock',
 ]);
 
 const WORKSPACE_TREES = ['packages', 'apps', 'ee/packages'];
