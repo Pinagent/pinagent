@@ -1,26 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Pinagent brand primitives. Single source of truth for the pin
- * shape and the two brand colors — imported by the widget bundle,
- * the picker cursor data URL, the `<Logo>` component, and any
- * marketing surface that needs the mark.
- *
- * Colors re-exported from @pinagent/ui/tokens so the dock, the widget,
- * and any other surface share one canonical palette.
+ * Pinagent brand primitives — re-exported from @pinagent/ui/tokens so
+ * every surface (widget bundle, picker cursor, <Logo>, marketing pages)
+ * pulls from one source. This module owns only the picker-cursor data
+ * URL, which lives here because the widget is the only consumer that
+ * needs the pre-encoded `cursor: url(...)` form.
  */
 
-import { BRAND_CREAM, BRAND_GOLD, BRAND_INK } from '@pinagent/ui/tokens';
+import {
+  BRAND_CREAM,
+  BRAND_GOLD,
+  BRAND_INK,
+  BRAND_VIEWBOX,
+  PIN_PATH,
+} from '@pinagent/ui/tokens';
 
-export { BRAND_CREAM, BRAND_GOLD, BRAND_INK };
-
-/**
- * Pin teardrop path on a 93x93 viewBox. The full mark sits on a
- * cream square; the FAB and cursor draw just the pin.
- */
-export const PIN_PATH =
-  'M38.0761 27C24.2046 27 16.7486 43.8193 26.2852 53.7027L26.4587 53.8761L47.2659 74.6834L68.0732 53.8761L68.2466 53.7027C77.9567 43.8193 70.3273 27 56.4558 27L38.0761 27Z';
-
-export const BRAND_VIEWBOX = '0 0 93 93';
+export { BRAND_CREAM, BRAND_GOLD, BRAND_INK, BRAND_VIEWBOX, PIN_PATH };
 
 /**
  * `cursor: url(...)` value used while picking. The pin is rotated

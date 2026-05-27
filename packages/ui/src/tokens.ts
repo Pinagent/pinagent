@@ -26,6 +26,17 @@ export const BRAND_CREAM = '#FCF9E8';
 /** Gold accent — used sparingly: focus rings, primary CTAs, count badges. */
 export const BRAND_GOLD = '#FFD700';
 
+/**
+ * Pin teardrop path on a 93x93 viewBox. The full mark sits on a
+ * cream square; FAB / cursor / dock chrome / marketing all draw just
+ * the pin via <PinMark /> in @pinagent/ui/components/pin-mark.
+ */
+export const PIN_PATH =
+  'M38.0761 27C24.2046 27 16.7486 43.8193 26.2852 53.7027L26.4587 53.8761L47.2659 74.6834L68.0732 53.8761L68.2466 53.7027C77.9567 43.8193 70.3273 27 56.4558 27L38.0761 27Z';
+
+/** Viewbox string for the pin teardrop. */
+export const BRAND_VIEWBOX = '0 0 93 93';
+
 // ---------------------------------------------------------------------------
 // Surface palette — light mode
 // ---------------------------------------------------------------------------
