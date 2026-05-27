@@ -6,6 +6,7 @@ import {
   type ClientMessage,
   ClientMessageSchema,
   getOrCreateBus,
+  type ProjectEvent,
   type ServerMessage,
   type WorktreeWireState,
 } from '@pinagent/shared';
@@ -19,6 +20,7 @@ import {
 } from './agent';
 import { resolveAsk } from './ask-user';
 import { enqueue } from './merge-queue';
+import { onProjectChange } from './project-events';
 import { Storage } from './storage';
 import { clearWarning, isStale, sweepStaleWorktrees } from './worktree-ttl';
 
@@ -105,12 +107,18 @@ export function startWsServer(): ServerHandle {
   // is users don't get the nudge on this boot.
   void sweepStaleWorktrees(projectRoot());
 
+  // Register the project-event fan-out listener exactly once. Safe to
+  // call on every startWsServer invocation — singleton-guarded inside.
+  ensureProjectListener();
+
   return handle;
 }
 
 /** Per-connection state — which feedback ids this socket is subscribed to. */
 interface ConnectionState {
   subscriptions: Map<string, () => void>; // feedbackId → unsubscribe
+  /** Whether this socket has sent `subscribe_project` and should get fan-out. */
+  projectSubscribed: boolean;
   alive: boolean;
 }
 
@@ -154,6 +162,42 @@ function broadcastWorktreeState(
   for (const sock of set) send(sock, msg);
 }
 
+/**
+ * Project-wide subscribers. Sockets self-register via `subscribe_project`
+ * and receive `project_event` messages whenever Storage emits a change
+ * (see project-events.ts). Lives separately from `worktreeSubs` because
+ * it's not keyed by feedbackId — every project subscriber gets every
+ * project event.
+ *
+ * Pinned via globalThis so Next 16 / HMR re-evaluation doesn't lose
+ * subscribers across module reloads — same approach as worktreeSubs.
+ */
+const PROJECT_SUBS_SYMBOL = Symbol.for('pinagent.ws.projectSubs');
+const projectSubs: Set<WebSocket> =
+  ((globalThis as Record<symbol, unknown>)[PROJECT_SUBS_SYMBOL] as Set<WebSocket> | undefined) ??
+  new Set<WebSocket>();
+(globalThis as Record<symbol, unknown>)[PROJECT_SUBS_SYMBOL] = projectSubs;
+
+/**
+ * Singleton-guarded listener registration. `onProjectChange` returns an
+ * unsubscribe handle; we keep the handle around the same global slot so
+ * a duplicate `startWsServer` call doesn't stack listeners (which would
+ * cause each event to fan out twice, then three times, etc).
+ */
+const PROJECT_LISTENER_SYMBOL = Symbol.for('pinagent.ws.projectListener');
+
+function ensureProjectListener(): void {
+  const slot = globalThis as Record<symbol, unknown>;
+  if (slot[PROJECT_LISTENER_SYMBOL]) return;
+  const unsubscribe = onProjectChange((event) => fanoutProjectEvent(event));
+  slot[PROJECT_LISTENER_SYMBOL] = unsubscribe;
+}
+
+function fanoutProjectEvent(event: ProjectEvent): void {
+  const msg: ServerMessage = { type: 'project_event', event };
+  for (const sock of projectSubs) send(sock, msg);
+}
+
 function projectRoot(): string {
   return process.env.PINAGENT_PROJECT_ROOT ?? process.cwd();
 }
@@ -167,6 +211,7 @@ const PING_INTERVAL_MS = 30_000;
 function attachConnection(socket: WebSocket): void {
   const state: ConnectionState = {
     subscriptions: new Map(),
+    projectSubscribed: false,
     alive: true,
   };
 
@@ -211,6 +256,10 @@ function attachConnection(socket: WebSocket): void {
       removeWorktreeSub(feedbackId, socket);
     }
     state.subscriptions.clear();
+    if (state.projectSubscribed) {
+      projectSubs.delete(socket);
+      state.projectSubscribed = false;
+    }
   });
 
   socket.on('error', () => {
@@ -317,6 +366,18 @@ async function handleClientMessage(
           message: err instanceof Error ? err.message : String(err),
         });
       }
+      return;
+    }
+    case 'subscribe_project': {
+      if (state.projectSubscribed) return;
+      projectSubs.add(socket);
+      state.projectSubscribed = true;
+      return;
+    }
+    case 'unsubscribe_project': {
+      if (!state.projectSubscribed) return;
+      projectSubs.delete(socket);
+      state.projectSubscribed = false;
       return;
     }
     case 'ping': {

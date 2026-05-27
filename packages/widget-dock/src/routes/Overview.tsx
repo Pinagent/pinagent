@@ -182,7 +182,7 @@ export function Overview() {
         <p className="text-[11px] text-muted-foreground">
           {isMock
             ? 'Fixtures · drop ?fixtures=on to read from a local pinagent dev-server.'
-            : 'Live · activity feed still fixture-driven (PR-B adds the project subscription).'}
+            : 'Live · conversations refetch on project events. Activity feed still fixture-driven.'}
         </p>
       </div>
     </div>
