@@ -7,6 +7,8 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  CreatePrError,
+  createPr,
   FeedbackInputSchema,
   ID_RE,
   listChanges,
@@ -19,6 +21,7 @@ import {
 } from '@pinagent/agent-runner';
 import { DB_WORKER_SOURCE } from '@pinagent/browser-runtime';
 import { nanoid } from 'nanoid';
+import { z } from 'zod';
 import { WIDGET_SOURCE } from './__generated__/widget';
 
 // Boot the WebSocket server in this module — same process as spawnAgent and
@@ -55,6 +58,19 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Wire schema for `POST /__pinagent/prs`. Mirrors
+ * `@pinagent/agent-runner.CreatePrInput`; redeclared here so the route
+ * handler can reject malformed bodies before reaching agent-runner.
+ */
+const CreatePrBodySchema = z.object({
+  conversationIds: z.array(z.string().min(1)).min(1),
+  title: z.string().min(1).max(256),
+  body: z.string().max(65_536),
+  branchName: z.string().min(1).max(256).optional(),
+  baseBranch: z.string().min(1).max(256).optional(),
+});
 
 interface RouteCtx {
   params: Promise<{ slug?: string[] }> | { slug?: string[] };
@@ -181,6 +197,30 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
       return json(200, result);
     } catch (e) {
       return json(500, { error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  // /__pinagent/prs — bundle selected conversations into a fresh
+  // branch + GitHub PR. See agent-runner/pr.ts for the orchestration.
+  // Requires GITHUB_TOKEN; 422 on user-recoverable errors so the dock
+  // can render the code/message inline rather than a generic 500.
+  if (slug.length === 1 && slug[0] === 'prs') {
+    const root = process.env.PINAGENT_PROJECT_ROOT ?? process.cwd();
+    const raw = await readJsonBody(req);
+    const parsed = CreatePrBodySchema.safeParse(raw);
+    if (!parsed.success) return json(400, { error: parsed.error.message });
+    try {
+      const result = await createPr(root, parsed.data);
+      return json(200, result);
+    } catch (err) {
+      if (err instanceof CreatePrError) {
+        return json(422, {
+          code: err.code,
+          message: err.message,
+          details: err.details ?? null,
+        });
+      }
+      throw err;
     }
   }
 

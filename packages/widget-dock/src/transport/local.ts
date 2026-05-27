@@ -15,7 +15,14 @@ import type { ProjectEvent } from '@pinagent/shared';
 import type { Change, Conversation } from '../fixtures/types';
 import { resolveWsUrl } from '../lib/ws-url';
 import { deriveDockStatus } from './status-derive';
-import type { ConversationDetail, ConversationFilters, DockTransport } from './types';
+import {
+  type ConversationDetail,
+  type ConversationFilters,
+  type CreatePrInput,
+  type CreatePrResult,
+  CreatePrTransportError,
+  type DockTransport,
+} from './types';
 import { type ConnectionStatus, type ConversationHandlers, DockWsClient } from './ws-client';
 
 /**
@@ -221,5 +228,28 @@ export class LocalTransport implements DockTransport {
 
   discardConversation(id: string): void {
     this.ws()?.sendDiscardRequest(id);
+  }
+
+  async createPr(input: CreatePrInput): Promise<CreatePrResult> {
+    const response = await fetch(this.url('/__pinagent/prs'), {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (response.status === 422) {
+      // Server-side `CreatePrError` came through as a structured 422
+      // (see vite-plugin/middleware.ts + next-plugin/route.ts). Rethrow
+      // as a typed error so the composer can switch on `.code`.
+      const body = (await response.json()) as {
+        code: string;
+        message: string;
+        details: Record<string, unknown> | null;
+      };
+      throw new CreatePrTransportError(body.message, body.code, body.details);
+    }
+    if (!response.ok) {
+      throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
+    }
+    return (await response.json()) as CreatePrResult;
   }
 }

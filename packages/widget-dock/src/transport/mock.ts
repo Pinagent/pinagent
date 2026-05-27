@@ -13,7 +13,13 @@ import {
   FIXTURE_CHANGES,
   FIXTURE_CONVERSATIONS,
 } from '../fixtures';
-import type { ConversationDetail, ConversationFilters, DockTransport } from './types';
+import type {
+  ConversationDetail,
+  ConversationFilters,
+  CreatePrInput,
+  CreatePrResult,
+  DockTransport,
+} from './types';
 import type { ConnectionStatus, ConversationHandlers } from './ws-client';
 
 /** Small artificial latency so loading states are visible while reviewing. */
@@ -88,5 +94,17 @@ export class MockTransport implements DockTransport {
 
   discardConversation(_id: string): void {
     // no-op
+  }
+
+  async createPr(input: CreatePrInput): Promise<CreatePrResult> {
+    // Slight extra latency so the composer's loading state is visible
+    // during design review.
+    await sleep(SIMULATED_LATENCY_MS * 4);
+    const number = Math.floor(1000 + Math.random() * 1000);
+    return {
+      number,
+      url: `https://github.com/pinagent/example/pull/${number}`,
+      branch: input.branchName ?? `pinagent/pr-mock-${number}`,
+    };
   }
 }

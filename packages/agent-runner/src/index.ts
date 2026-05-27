@@ -24,6 +24,7 @@ export {
 } from './ask-user';
 export { type ChangeRecord, listChanges } from './changes';
 export { type OpenInEditorResult, openInEditor } from './editor';
+export { CreatePrError, type CreatePrInput, type CreatePrResult, createPr } from './pr';
 export {
   type FeedbackInput,
   FeedbackInputSchema,

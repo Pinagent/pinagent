@@ -8,6 +8,8 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  CreatePrError,
+  createPr,
   FeedbackInputSchema,
   ID_RE,
   listChanges,
@@ -20,9 +22,23 @@ import {
 import { DB_WORKER_SOURCE } from '@pinagent/browser-runtime';
 import { nanoid } from 'nanoid';
 import type { Connect } from 'vite';
+import { z } from 'zod';
 import { WIDGET_SOURCE } from './__generated__/widget';
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024; // 8MB raw JSON (screenshot dominates)
+
+/**
+ * Wire schema for `POST /__pinagent/prs`. Mirrors
+ * `@pinagent/agent-runner.CreatePrInput`; redeclared here so the
+ * middleware can reject malformed bodies before reaching agent-runner.
+ */
+const CreatePrBodySchema = z.object({
+  conversationIds: z.array(z.string().min(1)).min(1),
+  title: z.string().min(1).max(256),
+  body: z.string().max(65_536),
+  branchName: z.string().min(1).max(256).optional(),
+  baseBranch: z.string().min(1).max(256).optional(),
+});
 
 interface CreateMiddlewareOpts {
   storage: Storage;
@@ -147,6 +163,33 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       if (req.method === 'GET' && url === '/__pinagent/changes') {
         const changes = await listChanges(storage.root);
         return json(res, 200, changes);
+      }
+
+      // POST /__pinagent/prs — bundle selected conversations into a
+      // fresh branch + GitHub PR. See agent-runner/pr.ts for the
+      // orchestration (cherry-pick in a throwaway worktree, push,
+      // POST /repos/.../pulls). Requires GITHUB_TOKEN.
+      if (req.method === 'POST' && url === '/__pinagent/prs') {
+        const raw = await readJsonBody(req);
+        const parsed = CreatePrBodySchema.safeParse(raw);
+        if (!parsed.success) return badRequest(res, parsed.error.message);
+        try {
+          const result = await createPr(storage.root, parsed.data);
+          return json(res, 200, result);
+        } catch (err) {
+          if (err instanceof CreatePrError) {
+            // 422 across the board for CreatePr errors — they're user-
+            // recoverable (set GITHUB_TOKEN, resolve conflicts, etc.)
+            // rather than server bugs, so the dock can render the
+            // .code + .message inline without a generic 500.
+            return json(res, 422, {
+              code: err.code,
+              message: err.message,
+              details: err.details ?? null,
+            });
+          }
+          throw err;
+        }
       }
 
       // GET /__pinagent/feedback

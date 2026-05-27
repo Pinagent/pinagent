@@ -5,6 +5,7 @@ import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
 import { GitPullRequest, RotateCcw, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { PrComposerDialog } from '../components/PrComposerDialog';
 import { TimestampDot } from '../components/TimestampDot';
 import type { Change } from '../fixtures';
 import { useChanges } from '../hooks/useChanges';
@@ -15,6 +16,7 @@ import { useTransport } from '../transport';
 
 export function Changes() {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [composerOpen, setComposerOpen] = useState(false);
   const transport = useTransport();
   const changesQuery = useChanges();
 
@@ -37,6 +39,21 @@ export function Changes() {
 
   const isMock = transport.kind === 'mock';
 
+  // Preserve selected-row ORDER so the PR cherry-picks commits in the
+  // order the user picked them. `Set` preserves insertion order, but
+  // we also want to re-derive the matching Change objects from the
+  // current query data (in case the underlying list changed since
+  // selection — e.g. one of the picked changes got landed elsewhere).
+  const selectedChanges = useMemo<Change[]>(() => {
+    const byId = new Map(ready.map((c) => [c.id, c] as const));
+    const out: Change[] = [];
+    for (const id of selected) {
+      const c = byId.get(id);
+      if (c) out.push(c);
+    }
+    return out;
+  }, [ready, selected]);
+
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <div className="border-b border-border bg-card px-3 py-2.5 flex items-center gap-2">
@@ -52,16 +69,27 @@ export function Changes() {
           )}
           <Button
             size="sm"
-            disabled={selected.size === 0}
+            disabled={selectedChanges.length === 0}
             className="h-7 gap-1.5"
-            variant={selected.size > 0 ? 'accent' : 'outline'}
-            title="PR composer lands in PR-D2"
+            variant={selectedChanges.length > 0 ? 'accent' : 'outline'}
+            onClick={() => setComposerOpen(true)}
           >
             <GitPullRequest className="h-3.5 w-3.5" />
             Create PR
           </Button>
         </div>
       </div>
+
+      <PrComposerDialog
+        open={composerOpen}
+        onOpenChange={setComposerOpen}
+        selected={selectedChanges}
+        onSuccess={() => {
+          // Clear selection after a successful PR — the dialog stays
+          // open showing the success card; user closes when done.
+          setSelected(new Set());
+        }}
+      />
 
       <div className="flex-1 overflow-auto p-3 space-y-2">
         {changesQuery.isLoading && <LoadingState rows={4} />}

@@ -34,7 +34,14 @@ export function useTransport(): DockTransport {
   return transport;
 }
 
-export type { ConversationDetail, ConversationFilters, DockTransport } from './types';
+export {
+  type ConversationDetail,
+  type ConversationFilters,
+  type CreatePrInput,
+  type CreatePrResult,
+  CreatePrTransportError,
+  type DockTransport,
+} from './types';
 export type {
   ConnectionStatus,
   ConversationHandlers,

@@ -108,4 +108,50 @@ export interface DockTransport {
 
   /** Throw away the agent's worktree without merging. */
   discardConversation(id: string): void;
+
+  /**
+   * Bundle a set of conversations into a fresh branch + GitHub PR.
+   * The server cherry-picks each conversation's commits onto a new
+   * branch (in a throwaway worktree so the user's main checkout
+   * stays clean), pushes the branch, and opens the PR via the
+   * GitHub REST API.
+   *
+   * Throws `CreatePrTransportError` for the server's structured
+   * 422 errors (missing GITHUB_TOKEN, cherry-pick conflict, push
+   * failed, etc.) — the composer keys off `.code` to render
+   * specific guidance. Throws a generic Error for everything else.
+   */
+  createPr(input: CreatePrInput): Promise<CreatePrResult>;
+}
+
+/** Wire shape mirroring `@pinagent/agent-runner.CreatePrInput`. */
+export interface CreatePrInput {
+  conversationIds: string[];
+  title: string;
+  body: string;
+  branchName?: string;
+  baseBranch?: string;
+}
+
+/** Wire shape mirroring `@pinagent/agent-runner.CreatePrResult`. */
+export interface CreatePrResult {
+  number: number;
+  url: string;
+  branch: string;
+}
+
+/**
+ * Thrown by `transport.createPr` when the server returns a 422 with
+ * a structured error code from `@pinagent/agent-runner.CreatePrError`.
+ * Composer UI keys off `.code` to render specific guidance.
+ */
+export class CreatePrTransportError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly details: Record<string, unknown> | null = null,
+  ) {
+    super(message);
+    this.name = 'CreatePrTransportError';
+  }
 }
