@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
 import {
   CheckCheck,
@@ -14,12 +13,12 @@ import type { ComponentType, ReactNode, SVGAttributes } from 'react';
 import { AnchorChip } from '../components/AnchorChip';
 import { ListRow } from '../components/ListRow';
 import { TimestampDot } from '../components/TimestampDot';
-import {
-  type ActivityEvent,
-  CURRENT_PAGE,
-  FIXTURE_ACTIVITY,
-  FIXTURE_CONVERSATIONS,
-} from '../fixtures';
+import { type ActivityEvent, FIXTURE_ACTIVITY } from '../fixtures';
+import { useConversations } from '../hooks/useConversations';
+import { EmptyState } from '../shell/states/EmptyState';
+import { ErrorState } from '../shell/states/ErrorState';
+import { LoadingState } from '../shell/states/LoadingState';
+import { useTransport } from '../transport';
 
 const EVENT_ICON: Record<ActivityEvent['type'], ComponentType<SVGAttributes<SVGSVGElement>>> = {
   conversation_created: MessageSquarePlus,
@@ -93,46 +92,66 @@ function SectionHeader({
 }
 
 export function Overview() {
-  const onThisPage = FIXTURE_CONVERSATIONS.filter((c) => c.page === CURRENT_PAGE);
-  const recent = FIXTURE_CONVERSATIONS.slice()
-    .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
-    .slice(0, 8);
+  const transport = useTransport();
+  const conversations = useConversations();
+  const isMock = transport.kind === 'mock';
 
   return (
     <div className="flex flex-1 flex-col">
-      <SectionHeader
-        title="On this page"
-        hint={CURRENT_PAGE}
-        action={
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
-            View all
-          </Button>
-        }
-      />
-      {onThisPage.length > 0 ? (
+      <SectionHeader title="Recent conversations" hint={isMock ? 'fixtures' : undefined} />
+
+      {conversations.isLoading && <LoadingState rows={4} />}
+
+      {conversations.isError && (
+        <ErrorState
+          title="Couldn't load conversations"
+          description={
+            <>
+              The dock couldn't reach the local pinagent dev-server. Make sure your host app is
+              running with the pinagent plugin, or append{' '}
+              <code className="font-mono">?fixtures=on</code> to the URL to use the demo dataset.
+            </>
+          }
+          onRetry={() => conversations.refetch()}
+        />
+      )}
+
+      {conversations.isSuccess && conversations.data.length === 0 && (
+        <EmptyState
+          title="No conversations yet"
+          description={
+            <>
+              Click any element on your host app with the pinagent picker to start a conversation.
+              It'll show up here in real time.
+            </>
+          }
+        />
+      )}
+
+      {conversations.isSuccess && conversations.data.length > 0 && (
         <div className="flex flex-col gap-1.5 px-3">
-          {onThisPage.map((c) => (
+          {conversations.data.slice(0, 8).map((c) => (
             <ListRow
               key={c.id}
               status={c.status}
               title={c.title}
               meta={
                 <>
-                  <AnchorChip loc={c.anchor.loc} selector={c.anchor.selector} />
-                  <span className="truncate">{c.lastMessage}</span>
+                  {c.anchor.loc && <AnchorChip loc={c.anchor.loc} selector={c.anchor.selector} />}
+                  {c.page && (
+                    <span className="truncate font-mono text-[10.5px]">
+                      {new URL(c.page).pathname}
+                    </span>
+                  )}
                 </>
               }
               updatedAt={c.updatedAt}
             />
           ))}
         </div>
-      ) : (
-        <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-          No conversations anchored to this page yet.
-        </p>
       )}
 
-      <SectionHeader title="Recent activity" />
+      <SectionHeader title="Recent activity" hint="fixtures" />
       <ul className="flex flex-col gap-0.5 px-3 pb-4">
         {FIXTURE_ACTIVITY.slice(0, 7).map((event) => {
           const Icon = EVENT_ICON[event.type];
@@ -161,8 +180,9 @@ export function Overview() {
 
       <div className="mt-auto border-t border-border bg-secondary/30 px-3 py-2">
         <p className="text-[11px] text-muted-foreground">
-          Visual demo · {recent.length} conversations loaded from fixtures. Phase 5 of the redesign
-          — real transport lands later.
+          {isMock
+            ? 'Fixtures · drop ?fixtures=on to read from a local pinagent dev-server.'
+            : 'Live · activity feed still fixture-driven (PR-B adds the project subscription).'}
         </p>
       </div>
     </div>
