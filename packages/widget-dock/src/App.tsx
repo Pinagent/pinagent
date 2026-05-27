@@ -79,14 +79,27 @@ function HostBackdrop() {
           Click the pin to open the dock.
         </h1>
         <p className="mt-3 max-w-prose text-sm text-muted-foreground leading-relaxed">
-          This page stands in for any host app the dock embeds into. The FAB sits bottom-left;
-          the per-element picker (built into <code className="font-mono">@pinagent/widget</code>)
-          would sit bottom-right. Append <code className="font-mono">?state=disconnected</code>
-          {' '}to the URL to see the disconnected indicator.
+          This page stands in for any host app the dock embeds into. The dock FAB sits
+          bottom-left; the per-element picker (built into{' '}
+          <code className="font-mono">@pinagent/widget</code>) sits bottom-right. Append{' '}
+          <code className="font-mono">?state=disconnected</code> to the URL to see the
+          disconnected indicator.
         </p>
-        <p className="mt-6 text-xs text-muted-foreground/80">
-          Route screens land in Phase 5; today every nav item renders the same placeholder.
-        </p>
+        <div className="mt-6 inline-flex items-start gap-2 rounded-md border border-border bg-secondary/50 px-3 py-2 text-xs text-muted-foreground max-w-prose">
+          <span
+            aria-hidden
+            className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground text-[10px] font-bold"
+          >
+            i
+          </span>
+          <span>
+            <strong className="text-foreground">Opt-in:</strong> the dock does not auto-mount
+            from <code className="font-mono">@pinagent/vite-plugin</code> or{' '}
+            <code className="font-mono">@pinagent/next-plugin</code>. The per-element widget
+            ships by default; project authors opt in to the dock explicitly. See the package
+            README for details.
+          </span>
+        </div>
       </div>
     </div>
   );
