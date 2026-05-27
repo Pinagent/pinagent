@@ -11,6 +11,7 @@ import {
   ComposeOptsSchema,
   composePullRequest,
   FeedbackInputSchema,
+  getChangeDiff,
   ID_RE,
   listChanges,
   openInEditor,
@@ -149,6 +150,18 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       if (req.method === 'GET' && url === '/__pinagent/changes') {
         const changes = await listChanges(storage.root);
         return json(res, 200, changes);
+      }
+
+      // GET /__pinagent/changes/:id/diff — full unified diff for one
+      // conversation's worktree. Lazily called when the dock's Changes
+      // row is expanded; capped server-side (see computeWorktreeDiff).
+      const diffMatch = req.method === 'GET' && /^\/__pinagent\/changes\/([^/]+)\/diff$/.exec(url);
+      if (diffMatch) {
+        const id = diffMatch[1] ?? '';
+        if (!ID_RE.test(id)) return badRequest(res, 'invalid id');
+        const result = await getChangeDiff(storage.root, id);
+        if (!result) return notFound(res);
+        return json(res, 200, result);
       }
 
       // POST /__pinagent/prs — compose a PR from multiple conversations.

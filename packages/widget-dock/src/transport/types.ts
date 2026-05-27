@@ -65,6 +65,14 @@ export interface DockTransport {
    */
   listChanges(): Promise<Change[]>;
 
+  /**
+   * Full unified diff for one conversation. Lazy-loaded when the user
+   * expands a row in the Changes view. `null` when the conversation
+   * isn't a worktree-state row we can diff (landed worktree gone from
+   * disk, no such record, etc).
+   */
+  getChangeDiff(id: string): Promise<ChangeDiff | null>;
+
   // ---------- Live subscriptions ----------
 
   /**
@@ -118,6 +126,13 @@ export interface DockTransport {
    * was skipped or failed.
    */
   createPullRequest(input: CreatePullRequestInput): Promise<CreatePullRequestResult>;
+}
+
+export interface ChangeDiff {
+  /** Unified diff text. Possibly truncated — see `truncated`. */
+  diff: string;
+  /** True when the server cut the diff short to keep payloads bounded. */
+  truncated: boolean;
 }
 
 export interface CreatePullRequestInput {

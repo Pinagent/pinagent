@@ -11,7 +11,7 @@
  * vite-plugin and next-plugin call into the same logic — they only
  * differ in how the returned data is serialized to the wire.
  */
-import { computeWorktreeStats } from './agent';
+import { computeWorktreeDiff, computeWorktreeStats, type WorktreeDiff } from './agent';
 import { runGitCapture } from './git-utils';
 import { Storage } from './storage';
 
@@ -96,4 +96,29 @@ function titleOf(comment: string): string {
   const first = comment.split('\n').find((l) => l.trim().length > 0) ?? comment;
   const t = first.trim();
   return t.length > 80 ? `${t.slice(0, 77)}…` : t;
+}
+
+/**
+ * Fetch the full unified diff for one conversation's worktree. Returns
+ * null when the conversation isn't found, isn't in a worktree state we
+ * can diff, or the worktree is gone from disk.
+ *
+ * PR-D3 lazy-loads diffs per row via this — the list endpoint stays
+ * lightweight (stats only), only expanded rows pay the diff cost.
+ */
+export async function getChangeDiff(
+  projectRoot: string,
+  feedbackId: string,
+): Promise<WorktreeDiff | null> {
+  const storage = new Storage(projectRoot);
+  const rec = await storage.read(feedbackId);
+  if (!rec) return null;
+  // Landed worktrees may be gone from disk — the diff lives in the
+  // merge commit but we don't surface that here (Changes view treats
+  // landed rows as history, no diff body). Only active worktrees have
+  // an inspectable diff.
+  if (rec.worktreeState !== 'active') return null;
+  if (!rec.worktreePath) return null;
+  const baseRef = await resolveBaseRef(projectRoot);
+  return computeWorktreeDiff(rec.worktreePath, baseRef);
 }

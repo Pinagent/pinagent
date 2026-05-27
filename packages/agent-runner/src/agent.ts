@@ -762,6 +762,44 @@ export async function computeWorktreeStats(
   return parseShortStat(line);
 }
 
+export interface WorktreeDiff {
+  /** Unified diff text. Possibly truncated — see `truncated`. */
+  diff: string;
+  /** True when the source diff exceeded the cap and `diff` was cut short. */
+  truncated: boolean;
+}
+
+/**
+ * Capture the full unified diff of a worktree against its base ref —
+ * the data the Changes view's expand-to-diff UI renders. Capped at a
+ * generous-but-bounded size so an accidental megabyte of churn doesn't
+ * lock up the dock when the user expands a row.
+ *
+ * Mirrors `computeWorktreeStats`'s base-resolution shape so the diff
+ * and the stats line up for any given conversation.
+ */
+const DIFF_CAP_BYTES = 512 * 1024;
+
+export async function computeWorktreeDiff(
+  worktreePath: string,
+  baseRef: string,
+): Promise<WorktreeDiff | null> {
+  if (!existsSync(worktreePath)) return null;
+  const mb = await runGitCapture(worktreePath, ['merge-base', baseRef, 'HEAD']);
+  const compareTo = mb.code === 0 ? mb.stdout.trim() : baseRef;
+  const result = await runGitCapture(worktreePath, ['diff', '--no-color', compareTo]);
+  if (result.code !== 0) return null;
+  if (result.stdout.length <= DIFF_CAP_BYTES) {
+    return { diff: result.stdout, truncated: false };
+  }
+  // Truncate on a line boundary so the renderer never sees a half-hunk.
+  const cut = result.stdout.lastIndexOf('\n', DIFF_CAP_BYTES);
+  return {
+    diff: result.stdout.slice(0, cut >= 0 ? cut : DIFF_CAP_BYTES),
+    truncated: true,
+  };
+}
+
 function parseShortStat(line: string): WorktreeStats {
   // Format: " N files changed, X insertions(+), Y deletions(-)"
   // Any of files/insertions/deletions can be missing if zero.
