@@ -10,6 +10,7 @@
   ],
   "exports": {
     "./styles/globals.css": "./src/styles/globals.css",
+    "./tokens": "./src/tokens.ts",
     "./lib/utils": "./src/lib/utils.ts",
     "./components/ui/button": "./src/components/ui/button.tsx",
     "./components/ui/card": "./src/components/ui/card.tsx"
@@ -18,6 +19,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource-variable/geist": "^5.2.5",
+    "@fontsource-variable/geist-mono": "^5.2.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "tailwind-merge": "^2.6.0"

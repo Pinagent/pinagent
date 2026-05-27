@@ -421,6 +421,12 @@ importers:
 
   packages/ui:
     dependencies:
+      '@fontsource-variable/geist':
+        specifier: ^5.2.5
+        version: 5.2.9
+      '@fontsource-variable/geist-mono':
+        specifier: ^5.2.5
+        version: 5.2.8
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -528,6 +534,9 @@ importers:
       '@pinagent/shared':
         specifier: workspace:*
         version: link:../shared
+      '@pinagent/ui':
+        specifier: workspace:*
+        version: link:../ui
       '@sqlite.org/sqlite-wasm':
         specifier: ^3.50.0-build1
         version: 3.50.0-build1
@@ -1312,6 +1321,12 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@fontsource-variable/geist-mono@5.2.8':
+    resolution: {integrity: sha512-KI5bj+hkkRiHttYHmccotUZ80ZuZyai+RwI1d7UId0clkx/jXxlo8qYK8j54WzmpBjtMoEMPyllV7faDcj+6RA==}
+
+  '@fontsource-variable/geist@5.2.9':
+    resolution: {integrity: sha512-TP+QSBG3wxKGPE33CbMy/L0Nu3qvJ6Fy81Yc4LnQ95xH+i+cfEp8fyU8/kfV14YwszxIFPhnoMTbjL71waVpyQ==}
 
   '@hono/node-server@1.19.14':
     resolution: {integrity: sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw==}
@@ -4096,6 +4111,10 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.0':
     optional: true
+
+  '@fontsource-variable/geist-mono@5.2.8': {}
+
+  '@fontsource-variable/geist@5.2.9': {}
 
   '@hono/node-server@1.19.14(hono@4.12.22)':
     dependencies:

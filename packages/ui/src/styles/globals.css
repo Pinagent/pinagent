@@ -7,6 +7,13 @@
  */
 @source "../components/**/*.{ts,tsx}";
 
+/*
+ * Geist variable fonts. The @fontsource-variable packages bundle the
+ * Latin subset; consumers that need additional subsets can layer them.
+ */
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -30,22 +37,54 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
+  /* Status palette — bg/fg/border per state, expose via Tailwind classes
+     like `bg-status-working-bg`, `text-status-working-fg`. */
+  --color-status-pending-fg: var(--status-pending-fg);
+  --color-status-pending-bg: var(--status-pending-bg);
+  --color-status-pending-border: var(--status-pending-border);
+  --color-status-working-fg: var(--status-working-fg);
+  --color-status-working-bg: var(--status-working-bg);
+  --color-status-working-border: var(--status-working-border);
+  --color-status-awaiting-fg: var(--status-awaiting-fg);
+  --color-status-awaiting-bg: var(--status-awaiting-bg);
+  --color-status-awaiting-border: var(--status-awaiting-border);
+  --color-status-ready-fg: var(--status-ready-fg);
+  --color-status-ready-bg: var(--status-ready-bg);
+  --color-status-ready-border: var(--status-ready-border);
+  --color-status-landed-fg: var(--status-landed-fg);
+  --color-status-landed-bg: var(--status-landed-bg);
+  --color-status-landed-border: var(--status-landed-border);
+  --color-status-discarded-fg: var(--status-discarded-fg);
+  --color-status-discarded-bg: var(--status-discarded-bg);
+  --color-status-discarded-border: var(--status-discarded-border);
+  --color-status-error-fg: var(--status-error-fg);
+  --color-status-error-bg: var(--status-error-bg);
+  --color-status-error-border: var(--status-error-border);
+  --color-status-anchor-lost-fg: var(--status-anchor-lost-fg);
+  --color-status-anchor-lost-bg: var(--status-anchor-lost-bg);
+  --color-status-anchor-lost-border: var(--status-anchor-lost-border);
+
   --radius-xs: calc(var(--radius) * 0.5);
   --radius-sm: calc(var(--radius) * 0.75);
   --radius-md: calc(var(--radius) * 0.875);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.5);
 
-  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  --font-sans: "Geist Variable", "Geist", "Geist Fallback", -apple-system,
+    BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", "Geist Mono Fallback",
+    ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+/*
+ * CSS custom properties below are a manual mirror of
+ * packages/ui/src/tokens.ts. Tailwind 4's CSS-first config can't import
+ * TypeScript, so when you change a token there, update the matching
+ * variable here. The widget (which can't pull a Tailwind runtime through
+ * shadow DOM) reads tokens.ts directly.
+ */
 :root {
-  /*
-   * Pinagent palette — cream on dark.
-   *   Background: #FCF9E8
-   *   Darks:      #201B21
-   */
+  /* Brand palette — cream on ink with gold accent. */
   --background: #fcf9e8;
   --foreground: #201b21;
   --card: #fcf9e8;
@@ -65,6 +104,32 @@
   --border: #e8dfb0;
   --input: #e8dfb0;
   --ring: #201b21;
+
+  /* Status palette — muted to coexist with cream surface. */
+  --status-pending-fg: #8a7a2e;
+  --status-pending-bg: #faf4d6;
+  --status-pending-border: #e8dfb0;
+  --status-working-fg: #c77a1e;
+  --status-working-bg: #faebd6;
+  --status-working-border: #e8c9a0;
+  --status-awaiting-fg: #7a5e00;
+  --status-awaiting-bg: #fff4b8;
+  --status-awaiting-border: #ffd700;
+  --status-ready-fg: #3f7a4a;
+  --status-ready-bg: #e5f0df;
+  --status-ready-border: #b8d4b5;
+  --status-landed-fg: #2e5a38;
+  --status-landed-bg: #d9e8d2;
+  --status-landed-border: #a4c49e;
+  --status-discarded-fg: #5c5546;
+  --status-discarded-bg: #f0ead0;
+  --status-discarded-border: #d5cca0;
+  --status-error-fg: #a1331c;
+  --status-error-bg: #fae2da;
+  --status-error-border: #e8b5a0;
+  --status-anchor-lost-fg: #7a6b2e;
+  --status-anchor-lost-bg: #faf4d6;
+  --status-anchor-lost-border: #c9b863;
 
   --radius: 0.625rem;
 }
@@ -89,6 +154,33 @@
   --border: #3d3730;
   --input: #3d3730;
   --ring: #fcf9e8;
+
+  /* Status palette — dark-mode variants keep similar hues at darker
+     luminance so badges read on the deeper ink card surface. */
+  --status-pending-fg: #c9bc85;
+  --status-pending-bg: #2f2925;
+  --status-pending-border: #4a4030;
+  --status-working-fg: #e3a268;
+  --status-working-bg: #322820;
+  --status-working-border: #5a4530;
+  --status-awaiting-fg: #ffd700;
+  --status-awaiting-bg: #3a3010;
+  --status-awaiting-border: #806020;
+  --status-ready-fg: #8fbf90;
+  --status-ready-bg: #1f2a20;
+  --status-ready-border: #3a5240;
+  --status-landed-fg: #6fa275;
+  --status-landed-bg: #1a2520;
+  --status-landed-border: #2f4230;
+  --status-discarded-fg: #a39a72;
+  --status-discarded-bg: #2a2520;
+  --status-discarded-border: #4a4030;
+  --status-error-fg: #e89478;
+  --status-error-bg: #3a2520;
+  --status-error-border: #6a3a2a;
+  --status-anchor-lost-fg: #c9b863;
+  --status-anchor-lost-bg: #2f2925;
+  --status-anchor-lost-border: #6a5a2a;
 }
 
 @layer base {

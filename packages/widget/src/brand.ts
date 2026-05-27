@@ -4,7 +4,14 @@
  * shape and the two brand colors — imported by the widget bundle,
  * the picker cursor data URL, the `<Logo>` component, and any
  * marketing surface that needs the mark.
+ *
+ * Colors re-exported from @pinagent/ui/tokens so the dock, the widget,
+ * and any other surface share one canonical palette.
  */
+
+import { BRAND_CREAM, BRAND_GOLD, BRAND_INK } from '@pinagent/ui/tokens';
+
+export { BRAND_CREAM, BRAND_GOLD, BRAND_INK };
 
 /**
  * Pin teardrop path on a 93x93 viewBox. The full mark sits on a
@@ -13,8 +20,6 @@
 export const PIN_PATH =
   'M38.0761 27C24.2046 27 16.7486 43.8193 26.2852 53.7027L26.4587 53.8761L47.2659 74.6834L68.0732 53.8761L68.2466 53.7027C77.9567 43.8193 70.3273 27 56.4558 27L38.0761 27Z';
 
-export const BRAND_INK = '#201B21';
-export const BRAND_CREAM = '#FCF9E8';
 export const BRAND_VIEWBOX = '0 0 93 93';
 
 /**
