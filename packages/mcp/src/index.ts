@@ -200,6 +200,15 @@ async function main() {
           } else if (!next.resolvedAt) {
             next.resolvedAt = new Date().toISOString();
           }
+          // Inline-mode runs have no worktree to Land/Discard, so the
+          // dock would otherwise leave them stuck in `readyToLand`. Treat
+          // the agent's own resolution as the terminal event in that
+          // case. Real worktrees (`active`) keep their state — the user
+          // still drives Land/Discard from the dock.
+          if (next.worktreeState === 'none') {
+            if (input.status === 'fixed') next.worktreeState = 'landed';
+            else if (input.status === 'wontfix') next.worktreeState = 'discarded';
+          }
           await storage.write(next);
           return {
             content: [

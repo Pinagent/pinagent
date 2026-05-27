@@ -38,18 +38,17 @@ import type { AuditEvent, HistoryMatchedField, HistorySearchHit } from '../trans
 
 type Tab = 'conversations' | 'activity';
 
-type HistoryFilter = 'all' | 'landed' | 'discarded' | 'error';
+type HistoryFilter = 'all' | 'landed' | 'discarded';
 type StatusParam = 'all' | 'landed' | 'discarded';
 
 const FILTERS: { label: string; key: HistoryFilter; matches: StatusKey[]; status: StatusParam }[] =
   [
-    { label: 'All', key: 'all', matches: ['landed', 'discarded', 'error'], status: 'all' },
+    { label: 'All', key: 'all', matches: ['landed', 'discarded'], status: 'all' },
     { label: 'Landed', key: 'landed', matches: ['landed'], status: 'landed' },
     { label: 'Discarded', key: 'discarded', matches: ['discarded'], status: 'discarded' },
-    { label: 'Errored', key: 'error', matches: ['error'], status: 'discarded' },
   ];
 
-const RESOLVED_STATUSES: ReadonlySet<StatusKey> = new Set(['landed', 'discarded', 'error']);
+const RESOLVED_STATUSES: ReadonlySet<StatusKey> = new Set(['landed', 'discarded']);
 
 const MATCH_LABEL: Record<HistoryMatchedField, string> = {
   comment: 'comment',
@@ -212,7 +211,7 @@ function ClientFilterView({
       <EmptyState
         Icon={HistoryIcon}
         title="Nothing resolved yet"
-        description="Landed, discarded, and errored conversations appear here once they leave the active list."
+        description="Landed and discarded conversations appear here once they leave the active list."
       />
     );
   }
