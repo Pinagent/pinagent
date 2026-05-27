@@ -1,44 +1,117 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Settings — read-only display of per-project configuration. Saves land
- * with Phase 5; until then, inputs render disabled so the schema and
- * defaults are visible without inviting edits that won't persist.
+ * Settings — editable per-project config. Reads via `GET /__pinagent/settings`,
+ * patches via `PATCH /__pinagent/settings`. The form tracks a local
+ * draft; Save flushes when dirty + valid. Cancel reverts to the
+ * authoritative read.
  */
 
 import { Badge } from '@pinagent/ui/components/ui/badge';
+import { Button } from '@pinagent/ui/components/ui/button';
 import { Input } from '@pinagent/ui/components/ui/input';
 import { cn } from '@pinagent/ui/lib/utils';
-import type { ReactNode } from 'react';
-import { FIXTURE_SETTINGS, type ProjectSettings } from '../fixtures';
+import { AlertTriangle } from 'lucide-react';
+import { type ReactNode, useEffect, useState } from 'react';
+import { useSettings, useUpdateSettings } from '../hooks/useSettings';
+import { ErrorState } from '../shell/states/ErrorState';
+import { LoadingState } from '../shell/states/LoadingState';
+import type { DockProjectSettings } from '../transport';
 
-const PERMISSION_LABEL: Record<ProjectSettings['permissionMode'], string> = {
+type PermissionMode = DockProjectSettings['permissionMode'];
+
+const PERMISSION_LABEL: Record<PermissionMode, string> = {
   auto: 'Auto-accept edits',
   approve: 'Require approval',
   'dry-run': 'Dry-run only',
 };
 
-const PERMISSION_DESCRIPTION: Record<ProjectSettings['permissionMode'], string> = {
+const PERMISSION_DESCRIPTION: Record<PermissionMode, string> = {
   auto: 'Agent edits land in the worktree without confirmation.',
   approve: 'Each edit pauses for your approval before applying.',
   'dry-run': 'Agents propose but never write. Useful for review-only setups.',
 };
 
 export function Settings() {
-  const s = FIXTURE_SETTINGS;
+  const settingsQuery = useSettings();
+
+  if (settingsQuery.isLoading) {
+    return (
+      <div className="flex flex-1 flex-col min-h-0">
+        <div className="border-b border-border bg-card px-3 py-2.5">
+          <h2 className="text-sm font-semibold tracking-tight">Settings</h2>
+        </div>
+        <LoadingState rows={4} />
+      </div>
+    );
+  }
+
+  if (settingsQuery.isError) {
+    return (
+      <div className="flex flex-1 flex-col min-h-0">
+        <div className="border-b border-border bg-card px-3 py-2.5">
+          <h2 className="text-sm font-semibold tracking-tight">Settings</h2>
+        </div>
+        <ErrorState
+          title="Couldn't load settings"
+          description="The dock couldn't reach the local pinagent dev-server."
+          onRetry={() => settingsQuery.refetch()}
+        />
+      </div>
+    );
+  }
+
+  if (!settingsQuery.data) return null;
+  return <SettingsForm key={JSON.stringify(settingsQuery.data)} initial={settingsQuery.data} />;
+}
+
+function SettingsForm({ initial }: { initial: DockProjectSettings }) {
+  const updateMutation = useUpdateSettings();
+  const [draft, setDraft] = useState<DockProjectSettings>(initial);
+
+  // If a save lands while the form is mounted, rehydrate the draft from
+  // the new authoritative read. The `key` on this component (parent
+  // passes JSON of initial) handles the full-reset case; this guards
+  // the in-place mutation success path.
+  useEffect(() => {
+    setDraft(initial);
+  }, [initial]);
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
+  const valid =
+    draft.baseBranch.trim().length > 0 &&
+    Number.isFinite(draft.worktreeRetentionDays) &&
+    draft.worktreeRetentionDays >= 1 &&
+    Number.isFinite(draft.perConversationCapUsd) &&
+    draft.perConversationCapUsd > 0 &&
+    (draft.monthlyBudgetUsd === null ||
+      (Number.isFinite(draft.monthlyBudgetUsd) && draft.monthlyBudgetUsd >= 0));
+
+  const onSave = (): void => {
+    updateMutation.mutate(draft);
+  };
+  const onReset = (): void => {
+    updateMutation.reset();
+    setDraft(initial);
+  };
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
-      <div className="border-b border-border bg-card px-3 py-2.5">
+      <div className="border-b border-border bg-card px-3 py-2.5 flex items-center gap-2">
         <h2 className="text-sm font-semibold tracking-tight">Settings</h2>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
-          Read-only · saving config lands with Phase 5.
-        </p>
+        <span className="text-[11px] text-muted-foreground">
+          Stored at <code className="font-mono">.pinagent/config.json</code>
+        </span>
       </div>
 
       <div className="flex-1 overflow-auto p-3 space-y-3">
         <SettingsGroup title="Git">
           <Field label="Base branch" description="Worktrees branch off this. PRs target it.">
-            <Input value={s.baseBranch} disabled className="h-8 max-w-[260px] font-mono text-xs" />
+            <Input
+              value={draft.baseBranch}
+              onChange={(e) => setDraft({ ...draft, baseBranch: e.target.value })}
+              spellCheck={false}
+              className="h-8 max-w-[260px] font-mono text-xs"
+            />
           </Field>
           <Field
             label="Worktree retention"
@@ -46,8 +119,13 @@ export function Settings() {
           >
             <div className="flex items-center gap-2">
               <Input
-                value={String(s.worktreeRetentionDays)}
-                disabled
+                value={String(draft.worktreeRetentionDays)}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    worktreeRetentionDays: Number(e.target.value) || 0,
+                  })
+                }
                 inputMode="numeric"
                 className="h-8 w-20 tabular-nums text-xs"
               />
@@ -61,8 +139,14 @@ export function Settings() {
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-muted-foreground">$</span>
               <Input
-                value={s.perConversationCapUsd.toFixed(2)}
-                disabled
+                value={String(draft.perConversationCapUsd)}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    perConversationCapUsd: Number(e.target.value) || 0,
+                  })
+                }
+                inputMode="decimal"
                 className="h-8 w-24 tabular-nums text-xs"
               />
             </div>
@@ -74,9 +158,16 @@ export function Settings() {
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-muted-foreground">$</span>
               <Input
-                value={s.monthlyBudgetUsd === null ? '' : s.monthlyBudgetUsd.toFixed(2)}
+                value={draft.monthlyBudgetUsd === null ? '' : String(draft.monthlyBudgetUsd)}
+                onChange={(e) => {
+                  const v = e.target.value.trim();
+                  setDraft({
+                    ...draft,
+                    monthlyBudgetUsd: v.length === 0 ? null : Number(v),
+                  });
+                }}
                 placeholder="None"
-                disabled
+                inputMode="decimal"
                 className="h-8 w-24 tabular-nums text-xs"
               />
             </div>
@@ -84,20 +175,20 @@ export function Settings() {
         </SettingsGroup>
 
         <SettingsGroup title="Permission mode">
-          <div className="space-y-1.5">
-            {(Object.keys(PERMISSION_LABEL) as ProjectSettings['permissionMode'][]).map((mode) => {
-              const active = mode === s.permissionMode;
+          <div className="space-y-1.5 p-2">
+            {(Object.keys(PERMISSION_LABEL) as PermissionMode[]).map((mode) => {
+              const active = mode === draft.permissionMode;
               return (
                 <button
                   key={mode}
                   type="button"
-                  disabled
+                  onClick={() => setDraft({ ...draft, permissionMode: mode })}
                   className={cn(
                     'w-full text-left rounded-md border px-3 py-2 transition-colors',
-                    'disabled:cursor-not-allowed',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
                     active
                       ? 'border-foreground/40 bg-secondary/60'
-                      : 'border-border bg-card opacity-60',
+                      : 'border-border bg-card hover:bg-secondary/40',
                   )}
                 >
                   <div className="flex items-center gap-2">
@@ -118,6 +209,39 @@ export function Settings() {
             })}
           </div>
         </SettingsGroup>
+
+        {updateMutation.isError && (
+          <div className="flex items-start gap-2 rounded-md border border-status-error-border bg-status-error-bg px-3 py-2 text-[12px] text-status-error-fg">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span className="leading-snug">{updateMutation.error.message}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-border bg-card px-3 py-2 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-muted-foreground">
+          {dirty ? 'Unsaved changes' : updateMutation.isSuccess ? 'Saved.' : 'No changes'}
+        </span>
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={onReset}
+            disabled={!dirty || updateMutation.isPending}
+          >
+            Reset
+          </Button>
+          <Button
+            size="sm"
+            variant="accent"
+            className="h-7 text-xs"
+            onClick={onSave}
+            disabled={!dirty || !valid || updateMutation.isPending}
+          >
+            {updateMutation.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
       </div>
     </div>
   );

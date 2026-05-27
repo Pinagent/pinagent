@@ -26,6 +26,12 @@ export {
 } from './ask-user';
 export { type BranchRecord, listBranches } from './branches';
 export { type ChangeRecord, getChangeDiff, listChanges } from './changes';
+export {
+  type AnthropicValidation,
+  type GithubValidation,
+  validateAnthropicKey,
+  validateGithubToken,
+} from './connection-validators';
 export { type OpenInEditorResult, openInEditor } from './editor';
 export {
   type ComposeOpts,
@@ -33,6 +39,22 @@ export {
   type ComposeResult,
   composePullRequest,
 } from './pr-composer';
+export {
+  type PresentableConnections,
+  type SecretsFile,
+  SecretsFileSchema,
+  SecretsStore,
+} from './secrets-store';
+export {
+  DEFAULT_SETTINGS,
+  type PermissionMode,
+  PermissionModeSchema,
+  type ProjectSettings,
+  type ProjectSettingsPatch,
+  ProjectSettingsPatchSchema,
+  ProjectSettingsSchema,
+  SettingsStore,
+} from './settings-store';
 export {
   type FeedbackInput,
   FeedbackInputSchema,

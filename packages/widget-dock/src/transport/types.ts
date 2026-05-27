@@ -132,6 +132,32 @@ export interface DockTransport {
    * was skipped or failed.
    */
   createPullRequest(input: CreatePullRequestInput): Promise<CreatePullRequestResult>;
+
+  // ---------- Connections + settings (Phase 5) ----------
+
+  /** Presentable connection state. Never includes raw tokens. */
+  getConnections(): Promise<PresentableConnections>;
+
+  /**
+   * Set or replace the GitHub personal access token. The server
+   * validates it (`GET /user`) before persisting; rejects on bad token.
+   */
+  setGithubConnection(token: string): Promise<PresentableConnections>;
+
+  /** Forget the stored GitHub token. */
+  clearGithubConnection(): Promise<PresentableConnections>;
+
+  /** Set or replace the Anthropic API key, validated upstream. */
+  setAnthropicConnection(key: string): Promise<PresentableConnections>;
+
+  /** Forget the stored Anthropic key. */
+  clearAnthropicConnection(): Promise<PresentableConnections>;
+
+  /** Current project config: base branch, retention, cost caps, etc. */
+  getSettings(): Promise<DockProjectSettings>;
+
+  /** Partial update; whole record echoed back. */
+  updateSettings(patch: Partial<DockProjectSettings>): Promise<DockProjectSettings>;
 }
 
 export interface ChangeDiff {
@@ -139,6 +165,24 @@ export interface ChangeDiff {
   diff: string;
   /** True when the server cut the diff short to keep payloads bounded. */
   truncated: boolean;
+}
+
+export interface PresentableConnections {
+  github: { connected: boolean; login: string | null };
+  anthropic: { keySet: boolean };
+}
+
+/**
+ * Mirrors `@pinagent/agent-runner.ProjectSettings`. Kept local to the
+ * dock so the bundle doesn't pull Node-only deps. Defined here rather
+ * than in fixtures/types.ts so the type evolves with the transport.
+ */
+export interface DockProjectSettings {
+  baseBranch: string;
+  worktreeRetentionDays: number;
+  perConversationCapUsd: number;
+  monthlyBudgetUsd: number | null;
+  permissionMode: 'auto' | 'approve' | 'dry-run';
 }
 
 export interface CreatePullRequestInput {

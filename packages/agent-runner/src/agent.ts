@@ -22,6 +22,7 @@ import { ASK_USER_TOOL_NAME, createAskUserMcpServer, rejectAsk } from './ask-use
 import { getOrCreateBus } from './bus';
 import { getDb } from './db/client';
 import { runGitCapture } from './git-utils';
+import { SecretsStore } from './secrets-store';
 import { type FeedbackRecord, Storage } from './storage';
 
 /**
@@ -321,6 +322,12 @@ async function runQuery(opts: RunQueryOpts): Promise<void> {
     PINAGENT_PROJECT_ROOT: opts.projectRoot,
     CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '720000',
   };
+
+  // Dock-stored Anthropic key (set via Connections route) wins over an
+  // existing env var so the user can override CI-style auth without
+  // restarting the dev-server. No-op when the user hasn't set one.
+  const storedKey = await new SecretsStore(opts.projectRoot).getAnthropicKey();
+  if (storedKey) env.ANTHROPIC_API_KEY = storedKey;
 
   const sdkOptions: Options = {
     cwd: opts.cwd,

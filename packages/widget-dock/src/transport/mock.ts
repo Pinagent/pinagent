@@ -11,9 +11,12 @@ import {
   type Branch,
   type Change,
   type Conversation,
+  FIXTURE_ANTHROPIC,
   FIXTURE_BRANCHES,
   FIXTURE_CHANGES,
   FIXTURE_CONVERSATIONS,
+  FIXTURE_GITHUB,
+  FIXTURE_SETTINGS,
 } from '../fixtures';
 import type {
   ChangeDiff,
@@ -21,7 +24,9 @@ import type {
   ConversationFilters,
   CreatePullRequestInput,
   CreatePullRequestResult,
+  DockProjectSettings,
   DockTransport,
+  PresentableConnections,
 } from './types';
 import type { ConnectionStatus, ConversationHandlers } from './ws-client';
 
@@ -34,6 +39,21 @@ function sleep(ms: number): Promise<void> {
 
 export class MockTransport implements DockTransport {
   readonly kind = 'mock' as const;
+
+  // In-memory copies of the connection + settings fixtures so the
+  // dock's set/clear/patch flows mutate something observable. Resets
+  // whenever the page reloads — by design, since this is review-only.
+  private connections: PresentableConnections = {
+    github: { connected: FIXTURE_GITHUB.connected, login: FIXTURE_GITHUB.account },
+    anthropic: { keySet: FIXTURE_ANTHROPIC.keySet },
+  };
+  private settings: DockProjectSettings = {
+    baseBranch: FIXTURE_SETTINGS.baseBranch,
+    worktreeRetentionDays: FIXTURE_SETTINGS.worktreeRetentionDays,
+    perConversationCapUsd: FIXTURE_SETTINGS.perConversationCapUsd,
+    monthlyBudgetUsd: FIXTURE_SETTINGS.monthlyBudgetUsd,
+    permissionMode: FIXTURE_SETTINGS.permissionMode,
+  };
 
   async listConversations(filters?: ConversationFilters): Promise<Conversation[]> {
     await sleep(SIMULATED_LATENCY_MS);
@@ -133,5 +153,52 @@ export class MockTransport implements DockTransport {
       branchPushed: true,
       prUrl: `https://github.com/example/repo/pull/999?branch=${encodeURIComponent(input.branchName)}`,
     };
+  }
+
+  async getConnections(): Promise<PresentableConnections> {
+    await sleep(SIMULATED_LATENCY_MS);
+    return this.connections;
+  }
+
+  async setGithubConnection(token: string): Promise<PresentableConnections> {
+    await sleep(SIMULATED_LATENCY_MS * 3);
+    // Pretend any non-empty token resolves to a plausible login. Reject
+    // obviously bogus tokens so the error-state UI is reviewable too.
+    if (token.length < 4) throw new Error('Invalid token (mock validation)');
+    this.connections = {
+      ...this.connections,
+      github: { connected: true, login: 'fixture-user' },
+    };
+    return this.connections;
+  }
+
+  async clearGithubConnection(): Promise<PresentableConnections> {
+    await sleep(SIMULATED_LATENCY_MS);
+    this.connections = { ...this.connections, github: { connected: false, login: null } };
+    return this.connections;
+  }
+
+  async setAnthropicConnection(key: string): Promise<PresentableConnections> {
+    await sleep(SIMULATED_LATENCY_MS * 3);
+    if (key.length < 4) throw new Error('Invalid key (mock validation)');
+    this.connections = { ...this.connections, anthropic: { keySet: true } };
+    return this.connections;
+  }
+
+  async clearAnthropicConnection(): Promise<PresentableConnections> {
+    await sleep(SIMULATED_LATENCY_MS);
+    this.connections = { ...this.connections, anthropic: { keySet: false } };
+    return this.connections;
+  }
+
+  async getSettings(): Promise<DockProjectSettings> {
+    await sleep(SIMULATED_LATENCY_MS);
+    return this.settings;
+  }
+
+  async updateSettings(patch: Partial<DockProjectSettings>): Promise<DockProjectSettings> {
+    await sleep(SIMULATED_LATENCY_MS * 2);
+    this.settings = { ...this.settings, ...patch };
+    return this.settings;
   }
 }
