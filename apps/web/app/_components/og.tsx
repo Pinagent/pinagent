@@ -1,17 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
+import { BRAND_CREAM, BRAND_GOLD, BRAND_INK, PIN_PATH, SURFACE_LIGHT } from '@pinagent/ui/tokens';
 import { ImageResponse } from 'next/og';
 
 export const OG_SIZE = { width: 1200, height: 630 };
 export const OG_CONTENT_TYPE = 'image/png';
-
-const BRAND_INK = '#201B21';
-const BRAND_CREAM = '#FCF9E8';
-const BRAND_GOLD = '#FFD700';
-const BRAND_BORDER = '#E8DFB0';
-const BRAND_MUTED_FOREGROUND = '#5C5546';
-
-const PIN_PATH =
-  'M38.0761 27C24.2046 27 16.7486 43.8193 26.2852 53.7027L26.4587 53.8761L47.2659 74.6834L68.0732 53.8761L68.2466 53.7027C77.9567 43.8193 70.3273 27 56.4558 27L38.0761 27Z';
 
 export function renderOgImage({ eyebrow, title }: { eyebrow?: string; title: string }) {
   return new ImageResponse(
@@ -59,9 +51,9 @@ export function renderOgImage({ eyebrow, title }: { eyebrow?: string; title: str
               display: 'flex',
               marginLeft: 8,
               paddingLeft: 24,
-              borderLeft: `2px solid ${BRAND_BORDER}`,
+              borderLeft: `2px solid ${SURFACE_LIGHT.border}`,
               fontSize: 28,
-              color: BRAND_MUTED_FOREGROUND,
+              color: SURFACE_LIGHT.mutedForeground,
             }}
           >
             {eyebrow}
@@ -86,7 +78,7 @@ export function renderOgImage({ eyebrow, title }: { eyebrow?: string; title: str
           justifyContent: 'space-between',
           alignItems: 'center',
           fontSize: 24,
-          color: BRAND_MUTED_FOREGROUND,
+          color: SURFACE_LIGHT.mutedForeground,
         }}
       >
         <div style={{ display: 'flex' }}>github.com/Pinagent/pinagent</div>
