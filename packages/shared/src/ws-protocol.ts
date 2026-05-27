@@ -45,9 +45,28 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('land_request'), feedbackId: FeedbackId }),
   /** Phase H — throw away the agent's worktree without merging. */
   z.object({ type: z.literal('discard_request'), feedbackId: FeedbackId }),
+  /**
+   * Dock subscribers (project-wide). One socket gets fan-out of every
+   * conversation-list-affecting change in the project: new submissions,
+   * status patches, worktree landings, discards. Used by the dock to
+   * invalidate its TanStack Query cache without polling.
+   */
+  z.object({ type: z.literal('subscribe_project') }),
+  z.object({ type: z.literal('unsubscribe_project') }),
   z.object({ type: z.literal('ping') }),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
+
+/**
+ * Project-scoped events fanned out to subscribers of `subscribe_project`.
+ *
+ * Kept intentionally small: today we only signal "something in the
+ * conversation list changed, refetch." Per-row patch events can come
+ * later if telemetry shows the refetch cost matters. The wire shape is
+ * a discriminated union so future event types can be added without
+ * breaking existing subscribers.
+ */
+export type ProjectEvent = { type: 'conversations_changed' };
 
 // ---------- Server → client ----------
 
@@ -89,4 +108,6 @@ export type ServerMessage =
        */
       changesCount?: number;
     }
+  /** Project-wide event; only delivered to sockets that sent `subscribe_project`. */
+  | { type: 'project_event'; event: ProjectEvent }
   | { type: 'pong' };

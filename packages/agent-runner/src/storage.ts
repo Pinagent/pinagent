@@ -6,6 +6,7 @@ import { join, relative, resolve } from 'node:path';
 import { asc, conversations, eq, widgetAnchors } from '@pinagent/db';
 import { z } from 'zod';
 import { type Db, getDb } from './db/client';
+import { emitProjectChange } from './project-events';
 
 export const ID_RE = /^[A-Za-z0-9_-]{8,16}$/;
 
@@ -205,7 +206,7 @@ export class Storage {
       userAgent: input.userAgent,
     });
 
-    return {
+    const record: FeedbackRecord = {
       id,
       comment: input.comment,
       file: input.loc?.file ?? null,
@@ -227,6 +228,10 @@ export class Storage {
       updatedAt: input.createdAt,
       resolvedAt: null,
     };
+    // Notify project subscribers (the dock) that the conversation list
+    // changed. Best-effort — emit failures shouldn't break the write.
+    emitProjectChange({ type: 'conversations_changed' });
+    return record;
   }
 
   async list(): Promise<FeedbackRecord[]> {
@@ -299,6 +304,10 @@ export class Storage {
 
     const next = await this.read(id);
     if (!next) return null;
+    // Tell project subscribers a row changed; `patch` shares this path,
+    // so all writes (status updates, worktree transitions, agent session
+    // attach) are covered by the one emit.
+    emitProjectChange({ type: 'conversations_changed' });
     return { record: next, previousStatus };
   }
 

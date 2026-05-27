@@ -16,6 +16,7 @@ import { PinMark } from '@pinagent/ui/components/pin-mark';
 import { useMemo, useState } from 'react';
 import { QueryProvider } from './hooks/QueryProvider';
 import { useConversations } from './hooks/useConversations';
+import { useProjectSubscription } from './hooks/useProjectSubscription';
 import { ROUTE_VIEWS } from './routes';
 import { DockChrome } from './shell/DockChrome';
 import { DockFAB } from './shell/DockFAB';
@@ -57,6 +58,14 @@ function DockShell({
   const [activeRoute, setActiveRoute] = useState<RouteKey>('overview');
   const forcedDisconnected = params.get('state') === 'disconnected';
 
+  // Open a single WS connection to the dev-server's project channel.
+  // When `conversations_changed` fires, the hook invalidates the
+  // conversations query — Overview, Conversations, and the FAB badge
+  // refetch automatically. Skipped in mock mode (nothing to subscribe
+  // to) and when the chrome is forced into disconnected demo mode.
+  const subscriptionEnabled = transportKind === 'local' && !forcedDisconnected;
+  const subscription = useProjectSubscription({ enabled: subscriptionEnabled });
+
   // The FAB count badge tracks anything the user might want to act on:
   // ready-to-land changes + conversations awaiting their reply. Reads
   // the same conversations cache the Overview/Conversations views use,
@@ -68,11 +77,12 @@ function DockShell({
       .length;
   }, [conversations.data]);
 
-  // If the local transport can't reach the dev-server, surface that as
-  // a chrome indicator alongside the forced state flag.
-  const transportDisconnected =
-    transportKind === 'local' && conversations.isError && !conversations.isLoading;
-  const disconnected = forcedDisconnected || transportDisconnected;
+  // Disconnected = forced (?state=disconnected), HTTP failed, or the WS
+  // bridge is down. Either signal is enough to surface the indicator;
+  // both being down (no host at all) shows it without flicker.
+  const httpDown = transportKind === 'local' && conversations.isError && !conversations.isLoading;
+  const wsDown = subscriptionEnabled && subscription.status === 'closed';
+  const disconnected = forcedDisconnected || httpDown || wsDown;
 
   const expandedNav = dock.mode !== 'panel';
   const ActiveView = ROUTE_VIEWS[activeRoute];
