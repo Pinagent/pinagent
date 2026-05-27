@@ -1,29 +1,98 @@
 // SPDX-License-Identifier: Apache-2.0
+import { Buffer } from 'node:buffer';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { FeedbackInputSchema, ID_RE, PatchSchema, type Storage } from '@pinagent/agent-runner';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  FeedbackInputSchema,
+  ID_RE,
+  openInEditor,
+  PatchSchema,
+  type SpawnAgentMode,
+  type Storage,
+  spawnAgent,
+} from '@pinagent/agent-runner';
+import { DB_WORKER_SOURCE } from '@pinagent/browser-runtime';
 import { nanoid } from 'nanoid';
 import type { Connect } from 'vite';
 import { WIDGET_SOURCE } from './__generated__/widget';
-import type { AutoTrigger } from './auto-trigger';
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024; // 8MB raw JSON (screenshot dominates)
 
-export function createMiddleware(
-  storage: Storage,
-  autoTrigger: AutoTrigger | null,
-): Connect.NextHandleFunction {
+interface CreateMiddlewareOpts {
+  storage: Storage;
+  /** Resolved spawn mode for this dev server. */
+  spawnMode: SpawnAgentMode;
+  /** WebSocket port the widget should connect to. */
+  wsPort: number | null;
+}
+
+export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandleFunction {
+  const { storage, spawnMode, wsPort } = opts;
+
   return async function pinagentMiddleware(req, res, next) {
     const url = req.url ?? '';
     if (!url.startsWith('/__pinagent')) return next();
 
     try {
-      // GET /__pinagent/widget.js
+      // GET /__pinagent/widget.js — IIFE bundle + a prelude that hands the
+      // widget its dynamic config (WS URL today). Mirrors `buildWidgetBundle`
+      // in next-plugin/route.ts.
       if (req.method === 'GET' && url === '/__pinagent/widget.js') {
+        const bundle = buildWidgetBundle(wsPort);
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');
-        res.end(WIDGET_SOURCE);
+        res.end(bundle);
         return;
+      }
+
+      // GET /__pinagent/db-worker.js — sqlite-wasm worker source (browser-runtime).
+      if (req.method === 'GET' && url === '/__pinagent/db-worker.js') {
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(DB_WORKER_SOURCE);
+        return;
+      }
+
+      // GET /__pinagent/db-migrations — drizzle migration journal + SQL.
+      if (req.method === 'GET' && url === '/__pinagent/db-migrations') {
+        const payload = await serveDbMigrations();
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(payload);
+        return;
+      }
+
+      // GET /__pinagent/sqlite-wasm/<file> — proxy sqlite-wasm jswasm files.
+      const wasmMatch = req.method === 'GET' && /^\/__pinagent\/sqlite-wasm\/([^/]+)$/.exec(url);
+      if (wasmMatch) {
+        return serveSqliteWasm(res, wasmMatch[1] ?? '');
+      }
+
+      // POST /__pinagent/open — spawn the developer's editor at file:line:col.
+      if (req.method === 'POST' && url.startsWith('/__pinagent/open')) {
+        const parsedUrl = new URL(url, 'http://localhost');
+        const file = parsedUrl.searchParams.get('file');
+        const lineRaw = parsedUrl.searchParams.get('line');
+        const colRaw = parsedUrl.searchParams.get('col');
+        if (!file) return badRequest(res, 'file required');
+        try {
+          const result = await openInEditor(
+            storage.root,
+            file,
+            lineRaw ? Number(lineRaw) : undefined,
+            colRaw ? Number(colRaw) : undefined,
+          );
+          return json(res, 200, result);
+        } catch (e) {
+          return json(res, 500, { error: e instanceof Error ? e.message : String(e) });
+        }
       }
 
       // POST /__pinagent/feedback
@@ -39,10 +108,20 @@ export function createMiddleware(
         }
         const id = nanoid(10);
         const rec = await storage.create(id, parsed.data);
-        if (autoTrigger) {
-          autoTrigger.enqueue({ id: rec.id, comment: rec.comment, file: rec.file });
+
+        // Mirror next-plugin/route.ts: optionally spawn an isolated agent.
+        // `await` so the widget's first WS subscribe sees `worktreeState`
+        // already set to `active` (or stays at `none` for inline mode).
+        const agentSpawned = spawnMode !== false;
+        if (agentSpawned) {
+          try {
+            await spawnAgent({ projectRoot: storage.root, feedback: rec, mode: spawnMode });
+          } catch {
+            // Errors land in the per-feedback log; don't fail the POST.
+          }
         }
-        return json(res, 200, { id: rec.id });
+
+        return json(res, 200, { id: rec.id, agentSpawned });
       }
 
       // GET /__pinagent/feedback
@@ -93,6 +172,89 @@ export function createMiddleware(
       return json(res, 500, { error: msg });
     }
   };
+}
+
+/**
+ * Build the widget IIFE plus a prelude that hands the widget its config
+ * (currently just the WebSocket URL). Mirrors `buildWidgetBundle` in
+ * `packages/next-plugin/src/route.ts`.
+ */
+function buildWidgetBundle(wsPort: number | null): string {
+  const config = wsPort ? { wsUrl: `ws://127.0.0.1:${wsPort}/__pinagent/ws` } : { wsUrl: null };
+  const prelude = `;(function(){try{window.__pinagentConfig=${JSON.stringify(config)};}catch(e){}})();\n`;
+  return prelude + WIDGET_SOURCE;
+}
+
+/**
+ * Whitelist of sqlite-wasm files we expose. Mirrors next-plugin/route.ts.
+ */
+const SQLITE_WASM_FILES: Record<string, string> = {
+  'sqlite3-bundler-friendly.mjs': 'application/javascript; charset=utf-8',
+  'sqlite3-worker1-bundler-friendly.mjs': 'application/javascript; charset=utf-8',
+  'sqlite3-opfs-async-proxy.js': 'application/javascript; charset=utf-8',
+  'sqlite3.mjs': 'application/javascript; charset=utf-8',
+  'sqlite3.js': 'application/javascript; charset=utf-8',
+  'sqlite3.wasm': 'application/wasm',
+};
+
+let sqliteWasmDirCache: string | null = null;
+function sqliteWasmDir(): string {
+  if (sqliteWasmDirCache) return sqliteWasmDirCache;
+  const req = createRequire(import.meta.url ?? `file://${process.cwd()}/__pinagent__.js`);
+  const pkgJson = req.resolve('@sqlite.org/sqlite-wasm/package.json');
+  sqliteWasmDirCache = join(dirname(pkgJson), 'sqlite-wasm', 'jswasm');
+  return sqliteWasmDirCache;
+}
+
+async function serveSqliteWasm(res: ServerResponse, file: string): Promise<void> {
+  const mime = SQLITE_WASM_FILES[file];
+  if (!mime) {
+    res.statusCode = 404;
+    res.end();
+    return;
+  }
+  try {
+    const bytes = await readFile(join(sqliteWasmDir(), file));
+    res.statusCode = 200;
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    res.end(bytes);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error(`[pinagent] failed to serve sqlite-wasm/${file}:`, e);
+    res.statusCode = 500;
+    res.end();
+  }
+}
+
+/**
+ * Read drizzle-kit migrations + journal and emit drizzle's
+ * `readMigrationFiles`-compatible payload. Mirrors next-plugin/route.ts.
+ */
+async function serveDbMigrations(): Promise<string> {
+  const moduleUrl: string | undefined = import.meta.url;
+  const dir = moduleUrl
+    ? join(dirname(fileURLToPath(moduleUrl)), '..', 'drizzle')
+    : join(process.cwd(), 'drizzle');
+  try {
+    const journalText = await readFile(join(dir, 'meta', '_journal.json'), 'utf8');
+    const journal = JSON.parse(journalText) as {
+      entries: { idx: number; when: number; tag: string }[];
+    };
+    const migrations = await Promise.all(
+      journal.entries.map(async (entry) => {
+        const sql = await readFile(join(dir, `${entry.tag}.sql`), 'utf8');
+        const hash = createHash('sha256').update(sql).digest('hex');
+        return { tag: entry.tag, when: entry.when, hash, sql };
+      }),
+    );
+    return JSON.stringify({ migrations });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[pinagent] failed to serve db-migrations:', e);
+    return JSON.stringify({ migrations: [] });
+  }
 }
 
 function readJsonBody(req: IncomingMessage): Promise<unknown> {
