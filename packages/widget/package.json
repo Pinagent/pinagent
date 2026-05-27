@@ -8,6 +8,7 @@
   "main": "dist/widget.iife.js",
   "exports": {
     ".": "./dist/widget.iife.js",
+    "./iife": "./dist/widget.iife.js",
     "./brand": {
       "types": "./dist/brand.d.ts",
       "import": "./dist/brand.js",

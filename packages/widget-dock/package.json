@@ -6,13 +6,16 @@
   "description": "Pinagent dock surface — project-management UI complementing the per-element widget. Visual + components layer; transport and routes will be wired in a later phase.",
   "type": "module",
   "scripts": {
+    "predev": "pnpm exec turbo run build --filter=@pinagent/widget",
     "dev": "vite",
+    "prebuild": "pnpm exec turbo run build --filter=@pinagent/widget",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@pinagent/ui": "workspace:*",
+    "@pinagent/widget": "workspace:*",
     "lucide-react": "^1.16.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
