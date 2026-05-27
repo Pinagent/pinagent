@@ -87,6 +87,15 @@ jobs:
       - name: Lint undeclared imports
         run: pnpm lint:undeclared-imports
 
+      # Peer-dep drift check: fail on any unmet peer dependency. Without
+      # this, an upstream SDK bumping its peer (e.g. claude-agent-sdk
+      # going zod ^3 → ^4) only surfaced as an install-time warning a
+      # developer could miss. `strictPeerDependencies` in
+      # pnpm-workspace.yaml makes every install enforce this — the
+      # explicit lint step here is a fast standalone re-check.
+      - name: Lint peer deps
+        run: pnpm lint:peer-deps
+
       # Widget cascade: @pinagent/widget is embedded into next-plugin
       # and vite-plugin at build time, so widget code changes must
       # ship via a changeset that bumps both consumers. PR-only —
