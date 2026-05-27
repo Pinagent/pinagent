@@ -23,6 +23,7 @@ import { recordAuditEvent } from './audit-log';
 import { getOrCreateBus } from './bus';
 import { getDb } from './db/client';
 import { runGitCapture } from './git-utils';
+import { emitProjectChange } from './project-events';
 import { SecretsStore } from './secrets-store';
 import { type FeedbackRecord, Storage } from './storage';
 
@@ -411,7 +412,10 @@ async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<v
         // If the agent flipped this feedback out of `pending` via the
         // MCP `resolve_feedback` tool, fan that out to the widget so
         // its cache catches up immediately instead of waiting on a
-        // reload-time scan.
+        // reload-time scan. The MCP server lives in a child process, so
+        // its SQLite write doesn't trigger our in-process project-events
+        // bus — we re-emit `conversations_changed` here to invalidate
+        // the dock's list/Changes/History caches.
         try {
           const storage = new Storage(opts.projectRoot);
           const rec = await storage.read(opts.feedbackId);
@@ -423,6 +427,7 @@ async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<v
               commitSha: rec.commitSha,
               resolvedAt: rec.resolvedAt,
             });
+            emitProjectChange({ type: 'conversations_changed' });
           }
         } catch {
           // Status sync is best-effort — the widget's terminal-event

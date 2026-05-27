@@ -19,6 +19,8 @@ export const ID_RE = /^[A-Za-z0-9_-]{8,16}$/;
 export const StatusSchema = z.enum(['pending', 'fixed', 'wontfix', 'deferred']);
 export type Status = z.infer<typeof StatusSchema>;
 
+export type WorktreeState = 'none' | 'active' | 'landed' | 'discarded';
+
 export interface FeedbackRecord {
   id: string;
   comment: string;
@@ -31,6 +33,7 @@ export interface FeedbackRecord {
   userAgent: string;
   screenshot: string;
   status: Status;
+  worktreeState: WorktreeState;
   note: string | null;
   commitSha: string | null;
   agentSessionId: string | null;
@@ -196,6 +199,7 @@ export class Storage {
       .update(conversations)
       .set({
         status: rec.status,
+        worktreeState: rec.worktreeState,
         note: rec.note,
         commitSha: rec.commitSha,
         agentSessionId: rec.agentSessionId,
@@ -230,6 +234,7 @@ function rowToRecord(row: {
     userAgent: a?.userAgent ?? '',
     screenshot: join('screenshots', `${c.id}.png`),
     status: c.status,
+    worktreeState: c.worktreeState,
     note: c.note,
     commitSha: c.commitSha,
     agentSessionId: c.agentSessionId,
