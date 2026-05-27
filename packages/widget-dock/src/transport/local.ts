@@ -29,6 +29,7 @@ import type {
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,
+  ConversationUpdate,
   CreatePullRequestInput,
   CreatePullRequestResult,
   DockProjectSettings,
@@ -127,6 +128,10 @@ const FeedbackRecordSchema = z
     status: z.enum(['pending', 'fixed', 'wontfix', 'deferred']),
     worktreeState: z.enum(['none', 'active', 'landed', 'discarded']),
     branch: z.string().nullable(),
+    // Title override + archive flag (Phase 7d). Defaults so a dock
+    // built against an older server still parses.
+    title: z.string().nullable().default(null),
+    archived: z.boolean().default(false),
     createdAt: z.string(),
     updatedAt: z.string(),
   })
@@ -160,7 +165,8 @@ function toConversation(rec: FeedbackRecord): Conversation {
   return {
     id: rec.id,
     shortId: shortId(rec.id),
-    title: commentToTitle(rec.comment),
+    // User-supplied title wins over the comment-derived one.
+    title: rec.title ?? commentToTitle(rec.comment),
     status: deriveDockStatus(rec.status, rec.worktreeState),
     page: rec.url,
     anchor: {
@@ -169,6 +175,7 @@ function toConversation(rec: FeedbackRecord): Conversation {
       snippet: '',
     },
     branch: rec.branch ?? '',
+    archived: rec.archived,
     updatedAt: rec.updatedAt,
     // Without a separate "latest agent message" query, the human's
     // original comment is the best preview we have for the list row.
@@ -216,6 +223,7 @@ export class LocalTransport implements DockTransport {
     // benefit from a network round-trip per filter change.
     return conversations
       .filter((c) => !filters?.page || c.page === filters.page)
+      .filter((c) => filters?.includeArchived || !c.archived)
       .filter((c) => {
         if (!filters?.query) return true;
         const q = filters.query.toLowerCase();
@@ -341,6 +349,16 @@ export class LocalTransport implements DockTransport {
 
   discardConversation(id: string): void {
     this.ws()?.sendDiscardRequest(id);
+  }
+
+  async updateConversation(id: string, patch: ConversationUpdate): Promise<Conversation> {
+    const rec = await this.jsonWriteValidated(
+      'PATCH',
+      `/__pinagent/feedback/${encodeURIComponent(id)}`,
+      FeedbackRecordSchema,
+      patch,
+    );
+    return toConversation(rec);
   }
 
   async createPullRequest(input: CreatePullRequestInput): Promise<CreatePullRequestResult> {

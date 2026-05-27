@@ -65,6 +65,16 @@ export interface FeedbackRecord {
   worktreePath: string | null;
   /** Lifecycle of the worktree itself (see schema for state meanings). */
   worktreeState: WorktreeState;
+  /**
+   * User-supplied title override. NULL means callers should fall back
+   * to the agent-derived title from `comment` (first non-empty line).
+   */
+  title: string | null;
+  /**
+   * Soft-archive flag. Hidden from the dock's default list and excluded
+   * from the FAB pending count. Orthogonal to status + worktreeState.
+   */
+  archived: boolean;
   createdAt: string;
   /** When the row was last mutated. Echoed for TTL-sweep computations. */
   updatedAt: string;
@@ -79,6 +89,13 @@ export const PatchSchema = z.object({
   branch: z.string().max(256).nullable().optional(),
   worktreePath: z.string().max(1024).nullable().optional(),
   worktreeState: WorktreeStateSchema.optional(),
+  /**
+   * Title override. Pass an empty string or `null` to clear back to the
+   * comment-derived title. Capped at 200 chars so the list rows don't
+   * blow up.
+   */
+  title: z.string().max(200).nullable().optional(),
+  archived: z.boolean().optional(),
 });
 export type Patch = z.infer<typeof PatchSchema>;
 
@@ -225,6 +242,8 @@ export class Storage {
       branch: null,
       worktreePath: null,
       worktreeState: 'none',
+      title: null,
+      archived: false,
       createdAt: input.createdAt,
       updatedAt: input.createdAt,
       resolvedAt: null,
@@ -308,6 +327,12 @@ export class Storage {
     if (patch.branch !== undefined) update.branch = patch.branch;
     if (patch.worktreePath !== undefined) update.worktreePath = patch.worktreePath;
     if (patch.worktreeState !== undefined) update.worktreeState = patch.worktreeState;
+    if (patch.title !== undefined) {
+      // Empty string collapses to null so the user can revert to the
+      // comment-derived title without remembering what it was.
+      update.title = patch.title && patch.title.trim().length > 0 ? patch.title.trim() : null;
+    }
+    if (patch.archived !== undefined) update.archived = patch.archived;
 
     const db = this.db();
     await db.update(conversations).set(update).where(eq(conversations.id, id));
@@ -364,6 +389,8 @@ function rowToRecord(row: {
     branch: c.branch,
     worktreePath: c.worktreePath,
     worktreeState: c.worktreeState,
+    title: c.title,
+    archived: c.archived,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
     resolvedAt: c.resolvedAt ? c.resolvedAt.toISOString() : null,

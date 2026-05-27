@@ -26,6 +26,9 @@ export type AuditAction =
   | 'conversation_created'
   | 'conversation_landed'
   | 'conversation_discarded'
+  | 'conversation_renamed'
+  | 'conversation_archived'
+  | 'conversation_unarchived'
   | 'pr_created';
 
 export interface AuditEventRecord {

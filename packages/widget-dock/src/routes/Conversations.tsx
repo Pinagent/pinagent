@@ -9,7 +9,17 @@ import { Textarea } from '@pinagent/ui/components/ui/textarea';
 import { cn } from '@pinagent/ui/lib/utils';
 import type { StatusKey } from '@pinagent/ui/tokens';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, Check, Filter, Search, Send } from 'lucide-react';
+import {
+  AlertTriangle,
+  Archive,
+  ArchiveRestore,
+  ArrowLeft,
+  Check,
+  Filter,
+  Pencil,
+  Search,
+  Send,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnchorChip } from '../components/AnchorChip';
 import { ListRow } from '../components/ListRow';
@@ -21,6 +31,7 @@ import {
   useConversationStream,
 } from '../hooks/useConversationStream';
 import { useConversations } from '../hooks/useConversations';
+import { useUpdateConversation } from '../hooks/useUpdateConversation';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
@@ -54,13 +65,18 @@ export function Conversations() {
 
   const [filter, setFilter] = useState<StatusKey | 'all'>('all');
   const [query, setQuery] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const transport = useTransport();
 
   // Query is passed to the transport (small client-side filter today, but
   // semantically a search term). Status filter stays client-side since
-  // status is a derived field, not a stored one.
+  // status is a derived field, not a stored one. `includeArchived` is
+  // forwarded so the transport drops archived rows before they reach
+  // the cache — flipping the toggle invalidates the cache via the
+  // query key and refetches without archived stragglers.
   const conversationsQuery = useConversations({
     query: query.trim() || undefined,
+    includeArchived: showArchived,
   });
 
   const items = useMemo(() => {
@@ -98,7 +114,7 @@ export function Conversations() {
             <Filter className="h-3.5 w-3.5" />
           </Button>
         </div>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {STATUS_FILTERS.map((f) => (
             <button
               key={f.status}
@@ -115,6 +131,26 @@ export function Conversations() {
               {f.label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setShowArchived((v) => !v)}
+            aria-pressed={showArchived}
+            className={cn(
+              'ml-auto inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+              showArchived
+                ? 'border-foreground/40 bg-secondary text-foreground'
+                : 'border-border text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+            )}
+            title={
+              showArchived
+                ? 'Currently showing archived conversations — click to hide'
+                : 'Click to include archived conversations'
+            }
+          >
+            <Archive className="h-3 w-3" aria-hidden />
+            Archived
+          </button>
         </div>
       </div>
 
@@ -487,6 +523,41 @@ function DetailHeader({
   onBack: () => void;
   worktreeState: WorktreeStatePayload | null;
 }) {
+  const update = useUpdateConversation();
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(detail.title);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Focus + select on edit open. Run after the render that flips
+  // `editingTitle` to true so the input element exists.
+  useEffect(() => {
+    if (editingTitle) {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }
+  }, [editingTitle]);
+
+  const startRename = (): void => {
+    setDraftTitle(detail.title);
+    setEditingTitle(true);
+  };
+  const cancelRename = (): void => {
+    setEditingTitle(false);
+    setDraftTitle(detail.title);
+  };
+  const commitRename = (): void => {
+    setEditingTitle(false);
+    const trimmed = draftTitle.trim();
+    if (trimmed === detail.title.trim()) return;
+    // Empty string clears back to the comment-derived title (storage
+    // collapses to NULL). Otherwise persist the user's override.
+    update.mutate({ id: detail.id, patch: { title: trimmed.length === 0 ? '' : trimmed } });
+  };
+
+  const toggleArchive = (): void => {
+    update.mutate({ id: detail.id, patch: { archived: !detail.archived } });
+  };
+
   return (
     <div className="border-b border-border bg-card px-3 py-2.5">
       <div className="flex items-center gap-2 mb-2">
@@ -499,13 +570,68 @@ function DetailHeader({
           <ArrowLeft className="h-3.5 w-3.5" />
           All conversations
         </Button>
-        <Badge variant="outline" className="ml-auto font-mono text-[10px]">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleArchive}
+          disabled={update.isPending}
+          className="ml-auto h-7 w-7 text-muted-foreground hover:text-foreground"
+          aria-label={detail.archived ? 'Unarchive conversation' : 'Archive conversation'}
+          title={detail.archived ? 'Unarchive conversation' : 'Archive conversation'}
+        >
+          {detail.archived ? (
+            <ArchiveRestore className="h-3.5 w-3.5" />
+          ) : (
+            <Archive className="h-3.5 w-3.5" />
+          )}
+        </Button>
+        <Badge variant="outline" className="font-mono text-[10px]">
           {detail.shortId}
         </Badge>
       </div>
-      <h2 className="text-sm font-semibold leading-tight">{detail.title}</h2>
+      {editingTitle ? (
+        <Input
+          ref={titleInputRef}
+          value={draftTitle}
+          onChange={(e) => setDraftTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              commitRename();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              cancelRename();
+            }
+          }}
+          onBlur={commitRename}
+          placeholder="Title (empty to use the original comment)"
+          aria-label="Conversation title"
+          className="h-7 text-sm font-semibold"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={startRename}
+          aria-label={`Rename conversation: ${detail.title}`}
+          className={cn(
+            'group flex w-full items-center gap-1.5 rounded -mx-1 px-1 py-0.5 text-left',
+            'hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+          )}
+        >
+          <h2 className="flex-1 text-sm font-semibold leading-tight truncate">{detail.title}</h2>
+          <Pencil
+            className="h-3 w-3 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground"
+            aria-hidden
+          />
+        </button>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <StatusBadge status={detail.status} pulse={detail.status === 'working'} />
+        {detail.archived && (
+          <Badge variant="outline" className="text-[10px]">
+            archived
+          </Badge>
+        )}
         {detail.anchor.loc && (
           <AnchorChip loc={detail.anchor.loc} selector={detail.anchor.selector} />
         )}

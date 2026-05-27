@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  applyConversationPatch,
   ComposeOptsSchema,
   composePullRequest,
   FeedbackInputSchema,
@@ -353,9 +354,11 @@ export async function PATCH(req: Request, ctx: RouteCtx): Promise<Response> {
   const parsed = PatchSchema.safeParse(raw);
   if (!parsed.success) return json(400, { error: parsed.error.message });
 
-  const rec = await getStorage().patch(id, parsed.data);
-  if (!rec) return json(404, { error: 'not found' });
-  return json(200, rec);
+  // applyConversationPatch wraps Storage.patch and emits the
+  // human-facing audit events (rename, archive, unarchive).
+  const result = await applyConversationPatch(getStorage().root, id, parsed.data);
+  if (!result.record) return json(404, { error: 'not found' });
+  return json(200, result.record);
 }
 
 /**
