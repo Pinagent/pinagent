@@ -1,0 +1,43 @@
+{
+  "name": "@pinagent/vscode-extension",
+  "displayName": "Pinagent",
+  "description": "VSCode bridge for the Pinagent dock — opens Claude Code terminals with conversation prompts piped in from clicks in the dock.",
+  "version": "0.0.1",
+  "publisher": "pinagent",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pinagent/pinagent.git",
+    "directory": "packages/vscode-extension"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.cjs",
+  "activationEvents": [
+    "onUri"
+  ],
+  "contributes": {},
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit",
+    "package": "vsce package --no-dependencies --out dist/pinagent-vscode.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "tsdown": "^0.22.0",
+    "typescript": "^6.0.3"
+  }
+}

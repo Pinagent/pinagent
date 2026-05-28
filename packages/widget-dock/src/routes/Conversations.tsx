@@ -27,6 +27,7 @@ import {
   Pencil,
   Search,
   Send,
+  Terminal,
   Trash2,
   X,
 } from 'lucide-react';
@@ -48,6 +49,7 @@ import {
   useSavedFilters,
 } from '../hooks/useSavedFilters';
 import { useUpdateConversation } from '../hooks/useUpdateConversation';
+import { openInClaudeCode } from '../lib/vscode-bridge';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
@@ -913,6 +915,10 @@ function DetailHeader({
     update.mutate({ id: detail.id, patch: { archived: !detail.archived } });
   };
 
+  const openInClaude = (): void => {
+    openInClaudeCode(detail.comment);
+  };
+
   return (
     <div className="border-b border-border bg-card px-3 py-2.5">
       <div className="flex items-center gap-2 mb-2">
@@ -925,21 +931,33 @@ function DetailHeader({
           <ArrowLeft className="h-3.5 w-3.5" />
           All conversations
         </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleArchive}
-          disabled={update.isPending}
-          className="ml-auto h-7 w-7 text-muted-foreground hover:text-foreground"
-          aria-label={detail.archived ? 'Unarchive conversation' : 'Archive conversation'}
-          title={detail.archived ? 'Unarchive conversation' : 'Archive conversation'}
-        >
-          {detail.archived ? (
-            <ArchiveRestore className="h-3.5 w-3.5" />
-          ) : (
-            <Archive className="h-3.5 w-3.5" />
-          )}
-        </Button>
+        <div className="ml-auto flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={openInClaude}
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            aria-label="Open this conversation in Claude Code"
+            title="Open in Claude Code (VSCode)"
+          >
+            <Terminal className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleArchive}
+            disabled={update.isPending}
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            aria-label={detail.archived ? 'Unarchive conversation' : 'Archive conversation'}
+            title={detail.archived ? 'Unarchive conversation' : 'Archive conversation'}
+          >
+            {detail.archived ? (
+              <ArchiveRestore className="h-3.5 w-3.5" />
+            ) : (
+              <Archive className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        </div>
         <Badge variant="outline" className="font-mono text-[10px]">
           {detail.shortId}
         </Badge>
