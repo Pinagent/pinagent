@@ -37,10 +37,10 @@
   "devDependencies": {
     "@types/node": "^22.10.1",
     "@types/vscode": "^1.85.0",
-    "@types/ws": "^8.5.13",
+    "@types/ws": "^8.18.1",
     "@vscode/vsce": "^3.2.1",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3",
-    "ws": "^8.18.0"
+    "ws": "^8.21.0"
   }
 }
