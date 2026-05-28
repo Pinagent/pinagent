@@ -18,6 +18,7 @@ import {
   FIXTURE_GITHUB,
   FIXTURE_PRS,
   FIXTURE_SETTINGS,
+  FIXTURE_TRANSCRIPTS,
   type PullRequest,
 } from '../fixtures';
 import type {
@@ -215,12 +216,13 @@ export class MockTransport implements DockTransport {
     };
   }
 
-  async getConversationMessages(_id: string): Promise<AgentEvent[]> {
-    // No fixture transcript stream; consumers branch on transport.kind
-    // when they need to render a "fixtures, no live stream" placeholder.
-    // Matches the no-op `subscribeConversation` above.
+  async getConversationMessages(id: string): Promise<AgentEvent[]> {
+    // `FIXTURE_TRANSCRIPTS` covers a representative slice — conversations
+    // outside the map return [] (same shape as a brand-new pre-spawn
+    // run, which is also a legitimate demo state). The map is keyed on
+    // the `Conversation.id` (`cv_01` etc.), not shortId.
     await sleep(SIMULATED_LATENCY_MS);
-    return [];
+    return FIXTURE_TRANSCRIPTS[id] ?? [];
   }
 
   // No real WS in mock mode — these methods report a stable "idle" status

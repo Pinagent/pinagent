@@ -45,6 +45,28 @@ export interface ConversationStream {
 
 const EMPTY_STREAM: ConversationStream = { items: [], worktree: null };
 
+/**
+ * Pick which set of items the detail view renders. WS items are
+ * authoritative the moment any of them arrive — the bus replays the
+ * full transcript on first poll, so any prefetched events are about to
+ * be re-delivered. Showing prefetched only while WS is empty avoids
+ * the dedupe problem entirely.
+ *
+ * Worktree state always rides on `wsStream` (the prefetch is a one-shot
+ * HTTP read and has nothing to say about the live worktree lifecycle),
+ * so the return value spreads `wsStream` and only overrides `items`.
+ *
+ * Extracted as a pure function so the invariant ("WS wins once any
+ * arrive; otherwise prefetched") can be pinned without a hook-test
+ * harness.
+ */
+export function mergeStreamView(
+  wsStream: ConversationStream,
+  prefetched: StreamItem[],
+): ConversationStream {
+  return wsStream.items.length > 0 ? wsStream : { ...wsStream, items: prefetched };
+}
+
 export function useConversationStream(id: string | null): ConversationStream {
   const transport = useTransport();
   const [stream, setStream] = useState<ConversationStream>(EMPTY_STREAM);
@@ -125,9 +147,5 @@ export function useConversationStream(id: string | null): ConversationStream {
     return transport.subscribeConversation(id, handlers);
   }, [id, transport]);
 
-  // WS items are authoritative once they arrive (the bus replays the
-  // full transcript on first poll, so any prefetched events are about
-  // to be re-delivered). Showing prefetched only while WS is empty
-  // avoids the dedupe problem entirely.
-  return stream.items.length > 0 ? stream : { ...stream, items: prefetched };
+  return mergeStreamView(stream, prefetched);
 }
