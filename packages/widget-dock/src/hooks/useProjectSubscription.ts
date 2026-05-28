@@ -12,8 +12,9 @@
  * Returns the live connection status so the chrome can render
  * "Disconnected" without owning the socket itself.
  */
-import { type QueryClient, useQueryClient } from '@tanstack/react-query';
+
 import type { ProjectEvent } from '@pinagent/shared';
+import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { type ConnectionStatus, useTransport } from '../transport';
 

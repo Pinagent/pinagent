@@ -21,9 +21,8 @@ export function App() {
         </p>
         <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
           Leave feedback right on the UI. Every comment records a screenshot, the selected element,
-          and the exact source file and line that produced it — sending your request straight to
-          the code that needs changing. Try it on anything here, including the counters and the
-          footer.
+          and the exact source file and line that produced it — sending your request straight to the
+          code that needs changing. Try it on anything here, including the counters and the footer.
         </p>
         <section style={{ marginTop: 24 }}>
           <Counter label="Pineapple" />
@@ -56,7 +55,7 @@ function Sidebar() {
         {items.map((item, i) => (
           <a
             key={item}
-            href="#"
+            href={`#${item.toLowerCase()}`}
             style={{
               padding: '6px 10px',
               borderRadius: 6,
