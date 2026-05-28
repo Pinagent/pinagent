@@ -27,6 +27,7 @@ import { deriveDockStatus } from './status-derive';
 import type {
   AuditEvent,
   BulkArchiveResult,
+  BulkPruneResult,
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,
@@ -152,6 +153,25 @@ const BulkArchiveResultSchema = z
   .object({
     updated: z.array(z.string()),
     skipped: z.array(z.string()),
+  })
+  .loose();
+
+/**
+ * Wire shape for `POST /__pinagent/branches/bulk-prune`. Mirrors the
+ * server-side BulkPruneResult shape in @pinagent/agent-runner — same
+ * row structure as PruneStaleResult minus the retentionDays echo.
+ */
+const BulkPruneResultSchema = z
+  .object({
+    pruned: z.array(z.string()),
+    failed: z.array(
+      z
+        .object({
+          feedbackId: z.string(),
+          error: z.string(),
+        })
+        .loose(),
+    ),
   })
   .loose();
 
@@ -476,6 +496,15 @@ export class LocalTransport implements DockTransport {
       'POST',
       '/__pinagent/branches/prune-stale',
       PruneStaleResultSchema,
+    );
+  }
+
+  async bulkPruneBranches(feedbackIds: string[]): Promise<BulkPruneResult> {
+    return this.jsonWriteValidated(
+      'POST',
+      '/__pinagent/branches/bulk-prune',
+      BulkPruneResultSchema,
+      { feedbackIds },
     );
   }
 

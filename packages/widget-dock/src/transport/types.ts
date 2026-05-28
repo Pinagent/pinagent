@@ -233,6 +233,15 @@ export interface DockTransport {
    */
   pruneStaleBranches(): Promise<PruneStaleResult>;
 
+  /**
+   * Bulk-prune a hand-picked batch of worktrees from the Branches
+   * view's multi-select. Returns `{ pruned, failed }`; the server
+   * emits a single `worktrees_bulk_pruned` audit event covering the
+   * batch (per-row `conversation_discarded` events still fire from
+   * the worktree teardown).
+   */
+  bulkPruneBranches(feedbackIds: string[]): Promise<BulkPruneResult>;
+
   // ---------- History (Phase 6) ----------
 
   /**
@@ -285,6 +294,11 @@ export interface PruneStaleResult {
   pruned: string[];
   failed: { feedbackId: string; error: string }[];
   retentionDays: number;
+}
+
+export interface BulkPruneResult {
+  pruned: string[];
+  failed: { feedbackId: string; error: string }[];
 }
 
 export interface HistorySearchQuery {

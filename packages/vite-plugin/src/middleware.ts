@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import {
   applyBulkArchive,
   applyConversationPatch,
+  BulkPruneBodySchema,
   BulkUpdateBodySchema,
   ComposeOptsSchema,
   composePullRequest,
@@ -25,6 +26,7 @@ import {
   PatchSchema,
   ProjectSettingsPatchSchema,
   pruneBranch,
+  pruneBranches,
   pruneStaleBranches,
   SecretsStore,
   SettingsStore,
@@ -195,6 +197,18 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       // Returns { pruned, failed, retentionDays }.
       if (req.method === 'POST' && url === '/__pinagent/branches/prune-stale') {
         const result = await pruneStaleBranches(storage.root);
+        return json(res, 200, result);
+      }
+
+      // POST /__pinagent/branches/bulk-prune — prune a hand-picked
+      // batch of worktrees from the Branches view's multi-select.
+      // Returns { pruned, failed }; emits a single
+      // `worktrees_bulk_pruned` audit event per call.
+      if (req.method === 'POST' && url === '/__pinagent/branches/bulk-prune') {
+        const raw = await readJsonBody(req);
+        const parsed = BulkPruneBodySchema.safeParse(raw);
+        if (!parsed.success) return badRequest(res, parsed.error.message);
+        const result = await pruneBranches(storage.root, parsed.data.feedbackIds);
         return json(res, 200, result);
       }
 
