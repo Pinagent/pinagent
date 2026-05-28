@@ -11,13 +11,38 @@
  * covers the mock path (no WS) and removes an interleaved-refetch
  * race in the live path.
  */
-import { type UseMutationResult, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  type QueryClient,
+  type UseMutationResult,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
 import type { Conversation } from '../fixtures/types';
 import { type ConversationUpdate, useTransport } from '../transport';
 
 export interface UpdateConversationVariables {
   id: string;
   patch: ConversationUpdate;
+}
+
+/**
+ * Invalidate every cache that could carry stale data after a rename or
+ * archive mutation lands. Exported so the contract can be tested
+ * directly without rendering React — the keys it invalidates have to
+ * stay in lock-step with `useConversations` and `useConversation`'s
+ * fetch keys, and there's no compiler check on that.
+ */
+export async function invalidateAfterUpdateConversation(
+  qc: QueryClient,
+  transportKind: string,
+  conversationId: string,
+): Promise<void> {
+  await Promise.all([
+    // 2-element prefix → matches every filter variant of the list query.
+    qc.invalidateQueries({ queryKey: ['conversations', transportKind] }),
+    // Exact 3-element key → only the open detail picks this up.
+    qc.invalidateQueries({ queryKey: ['conversation', transportKind, conversationId] }),
+  ]);
 }
 
 export function useUpdateConversation(): UseMutationResult<
@@ -29,11 +54,6 @@ export function useUpdateConversation(): UseMutationResult<
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }) => transport.updateConversation(id, patch),
-    onSuccess: async (_data, vars) => {
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['conversations', transport.kind] }),
-        qc.invalidateQueries({ queryKey: ['conversation', transport.kind, vars.id] }),
-      ]);
-    },
+    onSuccess: (_data, vars) => invalidateAfterUpdateConversation(qc, transport.kind, vars.id),
   });
 }
