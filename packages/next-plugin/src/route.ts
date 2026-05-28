@@ -248,6 +248,7 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
       title: r.title,
       archived: r.archived,
       branch: r.branch,
+      messageCount: r.messageCount,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
       resolvedAt: r.resolvedAt,
@@ -263,6 +264,19 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
     if (!rec) return json(404, { error: 'not found' });
     const screenshot = await storage.readScreenshotBase64(rec);
     return json(200, { ...rec, screenshot });
+  }
+
+  // /__pinagent/feedback/:id/messages — full persisted transcript for
+  // one conversation. Lets external clients (CLI, hosted dock) read
+  // history without opening a WebSocket. Mirrors the vite-plugin
+  // route; both delegate to `Storage.listMessages`.
+  if (slug.length === 3 && slug[0] === 'feedback' && slug[2] === 'messages') {
+    const id = slug[1] ?? '';
+    if (!ID_RE.test(id)) return json(400, { error: 'invalid id' });
+    const rec = await storage.read(id);
+    if (!rec) return json(404, { error: 'not found' });
+    const events = await storage.listMessages(id);
+    return json(200, { messages: events });
   }
 
   return json(404, { error: 'not found' });

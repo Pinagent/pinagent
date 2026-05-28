@@ -369,11 +369,29 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
           title: r.title,
           archived: r.archived,
           branch: r.branch,
+          messageCount: r.messageCount,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
           resolvedAt: r.resolvedAt,
         }));
         return json(res, 200, shallow);
+      }
+
+      // GET /__pinagent/feedback/:id/messages — full persisted transcript
+      // for one conversation. Lets external clients (CLI, hosted dock)
+      // read history without opening a WebSocket. Mirrors the next-plugin
+      // route; both delegate to `Storage.listMessages`. Must match BEFORE
+      // the `/:id` handler so the trailing `/messages` segment doesn't
+      // get parsed as part of the id.
+      const messagesMatch =
+        req.method === 'GET' && /^\/__pinagent\/feedback\/([^/]+)\/messages$/.exec(url);
+      if (messagesMatch) {
+        const id = messagesMatch[1] ?? '';
+        if (!ID_RE.test(id)) return badRequest(res, 'invalid id');
+        const rec = await storage.read(id);
+        if (!rec) return notFound(res);
+        const events = await storage.listMessages(id);
+        return json(res, 200, { messages: events });
       }
 
       // GET /__pinagent/feedback/:id

@@ -178,6 +178,105 @@ describe('Storage', () => {
       expect(read?.agentSessionId).toBe('sess-abc-123');
     });
   });
+
+  describe('messageCount + listMessages', () => {
+    it('freshly created row reports messageCount: 0', async () => {
+      const s = new Storage(root);
+      const id = nanoid(10);
+      const created = await s.create(id, makeInput());
+      expect(created.messageCount).toBe(0);
+      const read = await s.read(id);
+      expect(read?.messageCount).toBe(0);
+    });
+
+    it('list + read reflect published transcript events, excluding init/result/__finished', async () => {
+      // Dynamic import so the in-process DB cache for `root` is fresh.
+      const bus = await import('../src/bus');
+      const s = new Storage(root);
+      const id = nanoid(10);
+      await s.create(id, makeInput());
+
+      const b = bus.getOrCreateBus(id, root);
+      // init / result are bookkeeping — should NOT count.
+      await b.publish({
+        type: 'init',
+        sessionId: 'sess-x',
+        model: 'claude',
+        permissionMode: 'acceptEdits',
+        apiKeySource: 'oauth',
+      });
+      await b.publish({ type: 'text', text: 'looking at the button' });
+      await b.publish({ type: 'tool_use', name: 'Edit', summary: 'src/Foo.tsx' });
+      await b.publish({ type: 'tool_result', ok: true });
+      await b.publish({
+        type: 'result',
+        subtype: 'success',
+        numTurns: 1,
+        totalCostUsd: 0.01,
+        durationMs: 1000,
+      });
+
+      const read = await s.read(id);
+      expect(read?.messageCount).toBe(3);
+      const list = await s.list();
+      expect(list.find((r) => r.id === id)?.messageCount).toBe(3);
+    });
+
+    it('listMessages returns events in insertion order', async () => {
+      const bus = await import('../src/bus');
+      const s = new Storage(root);
+      const id = nanoid(10);
+      await s.create(id, makeInput());
+
+      const b = bus.getOrCreateBus(id, root);
+      await b.publish({ type: 'text', text: 'first' });
+      await b.publish({ type: 'text', text: 'second' });
+      await b.publish({ type: 'text', text: 'third' });
+
+      const events = await s.listMessages(id);
+      expect(events).toHaveLength(3);
+      expect(events.map((e) => (e.type === 'text' ? e.text : null))).toEqual([
+        'first',
+        'second',
+        'third',
+      ]);
+    });
+
+    it('listMessages includes init/result (it is the full transcript) but excludes __finished', async () => {
+      // Distinct from messageCount, which excludes init/result/__finished.
+      // The transcript endpoint shows the agent's full output stream so
+      // consumers can re-render the conversation; bookkeeping events
+      // belong in the transcript, the bus sentinel doesn't.
+      const bus = await import('../src/bus');
+      const s = new Storage(root);
+      const id = nanoid(10);
+      await s.create(id, makeInput());
+
+      const b = bus.getOrCreateBus(id, root);
+      await b.publish({
+        type: 'init',
+        sessionId: 'sess-x',
+        model: 'claude',
+        permissionMode: 'acceptEdits',
+        apiKeySource: 'oauth',
+      });
+      await b.publish({ type: 'text', text: 'hi' });
+      await b.markFinished();
+
+      const events = await s.listMessages(id);
+      expect(events.map((e) => e.type)).toEqual(['init', 'text']);
+    });
+
+    it('listMessages returns [] for an invalid id (no fs hit)', async () => {
+      const s = new Storage(root);
+      expect(await s.listMessages('!')).toEqual([]);
+    });
+
+    it('listMessages returns [] for an unknown but well-formed id', async () => {
+      const s = new Storage(root);
+      expect(await s.listMessages('aBcDeFgHiJ')).toEqual([]);
+    });
+  });
 });
 
 describe('isInGitignore', () => {
