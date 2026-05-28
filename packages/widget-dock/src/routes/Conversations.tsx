@@ -739,6 +739,12 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
   const showActionRow =
     canLand || canDiscard || canReopen || showLifecycleBusy || lifecycleError !== null;
 
+  // The server's `status` field only flips on a terminal `resolve_feedback`
+  // call — it doesn't track "agent started working" or "ask_user paused".
+  // The live event stream does, so we override the cached status from
+  // stream activity to keep the timeline + header badge honest.
+  const effectiveStatus = deriveEffectiveStatus(detail.status, stream.items, answeredAskIds);
+
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <DetailHeader
@@ -746,9 +752,10 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
         onBack={onBack}
         worktreeState={stream.worktree}
         permissionMode={activePermissionMode}
+        effectiveStatus={effectiveStatus}
       />
       <StatusTimeline
-        status={detail.status}
+        status={effectiveStatus}
         worktreeState={stream.worktree}
         createdAt={detail.updatedAt}
       />
@@ -896,11 +903,13 @@ function DetailHeader({
   onBack,
   worktreeState,
   permissionMode,
+  effectiveStatus,
 }: {
   detail: ConversationDetail;
   onBack: () => void;
   worktreeState: WorktreeStatePayload | null;
   permissionMode: string | null;
+  effectiveStatus: StatusKey;
 }) {
   const update = useUpdateConversation();
   const [editingTitle, setEditingTitle] = useState(false);
@@ -1042,7 +1051,7 @@ function DetailHeader({
         </button>
       )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <StatusBadge status={detail.status} pulse={detail.status === 'working'} />
+        <StatusBadge status={effectiveStatus} pulse={effectiveStatus === 'working'} />
         {detail.archived && (
           <Badge variant="outline" className="text-[10px]">
             archived
@@ -1073,6 +1082,45 @@ function DetailHeader({
       </div>
     </div>
   );
+}
+
+/**
+ * Override the server-cached status with live signal from the event
+ * stream. The server only flips `status` on a terminal `resolve_feedback`
+ * call — it never publishes intermediate "agent started working" or
+ * "ask_user paused" transitions, so the cached status sits at `pending`
+ * for the entire active phase of a run. We reconstruct both transitions
+ * from the stream:
+ *
+ *   - If the most recent stream item is an unanswered `ask_user`,
+ *     we're awaiting clarification (regardless of cached status).
+ *   - If the cached status is `pending` but the stream has any agent
+ *     activity, we've moved into `working`.
+ *
+ * `answeredAskIds` covers the optimistic gap between the user sending an
+ * answer and the agent emitting its next event. Terminal cached statuses
+ * (landed, discarded, error, readyToLand) win over live signal — those
+ * reflect explicit lifecycle decisions, not transient pause state.
+ */
+function deriveEffectiveStatus(
+  base: StatusKey,
+  items: readonly StreamItem[],
+  answeredAskIds: ReadonlySet<string>,
+): StatusKey {
+  if (base === 'landed' || base === 'discarded' || base === 'error' || base === 'readyToLand') {
+    return base;
+  }
+  const last = items[items.length - 1];
+  if (
+    last &&
+    last.kind === 'event' &&
+    last.event.type === 'ask_user' &&
+    !answeredAskIds.has(last.event.askId)
+  ) {
+    return 'awaitingClarification';
+  }
+  if (base === 'pending' && items.length > 0) return 'working';
+  return base;
 }
 
 /**
