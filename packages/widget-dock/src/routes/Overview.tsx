@@ -15,9 +15,9 @@ import { ListRow } from '../components/ListRow';
 import { TimestampDot } from '../components/TimestampDot';
 import { type ActivityEvent, FIXTURE_ACTIVITY } from '../fixtures';
 import { useConversations } from '../hooks/useConversations';
-import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
+import { OnboardingState } from '../shell/states/OnboardingState';
 import { useTransport } from '../transport';
 
 const EVENT_ICON: Record<ActivityEvent['type'], ComponentType<SVGAttributes<SVGSVGElement>>> = {
@@ -116,17 +116,7 @@ export function Overview() {
         />
       )}
 
-      {conversations.isSuccess && conversations.data.length === 0 && (
-        <EmptyState
-          title="No conversations yet"
-          description={
-            <>
-              Click any element on your host app with the pinagent picker to start a conversation.
-              It'll show up here in real time.
-            </>
-          }
-        />
-      )}
+      {conversations.isSuccess && conversations.data.length === 0 && <OnboardingState />}
 
       {conversations.isSuccess && conversations.data.length > 0 && (
         <div className="flex flex-col gap-1.5 px-3">
