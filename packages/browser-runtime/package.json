@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
-  "description": "In-browser runtime: SQLite-WASM cache, iframe lifecycle, HMR re-anchoring. Loaded into the host page by @pinagent/vite-plugin and @pinagent/next-plugin.",
+  "description": "In-browser runtime: source for the SQLite-WASM worker the widget spawns. Loaded into the host page by @pinagent/vite-plugin and @pinagent/next-plugin.",
   "type": "module",
   "sideEffects": false,
   "main": "dist/index.js",
