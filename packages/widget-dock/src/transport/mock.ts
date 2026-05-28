@@ -190,6 +190,10 @@ export class MockTransport implements DockTransport {
     // no-op
   }
 
+  reopenConversation(_id: string): void {
+    // no-op
+  }
+
   async updateConversation(id: string, patch: ConversationUpdate): Promise<Conversation> {
     await sleep(SIMULATED_LATENCY_MS);
     const idx = this.conversations.findIndex((c) => c.id === id);

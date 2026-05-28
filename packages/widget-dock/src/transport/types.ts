@@ -156,6 +156,13 @@ export interface DockTransport {
   discardConversation(id: string): void;
 
   /**
+   * Move a landed/discarded conversation back to the active list. The
+   * worktree is not restored (it was cleaned up at land/discard); only
+   * the lifecycle metadata is reset to `pending` / `worktreeState=none`.
+   */
+  reopenConversation(id: string): void;
+
+  /**
    * Patch user-facing conversation metadata: title override + archived
    * flag. Both fields optional; passing `title: ''` clears back to the
    * comment-derived title. Returns the updated list-row shape; callers

@@ -15,6 +15,7 @@ import {
   discardWorktree,
   interruptRun,
   mergeWorktree,
+  reopenConversation,
   runFollowUpTurn,
 } from './agent';
 import { resolveAsk } from './ask-user';
@@ -418,6 +419,20 @@ async function handleClientMessage(
           state: 'active',
           message: err instanceof Error ? err.message : String(err),
         });
+      }
+      return;
+    }
+    case 'reopen_request': {
+      const root = projectRoot();
+      const logPath = logPathFor(root, msg.feedbackId);
+      // Reopen is a single DB write, but go through `enqueue` anyway so
+      // it serialises behind any in-flight land/discard on the same
+      // project — keeps the state-machine transitions linearisable.
+      const result = await enqueue(root, () => reopenConversation(root, msg.feedbackId, logPath));
+      if (result.ok) {
+        broadcastWorktreeState(msg.feedbackId, { state: 'none' });
+      } else {
+        sendError(socket, msg.feedbackId, result.error);
       }
       return;
     }

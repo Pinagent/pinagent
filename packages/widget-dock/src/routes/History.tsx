@@ -23,6 +23,7 @@ import {
   GitPullRequest,
   History as HistoryIcon,
   MessageSquarePlus,
+  RotateCcw,
   Search,
   XCircle,
 } from 'lucide-react';
@@ -381,6 +382,8 @@ function describeEvent(event: AuditEvent): ActivityVisual {
     }
     case 'conversation_discarded':
       return { Icon: XCircle, status: 'discarded', label: 'Discarded' };
+    case 'conversation_reopened':
+      return { Icon: RotateCcw, status: 'pending', label: 'Reopened' };
     case 'pr_created': {
       const number = event.payload.number as number | undefined;
       const title = event.payload.title as string | undefined;

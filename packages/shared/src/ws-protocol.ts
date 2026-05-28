@@ -46,6 +46,14 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** Phase H — throw away the agent's worktree without merging. */
   z.object({ type: z.literal('discard_request'), feedbackId: FeedbackId }),
   /**
+   * Reverse a landed/discarded conversation: clear `worktreeState` back
+   * to `none` and `status` back to `pending`. The worktree itself was
+   * cleaned up at land/discard time and is NOT restored — the user is
+   * just putting the conversation back in the active list so they can
+   * follow up with the agent.
+   */
+  z.object({ type: z.literal('reopen_request'), feedbackId: FeedbackId }),
+  /**
    * Dock subscribers (project-wide). One socket gets fan-out of every
    * conversation-list-affecting change in the project: new submissions,
    * status patches, worktree landings, discards. Used by the dock to

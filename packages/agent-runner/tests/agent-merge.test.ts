@@ -252,6 +252,64 @@ describe('discardWorktree', () => {
   });
 });
 
+describe('reopenConversation', () => {
+  it('reverses a landed conversation back to pending/none', async () => {
+    const storage = new storageMod.Storage(ROOT);
+    const id = await makeFeedbackWithWorktree(storage);
+    // Simulate the post-land state the MCP auto-resolution leaves behind
+    // in inline mode: fixed/landed, no worktree on disk.
+    await storage.patch(id, { status: 'fixed', worktreeState: 'landed' });
+
+    const logPath = join(ROOT, '.pinagent', 'logs', `${id}.md`);
+    const result = await agent.reopenConversation(ROOT, id, logPath);
+    expect(result.ok).toBe(true);
+
+    const rec = await storage.read(id);
+    expect(rec?.worktreeState).toBe('none');
+    expect(rec?.status).toBe('pending');
+    expect(rec?.resolvedAt).toBeNull();
+  });
+
+  it('reverses a discarded conversation back to pending/none', async () => {
+    const storage = new storageMod.Storage(ROOT);
+    const id = await makeFeedbackWithWorktree(storage);
+    await storage.patch(id, { status: 'wontfix', worktreeState: 'discarded' });
+
+    const logPath = join(ROOT, '.pinagent', 'logs', `${id}.md`);
+    const result = await agent.reopenConversation(ROOT, id, logPath);
+    expect(result.ok).toBe(true);
+
+    const rec = await storage.read(id);
+    expect(rec?.worktreeState).toBe('none');
+    expect(rec?.status).toBe('pending');
+  });
+
+  it('refuses to reopen an active worktree (must be landed/discarded first)', async () => {
+    const storage = new storageMod.Storage(ROOT);
+    const id = await makeFeedbackWithWorktree(storage);
+    await callCreateWorktree(id);
+
+    const logPath = join(ROOT, '.pinagent', 'logs', `${id}.md`);
+    const result = await agent.reopenConversation(ROOT, id, logPath);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/cannot reopen/i);
+    }
+
+    const rec = await storage.read(id);
+    expect(rec?.worktreeState).toBe('active');
+  });
+
+  it('returns an error for a missing conversation', async () => {
+    const result = await agent.reopenConversation(
+      ROOT,
+      'doesnotexist',
+      join(ROOT, '.pinagent', 'logs', 'doesnotexist.md'),
+    );
+    expect(result.ok).toBe(false);
+  });
+});
+
 // `createWorktree` isn't exported (it's a private helper). Reach it
 // through the same path spawnAgent would — by setting up the feedback
 // and patching the storage row directly with the worktree fields, then
