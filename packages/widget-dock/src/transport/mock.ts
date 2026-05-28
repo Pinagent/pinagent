@@ -246,6 +246,10 @@ export class MockTransport implements DockTransport {
     // no-op
   }
 
+  sendInterrupt(_id: string): void {
+    // no-op
+  }
+
   sendAskResponse(_askId: string, _answer: string): void {
     // no-op
   }

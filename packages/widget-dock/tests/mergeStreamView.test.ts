@@ -13,6 +13,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type ConversationStream,
+  deriveTurnRunning,
   mergeStreamView,
   type StreamItem,
 } from '../src/hooks/useConversationStream';
@@ -36,7 +37,7 @@ const prefetchedItem = (id: number, text: string): StreamItem => ({
 const wsStream = (
   items: StreamItem[],
   worktree: ConversationStream['worktree'] = null,
-): ConversationStream => ({ items, worktree });
+): ConversationStream => ({ items, worktree, turnRunning: false });
 
 describe('mergeStreamView', () => {
   it('returns the prefetched items when the WS stream is empty', () => {
@@ -82,5 +83,101 @@ describe('mergeStreamView', () => {
     expect(merged.items).toHaveLength(1);
     expect(merged.items[0]).toBe(merged.items[0]);
     expect(merged.items.some((i) => i.kind === 'event' && i.id < 0)).toBe(false);
+  });
+});
+
+// Constructors for the AgentEvent variants `deriveTurnRunning` cares
+// about. Only the `type` discriminator matters for the toggle logic;
+// the rest of the payload is filled in with minimum-viable values.
+const initItem = (id: number): StreamItem => ({
+  kind: 'event',
+  id,
+  event: {
+    type: 'init',
+    sessionId: 's',
+    model: 'm',
+    permissionMode: 'auto',
+    apiKeySource: 'k',
+  },
+  receivedAt: '2026-05-28T00:00:00.000Z',
+});
+
+const resultItem = (id: number): StreamItem => ({
+  kind: 'event',
+  id,
+  event: { type: 'result', subtype: 'success', numTurns: 1, totalCostUsd: 0, durationMs: 100 },
+  receivedAt: '2026-05-28T00:00:00.000Z',
+});
+
+const errorEventItem = (id: number): StreamItem => ({
+  kind: 'event',
+  id,
+  event: { type: 'error', message: 'boom' },
+  receivedAt: '2026-05-28T00:00:00.000Z',
+});
+
+const serverErrorItem = (id: number): StreamItem => ({
+  kind: 'error',
+  id,
+  message: 'transport error',
+  receivedAt: '2026-05-28T00:00:00.000Z',
+});
+
+const askItem = (id: number, askId: string): StreamItem => ({
+  kind: 'event',
+  id,
+  event: { type: 'ask_user', askId, question: 'q?' },
+  receivedAt: '2026-05-28T00:00:00.000Z',
+});
+
+describe('deriveTurnRunning', () => {
+  it('is false for an empty stream', () => {
+    expect(deriveTurnRunning([])).toBe(false);
+  });
+
+  it('is true after init with no terminal event yet', () => {
+    expect(deriveTurnRunning([initItem(1), wsItem(2, 'thinking')])).toBe(true);
+  });
+
+  it('flips back to false when result arrives', () => {
+    expect(deriveTurnRunning([initItem(1), wsItem(2, 'thinking'), resultItem(3)])).toBe(false);
+  });
+
+  it('flips back to false on an AgentEvent error', () => {
+    expect(deriveTurnRunning([initItem(1), errorEventItem(2)])).toBe(false);
+  });
+
+  it('flips back to false on a server-level (stream-kind) error', () => {
+    expect(deriveTurnRunning([initItem(1), serverErrorItem(2)])).toBe(false);
+  });
+
+  it('stays true while paused on ask_user (a legitimate stop target)', () => {
+    expect(deriveTurnRunning([initItem(1), askItem(2, 'a')])).toBe(true);
+  });
+
+  it('tracks multi-turn lifecycles (true → false → true after a fresh init)', () => {
+    expect(
+      deriveTurnRunning([
+        initItem(1),
+        resultItem(2),
+        // User sent a follow-up; agent emits a fresh init.
+        initItem(3),
+        wsItem(4, 'thinking again'),
+      ]),
+    ).toBe(true);
+  });
+});
+
+describe('mergeStreamView — turnRunning passthrough', () => {
+  it('reflects an in-flight turn from the WS items', () => {
+    const merged = mergeStreamView(wsStream([initItem(1)]), []);
+    expect(merged.turnRunning).toBe(true);
+  });
+
+  it('reflects an in-flight turn from the prefetched-only path', () => {
+    // Cold-load scenario: HTTP returned events with no WS items yet.
+    // turnRunning should be honest about what those events say.
+    const merged = mergeStreamView(wsStream([]), [initItem(-1)]);
+    expect(merged.turnRunning).toBe(true);
   });
 });
