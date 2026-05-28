@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import {
   applyBulkArchive,
   applyConversationPatch,
+  BulkPruneBodySchema,
   BulkUpdateBodySchema,
   ComposeOptsSchema,
   composePullRequest,
@@ -24,6 +25,7 @@ import {
   PatchSchema,
   ProjectSettingsPatchSchema,
   pruneBranch,
+  pruneBranches,
   pruneStaleBranches,
   resolveAgentMode,
   SecretsStore,
@@ -283,6 +285,17 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
   if (slug.length === 2 && slug[0] === 'branches' && slug[1] === 'prune-stale') {
     const storage = getStorage();
     const result = await pruneStaleBranches(storage.root);
+    return json(200, result);
+  }
+
+  // /__pinagent/branches/bulk-prune — prune a hand-picked batch from
+  // the Branches view's multi-select. Mirror of vite-plugin handler.
+  if (slug.length === 2 && slug[0] === 'branches' && slug[1] === 'bulk-prune') {
+    const raw = await readJsonBody(req);
+    const parsed = BulkPruneBodySchema.safeParse(raw);
+    if (!parsed.success) return json(400, { error: parsed.error.message });
+    const storage = getStorage();
+    const result = await pruneBranches(storage.root, parsed.data.feedbackIds);
     return json(200, result);
   }
 

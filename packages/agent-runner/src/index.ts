@@ -35,10 +35,14 @@ export {
 } from './audit-log';
 export {
   type BranchRecord,
+  type BulkPruneBody,
+  BulkPruneBodySchema,
+  type BulkPruneResult,
   listBranches,
   type PruneResult,
   type PruneStaleResult,
   pruneBranch,
+  pruneBranches,
   pruneStaleBranches,
 } from './branches';
 export { type ChangeRecord, getChangeDiff, listChanges } from './changes';

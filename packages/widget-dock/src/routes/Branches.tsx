@@ -15,15 +15,20 @@ import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
 import { AlertTriangle, GitBranch, MessageSquare, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TimestampDot } from '../components/TimestampDot';
 import type { Branch } from '../fixtures/types';
-import { useBranches, usePruneBranch, usePruneStaleBranches } from '../hooks/useBranches';
+import {
+  useBranches,
+  useBulkPruneBranches,
+  usePruneBranch,
+  usePruneStaleBranches,
+} from '../hooks/useBranches';
 import { useSettings } from '../hooks/useSettings';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
-import { type PruneStaleResult, useTransport } from '../transport';
+import { type BulkPruneResult, type PruneStaleResult, useTransport } from '../transport';
 
 const STATE_LABEL: Record<Branch['state'], string> = {
   clean: 'Clean',
@@ -48,13 +53,68 @@ export function Branches() {
   const branchesQuery = useBranches();
   const settingsQuery = useSettings();
   const pruneStaleMutation = usePruneStaleBranches();
+  const bulkPruneMutation = useBulkPruneBranches();
   const [staleResult, setStaleResult] = useState<PruneStaleResult | null>(null);
+  const [bulkResult, setBulkResult] = useState<BulkPruneResult | null>(null);
+  // Selection set keyed on conversationId. Drops ids that disappear
+  // from the list (a successful prune removes the row, so its id is
+  // no longer in the data) without needing an explicit clear step.
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const isMock = transport.kind === 'mock';
 
   // Read-time, not load-time — the 7-day cutoff makes "now drifts by a
   // few ms between two row renders" inconsequential.
   const now = Date.now();
   const retentionDays = settingsQuery.data?.worktreeRetentionDays ?? DEFAULT_RETENTION_DAYS;
+
+  // Selection bookkeeping. Sourced from `branchesQuery.data` (not the
+  // narrowed `branches` below) so the hooks run on every render path —
+  // React hook rules require this stay above the early returns for
+  // loading / error / empty. The early returns still happen below;
+  // the bookkeeping just degrades to "no rows visible" in those modes.
+  const safeBranches = branchesQuery.data ?? [];
+  const toggleSelected = useCallback((id: string, next: boolean) => {
+    setSelected((prev) => {
+      const out = new Set(prev);
+      if (next) out.add(id);
+      else out.delete(id);
+      return out;
+    });
+  }, []);
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
+
+  // Selectable branches are those with a conversation linked — the only
+  // ones bulk-prune knows how to address. Inline-mode rows (null
+  // conversationId) appear in the list but can't be checked.
+  const selectableBranches = useMemo(
+    () =>
+      safeBranches.filter(
+        (b): b is Branch & { conversationId: string } => b.conversationId !== null,
+      ),
+    [safeBranches],
+  );
+  const visibleSelectedCount = useMemo(
+    () => selectableBranches.filter((b) => selected.has(b.conversationId)).length,
+    [selectableBranches, selected],
+  );
+  const allVisibleSelected =
+    selectableBranches.length > 0 && visibleSelectedCount === selectableBranches.length;
+  const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected;
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someVisibleSelected;
+  }, [someVisibleSelected]);
+  const toggleAllVisible = useCallback(() => {
+    setSelected((prev) => {
+      const out = new Set(prev);
+      if (allVisibleSelected) {
+        for (const b of selectableBranches) out.delete(b.conversationId);
+      } else {
+        for (const b of selectableBranches) out.add(b.conversationId);
+      }
+      return out;
+    });
+  }, [allVisibleSelected, selectableBranches]);
 
   if (branchesQuery.isLoading) return <LoadingState rows={4} />;
 
@@ -74,7 +134,7 @@ export function Branches() {
     );
   }
 
-  const branches = branchesQuery.data ?? [];
+  const branches = safeBranches;
 
   if (branches.length === 0) {
     return (
@@ -100,6 +160,19 @@ export function Branches() {
       setStaleResult(result);
     } catch {
       // Mutation error already surfaces via `pruneStaleMutation.error`.
+    }
+  };
+
+  const handleBulkPrune = async (): Promise<void> => {
+    setBulkResult(null);
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    try {
+      const result = await bulkPruneMutation.mutateAsync(ids);
+      setBulkResult(result);
+      clearSelection();
+    } catch {
+      // Error surfaces via bulkPruneMutation.error in the toast below.
     }
   };
 
@@ -138,16 +211,88 @@ export function Branches() {
         />
       )}
 
+      {(bulkResult || bulkPruneMutation.isError) && (
+        <BulkPruneBanner
+          result={bulkResult}
+          error={bulkPruneMutation.error?.message ?? null}
+          onDismiss={() => {
+            setBulkResult(null);
+            bulkPruneMutation.reset();
+          }}
+        />
+      )}
+
       <div className="flex-1 overflow-auto p-3 space-y-1.5">
-        {branches.map((b) => (
-          <BranchRow
-            key={b.id}
-            branch={b}
-            stale={isStale(b.lastActivity, now, retentionDays)}
-            isMock={isMock}
+        <label className="flex items-center gap-2 px-3 text-[11px] text-muted-foreground">
+          <input
+            ref={selectAllRef}
+            type="checkbox"
+            checked={allVisibleSelected}
+            onChange={toggleAllVisible}
+            disabled={isMock || bulkPruneMutation.isPending}
+            aria-label={
+              allVisibleSelected
+                ? `Deselect all ${branches.length} branches`
+                : `Select all ${branches.length} branches`
+            }
+            className="h-3.5 w-3.5 rounded border-border accent-foreground cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
           />
-        ))}
+          <span>
+            {branches.length} active{totalDiskMb > 0 ? ` · ${totalDiskMb} MB on disk` : ''}
+            {visibleSelectedCount > 0 && (
+              <span className="ml-1 text-foreground">· {visibleSelectedCount} selected</span>
+            )}
+          </span>
+        </label>
+        {branches.map((b) => {
+          // Inline-mode rows (null conversationId) can't be bulk-pruned
+          // — surface them in the list for visibility but skip the
+          // checkbox to make the constraint obvious.
+          const cid = b.conversationId;
+          return (
+            <BranchRow
+              key={b.id}
+              branch={b}
+              stale={isStale(b.lastActivity, now, retentionDays)}
+              isMock={isMock}
+              selected={cid !== null && selected.has(cid)}
+              onSelectChange={cid !== null ? (next) => toggleSelected(cid, next) : null}
+              bulkPending={bulkPruneMutation.isPending}
+            />
+          );
+        })}
       </div>
+
+      {selected.size > 0 && (
+        <section
+          aria-label="Bulk prune actions"
+          className="border-t border-border bg-card px-3 py-2 flex items-center gap-2"
+        >
+          <span className="text-xs text-muted-foreground">{selected.size} selected</span>
+          <div className="ml-auto flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handleBulkPrune}
+              disabled={bulkPruneMutation.isPending || isMock}
+              className="h-7 gap-1.5 text-xs"
+              title={isMock ? 'Mock mode — fake prune' : `Prune ${selected.size} worktrees`}
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+              {bulkPruneMutation.isPending ? 'Pruning…' : `Prune ${selected.size}`}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearSelection}
+              disabled={bulkPruneMutation.isPending}
+              className="h-7 text-xs"
+            >
+              Cancel
+            </Button>
+          </div>
+        </section>
+      )}
 
       <div className="border-t border-border bg-secondary/30 px-3 py-2">
         <p className="text-[11px] text-muted-foreground">
@@ -208,9 +353,72 @@ function PruneStaleBanner({
   );
 }
 
-function BranchRow({ branch, stale, isMock }: { branch: Branch; stale: boolean; isMock: boolean }) {
+function BulkPruneBanner({
+  result,
+  error,
+  onDismiss,
+}: {
+  result: BulkPruneResult | null;
+  error: string | null;
+  onDismiss: () => void;
+}) {
+  if (error) {
+    return (
+      <div className="border-b border-status-error-border bg-status-error-bg px-3 py-2 flex items-start gap-2 text-[12px] text-status-error-fg">
+        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span className="flex-1 leading-snug">Bulk prune failed: {error}</span>
+        <button
+          type="button"
+          className="text-[11px] underline hover:opacity-80"
+          onClick={onDismiss}
+        >
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+  if (!result) return null;
+  const okCount = result.pruned.length;
+  const failCount = result.failed.length;
+  return (
+    <div
+      className={cn(
+        'border-b px-3 py-2 flex items-start gap-2 text-[12px]',
+        failCount === 0
+          ? 'border-status-landed-border bg-status-landed-bg text-status-landed-fg'
+          : 'border-status-awaiting-border bg-status-awaiting-bg text-status-awaiting-fg',
+      )}
+    >
+      <span className="flex-1 leading-snug">
+        Pruned {okCount} worktree{okCount === 1 ? '' : 's'}
+        {failCount > 0 && ` · ${failCount} failed`}
+        {failCount > 0 && '.'}
+      </span>
+      <button type="button" className="text-[11px] underline hover:opacity-80" onClick={onDismiss}>
+        Dismiss
+      </button>
+    </div>
+  );
+}
+
+function BranchRow({
+  branch,
+  stale,
+  isMock,
+  selected,
+  onSelectChange,
+  bulkPending,
+}: {
+  branch: Branch;
+  stale: boolean;
+  isMock: boolean;
+  selected: boolean;
+  /** Null for inline-mode rows (no conversation to prune by id). */
+  onSelectChange: ((selected: boolean) => void) | null;
+  bulkPending: boolean;
+}) {
   const pruneMutation = usePruneBranch();
-  const disabled = isMock || !branch.conversationId || pruneMutation.isPending;
+  const disabled = isMock || !branch.conversationId || pruneMutation.isPending || bulkPending;
   const handlePrune = (): void => {
     if (!branch.conversationId) return;
     pruneMutation.mutate(branch.conversationId);
@@ -221,8 +429,25 @@ function BranchRow({ branch, stale, isMock }: { branch: Branch; stale: boolean; 
       className={cn(
         'group flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2.5',
         stale && 'border-dashed',
+        selected && 'border-foreground/40 bg-secondary/60',
       )}
     >
+      {onSelectChange ? (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={(e) => onSelectChange(e.target.checked)}
+          disabled={isMock || bulkPending}
+          aria-label={`Select ${branch.name}`}
+          className={cn(
+            'mt-1 h-3.5 w-3.5 shrink-0 rounded border-border',
+            'accent-foreground cursor-pointer disabled:cursor-not-allowed disabled:opacity-50',
+          )}
+        />
+      ) : (
+        // Spacer so inline-mode rows line up with the checkbox column.
+        <span aria-hidden className="mt-1 h-3.5 w-3.5 shrink-0" />
+      )}
       <GitBranch aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <div className="flex-1 min-w-0">
         <div className="flex items-start gap-2">

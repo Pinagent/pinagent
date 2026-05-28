@@ -23,6 +23,7 @@ import {
 import type {
   AuditEvent,
   BulkArchiveResult,
+  BulkPruneResult,
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,
@@ -138,6 +139,29 @@ export class MockTransport implements DockTransport {
       failed: [],
       retentionDays,
     };
+  }
+
+  async bulkPruneBranches(feedbackIds: string[]): Promise<BulkPruneResult> {
+    await sleep(SIMULATED_LATENCY_MS * 2);
+    const pruned: string[] = [];
+    const failed: { feedbackId: string; error: string }[] = [];
+    const wanted = new Set(feedbackIds);
+    const remaining: Branch[] = [];
+    for (const b of this.branches) {
+      if (b.conversationId && wanted.has(b.conversationId)) {
+        pruned.push(b.conversationId);
+      } else {
+        remaining.push(b);
+      }
+    }
+    this.branches = remaining;
+    // Ids in the request that didn't match a fixture row → "failed"
+    // (mirrors the real server's pruneBranch shape for unknown ids).
+    const seen = new Set(pruned);
+    for (const id of feedbackIds) {
+      if (!seen.has(id)) failed.push({ feedbackId: id, error: 'conversation not found' });
+    }
+    return { pruned, failed };
   }
 
   async listPullRequests(): Promise<PullRequest[]> {
