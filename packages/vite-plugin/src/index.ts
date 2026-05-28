@@ -129,6 +129,14 @@ const DOCK_HOST_BRIDGE_TAG =
   '})();</script>';
 const DEFAULT_WS_PORT = 53636;
 
+/**
+ * Lower-level export of the dev-server middleware factory the plugin
+ * itself uses. Exposed for tests + alternative hosts that want to mount
+ * `/__pinagent/*` on their own Connect-style server without going
+ * through `vite.configureServer`.
+ */
+export { createMiddleware } from './middleware';
+
 export default function pinagent(options: PinagentOptions = {}): Plugin {
   let isServe = false;
   let resolvedRoot = process.cwd();
