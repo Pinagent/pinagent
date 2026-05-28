@@ -23,12 +23,18 @@ html[data-pinagent-embedded="true"] body {
   /* Keep the dock's color-scheme stable regardless of host page settings. */
   color-scheme: light;
 }
-html[data-pinagent-embedded="true"] body * {
+html[data-pinagent-embedded="true"] body > * {
   /*
-   * Restore pointer-events on every descendant so the dock chrome,
-   * surface, and FAB all stay interactive. We blanket-restore rather
-   * than tagging each interactive element because every dock element
-   * needs clicks; only the body itself needs the click-through.
+   * Restore pointer-events on the React mount root only. `pointer-events`
+   * is inherited, so descendants pick up `auto` from the root unless they
+   * explicitly set `none` themselves — which is exactly what we want.
+   *
+   * The previous `body *` selector applied `auto` to every descendant and
+   * silently overrode legitimate `pointer-events: none` on intermediate
+   * wrappers, breaking the absolute-overlay-button trick used by
+   * `ListRow` (clicks on the title text or status dot were captured by
+   * the text span instead of falling through to the z-0 overlay button,
+   * so list rows weren't clickable on the text itself).
    */
   pointer-events: auto;
 }
