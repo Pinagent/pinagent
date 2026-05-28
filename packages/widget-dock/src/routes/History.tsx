@@ -19,6 +19,7 @@ import { Input } from '@pinagent/ui/components/ui/input';
 import { cn } from '@pinagent/ui/lib/utils';
 import type { StatusKey } from '@pinagent/ui/tokens';
 import {
+  Bot,
   CheckCircle2,
   GitPullRequest,
   History as HistoryIcon,
@@ -384,6 +385,26 @@ function describeEvent(event: AuditEvent): ActivityVisual {
       return { Icon: XCircle, status: 'discarded', label: 'Discarded' };
     case 'conversation_reopened':
       return { Icon: RotateCcw, status: 'pending', label: 'Reopened' };
+    case 'conversation_resolved_by_agent': {
+      const status = event.payload.status as string | undefined;
+      const label =
+        status === 'fixed'
+          ? 'Agent marked fixed'
+          : status === 'wontfix'
+            ? "Agent marked won't fix"
+            : status === 'deferred'
+              ? 'Agent deferred'
+              : 'Agent resolved';
+      // Match the dock-status that the inline auto-promotion lands the
+      // row in, so the dot color stays consistent with the conversation.
+      const dotStatus: StatusKey =
+        status === 'fixed'
+          ? 'landed'
+          : status === 'wontfix'
+            ? 'discarded'
+            : 'awaitingClarification';
+      return { Icon: Bot, status: dotStatus, label };
+    }
     case 'pr_created': {
       const number = event.payload.number as number | undefined;
       const title = event.payload.title as string | undefined;

@@ -27,6 +27,15 @@ export type AuditAction =
   | 'conversation_landed'
   | 'conversation_discarded'
   | 'conversation_reopened'
+  /**
+   * Written by the MCP `resolve_feedback` handler whenever an agent
+   * flips status. Distinct from `conversation_landed` (which records a
+   * human-driven Land of a worktree) because the actor is `agent` and
+   * there's no branch/target/sha — the agent simply decided the
+   * conversation is `fixed` / `wontfix` / `deferred`. Payload:
+   * `{ status, previousStatus, worktreeState?, previousWorktreeState?, note?, commitSha? }`.
+   */
+  | 'conversation_resolved_by_agent'
   | 'conversation_renamed'
   | 'conversation_archived'
   | 'conversation_unarchived'

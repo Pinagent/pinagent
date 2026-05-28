@@ -210,6 +210,23 @@ async function main() {
             else if (input.status === 'wontfix') next.worktreeState = 'discarded';
           }
           await storage.write(next);
+          // Drop a row in the audit log so the dock's History → Activity
+          // feed shows the agent's resolution. Best-effort: any failure
+          // here is swallowed by the helper itself.
+          await storage.recordAuditEvent({
+            conversationId: next.id,
+            actor: 'agent',
+            action: 'conversation_resolved_by_agent',
+            payload: {
+              status: next.status,
+              previousStatus: rec.status,
+              ...(next.worktreeState !== rec.worktreeState
+                ? { worktreeState: next.worktreeState, previousWorktreeState: rec.worktreeState }
+                : {}),
+              ...(input.note !== undefined ? { note: input.note } : {}),
+              ...(input.commit_sha !== undefined ? { commitSha: input.commit_sha } : {}),
+            },
+          });
           return {
             content: [
               {
