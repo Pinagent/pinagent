@@ -30,6 +30,7 @@ import {
   pruneBranches,
   pruneStaleBranches,
   reopenConversations,
+  resolvePermissionModeOverride,
   SecretsStore,
   SettingsStore,
   type SpawnAgentMode,
@@ -328,9 +329,15 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       }
 
       // GET /__pinagent/settings — current project config.
+      // `permissionModeOverride` is a server-derived, read-only field
+      // surfacing whether `PINAGENT_AGENT_PERMISSION_MODE` is set on
+      // this dev shell. When non-null, the spawned agent ignores
+      // `permissionMode` from the settings file; the dock surfaces a
+      // banner so the user knows their picker is being overridden.
       if (req.method === 'GET' && url === '/__pinagent/settings') {
-        const settings = new SettingsStore(storage.root);
-        return json(res, 200, await settings.read());
+        const settings = await new SettingsStore(storage.root).read();
+        const permissionModeOverride = resolvePermissionModeOverride(process.env);
+        return json(res, 200, { ...settings, permissionModeOverride });
       }
 
       // PATCH /__pinagent/settings — partial update; whole record echoed back.

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Storage } from '@pinagent/agent-runner';
 import { nanoid } from 'nanoid';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createMiddleware } from '../src/middleware';
 
@@ -123,5 +123,46 @@ describe('GET /__pinagent/feedback', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ status: 'wontfix' }),
     });
+  });
+});
+
+describe('GET /__pinagent/settings — permissionModeOverride', () => {
+  // `PINAGENT_AGENT_PERMISSION_MODE` is process-global. Capture-and-
+  // restore so the assertion ordering in this file (and others) stays
+  // independent of whoever ran last.
+  let priorEnv: string | undefined;
+  beforeEach(() => {
+    priorEnv = process.env.PINAGENT_AGENT_PERMISSION_MODE;
+    delete process.env.PINAGENT_AGENT_PERMISSION_MODE;
+  });
+  afterEach(() => {
+    if (priorEnv === undefined) delete process.env.PINAGENT_AGENT_PERMISSION_MODE;
+    else process.env.PINAGENT_AGENT_PERMISSION_MODE = priorEnv;
+  });
+
+  it('returns permissionModeOverride: null when no env is set', async () => {
+    const res = await fetch(`${base}/__pinagent/settings`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { permissionModeOverride: string | null };
+    expect(body.permissionModeOverride).toBeNull();
+  });
+
+  it('returns the resolved SDK mode when PINAGENT_AGENT_PERMISSION_MODE is set', async () => {
+    process.env.PINAGENT_AGENT_PERMISSION_MODE = 'plan';
+    const res = await fetch(`${base}/__pinagent/settings`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { permissionModeOverride: string | null };
+    expect(body.permissionModeOverride).toBe('plan');
+  });
+
+  it('coerces invalid env values to the resolver default (acceptEdits), not null', async () => {
+    // The override is "active" any time the env is set — even garbage
+    // values flow through `resolvePermissionMode`'s fallback to
+    // `acceptEdits`. Banner should still show; users will see the
+    // value they typed is being treated as the fallback.
+    process.env.PINAGENT_AGENT_PERMISSION_MODE = 'not-a-mode';
+    const res = await fetch(`${base}/__pinagent/settings`);
+    const body = (await res.json()) as { permissionModeOverride: string | null };
+    expect(body.permissionModeOverride).toBe('acceptEdits');
   });
 });

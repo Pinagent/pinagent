@@ -313,9 +313,8 @@ interface RunQueryOpts {
  * without editing the settings file.
  */
 async function resolveRunPermissionMode(projectRoot: string): Promise<PermissionMode> {
-  if (process.env.PINAGENT_AGENT_PERMISSION_MODE) {
-    return resolvePermissionMode(process.env);
-  }
+  const override = resolvePermissionModeOverride(process.env);
+  if (override) return override;
   const settings = await new SettingsStore(projectRoot).read();
   return toSdkPermissionMode(settings.permissionMode);
 }
@@ -1071,6 +1070,18 @@ export function resolvePermissionMode(env: NodeJS.ProcessEnv): PermissionMode {
     return v;
   }
   return 'acceptEdits';
+}
+
+/**
+ * The active env override for permission mode, or `null` when no
+ * override is set. Different shape from `resolvePermissionMode`, which
+ * falls back to `'acceptEdits'` whether the env was unset or invalid —
+ * callers that need to distinguish "no override" from "override → some
+ * mode" (e.g. the dock's Settings UI banner) want this signal.
+ */
+export function resolvePermissionModeOverride(env: NodeJS.ProcessEnv): PermissionMode | null {
+  if (!env.PINAGENT_AGENT_PERMISSION_MODE) return null;
+  return resolvePermissionMode(env);
 }
 
 /**

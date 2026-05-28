@@ -3,7 +3,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { nanoid } from 'nanoid';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 /**
@@ -288,6 +288,40 @@ describe('POST /feedback', () => {
       ctx(['feedback']),
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /settings — permissionModeOverride', () => {
+  let priorEnv: string | undefined;
+  beforeEach(() => {
+    priorEnv = process.env.PINAGENT_AGENT_PERMISSION_MODE;
+    delete process.env.PINAGENT_AGENT_PERMISSION_MODE;
+  });
+  afterEach(() => {
+    if (priorEnv === undefined) delete process.env.PINAGENT_AGENT_PERMISSION_MODE;
+    else process.env.PINAGENT_AGENT_PERMISSION_MODE = priorEnv;
+  });
+
+  it('returns permissionModeOverride: null when no env is set', async () => {
+    const res = await route.GET(makeRequest('/__pinagent/settings'), ctx(['settings']));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { permissionModeOverride: string | null };
+    expect(body.permissionModeOverride).toBeNull();
+  });
+
+  it('returns the resolved SDK mode when PINAGENT_AGENT_PERMISSION_MODE is set', async () => {
+    process.env.PINAGENT_AGENT_PERMISSION_MODE = 'plan';
+    const res = await route.GET(makeRequest('/__pinagent/settings'), ctx(['settings']));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { permissionModeOverride: string | null };
+    expect(body.permissionModeOverride).toBe('plan');
+  });
+
+  it('coerces invalid env values to the resolver default (acceptEdits), not null', async () => {
+    process.env.PINAGENT_AGENT_PERMISSION_MODE = 'not-a-mode';
+    const res = await route.GET(makeRequest('/__pinagent/settings'), ctx(['settings']));
+    const body = (await res.json()) as { permissionModeOverride: string | null };
+    expect(body.permissionModeOverride).toBe('acceptEdits');
   });
 });
 

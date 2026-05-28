@@ -13,6 +13,7 @@ import { cn } from '@pinagent/ui/lib/utils';
 import { AlertTriangle } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useSettings, useUpdateSettings } from '../hooks/useSettings';
+import { permissionModeDisplay } from '../lib/permissionMode';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
 import type { DockProjectSettings } from '../transport';
@@ -175,6 +176,9 @@ function SettingsForm({ initial }: { initial: DockProjectSettings }) {
         </SettingsGroup>
 
         <SettingsGroup title="Permission mode">
+          {initial.permissionModeOverride && (
+            <PermissionModeOverrideBanner mode={initial.permissionModeOverride} />
+          )}
           <div className="space-y-1.5 p-2">
             {(Object.keys(PERMISSION_LABEL) as PermissionMode[]).map((mode) => {
               const active = mode === draft.permissionMode;
@@ -242,6 +246,33 @@ function SettingsForm({ initial }: { initial: DockProjectSettings }) {
             {updateMutation.isPending ? 'Saving…' : 'Save'}
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Shown inside the Permission mode group when
+ * `PINAGENT_AGENT_PERMISSION_MODE` is set on the dev server. The picker
+ * underneath still controls the persisted setting (useful for after
+ * the env is unset), but every spawn until then resolves to the env
+ * value.
+ */
+function PermissionModeOverrideBanner({ mode }: { mode: string }) {
+  const display = permissionModeDisplay(mode);
+  return (
+    <div className="m-2 flex items-start gap-2 rounded-md border border-status-awaiting-border bg-status-awaiting-bg px-3 py-2 text-[12px] text-status-awaiting-fg">
+      <AlertTriangle aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <div className="leading-snug">
+        <p className="font-medium">
+          <code className="font-mono">PINAGENT_AGENT_PERMISSION_MODE</code> is set in this dev
+          shell.
+        </p>
+        <p className="mt-0.5">
+          Spawned agents run in <span className="font-semibold">{display.label}</span> mode (
+          <code className="font-mono">{mode}</code>) regardless of your saved selection below. Unset
+          the env var to use the saved setting.
+        </p>
       </div>
     </div>
   );

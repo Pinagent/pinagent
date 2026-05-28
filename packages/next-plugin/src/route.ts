@@ -30,6 +30,7 @@ import {
   pruneStaleBranches,
   reopenConversations,
   resolveAgentMode,
+  resolvePermissionModeOverride,
   SecretsStore,
   SettingsStore,
   Storage,
@@ -215,9 +216,16 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
   }
 
   // /__pinagent/settings — current project config.
+  // `permissionModeOverride` is a server-derived, read-only field
+  // surfacing whether `PINAGENT_AGENT_PERMISSION_MODE` is set on this
+  // dev shell. When non-null, the spawned agent ignores `permissionMode`
+  // from the settings file; the dock surfaces a banner so the user
+  // knows their picker is being overridden. Mirror of the vite-plugin
+  // handler.
   if (slug.length === 1 && slug[0] === 'settings') {
-    const settings = new SettingsStore(storage.root);
-    return json(200, await settings.read());
+    const settings = await new SettingsStore(storage.root).read();
+    const permissionModeOverride = resolvePermissionModeOverride(process.env);
+    return json(200, { ...settings, permissionModeOverride });
   }
 
   // /__pinagent/feedback
