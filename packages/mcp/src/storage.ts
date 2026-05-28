@@ -9,8 +9,18 @@ import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { asc, auditEvents, conversations, eq, widgetAnchors } from '@pinagent/db';
+import {
+  and,
+  asc,
+  auditEvents,
+  conversations,
+  eq,
+  messages,
+  notInArray,
+  widgetAnchors,
+} from '@pinagent/db';
 import * as schema from '@pinagent/db/schema';
+import type { AgentEvent } from '@pinagent/shared';
 import { drizzle, type SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy';
 import { z } from 'zod';
 
@@ -179,6 +189,29 @@ export class Storage {
       return rowToRecord(row);
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Full transcript for one conversation, in insertion order. Mirror
+   * of `@pinagent/agent-runner.Storage.listMessages` — reads the same
+   * `messages` table the dev-server's bus writes to, skipping the
+   * `__finished` sentinel (internal bookkeeping subscribers shouldn't
+   * see). Returns `[]` for invalid or unknown ids.
+   */
+  async listMessages(id: string): Promise<AgentEvent[]> {
+    if (!ID_RE.test(id)) return [];
+    await this.maybeImportLegacy();
+    try {
+      const rows = await this.db()
+        .select()
+        .from(messages)
+        .where(and(eq(messages.conversationId, id), notInArray(messages.role, ['__finished'])))
+        .orderBy(asc(messages.id));
+      return rows.map((r) => r.content as unknown as AgentEvent);
+    } catch {
+      // Schema not yet applied (MCP started before route); treat as empty.
+      return [];
     }
   }
 

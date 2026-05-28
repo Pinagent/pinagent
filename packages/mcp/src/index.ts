@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { renderTranscript } from '@pinagent/shared';
 import { z } from 'zod';
 import { CHANNEL_INSTRUCTIONS, startFeedbackWatcher } from './channel';
 import { resolveRoot } from './root';
@@ -77,6 +78,25 @@ const TOOL_LIST = [
       },
     },
   },
+  {
+    name: 'get_conversation_transcript',
+    description:
+      "Fetch the full persisted agent transcript for one conversation in insertion order — every event the dev-server's bus has captured for this feedback id (init, text, tool_use, tool_result, ask_user, error, result, status_changed). Useful for a spawned agent to read its own prior runs (or another agent's transcript) when reasoning about follow-ups, or to bridge transcript content into a different model. The internal `__finished` bus sentinel is excluded.",
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['id'],
+      properties: {
+        id: { type: 'string', description: 'Conversation / feedback id.' },
+        format: {
+          type: 'string',
+          enum: ['text', 'json'],
+          description:
+            'Output format. `text` (default) returns a readable plain-text rendering identical to `pinagent transcript`; `json` returns the raw AgentEvent array stringified for downstream parsing.',
+        },
+      },
+    },
+  },
 ] as const;
 
 const ListInput = z.object({
@@ -97,6 +117,11 @@ const SourceInput = z.object({
   file: z.string(),
   line: z.number().int().min(1),
   radius: z.number().int().min(0).max(2000).optional(),
+});
+
+const TranscriptInput = z.object({
+  id: z.string(),
+  format: z.enum(['text', 'json']).optional(),
 });
 
 /**
@@ -268,6 +293,17 @@ async function main() {
               },
             ],
           };
+        }
+
+        case 'get_conversation_transcript': {
+          const input = TranscriptInput.parse(args);
+          const rec = await storage.read(input.id);
+          if (!rec) return errorResult(`conversation ${input.id} not found`);
+          const events = await storage.listMessages(input.id);
+          const format = input.format ?? 'text';
+          const text =
+            format === 'json' ? JSON.stringify(events, null, 2) : renderTranscript(events);
+          return { content: [{ type: 'text', text }] };
         }
 
         default:

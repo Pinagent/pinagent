@@ -12,8 +12,14 @@
  * up an HTTP server.
  */
 import type { AgentEvent } from '@pinagent/shared';
-import { AgentEventSchema } from '@pinagent/shared';
+import { AgentEventSchema, renderTranscript } from '@pinagent/shared';
 import { z } from 'zod';
+
+// Re-export so the CLI entry can keep importing from one module.
+// `renderTranscript` itself moved to `@pinagent/shared` so the MCP
+// server's `get_conversation_transcript` tool produces identical
+// output without duplicating the format.
+export { renderTranscript };
 
 export interface FetchOpts {
   /** Base URL of the dev-server, e.g. `http://localhost:3000`. */
@@ -63,16 +69,6 @@ export async function fetchTranscript(opts: FetchOpts): Promise<AgentEvent[]> {
   return parsed.data.messages;
 }
 
-/**
- * Render a transcript as plain text. One block per event, ordered by
- * the array. Output is terminal-friendly but does no ANSI color —
- * pipe through `less -R` or `bat` if you want highlights.
- */
-export function renderTranscript(events: AgentEvent[]): string {
-  if (events.length === 0) return '(no events recorded)\n';
-  return events.map(renderEvent).join('\n\n') + '\n';
-}
-
 export const DEFAULT_SERVER_URL = 'http://localhost:3000';
 
 export interface TranscriptArgs {
@@ -116,38 +112,4 @@ export function parseTranscriptArgs(
     serverUrl: serverUrl ?? env.PINAGENT_SERVER_URL ?? DEFAULT_SERVER_URL,
     json,
   };
-}
-
-function renderEvent(event: AgentEvent): string {
-  switch (event.type) {
-    case 'init':
-      return `[init] ${event.sessionId} · ${event.model} · ${event.permissionMode} (${event.apiKeySource})`;
-    case 'text':
-      return event.text
-        .split('\n')
-        .map((line) => `> ${line}`)
-        .join('\n');
-    case 'tool_use':
-      return `[tool_use] ${event.name}${event.summary ? ` · ${event.summary}` : ''}`;
-    case 'tool_result':
-      return `[tool_result] ${event.ok ? 'ok' : 'error'}`;
-    case 'ask_user': {
-      const opts = event.options?.length ? ` · options: ${event.options.join(' | ')}` : '';
-      const ctx = event.context ? `\n  ${event.context}` : '';
-      return `[ask_user] ${event.question}${opts}${ctx}`;
-    }
-    case 'error':
-      return `[error] ${event.message}`;
-    case 'result': {
-      const cost = `$${event.totalCostUsd.toFixed(4)}`;
-      const dur = `${(event.durationMs / 1000).toFixed(2)}s`;
-      const errs = event.errors?.length ? ` · errors: ${event.errors.join(', ')}` : '';
-      return `[result] ${event.subtype} · ${event.numTurns} turn(s) · ${cost} · ${dur}${errs}`;
-    }
-    case 'status_changed': {
-      const note = event.note ? ` · ${event.note}` : '';
-      const sha = event.commitSha ? ` (${event.commitSha.slice(0, 8)})` : '';
-      return `[status_changed] ${event.status}${sha}${note}`;
-    }
-  }
 }
