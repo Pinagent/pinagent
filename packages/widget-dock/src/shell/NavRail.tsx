@@ -52,9 +52,15 @@ export interface NavRailProps {
   /** Show labels alongside icons (force on for floating/fullscreen). */
   expanded?: boolean;
   className?: string;
+  /**
+   * Routes to render. Defaults to the full `ROUTES` list; callers pass a
+   * filtered subset to hide tabs whose underlying view is empty (e.g.
+   * Branches/Changes/PRs on a project that isn't using worktrees).
+   */
+  routes?: readonly RouteDescriptor[];
 }
 
-export function NavRail({ expanded = false, className }: NavRailProps) {
+export function NavRail({ expanded = false, className, routes = ROUTES }: NavRailProps) {
   const location = useLocation();
   return (
     <nav
@@ -65,7 +71,7 @@ export function NavRail({ expanded = false, className }: NavRailProps) {
         className,
       )}
     >
-      {ROUTES.map(({ key, path, label, Icon, count }) => {
+      {routes.map(({ key, path, label, Icon, count }) => {
         const isActive = location.pathname === path;
         return (
           <Link
