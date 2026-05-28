@@ -334,4 +334,49 @@ describe('ws-server', () => {
       bus.getOrCreateBus(id).publish({ type: 'text', text: 'after-close' }),
     ).resolves.not.toThrow();
   });
+
+  /**
+   * Regression: project subscribers should learn about cross-process
+   * writes (e.g. the MCP `resolve_feedback` handler running as a child
+   * Node process) without depending on the in-process `emitProjectChange`
+   * fan-out. We simulate that here by writing directly through drizzle —
+   * `Storage.patchWithDiff` would have called `emitProjectChange` itself
+   * and short-circuited the cross-process path we want to exercise.
+   */
+  it('fans out conversations_changed when a foreign process writes to conversations', async () => {
+    const { eq } = await import('drizzle-orm');
+    const { conversations } = await import('@pinagent/db');
+    const { getDb } = await import('../src/db/client');
+
+    const c = newClient();
+    await c.opened;
+    const id = newId();
+    await ensureConversation(id);
+
+    c.send({ type: 'subscribe_project' });
+    // Let the subscription land before triggering the write so the
+    // resulting project_event arrives at this client (not just sits in
+    // the projectSubs map for a future connect).
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Mirror what MCP's `Storage.write` does from a child process:
+    // bump `updatedAt` without going through `Storage.patchWithDiff`
+    // (which would call the in-process emitter and bypass the poller).
+    const db = getDb(PROJECT_ROOT);
+    const futureMs = Date.now() + 10_000;
+    await db
+      .update(conversations)
+      .set({ updatedAt: new Date(futureMs), status: 'fixed' })
+      .where(eq(conversations.id, id));
+
+    // Poll interval is 250ms; allow ~3x for happy-path scheduling jitter.
+    const event = await c.waitFor(
+      (m) => (m as { type?: string; event?: { type?: string } }).type === 'project_event',
+      1500,
+    );
+    expect(event).toMatchObject({
+      type: 'project_event',
+      event: { type: 'conversations_changed' },
+    });
+  });
 });
