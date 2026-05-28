@@ -56,6 +56,25 @@ beforeEach(() => {
   // unless we reset.
   delete (document.documentElement as HTMLElement & { dataset: DOMStringMap }).dataset
     .pinagentEmbedded;
+  // Stub `WebSocket` so the dock's eager WS subscribe at module init
+  // doesn't dispatch through happy-dom's mock. happy-dom races the
+  // `open` event with `readyState`, so the dock's onOpen handler's
+  // `ws.send(...)` throws `InvalidStateError: Still in CONNECTING`
+  // as an uncaught exception, which vitest treats as a suite failure
+  // even though the test itself passes. The test is asserting module
+  // init order, not WS lifecycle — so a no-op stub is the right shape.
+  class StubWebSocket {
+    readyState = 0;
+    onopen: (() => void) | null = null;
+    onmessage: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    onclose: (() => void) | null = null;
+    addEventListener(): void {}
+    removeEventListener(): void {}
+    send(): void {}
+    close(): void {}
+  }
+  (globalThis as { WebSocket: typeof StubWebSocket }).WebSocket = StubWebSocket;
 });
 
 describe('built embedded bundle', () => {

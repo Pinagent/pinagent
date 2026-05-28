@@ -140,7 +140,59 @@ export type PresentableConnections = z.infer<typeof PresentableConnectionsSchema
 
 // ---------- Settings ----------
 
-export const PermissionModeSchema = z.enum(['auto', 'approve', 'dry-run']);
+/**
+ * The three permission-mode options the dock's Settings picker exposes,
+ * pinned alongside their SDK-mode equivalents and all human-facing
+ * label text. Single source of truth — adding a fourth mode = one
+ * append to this list, no scattered edits across the dock UI, the
+ * detail-header chip, and the server-side translator.
+ *
+ * Consumers:
+ *   - `PermissionModeSchema` below (zod enum derived from `projectMode`)
+ *   - `agent-runner/settings-store` re-exports the schema/type
+ *   - `agent-runner/agent.toSdkPermissionMode` looks up `sdkMode`
+ *   - `widget-dock/routes/Settings.tsx` iterates this list for the
+ *     picker (uses `label` + `description`)
+ *   - `widget-dock/lib/permissionMode.ts` looks up the SDK→display
+ *     mapping for the detail-header chip (uses `shortLabel` + `tooltip`)
+ *
+ * `as const` so consumers can derive literal-string types.
+ */
+export const PROJECT_PERMISSION_MODES = [
+  {
+    projectMode: 'auto',
+    sdkMode: 'acceptEdits',
+    label: 'Auto-accept edits',
+    shortLabel: 'Auto-accept',
+    description: 'Agent edits land in the worktree without confirmation.',
+    tooltip: 'Auto-accept edits — tool calls run without prompting.',
+  },
+  {
+    projectMode: 'approve',
+    sdkMode: 'default',
+    label: 'Require approval',
+    shortLabel: 'Approval required',
+    description: 'Each edit pauses for your approval before applying.',
+    tooltip: 'Approval required — the agent prompts before each tool call.',
+  },
+  {
+    projectMode: 'dry-run',
+    sdkMode: 'plan',
+    label: 'Dry-run only',
+    shortLabel: 'Dry-run',
+    description: 'Agents propose but never write. Useful for review-only setups.',
+    tooltip: 'Dry-run — plan mode: the agent reasons without running tools.',
+  },
+] as const;
+
+export type ProjectPermissionModeMeta = (typeof PROJECT_PERMISSION_MODES)[number];
+
+export const PermissionModeSchema = z.enum(
+  PROJECT_PERMISSION_MODES.map((m) => m.projectMode) as [
+    (typeof PROJECT_PERMISSION_MODES)[number]['projectMode'],
+    ...(typeof PROJECT_PERMISSION_MODES)[number]['projectMode'][],
+  ],
+);
 export type PermissionMode = z.infer<typeof PermissionModeSchema>;
 
 export const DockProjectSettingsSchema = z
