@@ -28,8 +28,8 @@ The trust boundary is the developer's user account. Reports we care about most:
 - Anything that lets a remote origin reach the dev-time middleware or MCP server.
 - Path traversal / arbitrary file read or write under the project root.
 - Command injection in the agent runtime or git-touching code.
-- Bypasses of the localhost binding, the file-system message bus boundary, or
-  the iframe sandbox.
+- Bypasses of the localhost binding, the SQLite source-of-truth boundary
+  (`.pinagent/db.sqlite`), or the iframe sandbox.
 
 Reports about social-engineering an end user into running malicious code on
 their own machine are generally out of scope unless they reveal a real bug in
