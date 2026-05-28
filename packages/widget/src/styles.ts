@@ -74,6 +74,18 @@ export const STYLES = `
   transition: all 60ms ease;
   border-radius: 4px;
 }
+/* Persistent outlines drawn for each Cmd/Ctrl-click pick that hasn't
+   committed yet. Same look as the hover outline but solid gold edge so
+   "queued" reads as more committed than "hovering". No transition so
+   they don't drift while the page scrolls under the rAF loop. */
+.selection-outline {
+  position: fixed;
+  pointer-events: none;
+  border: 2px solid ${BRAND_GOLD};
+  background: rgba(255, 215, 0, 0.18);
+  z-index: 2147483646;
+  border-radius: 4px;
+}
 
 .hint {
   position: fixed;

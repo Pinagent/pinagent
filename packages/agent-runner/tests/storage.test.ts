@@ -47,9 +47,23 @@ describe('Storage', () => {
     expect(created.commitSha).toBeNull();
     expect(created.agentSessionId).toBeNull();
     expect(created.resolvedAt).toBeNull();
+    expect(created.additionalAnchors).toBeNull();
 
     const read = await s.read(id);
     expect(read).toEqual(created);
+  });
+
+  it('round-trips multi-pick extras through create → read', async () => {
+    const s = new Storage(root);
+    const id = nanoid(10);
+    const extras = [
+      { file: 'src/A.tsx', line: 10, col: 4, selector: '.a', clickX: 1, clickY: 2 },
+      { file: null, line: null, col: null, selector: '.b', clickX: 3, clickY: 4 },
+    ];
+    const created = await s.create(id, makeInput({ additionalAnchors: extras }));
+    expect(created.additionalAnchors).toEqual(extras);
+    const read = await s.read(id);
+    expect(read?.additionalAnchors).toEqual(extras);
   });
 
   it('create writes the screenshot under .pinagent/screenshots/<id>.png', async () => {

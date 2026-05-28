@@ -68,6 +68,58 @@ describe('recordConversationStart', () => {
     expect(cs).toHaveLength(1);
     expect(cs[0]?.comment).toBe('a'); // first write wins
   });
+
+  it('persists multi-pick extras into the additional_anchors JSON column', async () => {
+    await recordConversationStart(db, {
+      feedbackId: 'fb-multi',
+      comment: 'these three',
+      anchor: anchor({
+        additionalAnchors: [
+          {
+            file: 'src/A.tsx',
+            line: 10,
+            col: 4,
+            selector: '.a',
+            clickX: 1,
+            clickY: 2,
+          },
+          {
+            file: null,
+            line: null,
+            col: null,
+            selector: '.b',
+            clickX: 3,
+            clickY: 4,
+          },
+        ],
+      }),
+    });
+    const [row] = await db.select().from(widgetAnchors);
+    expect(row?.additionalAnchors).toEqual([
+      { file: 'src/A.tsx', line: 10, col: 4, selector: '.a', clickX: 1, clickY: 2 },
+      { file: null, line: null, col: null, selector: '.b', clickX: 3, clickY: 4 },
+    ]);
+  });
+
+  it('leaves additional_anchors null when the user picked a single element', async () => {
+    await recordConversationStart(db, {
+      feedbackId: 'fb-single',
+      comment: 'just this',
+      anchor: anchor(),
+    });
+    const [row] = await db.select().from(widgetAnchors);
+    expect(row?.additionalAnchors).toBeNull();
+  });
+
+  it('treats an empty extras array the same as omitting it (null in DB)', async () => {
+    await recordConversationStart(db, {
+      feedbackId: 'fb-empty',
+      comment: 'just this',
+      anchor: anchor({ additionalAnchors: [] }),
+    });
+    const [row] = await db.select().from(widgetAnchors);
+    expect(row?.additionalAnchors).toBeNull();
+  });
 });
 
 describe('recordEvent', () => {

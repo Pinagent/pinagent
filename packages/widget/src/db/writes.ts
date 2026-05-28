@@ -17,6 +17,20 @@ export interface AnchorInput {
   clickY: number;
   viewportW: number;
   viewportH: number;
+  /**
+   * Secondary elements picked via Cmd/Ctrl-click before the committing
+   * click. Empty/undefined for the single-pick case.
+   */
+  additionalAnchors?: AdditionalAnchor[];
+}
+
+export interface AdditionalAnchor {
+  file: string | null;
+  line: number | null;
+  col: number | null;
+  selector: string;
+  clickX: number;
+  clickY: number;
 }
 
 /**
@@ -33,9 +47,15 @@ export async function recordConversationStart(
     .values({ id: args.feedbackId, comment: args.comment })
     .onConflictDoNothing();
 
+  const { additionalAnchors, ...anchorCols } = args.anchor;
   await db
     .insert(widgetAnchors)
-    .values({ conversationId: args.feedbackId, ...args.anchor })
+    .values({
+      conversationId: args.feedbackId,
+      ...anchorCols,
+      additionalAnchors:
+        additionalAnchors && additionalAnchors.length > 0 ? additionalAnchors : null,
+    })
     .onConflictDoNothing();
 }
 

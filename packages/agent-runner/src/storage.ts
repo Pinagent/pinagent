@@ -32,6 +32,19 @@ const NON_MESSAGE_ROLES: string[] = ['__finished', 'init', 'result'];
 
 export const ID_RE = /^[A-Za-z0-9_-]{8,16}$/;
 
+/** Per-extra anchor in the multi-pick payload — flat fields mirroring
+ * the primary widget_anchors columns, minus viewport/userAgent (those
+ * are conversation-level). */
+const AdditionalAnchorSchema = z.object({
+  file: z.string().max(512).nullable(),
+  line: z.number().int().min(1).max(1_000_000).nullable(),
+  col: z.number().int().min(0).max(1_000_000).nullable(),
+  selector: z.string().max(2000),
+  clickX: z.number().int().min(-1_000_000).max(1_000_000),
+  clickY: z.number().int().min(-1_000_000).max(1_000_000),
+});
+export type AdditionalAnchor = z.infer<typeof AdditionalAnchorSchema>;
+
 export const FeedbackInputSchema = z.object({
   comment: z.string().min(1).max(8000),
   loc: z
@@ -50,6 +63,12 @@ export const FeedbackInputSchema = z.object({
   userAgent: z.string().max(1024),
   screenshot: z.string().min(1),
   createdAt: z.string().min(1),
+  /**
+   * Cmd/Ctrl-click extras queued before the committing click. Optional
+   * for backward compatibility with single-pick clients; capped at 32
+   * to keep a runaway client from blowing up the JSON column.
+   */
+  additionalAnchors: z.array(AdditionalAnchorSchema).max(32).optional(),
 });
 export type FeedbackInput = z.infer<typeof FeedbackInputSchema>;
 
@@ -69,6 +88,12 @@ export interface FeedbackRecord {
   url: string;
   viewport: { w: number; h: number };
   userAgent: string;
+  /**
+   * Cmd/Ctrl-click extras (the 2nd…Nth picks). Null when the user
+   * picked a single element — the common case. Pass-through only at
+   * v1; the agent prompt doesn't yet enumerate them.
+   */
+  additionalAnchors: AdditionalAnchor[] | null;
   /** Path relative to .pinagent/, e.g. `screenshots/abc.png`. */
   screenshot: string;
   status: Status;
@@ -228,6 +253,7 @@ export class Storage {
         viewportW: rec.viewport.w,
         viewportH: rec.viewport.h,
         userAgent: rec.userAgent,
+        additionalAnchors: rec.additionalAnchors,
       })
       .onConflictDoNothing();
   }
@@ -259,6 +285,10 @@ export class Storage {
       viewportW: input.viewport.w,
       viewportH: input.viewport.h,
       userAgent: input.userAgent,
+      additionalAnchors:
+        input.additionalAnchors && input.additionalAnchors.length > 0
+          ? input.additionalAnchors
+          : null,
     });
 
     const record: FeedbackRecord = {
@@ -271,6 +301,10 @@ export class Storage {
       url: input.url,
       viewport: input.viewport,
       userAgent: input.userAgent,
+      additionalAnchors:
+        input.additionalAnchors && input.additionalAnchors.length > 0
+          ? input.additionalAnchors
+          : null,
       screenshot: pngRel,
       status: 'pending',
       note: null,
@@ -524,6 +558,7 @@ function rowToRecord(
     url: a?.url ?? '',
     viewport: { w: a?.viewportW ?? 0, h: a?.viewportH ?? 0 },
     userAgent: a?.userAgent ?? '',
+    additionalAnchors: a?.additionalAnchors ?? null,
     // Derived from id — every screenshot lives at the same path.
     screenshot: join('screenshots', `${c.id}.png`),
     status: c.status,

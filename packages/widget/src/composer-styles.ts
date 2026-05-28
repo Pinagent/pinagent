@@ -76,6 +76,21 @@ export const COMPOSER_STYLES = `
     white-space: nowrap;
     min-width: 0;
   }
+  /* "+N more" badge for Cmd/Ctrl-click extras. Same shape as el-pill
+     but gold so it stands out as "additional selections". Cursor: help
+     so the hover-to-preview affordance reads. */
+  .el-extras {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 600;
+    background: ${BRAND_GOLD};
+    color: ${BRAND_INK};
+    padding: 2px 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    cursor: help;
+  }
 
   /* File row (#pa-meta): code icon + path:line:col + external-link
      icon. The whole row is the click target for open-in-editor when

@@ -54,8 +54,36 @@ async function downscaleBlob(bitmap: ImageBitmap, targetWidth: number): Promise<
   return canvasToBlob(canvas, 'image/png');
 }
 
+async function cropBlob(
+  bitmap: ImageBitmap,
+  rect: { x: number; y: number; w: number; h: number },
+): Promise<Blob> {
+  // Clamp the requested rect to the source bitmap so callers can be
+  // sloppy about negative offsets or rects that extend past the page
+  // (e.g. an extra picked while scrolled below the bottom of the body
+  // mid-pick).
+  const sx = Math.max(0, Math.min(rect.x, bitmap.width));
+  const sy = Math.max(0, Math.min(rect.y, bitmap.height));
+  const sw = Math.max(1, Math.min(rect.w, bitmap.width - sx));
+  const sh = Math.max(1, Math.min(rect.h, bitmap.height - sy));
+  const canvas = document.createElement('canvas');
+  canvas.width = sw;
+  canvas.height = sh;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('no 2d context');
+  ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+  return canvasToBlob(canvas, 'image/png');
+}
+
 export async function capturePageScreenshot(
   filter?: (node: HTMLElement) => boolean,
+  /**
+   * Document-coord rect (CSS pixels, including scroll offset) to crop
+   * the capture to. Omit to keep today's full-body behavior. Used by
+   * multi-anchor picks so the agent's screenshot is bounded to the
+   * union of the selected elements.
+   */
+  cropRect?: { x: number; y: number; w: number; h: number } | null,
 ): Promise<string> {
   // Compose user filter with our defaults — skip the pinagent host (passed
   // in) and any cross-origin <img> nodes so html-to-image doesn't try to
@@ -90,6 +118,18 @@ export async function capturePageScreenshot(
   // operate on already-loaded data, no network involvement.
   try {
     let bitmap = await createImageBitmap(blob);
+
+    // Crop first (at native resolution) so the downscale step gets a
+    // tighter source and the agent sees a denser image of the picked
+    // region. toBlob was called on document.body with pixelRatio:1, so
+    // bitmap dims match document.body's CSS dims and the document-coord
+    // rect lines up 1:1.
+    if (cropRect) {
+      const next = await cropBlob(bitmap, cropRect);
+      bitmap.close?.();
+      blob = next;
+      bitmap = await createImageBitmap(blob);
+    }
 
     if (bitmap.width > MAX_WIDTH) {
       const next = await downscaleBlob(bitmap, MAX_WIDTH);
