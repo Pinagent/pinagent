@@ -553,7 +553,7 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
           optimistic={optimisticItems}
           answeredAskIds={answeredAskIds}
           onAnswerAsk={handleAnswerAsk}
-          askDisabled={isMock || stream.done}
+          askDisabled={isMock}
         />
       </div>
 
@@ -638,20 +638,18 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
           }}
           placeholder={isMock ? 'Sending disabled in mock mode' : 'Reply to the agent…'}
           className="min-h-[64px] resize-y text-xs"
-          disabled={isMock || stream.done}
+          disabled={isMock}
         />
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-muted-foreground">
             {isMock
               ? 'Switch off ?fixtures=on to send real replies.'
-              : stream.done
-                ? 'Agent run finished. Start a new conversation to keep going.'
-                : 'Shift + Enter for newline · Enter to send'}
+              : 'Shift + Enter for newline · Enter to send'}
           </span>
           <Button
             size="sm"
             className="h-7 gap-1.5"
-            disabled={isMock || stream.done || !reply.trim()}
+            disabled={isMock || !reply.trim()}
             onClick={handleSend}
           >
             <Send className="h-3.5 w-3.5" />
@@ -997,11 +995,7 @@ function StreamView({
         ref={scrollRef}
         className="rounded-lg border border-dashed border-border bg-secondary/20 px-3 py-6 text-center text-xs text-muted-foreground"
       >
-        {isMock
-          ? 'Mock mode — no live stream.'
-          : stream.done
-            ? 'No transcript available (agent finished — bus expired). Submit a follow-up to start a new turn.'
-            : 'Waiting for the agent to start…'}
+        {isMock ? 'Mock mode — no live stream.' : 'Waiting for the agent to start…'}
       </div>
     );
   }
@@ -1020,11 +1014,6 @@ function StreamView({
         ) : (
           <OptimisticRow key={d.key} item={d.item} />
         ),
-      )}
-      {stream.done && (
-        <div className="text-center text-[11px] text-muted-foreground pt-1">
-          — agent run finished —
-        </div>
       )}
     </div>
   );

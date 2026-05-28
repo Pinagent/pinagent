@@ -33,11 +33,9 @@ export interface ConversationStream {
   items: StreamItem[];
   /** Latest worktree-state broadcast, if any. */
   worktree: WorktreeStatePayload | null;
-  /** True after the server signals the agent run finished. */
-  done: boolean;
 }
 
-const EMPTY_STREAM: ConversationStream = { items: [], worktree: null, done: false };
+const EMPTY_STREAM: ConversationStream = { items: [], worktree: null };
 
 export function useConversationStream(id: string | null): ConversationStream {
   const transport = useTransport();
@@ -74,9 +72,12 @@ export function useConversationStream(id: string | null): ConversationStream {
           ],
         }));
       },
-      onDone() {
-        setStream((prev) => ({ ...prev, done: true }));
-      },
+      // The dev-server's bus never closes today (`finishBus` isn't wired
+      // in production — see `agent.ts`'s "intentionally do NOT call
+      // finishBus" note), so `onDone` is a no-op. Kept for protocol
+      // compatibility: the transport still translates incoming `done`
+      // messages into this callback if one is ever sent.
+      onDone() {},
     };
     return transport.subscribeConversation(id, handlers);
   }, [id, transport]);
