@@ -142,3 +142,53 @@ describe('listChanges — externallyModified', () => {
     expect(row?.externallyModified).toBe(false);
   });
 });
+
+describe('listChanges — preview', () => {
+  it('is the first changed line for an active worktree with edits', async () => {
+    const { id, worktreePath } = await makeFeedbackWithWorktree();
+    // Replace README.md's "hello" with "agent edit".
+    await writeFile(join(worktreePath, 'README.md'), 'agent edit\n', 'utf8');
+
+    const rows = await changesMod.listChanges(ROOT);
+    const row = rows.find((r) => r.id === id);
+    // The first non-header content line in the diff is the `-hello`
+    // deletion. Either `-` or `+` is acceptable depending on diff
+    // formatting order — git emits the deletion before the addition
+    // for the same hunk.
+    expect(row?.preview).toMatch(/^[+-]/);
+    expect(row?.preview).toMatch(/hello|agent edit/);
+  });
+
+  it('is empty for a fresh worktree with no edits', async () => {
+    const { id } = await makeFeedbackWithWorktree();
+    // Don't touch the worktree — no diff.
+    const rows = await changesMod.listChanges(ROOT);
+    const row = rows.find((r) => r.id === id);
+    expect(row?.preview).toBe('');
+  });
+
+  it('truncates very long lines with an ellipsis', async () => {
+    const { id, worktreePath } = await makeFeedbackWithWorktree();
+    // Append (don't replace) so the only changed content line is the
+    // long addition. Replacing the existing "hello" would surface
+    // `-hello` as the first changed line, which doesn't truncate.
+    await writeFile(join(worktreePath, 'README.md'), `hello\n${'x'.repeat(500)}\n`, 'utf8');
+
+    const rows = await changesMod.listChanges(ROOT);
+    const row = rows.find((r) => r.id === id);
+    // 140-char cap including the leading +/- prefix; ellipsis added.
+    expect(row?.preview.length).toBeLessThanOrEqual(140);
+    expect(row?.preview.endsWith('…')).toBe(true);
+  });
+
+  it('is empty for landed worktrees (gone from disk; no live diff)', async () => {
+    const { id, worktreePath } = await makeFeedbackWithWorktree();
+    await writeFile(join(worktreePath, 'README.md'), 'edit\n', 'utf8');
+    const storage = new storageMod.Storage(ROOT);
+    await storage.patch(id, { worktreeState: 'landed' });
+
+    const rows = await changesMod.listChanges(ROOT);
+    const row = rows.find((r) => r.id === id);
+    expect(row?.preview).toBe('');
+  });
+});

@@ -92,9 +92,10 @@ const BranchWireSchema = z
 
 /**
  * Wire shape for `GET /__pinagent/changes`. Mirrors
- * `@pinagent/agent-runner.ChangeRecord`. Local because the display
- * `Change` adds a `preview` field the list endpoint doesn't populate
- * (fetched lazily via getChangeDiff when a row expands).
+ * `@pinagent/agent-runner.ChangeRecord`. The display `Change` matches
+ * the wire shape one-for-one now that `preview` is populated server-
+ * side; the lazy /__pinagent/changes/:id/diff endpoint still exists
+ * for the full unified diff when a row expands.
  */
 const ChangeWireSchema = z
   .object({
@@ -110,6 +111,10 @@ const ChangeWireSchema = z
     // they shouldn't get a parse error just because the field is
     // missing. Real servers always send it (true | false).
     externallyModified: z.boolean().default(false),
+    // Default for the same compatibility reason as externallyModified
+    // — an older server that doesn't project preview just shows no
+    // preview line on the row.
+    preview: z.string().default(''),
     updatedAt: z.string(),
   })
   .loose();
@@ -301,10 +306,10 @@ export class LocalTransport implements DockTransport {
         additions: w.additions,
         deletions: w.deletions,
         externallyModified: w.externallyModified,
-        // Inline diff lives in /__pinagent/changes/:id/diff and is
-        // fetched lazily when the row is expanded — the list endpoint
-        // intentionally stays lightweight.
-        preview: '',
+        // List endpoint ships a one-line preview (first +/- line from
+        // the diff, truncated). The full unified diff is still lazy
+        // via /__pinagent/changes/:id/diff when the row expands.
+        preview: w.preview,
         updatedAt: w.updatedAt,
       }),
     );
