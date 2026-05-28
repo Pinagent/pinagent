@@ -49,9 +49,10 @@ Both the publisher (`pinagent`) and the extension name (`pinagent-vscode`) come 
 
 ### Actions
 
-| Action        | Query params                       | Effect                                                                                     |
-| ------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| `open-claude` | `prompt` — base64url-encoded UTF-8 | Open/reuse the "Pinagent → Claude" terminal, run `claude`, and type `prompt` without Enter |
+| Action        | Query params                                                                                                                | Effect                                                                                     |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `open-claude` | `prompt` — base64url-encoded UTF-8                                                                                          | Open/reuse the "Pinagent → Claude" terminal, run `claude`, and type `prompt` without Enter |
+| `open-file`   | `path` — project-relative or absolute; `line`, `col` — 1-based (default `1`). All standard URL-encoded (no base64 needed).  | Resolve `path` against the first open workspace folder and open the editor at `line:col`   |
 
 Unknown actions surface a "Pinagent: unknown URI action" warning in VSCode so misrouted URIs are visible during integration work.
 
@@ -66,7 +67,10 @@ import { openInClaudeCode } from '../lib/vscode-bridge';
 openInClaudeCode(detail.comment);
 ```
 
-Today's only consumer is the Terminal-icon button in the conversation detail header (`packages/widget-dock/src/routes/Conversations.tsx`). The button passes the original comment as the prompt.
+Current consumers:
+
+- The Terminal-icon button in the conversation detail header (`packages/widget-dock/src/routes/Conversations.tsx`) — fires `open-claude` with the original comment as the prompt.
+- The `AnchorChip` component (`packages/widget-dock/src/components/AnchorChip.tsx`) — fires `open-file` with the conversation's `file:line:col` so clicking the chip jumps straight to source. Renders as a non-interactive span when the loc doesn't parse, so list rows can still nest it safely.
 
 The helper fires the URI by clicking a transient anchor element rather than setting `location.href`, so the dock iframe doesn't trip its router on the scheme change before the browser intercepts it.
 
@@ -87,7 +91,6 @@ The helper fires the URI by clicking a transient anchor element rather than sett
 
 The URI handler is a switch — new verbs are cheap to add:
 
-- `open-file?path=…&line=…` — jump to a source location (today this works without the extension via plain `vscode://file/<path>:line:col`; an explicit action would let us layer in conversation context)
 - `open-claude-with-conversation?id=…` — fetch the full transcript from the dev-server and pipe it into `claude` via a temp file, instead of just the original comment
 - `apply-diff?id=…` — pull a worktree diff and stage it for review in VSCode's SCM panel
 
