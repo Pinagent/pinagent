@@ -91,6 +91,8 @@ describe('GET /__pinagent/feedback', () => {
         title: z.string().nullable(),
         archived: z.boolean(),
         branch: z.string().nullable(),
+        messageCount: z.number(),
+        totalCostUsd: z.number(),
         createdAt: z.string(),
         updatedAt: z.string(),
       })

@@ -146,6 +146,11 @@ const FeedbackRecordSchema = z
     // `Storage.list`. Default 0 so a dock built against an older server
     // (before this projection landed) still parses cleanly.
     messageCount: z.number().int().nonnegative().default(0),
+    // Per-row running cost in USD, summed from each `result` event's
+    // `total_cost_usd`. 0 for runs that haven't finished a turn yet and
+    // for oauth/subscription-quota runs where the SDK reports notional
+    // cost as 0. Default for the same compatibility reason as above.
+    totalCostUsd: z.number().nonnegative().default(0),
     createdAt: z.string(),
     updatedAt: z.string(),
   })
@@ -244,6 +249,7 @@ function toConversation(rec: FeedbackRecord): Conversation {
     // original comment is the best preview we have for the list row.
     lastMessage: commentToTitle(rec.comment),
     messageCount: rec.messageCount,
+    totalCostUsd: rec.totalCostUsd,
   };
 }
 

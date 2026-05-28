@@ -277,6 +277,122 @@ describe('Storage', () => {
       expect(await s.listMessages('aBcDeFgHiJ')).toEqual([]);
     });
   });
+
+  describe('cost aggregation', () => {
+    it('freshly created row reports totalCostUsd: 0', async () => {
+      const s = new Storage(root);
+      const id = nanoid(10);
+      const created = await s.create(id, makeInput());
+      expect(created.totalCostUsd).toBe(0);
+      const read = await s.read(id);
+      expect(read?.totalCostUsd).toBe(0);
+      const [listed] = await s.list();
+      expect(listed?.totalCostUsd).toBe(0);
+    });
+
+    it('list + read sum totalCostUsd across every result event', async () => {
+      const bus = await import('../src/bus');
+      const s = new Storage(root);
+      const id = nanoid(10);
+      await s.create(id, makeInput());
+      const b = bus.getOrCreateBus(id, root);
+      await b.publish({
+        type: 'result',
+        subtype: 'success',
+        numTurns: 1,
+        totalCostUsd: 0.05,
+        durationMs: 100,
+      });
+      await b.publish({
+        type: 'result',
+        subtype: 'success',
+        numTurns: 1,
+        totalCostUsd: 0.07,
+        durationMs: 100,
+      });
+
+      expect(await s.computeConversationCost(id)).toBeCloseTo(0.12, 4);
+      const read = await s.read(id);
+      expect(read?.totalCostUsd).toBeCloseTo(0.12, 4);
+      const list = await s.list();
+      expect(list.find((r) => r.id === id)?.totalCostUsd).toBeCloseTo(0.12, 4);
+    });
+
+    it('ignores text/tool_use/etc events when summing cost', async () => {
+      const bus = await import('../src/bus');
+      const s = new Storage(root);
+      const id = nanoid(10);
+      await s.create(id, makeInput());
+      const b = bus.getOrCreateBus(id, root);
+      // Non-result events have no totalCostUsd; tolerant of any shape.
+      await b.publish({ type: 'text', text: 'hi' });
+      await b.publish({ type: 'tool_use', name: 'Edit', summary: 'src/Foo.tsx' });
+      expect(await s.computeConversationCost(id)).toBe(0);
+    });
+
+    it('tolerates result events without a numeric totalCostUsd (counts 0)', async () => {
+      // Defensive: an SDK shape change or a historical row missing the
+      // field shouldn't crash the aggregate.
+      const bus = await import('../src/bus');
+      const s = new Storage(root);
+      const id = nanoid(10);
+      await s.create(id, makeInput());
+      const b = bus.getOrCreateBus(id, root);
+      await b.publish({
+        type: 'result',
+        subtype: 'success',
+        numTurns: 1,
+        totalCostUsd: NaN as unknown as number,
+        durationMs: 100,
+      });
+      await b.publish({
+        type: 'result',
+        subtype: 'success',
+        numTurns: 1,
+        totalCostUsd: 0.03,
+        durationMs: 100,
+      });
+      expect(await s.computeConversationCost(id)).toBeCloseTo(0.03, 4);
+    });
+
+    it('computeMonthlySpend sums result events across conversations in the calendar month', async () => {
+      const bus = await import('../src/bus');
+      const s = new Storage(root);
+      const id1 = nanoid(10);
+      const id2 = nanoid(10);
+      await s.create(id1, makeInput());
+      await s.create(id2, makeInput());
+      const b1 = bus.getOrCreateBus(id1, root);
+      const b2 = bus.getOrCreateBus(id2, root);
+      await b1.publish({
+        type: 'result',
+        subtype: 'success',
+        numTurns: 1,
+        totalCostUsd: 0.4,
+        durationMs: 100,
+      });
+      await b2.publish({
+        type: 'result',
+        subtype: 'success',
+        numTurns: 1,
+        totalCostUsd: 0.6,
+        durationMs: 100,
+      });
+
+      // Sum for the month each row was created in (same instant for
+      // both → same month) is 1.00. Past months pick up nothing.
+      const now = new Date();
+      expect(await s.computeMonthlySpend(now)).toBeCloseTo(1.0, 4);
+      const farPast = new Date('2024-01-15T12:00:00Z');
+      expect(await s.computeMonthlySpend(farPast)).toBe(0);
+    });
+
+    it('computeConversationCost returns 0 for unknown / invalid ids', async () => {
+      const s = new Storage(root);
+      expect(await s.computeConversationCost('!')).toBe(0);
+      expect(await s.computeConversationCost('aBcDeFgHiJ')).toBe(0);
+    });
+  });
 });
 
 describe('isInGitignore', () => {

@@ -149,6 +149,20 @@ export async function spawnAgent(ctx: AgentContext): Promise<void> {
   await mkdir(logsDir, { recursive: true });
   const logPath = join(logsDir, `${ctx.feedback.id}.md`);
 
+  // Cost cap check runs BEFORE worktree creation so a refused spawn
+  // doesn't leave orphaned worktrees on disk. Initial spawns rarely
+  // breach (running total is 0 for a brand-new conversation), but a
+  // re-spawn against an existing feedback id would.
+  const capCheck = await checkCostCaps(ctx.projectRoot, ctx.feedback.id);
+  if (!capCheck.ok) {
+    await getOrCreateBus(ctx.feedback.id, ctx.projectRoot).publish({
+      type: 'error',
+      message: capCheck.reason,
+    });
+    await appendLog(logPath, `\n> [pinagent] spawn refused: ${capCheck.reason}\n`);
+    return;
+  }
+
   let cwd = ctx.projectRoot;
   const startedAt = new Date().toISOString();
 
@@ -202,6 +216,19 @@ export async function runFollowUpTurn(feedbackId: string, content: string): Prom
   if (!rec) throw new Error(`feedback not found: ${feedbackId}`);
   if (!rec.agentSessionId) {
     throw new Error('no prior agent session — only spawn-mode submissions support follow-ups');
+  }
+
+  const capCheck = await checkCostCaps(projectRoot, feedbackId);
+  if (!capCheck.ok) {
+    // Publish to the bus so every dock subscribed to this conversation
+    // sees the refusal — `sendError` only goes to the originating
+    // socket. Then throw so the WS handler still surfaces the message
+    // to the originating client immediately.
+    await getOrCreateBus(feedbackId, projectRoot).publish({
+      type: 'error',
+      message: capCheck.reason,
+    });
+    throw new Error(capCheck.reason);
   }
 
   // If the original run used a worktree and it's still there, resume in
@@ -321,6 +348,42 @@ async function resolveRunPermissionMode(projectRoot: string): Promise<Permission
   if (override) return override;
   const settings = await new SettingsStore(projectRoot).read();
   return toSdkPermissionMode(settings.permissionMode);
+}
+
+/**
+ * Gate every new turn (initial spawn + follow-ups) on the cost caps in
+ * the project's settings. The cap is breached when the *running total*
+ * is already at or above the cap — that lets the first-ever turn run
+ * freely (totalCostUsd starts at 0) but blocks the next turn once
+ * spending has caught up.
+ *
+ * Returns `{ ok: true }` when within both caps, or `{ ok: false, reason }`
+ * with a user-facing message. Callers emit the message on the bus so
+ * every subscriber sees it, and refuse to actually start the turn.
+ */
+async function checkCostCaps(
+  projectRoot: string,
+  feedbackId: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const settings = await new SettingsStore(projectRoot).read();
+  const storage = new Storage(projectRoot);
+  const conversationCost = await storage.computeConversationCost(feedbackId);
+  if (conversationCost >= settings.perConversationCapUsd) {
+    return {
+      ok: false,
+      reason: `per-conversation cost cap reached: $${conversationCost.toFixed(2)} of $${settings.perConversationCapUsd.toFixed(2)} spent. Raise the cap in Settings or resolve this conversation.`,
+    };
+  }
+  if (settings.monthlyBudgetUsd !== null) {
+    const monthlySpend = await storage.computeMonthlySpend(new Date());
+    if (monthlySpend >= settings.monthlyBudgetUsd) {
+      return {
+        ok: false,
+        reason: `monthly budget reached: $${monthlySpend.toFixed(2)} of $${settings.monthlyBudgetUsd.toFixed(2)} spent this month. Raise the budget in Settings.`,
+      };
+    }
+  }
+  return { ok: true };
 }
 
 async function runQuery(opts: RunQueryOpts): Promise<void> {

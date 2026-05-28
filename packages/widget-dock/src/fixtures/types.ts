@@ -42,6 +42,15 @@ export interface Conversation {
   lastMessage: string;
   /** Number of human + agent messages in the thread. */
   messageCount: number;
+  /**
+   * Running USD cost for this conversation, summed from each SDK
+   * `result` event's `total_cost_usd`. Server populates this in
+   * `Storage.list`; fixtures supply representative values for the
+   * design demo. 0 when no turn has completed yet (or for runs
+   * billed against an OAuth subscription where the SDK reports
+   * notional cost as 0).
+   */
+  totalCostUsd: number;
 }
 
 /** A pending or landed code change produced by an agent for a conversation. */
