@@ -12,13 +12,55 @@
  * Returns the live connection status so the chrome can render
  * "Disconnected" without owning the socket itself.
  */
-import { useQueryClient } from '@tanstack/react-query';
+
+import type { ProjectEvent } from '@pinagent/shared';
+import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { type ConnectionStatus, useTransport } from '../transport';
 
 export interface UseProjectSubscriptionOptions {
   /** When false (e.g. mock-transport mode), the hook is a no-op. */
   enabled?: boolean;
+}
+
+/**
+ * Query keys touched by a `conversations_changed` event. Any conversation
+ * change can affect:
+ *
+ *   - `conversations`  — the list view
+ *   - `conversation`   — the open detail view; without this the status
+ *                        timeline pills stay stuck on the initial status
+ *                        through the agent's working → landed transitions
+ *   - `changes`        — worktree-state transitions ripple into diff stats
+ *   - `branches`       — same; the Branches view keys off worktree state
+ *   - `pullRequests`   — compose flow flips conversations to landed and
+ *                        writes the PR row in the same transition
+ *   - `auditLog`       — every lifecycle write also writes an audit row
+ */
+const CONVERSATIONS_CHANGED_KEYS: readonly (readonly string[])[] = [
+  ['conversations'],
+  ['conversation'],
+  ['changes'],
+  ['branches'],
+  ['pullRequests'],
+  ['auditLog'],
+];
+
+/**
+ * Factory for the project-event listener. Exposed for unit testing so
+ * tests can drive synthetic events without rendering React or spinning
+ * up a real transport.
+ */
+export function createProjectEventListener(
+  queryClient: Pick<QueryClient, 'invalidateQueries'>,
+): (event: ProjectEvent) => void {
+  return (event) => {
+    if (event.type === 'conversations_changed') {
+      for (const queryKey of CONVERSATIONS_CHANGED_KEYS) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    }
+  };
 }
 
 export function useProjectSubscription({ enabled = true }: UseProjectSubscriptionOptions = {}): {
@@ -33,21 +75,7 @@ export function useProjectSubscription({ enabled = true }: UseProjectSubscriptio
       setStatus('idle');
       return;
     }
-    const unsubEvents = transport.subscribeProject((event) => {
-      if (event.type === 'conversations_changed') {
-        // Any conversation change can affect both the list view AND
-        // the Changes view (worktree-state transitions ripple into
-        // diff stats). Invalidate both query namespaces. The PRs view
-        // is invalidated too because the compose flow flips affected
-        // conversations to landed and writes the PR row in the same
-        // transition — both signals piggyback on this event.
-        void queryClient.invalidateQueries({ queryKey: ['conversations'] });
-        void queryClient.invalidateQueries({ queryKey: ['changes'] });
-        void queryClient.invalidateQueries({ queryKey: ['branches'] });
-        void queryClient.invalidateQueries({ queryKey: ['pullRequests'] });
-        void queryClient.invalidateQueries({ queryKey: ['auditLog'] });
-      }
-    });
+    const unsubEvents = transport.subscribeProject(createProjectEventListener(queryClient));
     const unsubStatus = transport.onConnectionStatus(setStatus);
     return () => {
       unsubEvents();

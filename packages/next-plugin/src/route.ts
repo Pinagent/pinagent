@@ -237,6 +237,8 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
       url: r.url,
       status: r.status,
       worktreeState: r.worktreeState,
+      title: r.title,
+      archived: r.archived,
       branch: r.branch,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,

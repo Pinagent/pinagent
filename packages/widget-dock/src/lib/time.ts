@@ -22,6 +22,3 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
     day: 'numeric',
   });
 }
-
-/** Fixed "now" the fixtures were generated against (2026-05-26 22:30 UTC). */
-export const FIXTURE_NOW = Date.parse('2026-05-26T22:30:00Z');

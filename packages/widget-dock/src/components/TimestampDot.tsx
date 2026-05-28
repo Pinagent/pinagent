@@ -4,7 +4,7 @@
  * absolute time as a tooltip via `title`.
  */
 import { cn } from '@pinagent/ui/lib/utils';
-import { FIXTURE_NOW, relativeTime } from '../lib/time';
+import { relativeTime } from '../lib/time';
 
 export interface TimestampDotProps {
   iso: string;
@@ -18,7 +18,7 @@ export function TimestampDot({ iso, className }: TimestampDotProps) {
       title={new Date(iso).toLocaleString()}
       className={cn('shrink-0 text-[11px] text-muted-foreground tabular-nums', className)}
     >
-      {relativeTime(iso, FIXTURE_NOW)}
+      {relativeTime(iso)}
     </time>
   );
 }
