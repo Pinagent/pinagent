@@ -441,33 +441,31 @@ export function Conversations() {
           />
         )}
 
-        {conversationsQuery.isSuccess && items.length === 0 && (
-          <>
-            {(conversationsQuery.data ?? []).length === 0 ? (
-              // First-time: project has zero conversations. Show the
-              // full walkthrough pointing at the per-element widget.
-              <OnboardingState
-                title="Start your first conversation"
-                intro={
-                  transport.kind === 'mock' ? (
-                    <>
-                      Running on fixtures — switch off{' '}
-                      <code className="font-mono">?fixtures=on</code> to see real data. The
-                      walkthrough below is what new users see on first dock open.
-                    </>
-                  ) : undefined
-                }
-              />
-            ) : (
-              // Project has rows but none match the current filter +
-              // search combo. Keep the lightweight EmptyState here.
-              <EmptyState
-                title="No conversations match this filter"
-                description="Try a different status or clear the search."
-              />
-            )}
-          </>
-        )}
+        {conversationsQuery.isSuccess &&
+          items.length === 0 &&
+          ((conversationsQuery.data ?? []).length === 0 ? (
+            // First-time: project has zero conversations. Show the
+            // full walkthrough pointing at the per-element widget.
+            <OnboardingState
+              title="Start your first conversation"
+              intro={
+                transport.kind === 'mock' ? (
+                  <>
+                    Running on fixtures — switch off <code className="font-mono">?fixtures=on</code>{' '}
+                    to see real data. The walkthrough below is what new users see on first dock
+                    open.
+                  </>
+                ) : undefined
+              }
+            />
+          ) : (
+            // Project has rows but none match the current filter +
+            // search combo. Keep the lightweight EmptyState here.
+            <EmptyState
+              title="No conversations match this filter"
+              description="Try a different status or clear the search."
+            />
+          ))}
 
         {items.length > 0 && (
           <div className="flex flex-col gap-1.5 p-3">
