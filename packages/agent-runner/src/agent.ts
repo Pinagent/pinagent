@@ -25,6 +25,7 @@ import { getDb } from './db/client';
 import { runGitCapture } from './git-utils';
 import { emitProjectChange } from './project-events';
 import { SecretsStore } from './secrets-store';
+import { type PermissionMode as ProjectPermissionMode, SettingsStore } from './settings-store';
 import { type FeedbackRecord, Storage } from './storage';
 
 /**
@@ -162,6 +163,7 @@ export async function spawnAgent(ctx: AgentContext): Promise<void> {
   await appendLog(logPath, renderHeader(ctx, cwd, startedAt, /* worktreeReady */ true));
 
   const prompt = buildInitialPrompt(ctx.feedback, ctx.mode, cwd);
+  const permissionMode = await resolveRunPermissionMode(ctx.projectRoot);
 
   // Fire and forget. The route handler awaits spawnAgent only for the
   // worktree-creation + header-write phase — once we hand off to runQuery
@@ -173,6 +175,7 @@ export async function spawnAgent(ctx: AgentContext): Promise<void> {
     logPath,
     prompt,
     isInitial: true,
+    permissionMode,
   });
 }
 
@@ -214,6 +217,8 @@ export async function runFollowUpTurn(feedbackId: string, content: string): Prom
       .join('\n> ')}\n\n`,
   );
 
+  const permissionMode = await resolveRunPermissionMode(projectRoot);
+
   void runQuery({
     projectRoot,
     feedbackId,
@@ -221,6 +226,7 @@ export async function runFollowUpTurn(feedbackId: string, content: string): Prom
     logPath,
     prompt: content,
     isInitial: false,
+    permissionMode,
     resume: rec.agentSessionId,
   });
 }
@@ -295,11 +301,27 @@ interface RunQueryOpts {
   logPath: string;
   prompt: string;
   isInitial: boolean;
+  permissionMode: PermissionMode;
   resume?: string;
 }
 
+/**
+ * Resolve the SDK permission mode for a run. Precedence:
+ *   `PINAGENT_AGENT_PERMISSION_MODE` env override > project settings
+ *   (`.pinagent/config.json` permissionMode) > default.
+ * The env override is kept so CI / power users can bypass the dock UI
+ * without editing the settings file.
+ */
+async function resolveRunPermissionMode(projectRoot: string): Promise<PermissionMode> {
+  if (process.env.PINAGENT_AGENT_PERMISSION_MODE) {
+    return resolvePermissionMode(process.env);
+  }
+  const settings = await new SettingsStore(projectRoot).read();
+  return toSdkPermissionMode(settings.permissionMode);
+}
+
 async function runQuery(opts: RunQueryOpts): Promise<void> {
-  const permissionMode = resolvePermissionMode(process.env);
+  const { permissionMode } = opts;
   const abort = new AbortController();
   activeRuns.set(opts.feedbackId, { abort });
 
@@ -1049,6 +1071,25 @@ export function resolvePermissionMode(env: NodeJS.ProcessEnv): PermissionMode {
     return v;
   }
   return 'acceptEdits';
+}
+
+/**
+ * Map the user-facing project setting (`auto` / `approve` / `dry-run` —
+ * the three options the dock's Settings route exposes) to the SDK's
+ * permission-mode value-space. The dock label for `auto` is
+ * "Auto-accept edits", so it maps to `acceptEdits`; `approve` keeps the
+ * SDK's default prompt-for-every-tool behaviour; `dry-run` maps to the
+ * SDK's `plan` mode, which lets the agent reason without running tools.
+ */
+export function toSdkPermissionMode(mode: ProjectPermissionMode): PermissionMode {
+  switch (mode) {
+    case 'auto':
+      return 'acceptEdits';
+    case 'approve':
+      return 'default';
+    case 'dry-run':
+      return 'plan';
+  }
 }
 
 function renderHeader(

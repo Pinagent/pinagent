@@ -18,6 +18,7 @@ export {
   runFollowUpTurn,
   type SpawnAgentMode,
   spawnAgent,
+  toSdkPermissionMode,
   type WorktreeDiff,
   type WorktreeStats,
 } from './agent';
