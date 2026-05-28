@@ -49,7 +49,9 @@ import {
   matchesPreset,
   useSavedFilters,
 } from '../hooks/useSavedFilters';
+import { useSettings } from '../hooks/useSettings';
 import { useUpdateConversation } from '../hooks/useUpdateConversation';
+import { type CostBadgeTone, formatCostBadge } from '../lib/cost';
 import { permissionModeDisplay } from '../lib/permissionMode';
 import { copyClaudeCommand, openInClaudeCode } from '../lib/vscode-bridge';
 import { EmptyState } from '../shell/states/EmptyState';
@@ -152,6 +154,12 @@ export function Conversations() {
     query: query.trim() || undefined,
     includeArchived: showArchived,
   });
+
+  // Settings is small + cached; reading it here lets the list-row cost
+  // chip color-shift as a conversation approaches its per-conversation
+  // cap. `undefined` while loading → chip falls back to "no cap" view.
+  const settingsQuery = useSettings();
+  const capUsd = settingsQuery.data?.perConversationCapUsd;
 
   const items = useMemo(() => {
     const data = conversationsQuery.data ?? [];
@@ -511,9 +519,7 @@ export function Conversations() {
                       <span className="text-[10px] tabular-nums">· {c.messageCount} msg</span>
                     )}
                     {c.totalCostUsd > 0 && (
-                      <span className="text-[10px] tabular-nums" title="Running SDK cost">
-                        · {formatRowCost(c.totalCostUsd)}
-                      </span>
+                      <CostChip cost={c.totalCostUsd} cap={capUsd} prefix="· " />
                     )}
                   </>
                 }
@@ -579,14 +585,54 @@ function safePath(url: string): string {
 }
 
 /**
- * Compact USD formatter for the list-row cost badge. Sub-cent amounts
- * show full precision (`$0.0023`) so a string of cheap turns still
- * surfaces a non-zero badge; ≥$0.01 trims to two decimals (`$0.12`).
- * Caller already gates on `> 0` so we never render `$0`.
+ * Running-cost chip used on both the list row and the detail header.
+ * Shows `$0.12 / $5.00` when the per-conversation cap is configured,
+ * `$0.12` otherwise. Color-shifts as spending approaches the cap so
+ * a long-running conversation surfaces the cliff *before* the next
+ * turn gets refused by `agent.ts.checkCostCaps`.
+ *
+ * Caller already gates rendering on `cost > 0` — we never render `$0`.
  */
-function formatRowCost(usd: number): string {
-  if (usd < 0.01) return `$${usd.toFixed(4)}`;
-  return `$${usd.toFixed(2)}`;
+function CostChip({
+  cost,
+  cap,
+  prefix = '',
+  size = 'sm',
+}: {
+  cost: number;
+  cap: number | null | undefined;
+  prefix?: string;
+  size?: 'sm' | 'md';
+}) {
+  const badge = formatCostBadge(cost, cap ?? undefined);
+  return (
+    <span
+      className={cn(
+        'tabular-nums',
+        size === 'sm' ? 'text-[10px]' : 'text-[10.5px]',
+        toneToClass(badge.tone),
+      )}
+      title={
+        cap
+          ? `Running SDK cost — per-conversation cap is ${formatCostBadge(cap, undefined).label}`
+          : 'Running SDK cost for this conversation'
+      }
+    >
+      {prefix}
+      {badge.label}
+    </span>
+  );
+}
+
+function toneToClass(tone: CostBadgeTone): string {
+  switch (tone) {
+    case 'over':
+      return 'text-status-error-fg font-medium';
+    case 'warn':
+      return 'text-status-awaiting-fg font-medium';
+    default:
+      return 'text-muted-foreground';
+  }
 }
 
 /**
@@ -959,6 +1005,8 @@ function DetailHeader({
   effectiveStatus: StatusKey;
 }) {
   const update = useUpdateConversation();
+  const settingsQuery = useSettings();
+  const capUsd = settingsQuery.data?.perConversationCapUsd;
   const [editingTitle, setEditingTitle] = useState(false);
   const [draftTitle, setDraftTitle] = useState(detail.title);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
@@ -1126,14 +1174,7 @@ function DetailHeader({
               </Badge>
             );
           })()}
-        {detail.totalCostUsd > 0 && (
-          <span
-            className="text-[10.5px] text-muted-foreground tabular-nums"
-            title="Running SDK cost for this conversation"
-          >
-            {formatRowCost(detail.totalCostUsd)}
-          </span>
-        )}
+        {detail.totalCostUsd > 0 && <CostChip cost={detail.totalCostUsd} cap={capUsd} size="md" />}
       </div>
     </div>
   );
