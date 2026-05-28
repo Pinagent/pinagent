@@ -53,6 +53,13 @@ import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
 import { OnboardingState } from '../shell/states/OnboardingState';
 import { type ConversationDetail, useTransport, type WorktreeStatePayload } from '../transport';
+import {
+  LIFECYCLE_TIMEOUT_MS,
+  type LifecycleError,
+  type LifecycleIntent,
+  lifecycleTimeoutState,
+  reduceLifecycleOnWorktreeState,
+} from './conversation-lifecycle';
 
 const STATUS_FILTERS: { label: string; status: StatusKey | 'all' }[] = [
   { label: 'All', status: 'all' },
@@ -584,11 +591,6 @@ type OptimisticItem =
   | { kind: 'user_message'; id: number; content: string; receivedAt: string }
   | { kind: 'ask_response'; id: number; askId: string; answer: string; receivedAt: string };
 
-type LifecycleIntent = { kind: 'land' | 'discard' | 'reopen'; sentAt: number } | null;
-type LifecycleError = { kind: 'land' | 'discard' | 'reopen'; message: string } | null;
-
-const LIFECYCLE_TIMEOUT_MS = 10_000;
-
 function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void }) {
   const transport = useTransport();
   const detailQuery = useConversation(id);
@@ -639,57 +641,40 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
     ]);
   };
 
-  // Watch worktree-state transitions to clear or fail any pending
-  // land/discard/reopen intent. Server broadcasts transient `landing` /
-  // `discarding` states first, then a terminal state (`landed` /
-  // `discarded` / `conflict`). Reopen has no transient state — the
-  // server emits the final `none` directly. We clear intent on any
-  // terminal state for our kind; on a conflict we additionally surface
-  // a lifecycle error.
+  // Watch worktree-state transitions and apply the reducer — decision
+  // logic lives in `reduceLifecycleOnWorktreeState` so it's testable
+  // without rendering.
   const worktreeState = stream.worktree?.state ?? null;
   useEffect(() => {
-    if (!intent) return;
-    if (intent.kind === 'land') {
-      if (worktreeState === 'landed') {
-        setIntent(null);
-        setLifecycleError(null);
-      } else if (worktreeState === 'conflict') {
-        setIntent(null);
-        const count = stream.worktree?.conflicts?.length ?? 0;
-        setLifecycleError({
-          kind: 'land',
-          message: `Land failed — ${count} file${count === 1 ? '' : 's'} in conflict.`,
-        });
-      }
-    } else if (intent.kind === 'discard' && worktreeState === 'discarded') {
-      setIntent(null);
-      setLifecycleError(null);
-    } else if (intent.kind === 'reopen' && worktreeState === 'none') {
-      setIntent(null);
-      setLifecycleError(null);
+    const next = reduceLifecycleOnWorktreeState(
+      intent,
+      worktreeState,
+      stream.worktree?.conflicts?.length ?? 0,
+    );
+    if (next) {
+      setIntent(next.intent);
+      setLifecycleError(next.error);
     }
   }, [intent, worktreeState, stream.worktree]);
 
-  // Timeout watchdog: if 10s elapse without a confirming transition,
-  // assume the request was lost and surface a Retry option.
+  // Timeout watchdog: if LIFECYCLE_TIMEOUT_MS elapse without a
+  // confirming transition, surface a Retry option. The fire-the-timeout
+  // decision lives in `lifecycleTimeoutState` (pure).
   useEffect(() => {
     if (!intent) return;
+    const fire = (): void => {
+      const fired = lifecycleTimeoutState(intent, Date.now());
+      if (fired) {
+        setIntent(fired.intent);
+        setLifecycleError(fired.error);
+      }
+    };
     const remaining = LIFECYCLE_TIMEOUT_MS - (Date.now() - intent.sentAt);
     if (remaining <= 0) {
-      setLifecycleError({
-        kind: intent.kind,
-        message: `No response from the dev-server within ${LIFECYCLE_TIMEOUT_MS / 1000}s.`,
-      });
-      setIntent(null);
+      fire();
       return;
     }
-    const handle = setTimeout(() => {
-      setLifecycleError({
-        kind: intent.kind,
-        message: `No response from the dev-server within ${LIFECYCLE_TIMEOUT_MS / 1000}s.`,
-      });
-      setIntent(null);
-    }, remaining);
+    const handle = setTimeout(fire, remaining);
     return () => clearTimeout(handle);
   }, [intent]);
 
