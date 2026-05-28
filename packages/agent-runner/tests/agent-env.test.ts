@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resolveAgentMode, resolvePermissionMode } from '../src/agent';
+import { resolveAgentMode, resolvePermissionMode, toSdkPermissionMode } from '../src/agent';
 
 /**
  * Helper to call the resolver with a stubbed env. The resolver takes
@@ -64,5 +64,19 @@ describe('resolvePermissionMode', () => {
     expect(resolvePermissionMode(permEnv('rude'))).toBe('acceptEdits');
     expect(resolvePermissionMode(permEnv('YOLO'))).toBe('acceptEdits');
     expect(resolvePermissionMode(permEnv(''))).toBe('acceptEdits');
+  });
+});
+
+describe('toSdkPermissionMode', () => {
+  it('maps "auto" (dock label: Auto-accept edits) to acceptEdits', () => {
+    expect(toSdkPermissionMode('auto')).toBe('acceptEdits');
+  });
+
+  it('maps "approve" (dock label: Require approval) to the SDK default', () => {
+    expect(toSdkPermissionMode('approve')).toBe('default');
+  });
+
+  it('maps "dry-run" (dock label: Dry-run only) to plan mode', () => {
+    expect(toSdkPermissionMode('dry-run')).toBe('plan');
   });
 });

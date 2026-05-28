@@ -353,6 +353,87 @@ describe('spawnAgent', () => {
       readFile(join(PROJECT_ROOT, '.pinagent', 'logs', `${id}.md`), 'utf8'),
     ).rejects.toThrow();
   });
+
+  describe('permissionMode plumbing (settings → SDK)', () => {
+    // Each test mutates the shared SettingsStore + env var; restore both
+    // afterwards so later tests run against the unset/default baseline.
+    let store: InstanceType<typeof import('../src/settings-store').SettingsStore>;
+    let priorEnv: string | undefined;
+    let restoreSettings: (() => Promise<void>) | null = null;
+
+    beforeEach(async () => {
+      const settingsMod = await import('../src/settings-store');
+      store = new settingsMod.SettingsStore(PROJECT_ROOT);
+      priorEnv = process.env.PINAGENT_AGENT_PERMISSION_MODE;
+      delete process.env.PINAGENT_AGENT_PERMISSION_MODE;
+    });
+
+    afterEach(async () => {
+      if (priorEnv === undefined) delete process.env.PINAGENT_AGENT_PERMISSION_MODE;
+      else process.env.PINAGENT_AGENT_PERMISSION_MODE = priorEnv;
+      if (restoreSettings) {
+        await restoreSettings();
+        restoreSettings = null;
+      }
+    });
+
+    it.each([
+      ['auto', 'acceptEdits'],
+      ['approve', 'default'],
+      ['dry-run', 'plan'],
+    ] as const)('persists settings.permissionMode=%s and the SDK call sees %s', async (saved, expected) => {
+      await store.patch({ permissionMode: saved });
+      restoreSettings = () => store.patch({ permissionMode: 'auto' }).then(() => undefined);
+
+      const { id, storage } = await makeFeedback();
+      const rec = await storage.read(id);
+      const captured = scriptQuery([
+        {
+          type: 'result',
+          subtype: 'success',
+          num_turns: 0,
+          usage: { input_tokens: 0, output_tokens: 0 },
+          total_cost_usd: 0,
+          duration_ms: 0,
+        } as never,
+      ]);
+
+      const done = collectUntil(id, (e) => e.type === 'result');
+      await agent.spawnAgent({ projectRoot: PROJECT_ROOT, feedback: rec!, mode: 'inline' });
+      await done;
+      await waitForRunIdle(id);
+
+      expect(captured.capturedParams?.options?.permissionMode).toBe(expected);
+    });
+
+    it('env override wins over the saved setting', async () => {
+      // Setting says "approve" (→ default), but the env explicitly
+      // overrides with "bypassPermissions" — env should win.
+      await store.patch({ permissionMode: 'approve' });
+      restoreSettings = () => store.patch({ permissionMode: 'auto' }).then(() => undefined);
+      process.env.PINAGENT_AGENT_PERMISSION_MODE = 'bypassPermissions';
+
+      const { id, storage } = await makeFeedback();
+      const rec = await storage.read(id);
+      const captured = scriptQuery([
+        {
+          type: 'result',
+          subtype: 'success',
+          num_turns: 0,
+          usage: { input_tokens: 0, output_tokens: 0 },
+          total_cost_usd: 0,
+          duration_ms: 0,
+        } as never,
+      ]);
+
+      const done = collectUntil(id, (e) => e.type === 'result');
+      await agent.spawnAgent({ projectRoot: PROJECT_ROOT, feedback: rec!, mode: 'inline' });
+      await done;
+      await waitForRunIdle(id);
+
+      expect(captured.capturedParams?.options?.permissionMode).toBe('bypassPermissions');
+    });
+  });
 });
 
 describe('runFollowUpTurn', () => {
