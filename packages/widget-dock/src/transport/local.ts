@@ -12,6 +12,8 @@
  * returns FeedbackRecord[]".
  */
 import {
+  type AgentEvent,
+  AgentEventSchema,
   AuditEventSchema,
   ChangeDiffSchema,
   DockProjectSettingsSchema,
@@ -135,6 +137,10 @@ const FeedbackRecordSchema = z
     // built against an older server still parses.
     title: z.string().nullable().default(null),
     archived: z.boolean().default(false),
+    // Per-row transcript depth. Server batches this in one query in
+    // `Storage.list`. Default 0 so a dock built against an older server
+    // (before this projection landed) still parses cleanly.
+    messageCount: z.number().int().nonnegative().default(0),
     createdAt: z.string(),
     updatedAt: z.string(),
   })
@@ -232,9 +238,7 @@ function toConversation(rec: FeedbackRecord): Conversation {
     // Without a separate "latest agent message" query, the human's
     // original comment is the best preview we have for the list row.
     lastMessage: commentToTitle(rec.comment),
-    // The list endpoint doesn't return per-row message counts; PR-C
-    // adds a detail-level read. List view hides count when 0.
-    messageCount: 0,
+    messageCount: rec.messageCount,
   };
 }
 
@@ -364,6 +368,22 @@ export class LocalTransport implements DockTransport {
       comment: rec.comment,
       screenshot: rec.screenshot ?? null,
     };
+  }
+
+  async getConversationMessages(id: string): Promise<AgentEvent[]> {
+    const response = await fetch(
+      this.url(`/__pinagent/feedback/${encodeURIComponent(id)}/messages`),
+      { headers: { Accept: 'application/json' } },
+    );
+    // Unknown id → []; matches the route handler, which 404s on missing
+    // record, vs. returning {messages: []}. Either way the caller wants
+    // an empty transcript, not an error.
+    if (response.status === 404) return [];
+    if (!response.ok) {
+      throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
+    }
+    const body = z.object({ messages: z.array(AgentEventSchema) }).parse(await response.json());
+    return body.messages;
   }
 
   subscribeProject(listener: (event: ProjectEvent) => void): () => void {

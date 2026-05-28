@@ -6,7 +6,7 @@
  *
  * Enabled via `?fixtures=on` in the URL; see App.tsx for the gate.
  */
-import type { ProjectEvent } from '@pinagent/shared';
+import type { AgentEvent, ProjectEvent } from '@pinagent/shared';
 import {
   type Branch,
   type Change,
@@ -213,6 +213,14 @@ export class MockTransport implements DockTransport {
       comment: c.title,
       screenshot: null,
     };
+  }
+
+  async getConversationMessages(_id: string): Promise<AgentEvent[]> {
+    // No fixture transcript stream; consumers branch on transport.kind
+    // when they need to render a "fixtures, no live stream" placeholder.
+    // Matches the no-op `subscribeConversation` above.
+    await sleep(SIMULATED_LATENCY_MS);
+    return [];
   }
 
   // No real WS in mock mode — these methods report a stable "idle" status

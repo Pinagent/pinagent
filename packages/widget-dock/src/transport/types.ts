@@ -19,7 +19,7 @@
  * Methods are intentionally narrow: every dock view talks through one
  * of these, never `fetch` or `new WebSocket()` directly.
  */
-import type { ProjectEvent } from '@pinagent/shared';
+import type { AgentEvent, ProjectEvent } from '@pinagent/shared';
 import type { Branch, Change, Conversation, PullRequest } from '../fixtures/types';
 import type { ConnectionStatus, ConversationHandlers } from './ws-client';
 
@@ -83,6 +83,16 @@ export interface DockTransport {
 
   /** Fetch the full detail for one conversation; null if not found. */
   getConversation(id: string): Promise<ConversationDetail | null>;
+
+  /**
+   * Full persisted transcript for one conversation, in order. Reads
+   * from the server's append-only `messages` table without opening a
+   * WebSocket — separate from `subscribeConversation`, which combines
+   * replay + live events. Useful for cold loads (faster initial paint),
+   * for surfaces where a WS isn't appropriate (CLI, export), and as a
+   * fallback when the live socket is down. Returns [] for unknown ids.
+   */
+  getConversationMessages(id: string): Promise<AgentEvent[]>;
 
   /**
    * List per-conversation diff data for the Changes view: which

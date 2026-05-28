@@ -166,3 +166,36 @@ describe('GET /__pinagent/settings — permissionModeOverride', () => {
     expect(body.permissionModeOverride).toBe('acceptEdits');
   });
 });
+
+describe('GET /__pinagent/feedback/:id/messages', () => {
+  it('returns 400 for an invalid id', async () => {
+    const res = await fetch(`${base}/__pinagent/feedback/!/messages`);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 for an unknown but well-formed id', async () => {
+    const res = await fetch(`${base}/__pinagent/feedback/aBcDeFgHiJ/messages`);
+    expect(res.status).toBe(404);
+  });
+
+  it('returns { messages: [] } for a fresh conversation with no published events', async () => {
+    const post = await fetch(`${base}/__pinagent/feedback`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(validFeedbackPayload({ comment: 'no-events' })),
+    });
+    const { id } = (await post.json()) as { id: string };
+
+    const res = await fetch(`${base}/__pinagent/feedback/${id}/messages`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { messages: unknown[] };
+    expect(body.messages).toEqual([]);
+
+    // Cleanup so seeded row doesn't pollute later assertions.
+    await fetch(`${base}/__pinagent/feedback/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'wontfix' }),
+    });
+  });
+});

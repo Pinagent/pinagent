@@ -3,11 +3,30 @@ import { Buffer } from 'node:buffer';
 import { createReadStream, existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
-import { asc, conversations, eq, widgetAnchors } from '@pinagent/db';
+import {
+  and,
+  asc,
+  conversations,
+  count,
+  eq,
+  messages,
+  notInArray,
+  widgetAnchors,
+} from '@pinagent/db';
+import type { AgentEvent } from '@pinagent/shared';
 import { z } from 'zod';
 import { recordAuditEvent } from './audit-log';
 import { type Db, getDb } from './db/client';
 import { emitProjectChange } from './project-events';
+
+/**
+ * Bus event roles that shouldn't count toward "transcript depth". The
+ * `__finished` sentinel comes from `bus.ts` and isn't a real event;
+ * `init` and `result` are agent-run bookkeeping the user-facing badge
+ * shouldn't include. Anything else (text / tool_use / tool_result /
+ * ask_user / error / user / ask_response) counts.
+ */
+const NON_MESSAGE_ROLES: string[] = ['__finished', 'init', 'result'];
 
 export const ID_RE = /^[A-Za-z0-9_-]{8,16}$/;
 
@@ -79,6 +98,13 @@ export interface FeedbackRecord {
   /** When the row was last mutated. Echoed for TTL-sweep computations. */
   updatedAt: string;
   resolvedAt: string | null;
+  /**
+   * Number of agent/user transcript events recorded for this
+   * conversation, excluding bookkeeping (init / result / `__finished`
+   * sentinel). Drives the dock's `· N msg` list badge. 0 for freshly
+   * created rows before the agent has emitted anything.
+   */
+  messageCount: number;
 }
 
 export const PatchSchema = z.object({
@@ -247,6 +273,8 @@ export class Storage {
       createdAt: input.createdAt,
       updatedAt: input.createdAt,
       resolvedAt: null,
+      // Freshly created — no transcript yet.
+      messageCount: 0,
     };
     // Notify project subscribers (the dock) that the conversation list
     // changed. Best-effort — emit failures shouldn't break the write.
@@ -271,7 +299,16 @@ export class Storage {
       .from(conversations)
       .leftJoin(widgetAnchors, eq(conversations.id, widgetAnchors.conversationId))
       .orderBy(asc(conversations.createdAt));
-    return rows.map((r) => rowToRecord(r));
+    // One batched count for all conversations rather than N+1
+    // per-row queries. SQLite handles this in a few ms even on
+    // long-lived projects.
+    const counts = await db
+      .select({ id: messages.conversationId, n: count() })
+      .from(messages)
+      .where(notInArray(messages.role, NON_MESSAGE_ROLES))
+      .groupBy(messages.conversationId);
+    const countByConvId = new Map(counts.map((c) => [c.id, c.n]));
+    return rows.map((r) => rowToRecord(r, countByConvId.get(r.conversations.id) ?? 0));
   }
 
   async read(id: string): Promise<FeedbackRecord | null> {
@@ -286,7 +323,35 @@ export class Storage {
       .limit(1);
     const row = rows[0];
     if (!row) return null;
-    return rowToRecord(row);
+    // `count()` always returns one row; the `?? 0` guards the
+    // noUncheckedIndexedAccess case for the array-indexed lookup.
+    const countRows = await db
+      .select({ n: count() })
+      .from(messages)
+      .where(and(eq(messages.conversationId, id), notInArray(messages.role, NON_MESSAGE_ROLES)));
+    return rowToRecord(row, countRows[0]?.n ?? 0);
+  }
+
+  /**
+   * Full transcript for one conversation, in insertion order. Returns
+   * the raw `AgentEvent` payloads as they were appended to the bus,
+   * skipping the `__finished` sentinel (which is internal bookkeeping,
+   * not an event subscribers should see). Backs the HTTP transcript
+   * endpoint that external clients (CLI, hosted dock) read.
+   *
+   * Returns [] for unknown ids — matches `read()`'s "no error on
+   * missing row" contract; the route handler distinguishes via `read`.
+   */
+  async listMessages(id: string): Promise<AgentEvent[]> {
+    if (!ID_RE.test(id)) return [];
+    await this.maybeImportLegacy();
+    const db = this.db();
+    const rows = await db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.conversationId, id), notInArray(messages.role, ['__finished'])))
+      .orderBy(asc(messages.id));
+    return rows.map((r) => r.content as unknown as AgentEvent);
   }
 
   async readScreenshotBase64(rec: FeedbackRecord): Promise<string | null> {
@@ -364,10 +429,13 @@ function parseDate(iso: string): Date {
   return d;
 }
 
-function rowToRecord(row: {
-  conversations: typeof conversations.$inferSelect;
-  widget_anchors: typeof widgetAnchors.$inferSelect | null;
-}): FeedbackRecord {
+function rowToRecord(
+  row: {
+    conversations: typeof conversations.$inferSelect;
+    widget_anchors: typeof widgetAnchors.$inferSelect | null;
+  },
+  messageCount: number,
+): FeedbackRecord {
   const c = row.conversations;
   const a = row.widget_anchors;
   return {
@@ -394,6 +462,7 @@ function rowToRecord(row: {
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
     resolvedAt: c.resolvedAt ? c.resolvedAt.toISOString() : null,
+    messageCount,
   };
 }
 
