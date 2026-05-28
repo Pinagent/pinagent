@@ -153,6 +153,15 @@ export interface DockTransport {
   sendUserMessage(id: string, content: string): void;
 
   /**
+   * Abort the in-flight SDK turn for `id`. Server-side this aborts the
+   * SDK loop's AbortController (see `agent.ts.interruptRun`) and emits
+   * an `error` event on the bus so subscribers update. No-op if no turn
+   * is actually running — the dock should still gate the UI on the
+   * derived `turnRunning` state to avoid surprises.
+   */
+  sendInterrupt(id: string): void;
+
+  /**
    * Answer a specific `ask_user` tool call. Correlated by `askId` so the
    * agent's awaiting Promise resolves with the right answer even if the
    * user sent unrelated messages in between.
