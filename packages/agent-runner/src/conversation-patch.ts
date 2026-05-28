@@ -32,6 +32,16 @@ export const BulkUpdateBodySchema = z.object({
 });
 export type BulkUpdateBody = z.infer<typeof BulkUpdateBodySchema>;
 
+/**
+ * Wire body for `POST /__pinagent/feedback/bulk-reopen`. Same id cap
+ * as bulk-update — the bulk reopen iterates per-row and is bounded by
+ * the same back-pressure considerations.
+ */
+export const BulkReopenBodySchema = z.object({
+  feedbackIds: z.array(z.string().regex(ID_RE)).min(1).max(200),
+});
+export type BulkReopenBody = z.infer<typeof BulkReopenBodySchema>;
+
 export interface ApplyPatchResult {
   /** Updated record, or null when the id didn't exist. */
   record: FeedbackRecord | null;

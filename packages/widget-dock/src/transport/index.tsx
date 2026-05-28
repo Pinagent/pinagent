@@ -40,6 +40,7 @@ export type {
   AuditEvent,
   BulkArchiveResult,
   BulkPruneResult,
+  BulkReopenResult,
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,

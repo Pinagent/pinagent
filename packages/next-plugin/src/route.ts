@@ -10,6 +10,7 @@ import {
   applyBulkArchive,
   applyConversationPatch,
   BulkPruneBodySchema,
+  BulkReopenBodySchema,
   BulkUpdateBodySchema,
   ComposeOptsSchema,
   composePullRequest,
@@ -27,6 +28,7 @@ import {
   pruneBranch,
   pruneBranches,
   pruneStaleBranches,
+  reopenConversations,
   resolveAgentMode,
   SecretsStore,
   SettingsStore,
@@ -324,6 +326,18 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
       parsed.data.ids,
       parsed.data.patch.archived,
     );
+    return json(200, result);
+  }
+
+  // /__pinagent/feedback/bulk-reopen — multi-row re-open of resolved
+  // conversations from the History view's multi-select. Mirror of
+  // vite-plugin handler; see it for shape + audit semantics.
+  if (slug.length === 2 && slug[0] === 'feedback' && slug[1] === 'bulk-reopen') {
+    const raw = await readJsonBody(req);
+    const parsed = BulkReopenBodySchema.safeParse(raw);
+    if (!parsed.success) return json(400, { error: parsed.error.message });
+    const storage = getStorage();
+    const result = await reopenConversations(storage.root, parsed.data.feedbackIds);
     return json(200, result);
   }
 

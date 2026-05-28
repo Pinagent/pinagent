@@ -767,6 +767,52 @@ export async function reopenConversation(
   return { ok: true };
 }
 
+export interface BulkReopenResult {
+  /** Conversation ids that flipped back to pending/none. */
+  reopened: string[];
+  /** Ids the storage layer couldn't reopen (not landed/discarded, missing, etc). */
+  failed: { feedbackId: string; error: string }[];
+}
+
+/**
+ * Bulk re-open a batch of resolved conversations from the History
+ * view's multi-select. Each id goes through the existing per-row
+ * `reopenConversation` so the worktree-state flip + per-row
+ * `conversation_reopened` audit emission stay intact; this function
+ * adds ONE summary `conversations_bulk_reopened` event covering the
+ * batch.
+ */
+export async function reopenConversations(
+  projectRoot: string,
+  feedbackIds: string[],
+): Promise<BulkReopenResult> {
+  const reopened: string[] = [];
+  const failed: { feedbackId: string; error: string }[] = [];
+
+  for (const id of feedbackIds) {
+    const logPath = join(projectRoot, '.pinagent', 'logs', `${id}.md`);
+    await mkdir(join(projectRoot, '.pinagent', 'logs'), { recursive: true });
+    try {
+      const result = await reopenConversation(projectRoot, id, logPath);
+      if (result.ok) reopened.push(id);
+      else failed.push({ feedbackId: id, error: result.error });
+    } catch (e) {
+      failed.push({ feedbackId: id, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  if (reopened.length > 0) {
+    await recordAuditEvent(projectRoot, {
+      conversationId: null,
+      actor: 'user',
+      action: 'conversations_bulk_reopened',
+      payload: { ids: reopened, count: reopened.length },
+    });
+  }
+
+  return { reopened, failed };
+}
+
 /**
  * Throw away the worktree and its branch without merging. Idempotent —
  * tolerates a missing worktree or branch (the user may have cleaned

@@ -11,6 +11,7 @@ import {
   applyBulkArchive,
   applyConversationPatch,
   BulkPruneBodySchema,
+  BulkReopenBodySchema,
   BulkUpdateBodySchema,
   ComposeOptsSchema,
   composePullRequest,
@@ -28,6 +29,7 @@ import {
   pruneBranch,
   pruneBranches,
   pruneStaleBranches,
+  reopenConversations,
   SecretsStore,
   SettingsStore,
   type SpawnAgentMode,
@@ -403,6 +405,18 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
           parsed.data.ids,
           parsed.data.patch.archived,
         );
+        return json(res, 200, result);
+      }
+
+      // POST /__pinagent/feedback/bulk-reopen — multi-row reopen of
+      // landed/discarded conversations from the History view.
+      // Returns { reopened, failed }; emits one
+      // `conversations_bulk_reopened` audit event per call.
+      if (req.method === 'POST' && url === '/__pinagent/feedback/bulk-reopen') {
+        const raw = await readJsonBody(req);
+        const parsed = BulkReopenBodySchema.safeParse(raw);
+        if (!parsed.success) return badRequest(res, parsed.error.message);
+        const result = await reopenConversations(storage.root, parsed.data.feedbackIds);
         return json(res, 200, result);
       }
 

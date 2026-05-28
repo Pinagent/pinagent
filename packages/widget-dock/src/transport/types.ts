@@ -242,6 +242,15 @@ export interface DockTransport {
    */
   bulkPruneBranches(feedbackIds: string[]): Promise<BulkPruneResult>;
 
+  /**
+   * Bulk re-open a hand-picked batch of resolved conversations from
+   * the History view's multi-select. Returns `{ reopened, failed }`;
+   * the server emits a single `conversations_bulk_reopened` audit
+   * event covering the batch (per-row `conversation_reopened` events
+   * still fire from `reopenConversation`).
+   */
+  bulkReopenConversations(feedbackIds: string[]): Promise<BulkReopenResult>;
+
   // ---------- History (Phase 6) ----------
 
   /**
@@ -298,6 +307,11 @@ export interface PruneStaleResult {
 
 export interface BulkPruneResult {
   pruned: string[];
+  failed: { feedbackId: string; error: string }[];
+}
+
+export interface BulkReopenResult {
+  reopened: string[];
   failed: { feedbackId: string; error: string }[];
 }
 
