@@ -130,20 +130,3 @@ export interface ProjectSettings {
   monthlyBudgetUsd: number | null;
   permissionMode: 'auto' | 'approve' | 'dry-run';
 }
-
-/** A recent project-wide event for the Overview activity feed. */
-export interface ActivityEvent {
-  id: string;
-  type:
-    | 'conversation_created'
-    | 'conversation_updated'
-    | 'conversation_landed'
-    | 'pr_created'
-    | 'pr_merged'
-    | 'worktree_pruned';
-  conversationId?: string;
-  conversationTitle?: string;
-  prNumber?: number;
-  branch?: string;
-  at: string;
-}
