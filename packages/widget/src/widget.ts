@@ -1542,6 +1542,19 @@ export function mount(): void {
       },
       { capture: true },
     );
+
+    // The dock iframe forwards the pick hotkey here when it has focus:
+    // keystrokes inside the iframe never reach this page's keydown
+    // listener above, so the dock relays a message instead. Mirror of
+    // the host→dock `toggle-dock` bridge, in the other direction. See
+    // widget-dock/src/shell/useKeyboardShortcuts.ts.
+    window.addEventListener('message', (e) => {
+      const data = e.data as { source?: string; type?: string } | null;
+      if (!data || typeof data !== 'object') return;
+      if (data.source !== 'pinagent-dock' || data.type !== 'enter-picker') return;
+      if (state.mode === 'picking') exitPicking();
+      else enterPicking();
+    });
   }
 
   document.addEventListener(

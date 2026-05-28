@@ -73,12 +73,14 @@ export function DockShell() {
   const disconnected = forcedDisconnected || httpDown || wsDown;
 
   // Cmd+Shift+P toggle (also from host page via postMessage), g c / g h
-  // / g s nav chord, / focuses the active search input. Esc-to-close
-  // stays in useDockMode (panel mode only).
+  // / g s nav chord, / focuses the active search input, and (when
+  // embedded) c forwards to the host to open the widget picker.
+  // Esc-to-close stays in useDockMode (panel mode only).
   useKeyboardShortcuts({
     onToggle: dock.toggle,
     open: () => dock.setOpen(true),
     isOpen: dock.open,
+    embedded,
   });
 
   const expandedNav = dock.mode !== 'panel';

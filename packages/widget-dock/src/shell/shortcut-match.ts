@@ -18,6 +18,13 @@ export type ShortcutAction =
   | { type: 'navigate'; to: '/conversations' | '/history' | '/settings' }
   /** / — focus the active route's search input. */
   | { type: 'focus-search' }
+  /**
+   * The widget's pick hotkey (default `c`) was pressed while focus was
+   * inside the dock iframe. The host's keydown listeners — including the
+   * widget's own — never see it, so the hook forwards this to the host
+   * page, which opens the element picker. See `useKeyboardShortcuts.ts`.
+   */
+  | { type: 'enter-picker' }
   /** Initial `g` press — start the chord window. */
   | { type: 'start-g-chord' }
   /** Second key after `g` didn't match — drop the chord. */
@@ -39,6 +46,14 @@ export interface ShortcutMatchInput {
   pendingG: boolean;
   /** True when the dock surface is open — gates `/` (no input to focus when closed). */
   isOpen: boolean;
+  /**
+   * The widget's pick hotkey (lowercased), or null/undefined to disable
+   * forwarding. Only set when the dock is embedded in a host iframe: a
+   * standalone press of this key returns `enter-picker` so the hook can
+   * relay it to the host. Null in the standalone dev preview, where the
+   * widget shares the document and handles the hotkey directly.
+   */
+  pickerHotkey?: string | null;
 }
 
 export function matchKeyboardShortcut(
@@ -69,6 +84,14 @@ export function matchKeyboardShortcut(
   }
 
   if (e.key === 'g') return { type: 'start-g-chord' };
+
+  // The widget's pick hotkey, forwarded to the host. Checked after the
+  // g-chord branch above so `g c` still navigates rather than picking.
+  // No `isOpen` gate: the picker should open whether the dock panel is
+  // expanded or the user is just focused on the closed FAB.
+  if (state.pickerHotkey && e.key.toLowerCase() === state.pickerHotkey) {
+    return { type: 'enter-picker' };
+  }
 
   // `/` focuses the active route's search input. Only meaningful when
   // the dock is open and a search input is mounted (the caller decides
