@@ -63,9 +63,11 @@ export interface Change {
    */
   externallyModified: boolean;
   /**
-   * Truncated diff preview for the row. PR-D3 wires the inline diff
-   * renderer; for now this stays empty on real data and is just
-   * populated in fixtures for the design demo.
+   * One-line diff preview rendered under the stats — the first `+`/`-`
+   * line from the worktree's diff against base, truncated. Populated
+   * server-side by `listChanges` (see `agent.ts.computeWorktreePreview`);
+   * fixtures supply hand-crafted multi-line values that the `truncate`
+   * CSS reduces to the first line for the design demo.
    */
   preview: string;
   updatedAt: string;

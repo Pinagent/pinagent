@@ -910,6 +910,45 @@ export async function computeWorktreeStats(
   return parseShortStat(line);
 }
 
+/**
+ * One-line preview of the first changed hunk for a worktree. Drives
+ * the dock's Changes list row, which renders this as a truncated
+ * monospace line under the stats. Returns '' for worktrees with no
+ * changes (or only binary/rename-only diffs that don't have a
+ * `+`/`-` content line to surface).
+ */
+const PREVIEW_MAX_CHARS = 140;
+export async function computeWorktreePreview(
+  worktreePath: string,
+  baseRef: string,
+): Promise<string> {
+  if (!existsSync(worktreePath)) return '';
+  const mb = await runGitCapture(worktreePath, ['merge-base', baseRef, 'HEAD']);
+  const compareTo = mb.code === 0 ? mb.stdout.trim() : baseRef;
+  // `--unified=0` strips context lines so the first content line we see
+  // is an actual change. Capped via `--stat-count` equivalents — we don't
+  // need the whole diff, just enough to find the first `+`/`-` line.
+  // `git diff` doesn't have a head-style flag, so we rely on the early
+  // return below to stop scanning once we have a hit.
+  const result = await runGitCapture(worktreePath, [
+    'diff',
+    '--no-color',
+    '--unified=0',
+    compareTo,
+  ]);
+  if (result.code !== 0) return '';
+  for (const line of result.stdout.split('\n')) {
+    // Skip diff headers (--- a/x, +++ b/x) and metadata. Real content
+    // lines are exactly one `+` or `-` followed by the source.
+    if (line.startsWith('+++') || line.startsWith('---')) continue;
+    if (!line.startsWith('+') && !line.startsWith('-')) continue;
+    const trimmed =
+      line.length > PREVIEW_MAX_CHARS ? `${line.slice(0, PREVIEW_MAX_CHARS - 1)}…` : line;
+    return trimmed;
+  }
+  return '';
+}
+
 export interface WorktreeDiff {
   /** Unified diff text. Possibly truncated — see `truncated`. */
   diff: string;

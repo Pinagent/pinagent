@@ -11,7 +11,12 @@
  * vite-plugin and next-plugin call into the same logic — they only
  * differ in how the returned data is serialized to the wire.
  */
-import { computeWorktreeDiff, computeWorktreeStats, type WorktreeDiff } from './agent';
+import {
+  computeWorktreeDiff,
+  computeWorktreePreview,
+  computeWorktreeStats,
+  type WorktreeDiff,
+} from './agent';
 import { runGitCapture } from './git-utils';
 import { Storage } from './storage';
 
@@ -41,6 +46,14 @@ export interface ChangeRecord {
    * conversation's record before they Land or Discard.
    */
   externallyModified: boolean;
+  /**
+   * One-line diff preview for the row — the first `+`/`-` line from
+   * the worktree's diff against base, truncated. Empty when the
+   * worktree has no changes, has only renames/binary diffs, or is a
+   * landed worktree (gone from disk). Drives the truncated monospace
+   * line under the stats on the Changes view.
+   */
+  preview: string;
   updatedAt: string;
 }
 
@@ -100,6 +113,10 @@ export async function listChanges(projectRoot: string): Promise<ChangeRecord[]> 
       const externallyModified = isActive
         ? (await countExternalCommits(rec.worktreePath, baseRef)) > 0
         : false;
+      // Preview comes from the same `git diff` family of calls the
+      // stats use, so this only matters for active worktrees — landed
+      // ones don't have an inspectable on-disk diff anymore.
+      const preview = isActive ? await computeWorktreePreview(rec.worktreePath, baseRef) : '';
       return {
         id: rec.id,
         conversationId: rec.id,
@@ -115,6 +132,7 @@ export async function listChanges(projectRoot: string): Promise<ChangeRecord[]> 
         additions: stats.additions,
         deletions: stats.deletions,
         externallyModified,
+        preview,
         updatedAt: rec.updatedAt,
       };
     }),
