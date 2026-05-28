@@ -12,6 +12,7 @@ import {
   recordEvent,
   recordUserMessage,
 } from './db/writes';
+import { type QuickAction, quickActionsFor } from './quick-actions';
 import { capturePageScreenshot } from './screenshot';
 import {
   breadcrumbTags,
@@ -46,58 +47,16 @@ const MAX_TA_H = 240;
  * Composer header shape. Built once when the user picks an element
  * and passed straight into composerHTML; tag/label/breadcrumbs come
  * from the live DOM, `loc` is from data-pa-loc (may be null in
- * unstrumented apps).
+ * unstrumented apps). `chips` is the element-aware quick-action set
+ * — see quick-actions.ts.
  */
 interface ComposerMeta {
   tag: string;
   label: string | null;
   loc: PaLoc | null;
   breadcrumbs: string[];
+  chips: QuickAction[];
 }
-
-/**
- * Quick-action chips below the header. Clicking a chip drops the
- * `prompt` into the textarea, focuses it, and places the cursor at
- * the end so the user can finish the sentence ("Change the text to:
- * Submit"). The list is deliberately small — these are the changes
- * we expect most often; anything else, the user types from scratch.
- */
-interface QuickAction {
-  label: string;
-  icon: string;
-  prompt: string;
-}
-
-const QA_ICON_ATTRS =
-  'class="qa-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
-
-const QUICK_ACTIONS: ReadonlyArray<QuickAction> = [
-  {
-    label: 'Change text',
-    icon: `<svg ${QA_ICON_ATTRS}><path d="M4 20l6-14 6 14"/><path d="M7 13h6"/></svg>`,
-    prompt: 'Change the text to: ',
-  },
-  {
-    label: 'Recolor',
-    icon: `<svg ${QA_ICON_ATTRS}><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.12-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.66h1.99c3.05 0 5.56-2.5 5.56-5.55C21.97 6.01 17.46 2 12 2Z"/></svg>`,
-    prompt: 'Recolor this to ',
-  },
-  {
-    label: 'Add hover state',
-    icon: `<svg ${QA_ICON_ATTRS}><path d="M12 3l1.9 5.7L19.5 11l-5.6 1.9L12 18.5l-1.9-5.6L4.5 11l5.7-1.9L12 3z"/><path d="M19 3v3"/><path d="M5 17v3"/><path d="M17.5 4.5h3"/><path d="M3.5 18.5h3"/></svg>`,
-    prompt: 'Add a hover state that ',
-  },
-  {
-    label: 'Resize',
-    icon: `<svg ${QA_ICON_ATTRS}><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`,
-    prompt: 'Resize this element to ',
-  },
-  {
-    label: 'Make it a link',
-    icon: `<svg ${QA_ICON_ATTRS}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
-    prompt: 'Make this a link to ',
-  },
-];
 
 const ICON_CODE = `<svg class="hdr-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`;
 
@@ -847,6 +806,7 @@ export function mount(): void {
       label: describeElementLabel(target),
       loc,
       breadcrumbs: breadcrumbTags(target),
+      chips: quickActionsFor(target),
     };
     const dataPaLoc = loc ? `${loc.file}:${loc.line}:${loc.col}` : null;
 
@@ -2155,7 +2115,7 @@ function composerHTML(meta: ComposerMeta): string {
     ${renderHeader(meta, esc)}
 
     <div class="pane" id="pa-composer-pane">
-      ${renderQuickActions(esc)}
+      ${renderQuickActions(meta.chips, esc)}
       <textarea id="pa-ta" placeholder="Describe the change you want…"></textarea>
       <div class="row spread footer-row">
         <span class="kbd-hint"><kbd>⌘↵</kbd> submit · <kbd>esc</kbd> cancel</span>
@@ -2232,13 +2192,15 @@ function renderHeader(meta: ComposerMeta, esc: (s: string) => string): string {
   return `<div class="header-block">${identity}${fileRow}${breadcrumb}</div>`;
 }
 
-function renderQuickActions(esc: (s: string) => string): string {
+function renderQuickActions(chips: ReadonlyArray<QuickAction>, esc: (s: string) => string): string {
   return (
     `<div class="qa-chips">` +
-    QUICK_ACTIONS.map(
-      (a) =>
-        `<button class="qa-chip" type="button" data-prompt="${esc(a.prompt)}">${a.icon}<span>${esc(a.label)}</span></button>`,
-    ).join('') +
+    chips
+      .map(
+        (a) =>
+          `<button class="qa-chip" type="button" data-prompt="${esc(a.prompt)}">${a.icon}<span>${esc(a.label)}</span></button>`,
+      )
+      .join('') +
     `</div>`
   );
 }
