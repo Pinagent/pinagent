@@ -45,7 +45,12 @@ import type {
   PresentableConnections,
   PruneStaleResult,
 } from './types';
-import { type ConnectionStatus, type ConversationHandlers, DockWsClient } from './ws-client';
+import {
+  type ConnectionStatus,
+  type ConversationHandlers,
+  DockWsClient,
+  type ExtensionStatus,
+} from './ws-client';
 
 /**
  * Wire shape for `GET /__pinagent/prs`. Mirrors
@@ -410,6 +415,17 @@ export class LocalTransport implements DockTransport {
       return () => {};
     }
     return client.onStatusChange(listener);
+  }
+
+  subscribeExtensionStatus(listener: (status: ExtensionStatus) => void): () => void {
+    const client = this.ws();
+    if (!client) {
+      // No WS URL resolvable (e.g. not running behind a dev-server) —
+      // report "not present" so the dock can still offer the install path.
+      listener({ present: false });
+      return () => {};
+    }
+    return client.subscribeExtensionStatus(listener);
   }
 
   subscribeConversation(id: string, handlers: ConversationHandlers): () => void {

@@ -15,6 +15,7 @@ import { cn } from '@pinagent/ui/lib/utils';
 import { FileCode } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { openAnchorInVSCode, parseAnchorLoc } from '../lib/vscode-bridge';
+import { useExtensionLaunch } from '../shell/ExtensionLaunch';
 
 export interface AnchorChipProps {
   loc: string;
@@ -40,6 +41,7 @@ const baseChipClass = cn(
 );
 
 export function AnchorChip({ loc, selector, className, bare = false }: AnchorChipProps) {
+  const { attemptLaunch } = useExtensionLaunch();
   const canOpen = parseAnchorLoc(loc) !== null;
   const tooltip = selector ? `${loc} — ${selector}` : loc;
   const body = (
@@ -61,7 +63,7 @@ export function AnchorChip({ loc, selector, className, bare = false }: AnchorChi
   // click targets without also triggering their "open this row" handlers.
   const onClick = (event: MouseEvent<HTMLButtonElement>): void => {
     event.stopPropagation();
-    openAnchorInVSCode(loc);
+    attemptLaunch(() => openAnchorInVSCode(loc));
   };
 
   return (

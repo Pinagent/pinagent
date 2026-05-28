@@ -41,8 +41,12 @@ export type WorktreeStatePayload = Omit<
   'type' | 'feedbackId'
 >;
 
+/** Editor-bridge presence snapshot pushed by the server. */
+export type ExtensionStatus = Omit<Extract<ServerMessage, { type: 'extension_status' }>, 'type'>;
+
 type StatusListener = (status: ConnectionStatus) => void;
 type ProjectListener = (event: ProjectEvent) => void;
+type ExtensionStatusListener = (status: ExtensionStatus) => void;
 
 export class DockWsClient {
   private socket: WebSocket | null = null;
@@ -54,6 +58,7 @@ export class DockWsClient {
 
   private readonly statusListeners = new Set<StatusListener>();
   private readonly projectListeners = new Set<ProjectListener>();
+  private readonly extensionStatusListeners = new Set<ExtensionStatusListener>();
   private readonly conversationHandlers = new Map<string, ConversationHandlers>();
 
   /** Outbound queue for messages sent while disconnected. */
@@ -61,6 +66,17 @@ export class DockWsClient {
 
   /** Whether `subscribe_project` is currently active (client-side intent). */
   private projectSubscribed = false;
+
+  /** Whether we've asked the server for extension presence (client-side intent). */
+  private extensionSubscribed = false;
+
+  /**
+   * Last presence snapshot the server sent. Replayed synchronously to
+   * new `subscribeExtensionStatus` listeners so a late subscriber (e.g.
+   * the Connections card mounting after the FAB) doesn't render a blank
+   * state while it waits for the next push.
+   */
+  private lastExtensionStatus: ExtensionStatus | null = null;
 
   constructor(private readonly url: string) {}
 
@@ -102,6 +118,32 @@ export class DockWsClient {
     if (this.projectListeners.size > 0) return;
     this.projectSubscribed = false;
     this.send({ type: 'unsubscribe_project' });
+    this.maybeIdleClose();
+  }
+
+  // ---------- Extension presence ----------
+
+  /**
+   * Listen for editor-bridge presence. Opens the socket if needed and
+   * sends `query_extension` for an immediate snapshot; thereafter the
+   * server pushes updates on every connect/disconnect transition. New
+   * listeners get the last known snapshot synchronously.
+   */
+  subscribeExtensionStatus(listener: ExtensionStatusListener): () => void {
+    this.extensionStatusListeners.add(listener);
+    if (this.lastExtensionStatus) listener(this.lastExtensionStatus);
+    if (!this.extensionSubscribed) {
+      this.extensionSubscribed = true;
+      this.send({ type: 'query_extension' });
+    }
+    this.ensureConnected();
+    return () => this.unsubscribeExtensionStatusListener(listener);
+  }
+
+  private unsubscribeExtensionStatusListener(listener: ExtensionStatusListener): void {
+    this.extensionStatusListeners.delete(listener);
+    if (this.extensionStatusListeners.size > 0) return;
+    this.extensionSubscribed = false;
     this.maybeIdleClose();
   }
 
@@ -212,6 +254,9 @@ export class DockWsClient {
     if (this.projectSubscribed) {
       this.socket?.send(JSON.stringify({ type: 'subscribe_project' }));
     }
+    if (this.extensionSubscribed) {
+      this.socket?.send(JSON.stringify({ type: 'query_extension' }));
+    }
     for (const id of this.conversationHandlers.keys()) {
       this.socket?.send(JSON.stringify({ type: 'subscribe', feedbackId: id }));
     }
@@ -246,6 +291,18 @@ export class DockWsClient {
           }
         }
         return;
+      case 'extension_status': {
+        const { type: _type, ...status } = m;
+        this.lastExtensionStatus = status;
+        for (const l of this.extensionStatusListeners) {
+          try {
+            l(status);
+          } catch {
+            // Ignore individual listener errors.
+          }
+        }
+        return;
+      }
       case 'event': {
         const h = this.conversationHandlers.get(m.feedbackId);
         if (h) {
@@ -304,7 +361,11 @@ export class DockWsClient {
       this.setStatus('closed');
       return;
     }
-    if (this.projectListeners.size === 0 && this.conversationHandlers.size === 0) {
+    if (
+      this.projectListeners.size === 0 &&
+      this.conversationHandlers.size === 0 &&
+      this.extensionStatusListeners.size === 0
+    ) {
       // Nobody's listening; stay closed until someone re-subscribes.
       this.setStatus('closed');
       return;
@@ -324,13 +385,23 @@ export class DockWsClient {
   }
 
   private maybeIdleClose(): void {
-    if (this.projectListeners.size > 0 || this.conversationHandlers.size > 0) return;
+    if (
+      this.projectListeners.size > 0 ||
+      this.conversationHandlers.size > 0 ||
+      this.extensionStatusListeners.size > 0
+    )
+      return;
     // Defer the close briefly so a fast re-subscribe (e.g. detail view
     // unmount → list view → click another row) doesn't churn the socket.
     if (this.idleCloseTimer) clearTimeout(this.idleCloseTimer);
     this.idleCloseTimer = setTimeout(() => {
       this.idleCloseTimer = null;
-      if (this.projectListeners.size > 0 || this.conversationHandlers.size > 0) return;
+      if (
+        this.projectListeners.size > 0 ||
+        this.conversationHandlers.size > 0 ||
+        this.extensionStatusListeners.size > 0
+      )
+        return;
       this.close();
       // Reset the explicit-closed flag so a future subscribe re-opens.
       this.explicitlyClosed = false;

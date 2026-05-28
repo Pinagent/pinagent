@@ -93,6 +93,26 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
         return;
       }
 
+      // GET /__pinagent/extension.vsix — stream the locally-built VSCode
+      // extension package so the dock's Connections card can offer a
+      // one-click download. 404 (with a build hint) when it hasn't been
+      // packaged yet; the dock falls back to the copy-CLI-command path.
+      if (req.method === 'GET' && url === '/__pinagent/extension.vsix') {
+        const vsix = resolveVsixPath();
+        if (!vsix) {
+          return json(res, 404, {
+            error: 'extension .vsix not built — run `pnpm --filter pinagent-vscode package`',
+          });
+        }
+        const bytes = await readFile(vsix);
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('Content-Disposition', 'attachment; filename="pinagent-vscode.vsix"');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(bytes);
+        return;
+      }
+
       // GET /__pinagent/db-worker.js — sqlite-wasm worker source (browser-runtime).
       if (req.method === 'GET' && url === '/__pinagent/db-worker.js') {
         res.statusCode = 200;
@@ -505,6 +525,39 @@ function dockDistDir(): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Locate the built `pinagent-vscode.vsix`. The extension is a private,
+ * unpublished package, so we don't hard-depend on it (that would break
+ * `npm install` for external consumers once the plugin is published);
+ * instead we resolve it leniently:
+ *   1. via `require.resolve` if some consumer does install it, then
+ *   2. the in-monorepo sibling layout (packages/vscode-extension/dist).
+ * Returns null when the .vsix hasn't been packaged — the route 404s and
+ * the dock falls back to the copy-CLI path. Not cached on miss so a
+ * build mid-session is picked up without a dev-server restart.
+ */
+const VSIX_FILENAME = 'pinagent-vscode.vsix';
+let vsixPathCache: string | null = null;
+function resolveVsixPath(): string | null {
+  if (vsixPathCache && existsSync(vsixPathCache)) return vsixPathCache;
+  const candidates: string[] = [];
+  try {
+    const req = createRequire(import.meta.url ?? `file://${process.cwd()}/__pinagent__.js`);
+    const pkgJson = req.resolve('pinagent-vscode/package.json');
+    candidates.push(join(dirname(pkgJson), 'dist', VSIX_FILENAME));
+  } catch {
+    // Not resolvable (extension isn't installed alongside the plugin) —
+    // fall through to the monorepo-relative candidate below.
+  }
+  const moduleUrl: string | undefined = import.meta.url;
+  const base = moduleUrl ? dirname(fileURLToPath(moduleUrl)) : process.cwd();
+  // packages/vite-plugin/{src,dist}/middleware.* → ../../vscode-extension/dist/<vsix>
+  candidates.push(join(base, '..', '..', 'vscode-extension', 'dist', VSIX_FILENAME));
+  const found = candidates.find((p) => existsSync(p)) ?? null;
+  vsixPathCache = found;
+  return found;
 }
 
 const DOCK_MIME_BY_EXT: Record<string, string> = {

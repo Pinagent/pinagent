@@ -328,6 +328,47 @@ function fanoutProjectEvent(event: ProjectEvent): void {
   for (const sock of projectSubs) send(sock, msg);
 }
 
+/**
+ * Connected VSCode-extension sockets, mapped to their reported version.
+ * An entry exists for every socket that sent `extension_hello`. The dock
+ * consults presence (size > 0) to decide whether to nudge the user to
+ * install the editor bridge.
+ *
+ * Pinned to globalThis for the same Next-16 / HMR-survival reason as the
+ * subscriber sets above — a module re-eval mustn't forget that an
+ * extension is live and start telling docks it's missing.
+ */
+const EXTENSION_SOCKETS_SYMBOL = Symbol.for('pinagent.ws.extensionSockets');
+const extensionSockets: Map<WebSocket, string | undefined> =
+  ((globalThis as Record<symbol, unknown>)[EXTENSION_SOCKETS_SYMBOL] as
+    | Map<WebSocket, string | undefined>
+    | undefined) ?? new Map<WebSocket, string | undefined>();
+(globalThis as Record<symbol, unknown>)[EXTENSION_SOCKETS_SYMBOL] = extensionSockets;
+
+/**
+ * Snapshot the current presence state. `version` is the last-registered
+ * extension's version (newest connection wins) — good enough for the
+ * single-editor common case; multi-window users just see one of them.
+ */
+function extensionStatusMessage(): Extract<ServerMessage, { type: 'extension_status' }> {
+  let version: string | undefined;
+  for (const v of extensionSockets.values()) {
+    if (v) version = v;
+  }
+  const msg: Extract<ServerMessage, { type: 'extension_status' }> = {
+    type: 'extension_status',
+    present: extensionSockets.size > 0,
+  };
+  if (version) msg.version = version;
+  return msg;
+}
+
+/** Push the current presence snapshot to every project subscriber. */
+function broadcastExtensionStatus(): void {
+  const msg = extensionStatusMessage();
+  for (const sock of projectSubs) send(sock, msg);
+}
+
 function projectRoot(): string {
   return process.env.PINAGENT_PROJECT_ROOT ?? process.cwd();
 }
@@ -389,6 +430,11 @@ function attachConnection(socket: WebSocket): void {
     if (state.projectSubscribed) {
       projectSubs.delete(socket);
       state.projectSubscribed = false;
+    }
+    // If this was an editor-bridge socket, presence may have just
+    // dropped — tell the docks so they can re-surface the install nudge.
+    if (extensionSockets.delete(socket)) {
+      broadcastExtensionStatus();
     }
   });
 
@@ -516,12 +562,27 @@ async function handleClientMessage(
       if (state.projectSubscribed) return;
       projectSubs.add(socket);
       state.projectSubscribed = true;
+      // Seed the new subscriber with the current presence snapshot so the
+      // dock can render the right Connections state (and decide whether to
+      // nudge) without waiting for an extension to connect/disconnect.
+      send(socket, extensionStatusMessage());
       return;
     }
     case 'unsubscribe_project': {
       if (!state.projectSubscribed) return;
       projectSubs.delete(socket);
       state.projectSubscribed = false;
+      return;
+    }
+    case 'extension_hello': {
+      // Register (or refresh the version of) this editor-bridge socket and
+      // tell every dock subscriber presence is now live.
+      extensionSockets.set(socket, msg.version);
+      broadcastExtensionStatus();
+      return;
+    }
+    case 'query_extension': {
+      send(socket, extensionStatusMessage());
       return;
     }
     case 'ping': {

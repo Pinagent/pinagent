@@ -41,7 +41,7 @@ import type {
   PresentableConnections,
   PruneStaleResult,
 } from './types';
-import type { ConnectionStatus, ConversationHandlers } from './ws-client';
+import type { ConnectionStatus, ConversationHandlers, ExtensionStatus } from './ws-client';
 
 /** Small artificial latency so loading states are visible while reviewing. */
 const SIMULATED_LATENCY_MS = 120;
@@ -235,6 +235,15 @@ export class MockTransport implements DockTransport {
 
   onConnectionStatus(listener: (status: ConnectionStatus) => void): () => void {
     listener('idle');
+    return () => {};
+  }
+
+  subscribeExtensionStatus(listener: (status: ExtensionStatus) => void): () => void {
+    // Fixtures present the happy path: extension installed, like the
+    // pre-connected GitHub/Anthropic fixtures. Design review of the
+    // not-installed state runs against a real dev-server without the
+    // extension connected.
+    listener({ present: true, version: '0.0.1' });
     return () => {};
   }
 

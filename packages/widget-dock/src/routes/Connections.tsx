@@ -13,10 +13,19 @@
  */
 
 import { Badge } from '@pinagent/ui/components/ui/badge';
-import { Button } from '@pinagent/ui/components/ui/button';
+import { Button, buttonVariants } from '@pinagent/ui/components/ui/button';
 import { Input } from '@pinagent/ui/components/ui/input';
 import { cn } from '@pinagent/ui/lib/utils';
-import { AlertTriangle, Check, ExternalLink, KeyRound, Sparkles } from 'lucide-react';
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  Download,
+  ExternalLink,
+  KeyRound,
+  Puzzle,
+  Sparkles,
+} from 'lucide-react';
 import { type ComponentType, type ReactNode, type SVGAttributes, useState } from 'react';
 import {
   useClearAnthropicConnection,
@@ -25,6 +34,12 @@ import {
   useSetAnthropicConnection,
   useSetGithubConnection,
 } from '../hooks/useConnections';
+import { useExtensionStatus } from '../hooks/useExtensionStatus';
+import {
+  EXTENSION_INSTALL,
+  primaryInstallAction,
+  VSIX_CLI_COMMAND,
+} from '../lib/extension-install';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
 import { useTransport } from '../transport';
@@ -46,6 +61,10 @@ export function Connections() {
       </div>
 
       <div className="flex-1 overflow-auto p-3 space-y-3">
+        {/* Editor bridge — presence comes from the WS handshake, not the
+            connections HTTP query, so it renders independently of load state. */}
+        <VSCodeExtensionCard />
+
         {connectionsQuery.isLoading && <LoadingState rows={2} />}
         {connectionsQuery.isError && (
           <ErrorState
@@ -69,6 +88,107 @@ export function Connections() {
         )}
       </div>
     </div>
+  );
+}
+
+function VSCodeExtensionCard() {
+  const { present, version, known } = useExtensionStatus();
+  const [copied, setCopied] = useState(false);
+  const action = primaryInstallAction();
+
+  const copyCli = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(VSIX_CLI_COMMAND);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard can reject when the iframe isn't focused — the command
+      // is visible below for manual copy, so there's nothing to recover.
+    }
+  };
+
+  const status = present ? (
+    <Badge
+      variant="outline"
+      className="border-status-landed-border bg-status-landed-bg text-status-landed-fg"
+    >
+      <Check className="h-3 w-3" />
+      Installed
+    </Badge>
+  ) : known ? (
+    <Badge variant="outline" className="text-muted-foreground">
+      Not installed
+    </Badge>
+  ) : (
+    <Badge variant="outline" className="text-muted-foreground">
+      Checking…
+    </Badge>
+  );
+
+  return (
+    <ConnectionCard
+      Icon={Puzzle}
+      title="VS Code extension"
+      status={status}
+      description={
+        present ? (
+          <>
+            Clicks in the dock open Claude Code and jump to files in VS Code
+            {version ? (
+              <>
+                {' · '}
+                <span className="font-mono">v{version}</span>
+              </>
+            ) : null}
+            .
+          </>
+        ) : (
+          <>
+            Install the editor bridge so clicks in the dock open Claude Code and jump straight to
+            the file you clicked.
+          </>
+        )
+      }
+    >
+      {!present && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <a
+              href={action.href}
+              {...(action.kind === 'vsix' ? { download: action.download } : {})}
+              className={cn(buttonVariants({ variant: 'accent', size: 'sm' }), 'h-7 text-xs')}
+            >
+              {action.kind === 'vsix' ? (
+                <Download className="h-3 w-3" />
+              ) : (
+                <ExternalLink className="h-3 w-3" />
+              )}
+              {action.label}
+            </a>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={copyCli}
+              disabled={EXTENSION_INSTALL.published}
+            >
+              {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              {copied ? 'Copied' : 'Copy CLI command'}
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            {action.kind === 'vsix' ? (
+              <>
+                Then run <code className="font-mono">Extensions: Install from VSIX…</code> in VS
+                Code, or paste the copied command into a terminal.
+              </>
+            ) : (
+              <>Opens the extension's Marketplace page inside VS Code.</>
+            )}
+          </p>
+        </div>
+      )}
+    </ConnectionCard>
   );
 }
 

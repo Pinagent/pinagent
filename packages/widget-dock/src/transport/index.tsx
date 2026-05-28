@@ -59,6 +59,7 @@ export type {
 export type {
   ConnectionStatus,
   ConversationHandlers,
+  ExtensionStatus,
   WorktreeStatePayload,
 } from './ws-client';
 export { LocalTransport, MockTransport };

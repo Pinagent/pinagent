@@ -54,6 +54,7 @@ import { useUpdateConversation } from '../hooks/useUpdateConversation';
 import { type CostBadgeTone, formatCostBadge } from '../lib/cost';
 import { permissionModeDisplay } from '../lib/permissionMode';
 import { copyClaudeCommand, openInClaudeCode } from '../lib/vscode-bridge';
+import { useExtensionLaunch } from '../shell/ExtensionLaunch';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
@@ -1005,6 +1006,7 @@ function DetailHeader({
   effectiveStatus: StatusKey;
 }) {
   const update = useUpdateConversation();
+  const { attemptLaunch } = useExtensionLaunch();
   const settingsQuery = useSettings();
   const capUsd = settingsQuery.data?.perConversationCapUsd;
   const [editingTitle, setEditingTitle] = useState(false);
@@ -1042,7 +1044,7 @@ function DetailHeader({
   };
 
   const openInClaude = (): void => {
-    openInClaudeCode(detail.comment);
+    attemptLaunch(() => openInClaudeCode(detail.comment));
   };
 
   const copyClaude = (): void => {

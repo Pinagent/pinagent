@@ -21,7 +21,7 @@
  */
 import type { AgentEvent, PermissionMode, ProjectEvent } from '@pinagent/shared';
 import type { Branch, Change, Conversation, PullRequest } from '../fixtures/types';
-import type { ConnectionStatus, ConversationHandlers } from './ws-client';
+import type { ConnectionStatus, ConversationHandlers, ExtensionStatus } from './ws-client';
 
 export interface ConversationFilters {
   /** Limit to conversations anchored to this URL. */
@@ -138,6 +138,15 @@ export interface DockTransport {
    * project and conversation subscriptions, so status is global.
    */
   onConnectionStatus(listener: (status: ConnectionStatus) => void): () => void;
+
+  /**
+   * Subscribe to VSCode-extension presence. Fires with the current
+   * snapshot on subscribe (once known), then on every connect/disconnect
+   * transition. Drives the Connections card's installed/not-installed
+   * state and the just-in-time install nudge. Returns an unsubscribe
+   * function. In mock mode this reports a static "installed" snapshot.
+   */
+  subscribeExtensionStatus(listener: (status: ExtensionStatus) => void): () => void;
 
   /**
    * Subscribe to live events for one conversation — the per-feedback
