@@ -164,12 +164,14 @@ describe('GET /feedback', () => {
   it('projects every field the dock parses with `FeedbackRecordSchema`', async () => {
     // Mirror of `FeedbackRecordSchema` in
     // `@pinagent/widget-dock/src/transport/local.ts`. Pinned inline so a
-    // server-side projection that drops a field (the regression: an
-    // earlier shallow projection forgot `worktreeState`, `branch`, and
-    // `updatedAt`, which surfaced to users as "Couldn't load
-    // conversations") fails this test, NOT just a silent zod parse
-    // somewhere deep in the dock. Keep the field list and types in
-    // sync with that file.
+    // server-side projection that drops a field fails this test, NOT
+    // just a silent zod-default somewhere deep in the dock. Regressions
+    // we've taken: missing `worktreeState`/`branch`/`updatedAt`
+    // (surfaced as "Couldn't load conversations"); missing `title` +
+    // `archived` (dock zod-defaults them, so rename and archive
+    // silently no-op on the list view). Keep this list in sync with
+    // that file — fields with `.default()` on the dock side are the
+    // dangerous ones because their absence is invisible.
     const FeedbackRecordWireSchema = z
       .object({
         id: z.string(),
@@ -181,6 +183,8 @@ describe('GET /feedback', () => {
         url: z.string(),
         status: z.enum(['pending', 'fixed', 'wontfix', 'deferred']),
         worktreeState: z.enum(['none', 'active', 'landed', 'discarded']),
+        title: z.string().nullable(),
+        archived: z.boolean(),
         branch: z.string().nullable(),
         createdAt: z.string(),
         updatedAt: z.string(),

@@ -4,31 +4,73 @@ import { Counter } from './Counter';
 
 export function App() {
   return (
-    <main
+    <div
       style={{
         fontFamily: 'system-ui, sans-serif',
-        padding: '40px',
-        maxWidth: 720,
-        margin: '0 auto',
+        display: 'grid',
+        gridTemplateColumns: '220px 1fr',
+        minHeight: '100vh',
       }}
     >
-      <h1>Pinagent demo</h1>
-      <p>
-        Open the <Logo size={16} style={{ verticalAlign: '-3px', borderRadius: 3 }} /> button in the
-        bottom-right, pick an element, and leave a comment.
-      </p>
-      <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
-        Leave feedback right on the UI. Every comment records a screenshot, the selected element,
-        and the exact source file and line that produced it — sending your request straight to the
-        code that needs changing. Try it on anything here, including the counters and the footer.
-      </p>
-      <section style={{ marginTop: 24 }}>
-        <Counter label="Apples" />
-        <Counter label="Bananas" />
-        <Counter label="Oranges" />
-      </section>
-      <Footer />
-    </main>
+      <Sidebar />
+      <main style={{ padding: '40px', maxWidth: 720 }}>
+        <h1>Pinagent demo</h1>
+        <p>
+          Open the <Logo size={16} style={{ verticalAlign: '-3px', borderRadius: 3 }} /> button in
+          the bottom-right, pick an element, and leave a comment.
+        </p>
+        <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
+          Leave feedback right on the UI. Every comment records a screenshot, the selected element,
+          and the exact source file and line that produced it — sending your request straight to
+          the code that needs changing. Try it on anything here, including the counters and the
+          footer.
+        </p>
+        <section style={{ marginTop: 24 }}>
+          <Counter label="Pineapple" />
+          <Counter label="Grapes" />
+          <Counter label="Oranges" />
+          <Counter label="Mangoes" />
+          <Counter label="Blueberries" />
+        </section>
+        <Footer />
+      </main>
+    </div>
+  );
+}
+
+function Sidebar() {
+  const items = ['Overview', 'Counters', 'Activity', 'Settings'];
+  return (
+    <aside
+      style={{
+        borderRight: '1px solid #e5e7eb',
+        padding: '40px 20px',
+        background: '#f9fafb',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+        <Logo size={18} style={{ borderRadius: 4 }} />
+        <span style={{ fontWeight: 600, fontSize: 14 }}>Pinagent</span>
+      </div>
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {items.map((item, i) => (
+          <a
+            key={item}
+            href="#"
+            style={{
+              padding: '6px 10px',
+              borderRadius: 6,
+              textDecoration: 'none',
+              fontSize: 14,
+              color: i === 0 ? '#111827' : '#4b5563',
+              background: i === 0 ? '#e5e7eb' : 'transparent',
+            }}
+          >
+            {item}
+          </a>
+        ))}
+      </nav>
+    </aside>
   );
 }
 
@@ -40,7 +82,8 @@ function Footer() {
       onMouseLeave={() => setHovered(false)}
       style={{ marginTop: 40, color: hovered ? '#111827' : '#6b7280', fontSize: 13 }}
     >
-      Built for pinagent smoke tests.
+      Built as a Pinagent smoke-test playground — a minimal Vite + React app for exercising the
+      click-to-comment flow end to end, from widget selection through agent fixes in the editor.
     </footer>
   );
 }
