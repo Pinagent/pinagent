@@ -33,22 +33,153 @@ export const COMPOSER_STYLES = `
   }
   .pane { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
   .pane[hidden] { display: none; }
-  .meta {
+
+  /* --- Header block (identity + file + breadcrumb) --------------- */
+  .header-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e8dfb0;
+  }
+  .hdr-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .hdr-row[hidden] { display: none; }
+
+  /* Identity row: tag pill + quoted label. Pill uses ink-on-cream so
+     it visually matches the same tag highlighted in the breadcrumb. */
+  .el-pill {
+    display: inline-flex;
+    align-items: center;
+    font-family: ${FONT_MONO};
+    font-size: 11px;
+    font-weight: 600;
+    background: ${BRAND_INK};
+    color: ${BRAND_CREAM};
+    padding: 2px 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .el-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: ${BRAND_INK};
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  /* File row (#pa-meta): code icon + path:line:col + external-link
+     icon. The whole row is the click target for open-in-editor when
+     loc resolved. Hover/loading/ok/err mirror the old .meta states. */
+  .hdr-file {
     font-size: 11px;
     color: #5c5546;
     font-family: ${FONT_MONO};
-    word-break: break-all;
-    padding: 2px 4px;
-    margin: -2px -4px;
+    padding: 2px 6px;
+    margin: 0 -6px;
     border-radius: 4px;
-    transition: background 100ms ease, color 100ms ease;
+    transition: background 100ms ease, color 100ms ease, opacity 100ms ease;
     user-select: none;
   }
-  .meta.clickable { cursor: pointer; }
-  .meta.clickable:hover { background: #f5efd0; color: ${BRAND_INK}; }
-  .meta.loading { opacity: 0.5; }
-  .meta.ok { background: ${STATUS.landed.bg}; color: ${STATUS.landed.fg}; }
-  .meta.err { background: ${STATUS.error.bg}; color: ${STATUS.error.fg}; }
+  .hdr-file-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .hdr-icon {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    opacity: 0.65;
+  }
+  .hdr-file.clickable { cursor: pointer; }
+  .hdr-file.clickable:hover { background: #f5efd0; color: ${BRAND_INK}; }
+  .hdr-file.clickable:hover .hdr-icon { opacity: 1; }
+  .hdr-file.loading { opacity: 0.5; }
+  .hdr-file.ok { background: ${STATUS.landed.bg}; color: ${STATUS.landed.fg}; }
+  .hdr-file.err { background: ${STATUS.error.bg}; color: ${STATUS.error.fg}; }
+
+  /* Breadcrumb: chain of tag pills, last one (the picked element)
+     gets the same selected style as the identity pill. */
+  .hdr-bc {
+    font-family: ${FONT_MONO};
+    font-size: 11px;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .bc-item {
+    color: #8a8270;
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .bc-item.bc-selected {
+    background: ${BRAND_INK};
+    color: ${BRAND_CREAM};
+    font-weight: 600;
+  }
+  .bc-sep {
+    color: #b8ad88;
+    font-size: 12px;
+    user-select: none;
+  }
+
+  /* --- Quick-action chips ------------------------------------- */
+  .qa-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .qa-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: ${BRAND_INK};
+    background: transparent;
+    border: 1px solid #e8dfb0;
+    border-radius: 999px;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: background 100ms ease, border-color 100ms ease, box-shadow 100ms ease;
+  }
+  .qa-chip:hover {
+    background: #f5efd0;
+    border-color: ${BRAND_INK};
+  }
+  .qa-chip:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.45);
+  }
+  .qa-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.85; }
+
+  /* --- Footer kbd hint --------------------------------------- */
+  .footer-row { padding-top: 2px; }
+  .kbd-hint {
+    font-size: 11px;
+    color: #5c5546;
+    font-family: ${FONT_MONO};
+    user-select: none;
+  }
+  .kbd-hint kbd {
+    font-family: ${FONT_MONO};
+    font-size: 11px;
+    color: ${BRAND_INK};
+    background: #f5efd0;
+    border: 1px solid #e8dfb0;
+    border-radius: 3px;
+    padding: 0 4px;
+    margin-right: 2px;
+  }
   textarea {
     width: 100%;
     resize: none;
