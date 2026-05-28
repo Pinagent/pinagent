@@ -25,6 +25,7 @@ import { DockChrome } from './DockChrome';
 import { useDockEnvironment } from './DockEnvironment';
 import { DockFAB } from './DockFAB';
 import { DockSurface } from './DockSurface';
+import { ExtensionLaunchProvider, ExtensionNudgeBanner } from './ExtensionLaunch';
 import { NavRail, ROUTES } from './NavRail';
 import { filterNavRoutes } from './nav-route-filter';
 import { RouteFallback } from './RouteFallback';
@@ -113,7 +114,7 @@ export function DockShell() {
   );
 
   const surface = (
-    <>
+    <ExtensionLaunchProvider>
       <DockFAB open={dock.open} count={pendingCount} onToggle={dock.toggle} />
       <DockSurface open={dock.open} mode={dock.mode} embedded>
         <DockChrome
@@ -123,6 +124,7 @@ export function DockShell() {
           disconnected={disconnected}
           context={context}
         />
+        <ExtensionNudgeBanner />
         <div className="flex flex-1 min-h-0">
           <NavRail expanded={expandedNav} routes={visibleRoutes} />
           <main aria-label="Dock content" className="flex flex-1 flex-col overflow-auto">
@@ -135,7 +137,7 @@ export function DockShell() {
           {activeLabel && `${activeLabel} view`}
         </div>
       </DockSurface>
-    </>
+    </ExtensionLaunchProvider>
   );
 
   if (embedded) return surface;

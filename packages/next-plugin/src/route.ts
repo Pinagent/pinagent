@@ -145,6 +145,14 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
     });
   }
 
+  // /__pinagent/extension.vsix — stream the locally-built VSCode
+  // extension package for the dock's Connections card. 404 (with a build
+  // hint) when not packaged yet; the dock falls back to the copy-CLI
+  // path. Mirror of the vite-plugin middleware handler.
+  if (slug.length === 1 && slug[0] === 'extension.vsix') {
+    return serveVsix();
+  }
+
   const storage = getStorage();
 
   // /__pinagent/changes — per-conversation diff stats for the dock's
@@ -622,6 +630,54 @@ async function serveSqliteWasm(file: string): Promise<Response> {
     console.error(`[pinagent] failed to serve sqlite-wasm/${file}:`, e);
     return new Response(null, { status: 500 });
   }
+}
+
+/**
+ * Locate the built `pinagent-vscode.vsix`. The extension is a private,
+ * unpublished package, so we resolve it leniently rather than hard-
+ * depending on it (which would break `npm install` for consumers once
+ * this plugin is published): try `require.resolve`, then the in-monorepo
+ * sibling layout. Returns null when it hasn't been packaged. Not cached
+ * on miss so a build mid-session is picked up without a restart. Mirror
+ * of the vite-plugin middleware helper.
+ */
+const VSIX_FILENAME = 'pinagent-vscode.vsix';
+let vsixPathCache: string | null = null;
+function resolveVsixPath(): string | null {
+  if (vsixPathCache && existsSync(vsixPathCache)) return vsixPathCache;
+  const candidates: string[] = [];
+  try {
+    const req = createRequire(import.meta.url ?? `file://${process.cwd()}/__pinagent__.js`);
+    const pkgJson = req.resolve('pinagent-vscode/package.json');
+    candidates.push(join(dirname(pkgJson), 'dist', VSIX_FILENAME));
+  } catch {
+    // Not resolvable alongside the plugin — fall through to monorepo layout.
+  }
+  const moduleUrl: string | undefined = import.meta.url;
+  const base = moduleUrl ? dirname(fileURLToPath(moduleUrl)) : process.cwd();
+  // packages/next-plugin/{dist,src}/route.* → ../../vscode-extension/dist/<vsix>
+  candidates.push(join(base, '..', '..', 'vscode-extension', 'dist', VSIX_FILENAME));
+  const found = candidates.find((p) => existsSync(p)) ?? null;
+  vsixPathCache = found;
+  return found;
+}
+
+async function serveVsix(): Promise<Response> {
+  const vsix = resolveVsixPath();
+  if (!vsix) {
+    return json(404, {
+      error: 'extension .vsix not built — run `pnpm --filter pinagent-vscode package`',
+    });
+  }
+  const bytes = await readFile(vsix);
+  return new Response(bytes, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': 'attachment; filename="pinagent-vscode.vsix"',
+      'Cache-Control': 'no-store',
+    },
+  });
 }
 
 /**

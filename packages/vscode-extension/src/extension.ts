@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as vscode from 'vscode';
+import { PresenceClient } from './ws-presence';
+
+// Best-effort presence connection to the dev-server's WS bridge. Lets
+// the dock detect that the extension is installed (see ws-presence.ts).
+let presence: PresenceClient | null = null;
 
 // Single VSCode terminal reused across invocations. We keep one named
 // terminal so repeated clicks from the dock don't accumulate dozens of
@@ -15,6 +20,18 @@ let terminal: vscode.Terminal | null = null;
 const PROMPT_DELAY_MS = 1500;
 
 export function activate(context: vscode.ExtensionContext): void {
+  // Announce presence to any running pinagent dev-server so its dock can
+  // tell the developer the extension is installed. Version comes from the
+  // manifest VSCode parsed at load time. Best-effort: no server → quiet
+  // retries (see PresenceClient).
+  const version =
+    typeof context.extension.packageJSON?.version === 'string'
+      ? context.extension.packageJSON.version
+      : '0.0.0';
+  presence = new PresenceClient(version);
+  presence.start();
+  context.subscriptions.push({ dispose: () => presence?.dispose() });
+
   context.subscriptions.push(
     vscode.window.registerUriHandler({
       handleUri(uri: vscode.Uri) {
@@ -35,6 +52,8 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
+  presence?.dispose();
+  presence = null;
   terminal?.dispose();
   terminal = null;
 }

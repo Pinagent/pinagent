@@ -61,6 +61,21 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
    */
   z.object({ type: z.literal('subscribe_project') }),
   z.object({ type: z.literal('unsubscribe_project') }),
+  /**
+   * Sent by the VSCode extension when it activates. Marks this socket as
+   * the editor-side bridge so the server can broadcast presence to dock
+   * subscribers — that's how the dock knows whether to nudge the user to
+   * install the extension. `version` is the extension's package version,
+   * surfaced in the dock's Connections card.
+   */
+  z.object({ type: z.literal('extension_hello'), version: z.string().max(32).optional() }),
+  /**
+   * Dock asks for the current extension-presence snapshot. The server
+   * also pushes `extension_status` automatically on `subscribe_project`,
+   * so this is mostly a belt-and-suspenders for sockets that only want
+   * presence without the full project fan-out.
+   */
+  z.object({ type: z.literal('query_extension') }),
   z.object({ type: z.literal('ping') }),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
@@ -123,6 +138,15 @@ export type ServerMessage =
     }
   /** Project-wide event; only delivered to sockets that sent `subscribe_project`. */
   | { type: 'project_event'; event: ProjectEvent }
+  /**
+   * Editor-bridge presence. Pushed to project subscribers whenever an
+   * `extension_hello` socket connects or drops, and sent once on
+   * `subscribe_project` / `query_extension` so a freshly-connected dock
+   * gets the current state without waiting for a transition. `present`
+   * reflects whether at least one extension socket is live; `version` is
+   * the newest connected extension's reported version, if any.
+   */
+  | { type: 'extension_status'; present: boolean; version?: string }
   | { type: 'pong' };
 
 /**
@@ -172,6 +196,13 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
     .object({
       type: z.literal('project_event'),
       event: ProjectEventSchema,
+    })
+    .loose(),
+  z
+    .object({
+      type: z.literal('extension_status'),
+      present: z.boolean(),
+      version: z.string().optional(),
     })
     .loose(),
   z
