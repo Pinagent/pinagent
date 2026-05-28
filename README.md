@@ -2,7 +2,9 @@
 
 Click a UI element in your dev server, leave a comment, and your coding agent picks it up — with `file:line` and a screenshot — over MCP.
 
-Pinagent is a localhost-only Vite or Next.js plugin. It tags every JSX element with its source location, drops a small 💬 widget into the page, and writes each captured comment to `.pinagent/feedback/`. An MCP server surfaces the queue inside your existing Claude Code session, so the next thing you say can be "fix the pending feedback."
+Pinagent is a localhost-only Vite or Next.js plugin. It tags every JSX element with its source location, drops a small 💬 widget into the page, and persists each captured comment to a local SQLite database under `.pinagent/`. An MCP server surfaces the queue inside your existing Claude Code session, so the next thing you say can be "fix the pending feedback."
+
+There's also an opt-in **dock** surface (`@pinagent/widget-dock`) — a project-management UI for browsing conversations, reviewing diffs, composing PRs from resolved comments, and managing worktrees. Off by default; flip on with `dock: true` on either plugin.
 
 ## Try the bundled example in two minutes
 
@@ -21,7 +23,7 @@ The example's `predev` hook builds `@pinagent/vite-plugin` (and its upstream pac
 4. **Watch the widget pane** that opens next to the element — the Claude Agent SDK runs against `examples/react-vite/`, streaming text, tool calls, and the resulting edit back into the page.
 5. **Verify** in your editor that `examples/react-vite/src/App.tsx` was changed — Pinagent calls `mcp__pinagent__resolve_feedback` when it's done.
 
-The full feedback record lives at `.pinagent/feedback/<id>.json` and the captured screenshot at `.pinagent/screenshots/<id>.png` (both under the example's project root).
+The full feedback record persists to a local SQLite database at `.pinagent/db.sqlite`, and the captured screenshot lives at `.pinagent/screenshots/<id>.png` (both under the example's project root).
 
 If the dev server returns 500 on `POST /__pinagent/feedback`, the plugin dist is stale — `pnpm build` from the repo root forces a clean rebuild. See [examples/react-vite/README.md](./examples/react-vite/README.md) for more.
 
@@ -37,8 +39,8 @@ pnpm --filter next-app-example dev          # :3000
    browser                      dev server                    agent
 ┌────────────────┐    ┌──────────────────────────┐    ┌──────────────────┐
 │ click element  │    │  /__pinagent middleware  │    │  Claude Code     │
-│ leave comment  │──▶ │  writes                  │──▶ │  + @pinagent/mcp │
-│ widget snaps   │    │  .pinagent/feedback/<id> │    │  reads, edits,   │
+│ leave comment  │──▶ │  writes rows to          │──▶ │  + @pinagent/mcp │
+│ widget snaps   │    │  .pinagent/db.sqlite     │    │  reads, edits,   │
 │ a screenshot   │    │  + screenshots/<id>.png  │    │  resolves        │
 └────────────────┘    └──────────────────────────┘    └──────────────────┘
         ▲                                                       │
@@ -99,10 +101,9 @@ export default defineConfig({
 ```ts
 import pinagent from '@pinagent/next-plugin/config';
 
-export default pinagent(
-  { /* your existing nextConfig */ },
-  { spawnAgent: 'off' }, // see "Hands-off mode" to flip this on
-);
+export default pinagent({
+  /* your existing nextConfig */
+});
 ```
 
 Then add two short files:
@@ -122,7 +123,13 @@ export { GET, POST, PATCH } from '@pinagent/next-plugin/route';
 
 ## Connect your agent
 
-Register the MCP server with Claude Code:
+Register the MCP server with Claude Code. The easiest path uses `@pinagent/cli` so you don't need a global install:
+
+```bash
+claude mcp add pinagent -- pnpm dlx @pinagent/cli mcp
+```
+
+If `@pinagent/mcp` is already installed (e.g. as a project dep), the older direct-bin form also works:
 
 ```bash
 claude mcp add pinagent pinagent-mcp
@@ -149,39 +156,53 @@ Each feedback item carries:
 - `screenshot` — PNG, downscaled to ~1280px max width
 - `viewport`, `url`, `userAgent`
 
-The plugin writes JSON to `.pinagent/feedback/<id>.json` and the screenshot to `.pinagent/screenshots/<id>.png`. Add `.pinagent/` to your `.gitignore` — the Vite plugin will warn if you forget.
+The plugin persists each item into a local SQLite database at `.pinagent/db.sqlite` and writes the screenshot to `.pinagent/screenshots/<id>.png`. Schema lives in `@pinagent/db`; migrations run automatically on first connect. Add `.pinagent/` to your `.gitignore` — the Vite plugin will warn if you forget.
 
-## Hands-off mode (optional)
+## Spawn mode
 
-If you'd rather not bounce into Claude Code for every comment, the per-submit
-spawn flow is on by default in both plugins:
+Both plugins auto-spawn an agent when you submit a comment. The default streams the run back into the widget over WebSocket — no need to bounce into Claude Code. Switch off if you'd rather drive the loop from your own MCP-connected session.
 
 ```ts
-// Vite — defaults to spawnAgent: 'inline'
-pinagent({ spawnAgent: 'inline' })
-
-// Next.js — same option, same default
-pinagent(nextConfig, { spawnAgent: 'inline' })
+pinagent({ spawnAgent: 'inline' })             // Vite — the default
+pinagent(nextConfig, { spawnAgent: 'inline' }) // Next.js — same option, same default
 ```
 
-`inline` runs the Claude Agent SDK against your project root for each comment, streaming events back to the widget over WebSocket. Switch to `worktree` to give each comment its own git worktree at `.pinagent/worktrees/<id>` on branch `pinagent/<id>` — true parallel agents, review each like a PR. Pass `'off'` (or `false`) to disable per-submit spawning entirely. See `packages/agent-runner` for the full surface.
+| Value         | Effect                                                                                                          |
+| ------------- | --------------------------------------------------------------------------------------------------------------- |
+| `'inline'`    | Default. Each submit runs the Claude Agent SDK against your project root; events stream into the widget.        |
+| `'worktree'`  | Each submit gets its own git worktree at `.pinagent/worktrees/<id>` on branch `pinagent/<id>`. True parallel agents — review each like a PR. |
+| `'off'` / `false` | No auto-spawn. Use this when you want to drive the loop manually via the MCP server.                         |
+
+See `packages/agent-runner` for the full surface.
+
+## Dock surface (optional)
+
+The per-element widget is shipped by both plugins automatically. The **dock** is a second surface — a project-management UI that complements the widget — and is off by default. Opt in with `dock: true`:
+
+```ts
+pinagent({ dock: true })                       // Vite
+pinagent(nextConfig, { dock: true })           // Next.js
+```
+
+The dock surfaces a bottom-left FAB that opens panels for Conversations, Changes (with inline diffs), Branches, PRs, Connections, Settings, and History. Routes, keyboard shortcuts, and deep links are documented in [`packages/widget-dock/README.md`](./packages/widget-dock/README.md).
 
 ## Project layout
 
-- **`@pinagent/vite-plugin`** — Vite 5/6/7 plugin: JSX tagging, widget injection, `/__pinagent` middleware.
-- **`@pinagent/next-plugin`** — Next.js 14+ adapter: webpack and Turbopack loaders, route handler, `<Pinagent />` client component.
-- **`@pinagent/mcp`** — stdio MCP server. Ships the `pinagent-mcp` bin.
-- **`@pinagent/widget`** — the browser UI (shadow-root button → pick → composer). Embedded by the plugins at build time.
+- **`@pinagent/vite-plugin`** — Vite 5–8 plugin: JSX tagging, widget injection, `/__pinagent` middleware.
+- **`@pinagent/next-plugin`** — Next.js 14+ adapter (active on Next 16): webpack and Turbopack loaders, route handler, `<Pinagent />` client component.
+- **`@pinagent/widget`** — the per-element browser UI (shadow-root button → pick → composer). Embedded by the plugins at build time.
+- **`@pinagent/widget-dock`** — opt-in project-management surface (conversations, changes, PR composer, branches, history). Embedded by the plugins when `dock: true`.
+- **`@pinagent/cli`** — `pinagent` CLI. Currently exposes `pinagent mcp` (stdio MCP server).
+- **`@pinagent/mcp`** — stdio MCP server backing the CLI. Also ships the standalone `pinagent-mcp` bin.
 - **`@pinagent/babel-plugin`** — the JSX → `data-pa-loc` transform used by both plugins.
 - **`@pinagent/agent-runner`** — SDK-driven local runtime that backs `spawnAgent` in both plugins. WebSocket server, storage, worktree management, `ask_user`.
-- **`@pinagent/cli`** — `pinagent` CLI. Currently exposes `pinagent mcp` (stdio MCP server).
 - `@pinagent/browser-runtime`, `@pinagent/db`, `@pinagent/shared`, `@pinagent/ui` — internal.
 
 ## Invariants
 
 - **Localhost only.** Middleware and WebSocket bind to `127.0.0.1`.
 - **No auth.** The trust boundary is your own machine.
-- **File system is the message bus** between the plugin and the MCP server.
+- **Local SQLite is the source of truth.** The plugin writes to `.pinagent/db.sqlite`; the MCP server reads from the same file. No daemon to start, no socket to connect.
 - **Dev-only.** The loader, widget, and middleware are gated on `NODE_ENV !== 'production'`. Production builds are untouched.
 
 ## Licensing
