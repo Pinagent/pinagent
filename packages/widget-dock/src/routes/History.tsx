@@ -18,6 +18,7 @@ import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Input } from '@pinagent/ui/components/ui/input';
 import { cn } from '@pinagent/ui/lib/utils';
 import type { StatusKey } from '@pinagent/ui/tokens';
+import { Link } from '@tanstack/react-router';
 import {
   Bot,
   CheckCircle2,
@@ -423,8 +424,8 @@ function ActivityRow({ event }: { event: AuditEvent }) {
   const visual = describeEvent(event);
   const meta = activityMeta(event);
   const Icon = visual.Icon;
-  return (
-    <li className="group flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+  const body = (
+    <>
       <StatusBadge status={visual.status} variant="dot" className="mt-1.5 pointer-events-none" />
       <div className="flex-1 min-w-0">
         <div className="flex items-start gap-2">
@@ -440,6 +441,36 @@ function ActivityRow({ event }: { event: AuditEvent }) {
           </div>
         )}
       </div>
+    </>
+  );
+
+  // Conversation-scoped events (`conversation_*`, plus any future
+  // action that names a conversation) deep-link to the matching detail
+  // view via `?id=`. Project-scoped events (`pr_created`,
+  // `worktrees_bulk_pruned`) keep the static <li> render — their
+  // payload already carries its own external link (PR URL) inside
+  // `meta`, and nested anchors would be invalid markup.
+  if (event.conversationId !== null) {
+    return (
+      <li>
+        <Link
+          to="/conversations"
+          search={{ id: event.conversationId }}
+          aria-label={`${visual.label} — open conversation`}
+          className={cn(
+            'group flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2',
+            'transition-colors hover:bg-secondary/40',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+          )}
+        >
+          {body}
+        </Link>
+      </li>
+    );
+  }
+  return (
+    <li className="group flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+      {body}
     </li>
   );
 }
