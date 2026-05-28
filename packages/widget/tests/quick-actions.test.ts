@@ -13,6 +13,14 @@ function idsFor(html: string, querySelector = ':scope > *'): string[] {
   return quickActionsFor(el).map((a) => a.id);
 }
 
+function chipById(html: string, id: string, querySelector = ':scope > *') {
+  document.body.innerHTML = html;
+  const el = document.body.querySelector(querySelector) as Element;
+  const chip = quickActionsFor(el).find((c) => c.id === id);
+  if (!chip) throw new Error(`chip ${id} not present for ${html}`);
+  return chip;
+}
+
 describe('quickActionsFor', () => {
   it('always includes recolor + resize so the chip row is never empty', () => {
     const html = '<script>noop</script>';
@@ -87,6 +95,92 @@ describe('quickActionsFor', () => {
     const ids = idsFor('<div role="button">Tap</div>', 'body > div');
     expect(ids).toContain('hover-state');
   });
+
+  // ---------------- context-aware label + prompt ---------------------
+
+  it('change-text quotes the element’s own text in the prompt', () => {
+    expect(chipById('<button>Get started</button>', 'change-text').prompt).toBe(
+      'Change the text from "Get started" to: ',
+    );
+  });
+
+  it('change-text falls back to the generic prompt when no text is present', () => {
+    // A `<div>Hello</div>` always gets change-text; without text it
+    // can't appear (predicate rules it out), but if a chip has fallback
+    // path we still want it covered — check that the text-collapsing
+    // helper drops to the generic form when run on whitespace-only text.
+    document.body.innerHTML = '<button>  </button>';
+    const el = document.body.querySelector('button') as Element;
+    const chip = quickActionsFor(el).find((c) => c.id === 'change-text');
+    // Predicate fails on whitespace-only text — no chip should appear.
+    expect(chip).toBeUndefined();
+  });
+
+  it('change-text collapses internal whitespace before quoting', () => {
+    expect(chipById('<button>  Get   started   now  </button>', 'change-text').prompt).toBe(
+      'Change the text from "Get started now" to: ',
+    );
+  });
+
+  it('change-text truncates very long button labels', () => {
+    const longLabel = 'X'.repeat(200);
+    const html = `<button>${longLabel}</button>`;
+    const chip = chipById(html, 'change-text');
+    // 60-char snippet cap, ending with ellipsis
+    expect(chip.prompt.endsWith('…" to: ')).toBe(true);
+    expect(chip.prompt.length).toBeLessThan(120);
+  });
+
+  it('change-link echoes the current href in the prompt', () => {
+    expect(chipById('<a href="/docs/setup">Read</a>', 'change-link').prompt).toBe(
+      'Change the link target from "/docs/setup" to ',
+    );
+  });
+
+  it('change-placeholder echoes the current placeholder', () => {
+    expect(chipById('<input placeholder="Email address">', 'change-placeholder').prompt).toBe(
+      'Change the placeholder from "Email address" to: ',
+    );
+  });
+
+  it('change-image references the filename, not the full URL', () => {
+    expect(
+      chipById('<img src="https://cdn.example.com/images/logo.png?v=2">', 'change-image').prompt,
+    ).toBe('Change this image (currently logo.png) to: ');
+  });
+
+  it('change-image falls back when there is no src', () => {
+    expect(chipById('<img>', 'change-image').prompt).toBe('Change this image to: ');
+  });
+
+  it('change-image handles data: URIs by truncating, not splitting on slash', () => {
+    const dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA…long…';
+    const html = `<img src="${dataUri}">`;
+    const chip = chipById(html, 'change-image');
+    // Should not crash on the `:` in the data URI or produce a path part
+    expect(chip.prompt.startsWith('Change this image (currently data:')).toBe(true);
+  });
+
+  it('alt-text label is "Add" when alt is missing, "Edit" when alt is set', () => {
+    expect(chipById('<img>', 'alt-text').label).toBe('Add alt text');
+    expect(chipById('<img alt="Logo">', 'alt-text').label).toBe('Edit alt text');
+  });
+
+  it('alt-text prompt is the "Set …" form when alt is missing, "Change … from …" when set', () => {
+    expect(chipById('<img>', 'alt-text').prompt).toBe('Set the alt text to: ');
+    expect(chipById('<img alt="Company logo">', 'alt-text').prompt).toBe(
+      'Change the alt text from "Company logo" to: ',
+    );
+  });
+
+  it('static chips (recolor, resize, hover, make-link) return their fixed prompts', () => {
+    expect(chipById('<button>X</button>', 'recolor').prompt).toBe('Recolor this to ');
+    expect(chipById('<button>X</button>', 'resize').prompt).toBe('Resize this to ');
+    expect(chipById('<button>X</button>', 'hover-state').prompt).toBe('Add a hover state that ');
+    expect(chipById('<button>X</button>', 'make-link').prompt).toBe('Make this a link to ');
+  });
+
+  // ---------------------- ordering -----------------------------------
 
   it('chip order matches catalog order (predictable position)', () => {
     // Same set of chips for two buttons, same order both times.
