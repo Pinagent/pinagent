@@ -4,6 +4,14 @@ import type { AgentEvent } from '@pinagent/shared';
 import { StatusBadge } from '@pinagent/ui/components/status-badge';
 import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Button } from '@pinagent/ui/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@pinagent/ui/components/ui/dropdown-menu';
 import { Input } from '@pinagent/ui/components/ui/input';
 import { Textarea } from '@pinagent/ui/components/ui/textarea';
 import { cn } from '@pinagent/ui/lib/utils';
@@ -19,6 +27,8 @@ import {
   Pencil,
   Search,
   Send,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnchorChip } from '../components/AnchorChip';
@@ -32,6 +42,11 @@ import {
   useConversationStream,
 } from '../hooks/useConversationStream';
 import { useConversations } from '../hooks/useConversations';
+import {
+  type ConversationFilterState,
+  matchesPreset,
+  useSavedFilters,
+} from '../hooks/useSavedFilters';
 import { useUpdateConversation } from '../hooks/useUpdateConversation';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
@@ -67,6 +82,47 @@ export function Conversations() {
   const [filter, setFilter] = useState<StatusKey | 'all'>('all');
   const [query, setQuery] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  // Saved-filter presets — built-ins plus user-saved combinations of
+  // (status, query, showArchived). `isNaming` toggles the inline
+  // name input above the filter row.
+  const savedFilters = useSavedFilters();
+  const [isNaming, setIsNaming] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const currentState: ConversationFilterState = useMemo(
+    () => ({ statusFilter: filter, query, showArchived }),
+    [filter, query, showArchived],
+  );
+  const activePreset = useMemo(
+    () => savedFilters.presets.find((p) => matchesPreset(currentState, p)),
+    [savedFilters.presets, currentState],
+  );
+  const applyPreset = useCallback((state: ConversationFilterState) => {
+    setFilter(state.statusFilter);
+    setQuery(state.query);
+    setShowArchived(state.showArchived);
+  }, []);
+  const startSavingPreset = useCallback(() => {
+    setDraftName('');
+    setIsNaming(true);
+  }, []);
+  const cancelSavingPreset = useCallback(() => {
+    setIsNaming(false);
+    setDraftName('');
+  }, []);
+  const commitSavingPreset = useCallback(() => {
+    const trimmed = draftName.trim();
+    if (trimmed.length === 0) {
+      cancelSavingPreset();
+      return;
+    }
+    savedFilters.savePreset(trimmed, currentState);
+    setIsNaming(false);
+    setDraftName('');
+  }, [draftName, savedFilters, currentState, cancelSavingPreset]);
+  useEffect(() => {
+    if (isNaming) nameInputRef.current?.focus();
+  }, [isNaming]);
   // Selection set for bulk archive. Keyed on conversation id. Cleared
   // on filter / search / show-archived change so the user can't
   // accidentally bulk-archive rows that have scrolled out of view.
@@ -179,10 +235,144 @@ export function Conversations() {
               className="h-8 pl-8 text-xs"
             />
           </div>
-          <Button variant="outline" size="icon" className="h-8 w-8" aria-label="More filters">
-            <Filter className="h-3.5 w-3.5" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 px-2 text-xs"
+                aria-label="Saved filter presets"
+                title={activePreset ? `Preset: ${activePreset.name}` : 'Filter presets'}
+              >
+                <Filter className="h-3.5 w-3.5" />
+                <span className="max-w-[100px] truncate">{activePreset?.name ?? 'Presets'}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
+                Built-in
+              </DropdownMenuLabel>
+              {savedFilters.presets
+                .filter((p) => p.builtin)
+                .map((p) => (
+                  <DropdownMenuItem
+                    key={p.id}
+                    onSelect={() => applyPreset(p)}
+                    className={cn(
+                      'gap-2 text-sm',
+                      matchesPreset(currentState, p) && 'bg-secondary text-secondary-foreground',
+                    )}
+                  >
+                    {matchesPreset(currentState, p) ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <span className="w-3.5" aria-hidden />
+                    )}
+                    {p.name}
+                  </DropdownMenuItem>
+                ))}
+              {savedFilters.presets.some((p) => !p.builtin) && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
+                    Saved
+                  </DropdownMenuLabel>
+                  {savedFilters.presets
+                    .filter((p) => !p.builtin)
+                    .map((p) => (
+                      <DropdownMenuItem
+                        key={p.id}
+                        // Don't onSelect → handle apply on the row,
+                        // delete on its trailing button.
+                        asChild
+                        className={cn(
+                          'gap-2 text-sm',
+                          matchesPreset(currentState, p) &&
+                            'bg-secondary text-secondary-foreground',
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          {matchesPreset(currentState, p) ? (
+                            <Check className="h-3.5 w-3.5" />
+                          ) : (
+                            <span className="w-3.5" aria-hidden />
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => applyPreset(p)}
+                            className="flex-1 truncate text-left"
+                          >
+                            {p.name}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              savedFilters.deletePreset(p.id);
+                            }}
+                            aria-label={`Delete preset ${p.name}`}
+                            className="text-muted-foreground/60 hover:text-status-error-fg"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                </>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => startSavingPreset()}
+                disabled={activePreset !== undefined}
+                className="gap-2 text-xs text-muted-foreground"
+              >
+                <span className="w-3.5" aria-hidden />
+                {activePreset ? 'Already a preset' : 'Save current view…'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
+
+        {isNaming && (
+          <div className="flex items-center gap-1.5">
+            <Input
+              ref={nameInputRef}
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitSavingPreset();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelSavingPreset();
+                }
+              }}
+              placeholder="Preset name (e.g. Ready to land · mine)"
+              aria-label="Preset name"
+              className="h-7 text-xs"
+              maxLength={64}
+            />
+            <Button
+              size="sm"
+              variant="default"
+              onClick={commitSavingPreset}
+              disabled={draftName.trim().length === 0}
+              className="h-7 text-xs"
+            >
+              Save
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={cancelSavingPreset}
+              className="h-7 px-2 text-xs"
+              aria-label="Cancel saving preset"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-1">
           {STATUS_FILTERS.map((f) => (
             <button
