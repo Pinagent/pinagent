@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { useNavigate } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { ActivityRow } from '../components/ActivityRow';
 import { AnchorChip } from '../components/AnchorChip';
@@ -34,6 +35,7 @@ function SectionHeader({
 
 export function Overview() {
   const transport = useTransport();
+  const navigate = useNavigate();
   const conversations = useConversations();
   // Top 7 mirrors what the prior fixture strip showed. The History route
   // owns the full feed at limit 200; the Overview surface is a glance.
@@ -69,6 +71,7 @@ export function Overview() {
               key={c.id}
               status={c.status}
               title={c.title}
+              onClick={() => navigate({ to: '/conversations', search: { id: c.id } })}
               meta={
                 <>
                   {c.anchor.loc && <AnchorChip loc={c.anchor.loc} selector={c.anchor.selector} />}
