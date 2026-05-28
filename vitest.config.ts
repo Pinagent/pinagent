@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 
 // Root Vitest config. Picks up every *.test.ts(x) under packages/<pkg>/tests/
-// automatically — no per-package configuration needed.
+// and apps/<app>/tests/ automatically — no per-package configuration needed.
 //
 // Default environment is Node. Individual tests that need a DOM annotate
 // with `// @vitest-environment happy-dom` at the top of the file (the
@@ -19,7 +19,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['packages/*/tests/**/*.test.{ts,tsx}'],
+    include: ['packages/*/tests/**/*.test.{ts,tsx}', 'apps/*/tests/**/*.test.{ts,tsx}'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/.next/**'],
     isolate: true,
     // better-sqlite3 is a native module — Vite's resolver can't

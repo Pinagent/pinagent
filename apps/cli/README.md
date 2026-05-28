@@ -52,11 +52,42 @@ Claude Code config example (`~/.claude/mcp_servers.json` or per-project `.mcp.js
 }
 ```
 
+### `pinagent transcript <id>`
+
+Fetch the persisted agent transcript for one conversation from a
+running pinagent dev-server's HTTP endpoint
+(`GET /__pinagent/feedback/:id/messages`) and print it. Useful for
+exporting a conversation to a markdown file, piping into another
+model, or eyeballing what an agent actually did.
+
+```bash
+pinagent transcript cv_8a2f
+pinagent transcript --server http://localhost:5173 cv_8a2f
+pinagent transcript --json cv_8a2f | jq '.[] | select(.type == "tool_use")'
+```
+
+Options:
+
+| Flag             | Default                                       | Effect                                                 |
+| ---------------- | --------------------------------------------- | ------------------------------------------------------ |
+| `--server <url>` | `PINAGENT_SERVER_URL` or `http://localhost:3000` | Base URL of the running dev-server.                    |
+| `--json`         | off                                           | Emit raw `AgentEvent[]` JSON instead of formatted text. |
+
+Exit codes:
+
+| Code | Meaning                                                     |
+| ---- | ----------------------------------------------------------- |
+| `0`  | Success — transcript (possibly empty) written to stdout.    |
+| `1`  | Network or unexpected error.                                |
+| `2`  | Bad usage (invalid id, missing arg, server returned `400`). |
+| `3`  | Conversation not found (server returned `404`).             |
+
 ## Environment
 
 | Variable                 | Effect                                                                |
 | ------------------------ | --------------------------------------------------------------------- |
 | `PINAGENT_PROJECT_ROOT`  | Override the project root the MCP server reads from.                  |
+| `PINAGENT_SERVER_URL`    | Default dev-server URL for `pinagent transcript`.                     |
 
 ## Build
 
