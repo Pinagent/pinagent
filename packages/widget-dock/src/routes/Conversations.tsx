@@ -49,6 +49,7 @@ import {
   useSavedFilters,
 } from '../hooks/useSavedFilters';
 import { useUpdateConversation } from '../hooks/useUpdateConversation';
+import { permissionModeDisplay } from '../lib/permissionMode';
 import { openInClaudeCode } from '../lib/vscode-bridge';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
@@ -597,6 +598,19 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
   const stream = useConversationStream(id);
   const isMock = transport.kind === 'mock';
 
+  // Pick the latest init event's permissionMode so the header reflects
+  // the mode this run is *currently* using — important across follow-up
+  // turns, where each turn emits its own init and the user may have
+  // changed the setting in between.
+  const activePermissionMode = useMemo<string | null>(() => {
+    for (let i = stream.items.length - 1; i >= 0; i--) {
+      const it = stream.items[i];
+      if (it?.kind !== 'event') continue;
+      if (it.event.type === 'init') return it.event.permissionMode;
+    }
+    return null;
+  }, [stream.items]);
+
   const [reply, setReply] = useState('');
   const [optimisticItems, setOptimisticItems] = useState<OptimisticItem[]>([]);
   const [answeredAskIds, setAnsweredAskIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -726,7 +740,12 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
-      <DetailHeader detail={detail} onBack={onBack} worktreeState={stream.worktree} />
+      <DetailHeader
+        detail={detail}
+        onBack={onBack}
+        worktreeState={stream.worktree}
+        permissionMode={activePermissionMode}
+      />
       <StatusTimeline
         status={detail.status}
         worktreeState={stream.worktree}
@@ -875,10 +894,12 @@ function DetailHeader({
   detail,
   onBack,
   worktreeState,
+  permissionMode,
 }: {
   detail: ConversationDetail;
   onBack: () => void;
   worktreeState: WorktreeStatePayload | null;
+  permissionMode: string | null;
 }) {
   const update = useUpdateConversation();
   const [editingTitle, setEditingTitle] = useState(false);
@@ -1018,6 +1039,15 @@ function DetailHeader({
             conflicts
           </Badge>
         )}
+        {permissionMode &&
+          (() => {
+            const display = permissionModeDisplay(permissionMode);
+            return (
+              <Badge variant="outline" className="text-[10px]" title={display.title}>
+                {display.label}
+              </Badge>
+            );
+          })()}
       </div>
     </div>
   );
