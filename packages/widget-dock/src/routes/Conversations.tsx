@@ -381,8 +381,8 @@ type OptimisticItem =
   | { kind: 'user_message'; id: number; content: string; receivedAt: string }
   | { kind: 'ask_response'; id: number; askId: string; answer: string; receivedAt: string };
 
-type LifecycleIntent = { kind: 'land' | 'discard'; sentAt: number } | null;
-type LifecycleError = { kind: 'land' | 'discard'; message: string } | null;
+type LifecycleIntent = { kind: 'land' | 'discard' | 'reopen'; sentAt: number } | null;
+type LifecycleError = { kind: 'land' | 'discard' | 'reopen'; message: string } | null;
 
 const LIFECYCLE_TIMEOUT_MS = 10_000;
 
@@ -437,10 +437,12 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
   };
 
   // Watch worktree-state transitions to clear or fail any pending
-  // land/discard intent. Server broadcasts transient `landing` /
+  // land/discard/reopen intent. Server broadcasts transient `landing` /
   // `discarding` states first, then a terminal state (`landed` /
-  // `discarded` / `conflict`). We clear intent on any terminal state for
-  // our kind; on a conflict we additionally surface a lifecycle error.
+  // `discarded` / `conflict`). Reopen has no transient state — the
+  // server emits the final `none` directly. We clear intent on any
+  // terminal state for our kind; on a conflict we additionally surface
+  // a lifecycle error.
   const worktreeState = stream.worktree?.state ?? null;
   useEffect(() => {
     if (!intent) return;
@@ -457,6 +459,9 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
         });
       }
     } else if (intent.kind === 'discard' && worktreeState === 'discarded') {
+      setIntent(null);
+      setLifecycleError(null);
+    } else if (intent.kind === 'reopen' && worktreeState === 'none') {
       setIntent(null);
       setLifecycleError(null);
     }
@@ -497,6 +502,12 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
     transport.discardConversation(id);
   };
 
+  const performReopen = (): void => {
+    setLifecycleError(null);
+    setIntent({ kind: 'reopen', sentAt: Date.now() });
+    transport.reopenConversation(id);
+  };
+
   if (detailQuery.isLoading) return <LoadingState rows={3} />;
   if (detailQuery.isError) {
     return (
@@ -519,9 +530,11 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
   const detail = detailQuery.data;
   const canLand = worktreeState === 'active' || worktreeState === 'ttl_warning';
   const canDiscard = canLand;
+  const canReopen = worktreeState === 'landed' || worktreeState === 'discarded';
   const wsBusy = worktreeState === 'landing' || worktreeState === 'discarding';
   const showLifecycleBusy = wsBusy || intent !== null;
-  const showActionRow = canLand || canDiscard || showLifecycleBusy || lifecycleError !== null;
+  const showActionRow =
+    canLand || canDiscard || canReopen || showLifecycleBusy || lifecycleError !== null;
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -552,7 +565,13 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
             size="sm"
             variant="outline"
             className="h-6 text-[11px]"
-            onClick={lifecycleError.kind === 'land' ? performLand : performDiscard}
+            onClick={
+              lifecycleError.kind === 'land'
+                ? performLand
+                : lifecycleError.kind === 'discard'
+                  ? performDiscard
+                  : performReopen
+            }
           >
             Retry
           </Button>
@@ -565,28 +584,44 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
             {intent
               ? intent.kind === 'land'
                 ? 'Landing…'
-                : 'Discarding…'
+                : intent.kind === 'discard'
+                  ? 'Discarding…'
+                  : 'Reopening…'
               : lifecycleLabel(stream.worktree)}
           </span>
           <div className="flex items-center gap-1.5">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-              disabled={!canDiscard || showLifecycleBusy}
-              onClick={performDiscard}
-            >
-              Discard
-            </Button>
-            <Button
-              size="sm"
-              variant="accent"
-              className="h-7 text-xs"
-              disabled={!canLand || showLifecycleBusy}
-              onClick={performLand}
-            >
-              Land
-            </Button>
+            {canReopen ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                disabled={showLifecycleBusy}
+                onClick={performReopen}
+              >
+                Re-open
+              </Button>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  disabled={!canDiscard || showLifecycleBusy}
+                  onClick={performDiscard}
+                >
+                  Discard
+                </Button>
+                <Button
+                  size="sm"
+                  variant="accent"
+                  className="h-7 text-xs"
+                  disabled={!canLand || showLifecycleBusy}
+                  onClick={performLand}
+                >
+                  Land
+                </Button>
+              </>
+            )}
           </div>
         </div>
       )}

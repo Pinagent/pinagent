@@ -138,6 +138,10 @@ export class DockWsClient {
     this.send({ type: 'discard_request', feedbackId });
   }
 
+  sendReopenRequest(feedbackId: string): void {
+    this.send({ type: 'reopen_request', feedbackId });
+  }
+
   /** Force-close the socket; subscriptions are preserved in state and
    *  will re-attach on the next ensureConnected. Use for app teardown. */
   close(): void {

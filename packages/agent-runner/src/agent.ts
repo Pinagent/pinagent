@@ -726,6 +726,48 @@ export async function mergeWorktree(
 }
 
 /**
+ * Reverse a landed/discarded conversation: put it back in the active
+ * list so the user can follow up with the agent. We reset
+ * `worktreeState` to `'none'` and `status` to `'pending'`; we do NOT
+ * recreate the worktree (it was cleaned up at land/discard time and
+ * the developer's actual changes have either already merged or were
+ * thrown away). For inline-mode runs that's all that's needed — the
+ * user can immediately send a follow-up. For ex-worktree runs the
+ * conversation is conceptually inline-mode from this point forward.
+ *
+ * Refuses on conversations that aren't already resolved so a stray
+ * client click can't reset a still-active worktree.
+ */
+export async function reopenConversation(
+  projectRoot: string,
+  feedbackId: string,
+  logPath: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const storage = new Storage(projectRoot);
+  const rec = await storage.read(feedbackId);
+  if (!rec) return { ok: false, error: `feedback not found: ${feedbackId}` };
+  if (rec.worktreeState !== 'landed' && rec.worktreeState !== 'discarded') {
+    return {
+      ok: false,
+      error: `cannot reopen: worktree state is ${rec.worktreeState} (expected landed or discarded)`,
+    };
+  }
+
+  await appendLog(logPath, `\n## Reopen · ${new Date().toISOString()}\n\n`);
+  await storage.patch(feedbackId, { worktreeState: 'none', status: 'pending' });
+  await recordAuditEvent(projectRoot, {
+    conversationId: feedbackId,
+    actor: 'user',
+    action: 'conversation_reopened',
+    payload: {
+      previousWorktreeState: rec.worktreeState,
+      previousStatus: rec.status,
+    },
+  });
+  return { ok: true };
+}
+
+/**
  * Throw away the worktree and its branch without merging. Idempotent —
  * tolerates a missing worktree or branch (the user may have cleaned
  * them up manually).

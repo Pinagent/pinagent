@@ -26,6 +26,7 @@ export type AuditAction =
   | 'conversation_created'
   | 'conversation_landed'
   | 'conversation_discarded'
+  | 'conversation_reopened'
   | 'conversation_renamed'
   | 'conversation_archived'
   | 'conversation_unarchived'

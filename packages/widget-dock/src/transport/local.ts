@@ -364,6 +364,10 @@ export class LocalTransport implements DockTransport {
     this.ws()?.sendDiscardRequest(id);
   }
 
+  reopenConversation(id: string): void {
+    this.ws()?.sendReopenRequest(id);
+  }
+
   async updateConversation(id: string, patch: ConversationUpdate): Promise<Conversation> {
     const rec = await this.jsonWriteValidated(
       'PATCH',
