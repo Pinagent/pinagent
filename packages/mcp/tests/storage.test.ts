@@ -153,3 +153,85 @@ describe('Storage.recordAuditEvent', () => {
     await rm(freshRoot, { recursive: true, force: true });
   });
 });
+
+describe('Storage.listMessages', () => {
+  /**
+   * Seed one conversation + N message rows directly via the raw SQLite
+   * handle. The MCP Storage class has no `create` method (the dev-server
+   * owns writes); MCP only reads + occasionally patches. So tests insert
+   * rows the same way the dev-server's bus would.
+   */
+  function seed(convId: string, rows: Array<{ role: string; content: unknown }>): void {
+    const raw = new DatabaseSync(join(root, '.pinagent', 'db.sqlite'));
+    raw.exec('PRAGMA foreign_keys = ON');
+    raw
+      .prepare(
+        `INSERT INTO conversations (id, comment, status, worktree_state, created_at, updated_at)
+         VALUES (?, ?, 'pending', 'none', unixepoch() * 1000, unixepoch() * 1000)`,
+      )
+      .run(convId, 'seed comment');
+    const insert = raw.prepare(
+      'INSERT INTO messages (conversation_id, turn, role, content) VALUES (?, 1, ?, ?)',
+    );
+    for (const row of rows) insert.run(convId, row.role, JSON.stringify(row.content));
+    raw.close();
+  }
+
+  it('returns [] for a malformed id (no DB round-trip)', async () => {
+    const storage = new Storage(root);
+    expect(await storage.listMessages('!')).toEqual([]);
+  });
+
+  it('returns [] for a well-formed but unknown id', async () => {
+    const storage = new Storage(root);
+    expect(await storage.listMessages('aBcDeFgHiJ')).toEqual([]);
+  });
+
+  it('returns events in insertion order, parsed as AgentEvent', async () => {
+    const convId = 'cv_listmsg1';
+    seed(convId, [
+      {
+        role: 'init',
+        content: {
+          type: 'init',
+          sessionId: 'sess-a',
+          model: 'claude',
+          permissionMode: 'acceptEdits',
+          apiKeySource: 'oauth',
+        },
+      },
+      { role: 'text', content: { type: 'text', text: 'one' } },
+      { role: 'text', content: { type: 'text', text: 'two' } },
+    ]);
+
+    const events = await new Storage(root).listMessages(convId);
+    expect(events.map((e) => e.type)).toEqual(['init', 'text', 'text']);
+    expect(events[1]).toMatchObject({ type: 'text', text: 'one' });
+    expect(events[2]).toMatchObject({ type: 'text', text: 'two' });
+  });
+
+  it('excludes the __finished bus sentinel from the transcript', async () => {
+    const convId = 'cv_listmsg2';
+    seed(convId, [
+      { role: 'text', content: { type: 'text', text: 'visible' } },
+      // The bus writes a __finished row to flag a closed conversation.
+      // Subscribers translate it into an `onDone` callback; raw consumers
+      // (CLI, MCP) shouldn't see it as a transcript entry.
+      { role: '__finished', content: { type: '__finished' } },
+      { role: 'text', content: { type: 'text', text: 'also visible' } },
+    ]);
+
+    const events = await new Storage(root).listMessages(convId);
+    expect(events.map((e) => e.type)).toEqual(['text', 'text']);
+  });
+
+  it('returns [] when the schema is missing instead of throwing', async () => {
+    // Mirror the recordAuditEvent test: MCP is robust to being started
+    // before the dev-server has run migrations.
+    const freshRoot = join(tmpdir(), `mcp-noschema-${uniqueId()}`);
+    await mkdir(join(freshRoot, '.pinagent'), { recursive: true });
+    const storage = new Storage(freshRoot);
+    expect(await storage.listMessages('aBcDeFgHiJ')).toEqual([]);
+    await rm(freshRoot, { recursive: true, force: true });
+  });
+});

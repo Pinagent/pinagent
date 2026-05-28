@@ -42,6 +42,7 @@ export {
   HostToDockSchema,
 } from './dock-postmessage';
 export { type AgentEvent, AgentEventSchema, type BusSubscriber } from './event-bus';
+export { renderTranscript } from './render-transcript';
 export {
   type ClientMessage,
   ClientMessageSchema,

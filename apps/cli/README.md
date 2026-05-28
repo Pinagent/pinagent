@@ -30,14 +30,15 @@ Project root resolution (in order):
 3. Fall back to the nearest `package.json` ancestor.
 4. Fall back to the current directory.
 
-The MCP server exposes four tools:
+The MCP server exposes five tools:
 
-| Tool                     | Purpose                                                                                 |
-| ------------------------ | --------------------------------------------------------------------------------------- |
-| `list_pending_feedback`  | List items the developer has captured with the widget. Status filter, file filter.      |
-| `get_feedback`           | Fetch one item by id, including the screenshot inline as an image content block.        |
-| `resolve_feedback`       | Mark fixed / wontfix / deferred (or re-open with `status: 'pending'`). Optional note + commit sha. |
-| `get_source_context`     | Read a window of source around a `file:line` pair.                                      |
+| Tool                          | Purpose                                                                                 |
+| ----------------------------- | --------------------------------------------------------------------------------------- |
+| `list_pending_feedback`       | List items the developer has captured with the widget. Status filter, file filter.      |
+| `get_feedback`                | Fetch one item by id, including the screenshot inline as an image content block.        |
+| `resolve_feedback`            | Mark fixed / wontfix / deferred (or re-open with `status: 'pending'`). Optional note + commit sha. |
+| `get_source_context`          | Read a window of source around a `file:line` pair.                                      |
+| `get_conversation_transcript` | Read the full persisted agent transcript for one conversation (text or JSON).           |
 
 Claude Code config example (`~/.claude/mcp_servers.json` or per-project `.mcp.json`):
 
