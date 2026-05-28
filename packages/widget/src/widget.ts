@@ -2409,7 +2409,7 @@ function buildPinIcon(size: number, fill: string): SVGSVGElement {
  * full-page screenshot. ~16px padding around the union gives the
  * agent a little context.
  */
-function computeUnionCropRect(
+export function computeUnionCropRect(
   primary: Element,
   extras: ReadonlyArray<{
     selector: string;

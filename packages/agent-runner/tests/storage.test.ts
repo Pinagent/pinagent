@@ -5,7 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { nanoid } from 'nanoid';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { type FeedbackInput, isInGitignore, isInsideRoot, Storage } from '../src/storage';
+import {
+  type FeedbackInput,
+  FeedbackInputSchema,
+  isInGitignore,
+  isInsideRoot,
+  Storage,
+} from '../src/storage';
 
 // 1x1 transparent PNG.
 const TINY_PNG_B64 =
@@ -448,5 +454,85 @@ describe('isInsideRoot', () => {
 
   it('returns false for path traversal escapes', () => {
     expect(isInsideRoot('/abs/root', '/abs/root/../outside')).toBe(false);
+  });
+});
+
+describe('FeedbackInputSchema.additionalAnchors', () => {
+  // Minimal valid payload — the schema requires a screenshot, loc,
+  // viewport, etc. so the per-test overrides are tiny.
+  function baseInput(extra?: Partial<FeedbackInput>): unknown {
+    return {
+      comment: 'multi-pick test',
+      loc: { file: 'src/Foo.tsx', line: 1, col: 0 },
+      selector: 'main',
+      url: 'http://localhost:3000/',
+      viewport: { w: 1280, h: 720 },
+      userAgent: 'test-agent',
+      screenshot: 'iVBORw==',
+      createdAt: '2026-05-25T12:00:00.000Z',
+      ...extra,
+    };
+  }
+
+  it('accepts a payload with no additionalAnchors key at all (single-pick is the common case)', () => {
+    const parsed = FeedbackInputSchema.parse(baseInput());
+    expect(parsed.additionalAnchors).toBeUndefined();
+  });
+
+  it('accepts an empty array (client elected to send one even though they could omit)', () => {
+    const parsed = FeedbackInputSchema.parse(baseInput({ additionalAnchors: [] }));
+    expect(parsed.additionalAnchors).toEqual([]);
+  });
+
+  it('accepts a well-formed extras array, allowing nulls in file/line/col', () => {
+    const extras = [
+      { file: 'src/A.tsx', line: 1, col: 0, selector: '.a', clickX: 10, clickY: 20 },
+      { file: null, line: null, col: null, selector: '.b', clickX: 30, clickY: 40 },
+    ];
+    const parsed = FeedbackInputSchema.parse(baseInput({ additionalAnchors: extras }));
+    expect(parsed.additionalAnchors).toEqual(extras);
+  });
+
+  it('rejects more than 32 extras (runaway client guard)', () => {
+    const many = Array.from({ length: 33 }, (_, i) => ({
+      file: null,
+      line: null,
+      col: null,
+      selector: `.x-${i}`,
+      clickX: i,
+      clickY: i,
+    }));
+    expect(() => FeedbackInputSchema.parse(baseInput({ additionalAnchors: many }))).toThrow();
+  });
+
+  it('rejects an extra missing required selector', () => {
+    expect(() =>
+      FeedbackInputSchema.parse(
+        baseInput({
+          // biome-ignore lint/suspicious/noExplicitAny: deliberately invalid shape
+          additionalAnchors: [{ file: null, line: null, col: null, clickX: 0, clickY: 0 } as any],
+        }),
+      ),
+    ).toThrow();
+  });
+
+  it('rejects an extra with non-numeric click coordinates', () => {
+    expect(() =>
+      FeedbackInputSchema.parse(
+        baseInput({
+          additionalAnchors: [
+            {
+              file: null,
+              line: null,
+              col: null,
+              selector: '.b',
+              // biome-ignore lint/suspicious/noExplicitAny: deliberately invalid shape
+              clickX: 'no' as any,
+              clickY: 0,
+            },
+          ],
+        }),
+      ),
+    ).toThrow();
   });
 });
