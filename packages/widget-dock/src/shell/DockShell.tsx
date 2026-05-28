@@ -14,8 +14,11 @@
 import { PinMark } from '@pinagent/ui/components/pin-mark';
 import { Outlet, useLocation } from '@tanstack/react-router';
 import { Suspense, useMemo } from 'react';
+import { useBranches } from '../hooks/useBranches';
+import { useChanges } from '../hooks/useChanges';
 import { useConversations } from '../hooks/useConversations';
 import { useProjectSubscription } from '../hooks/useProjectSubscription';
+import { usePullRequests } from '../hooks/usePullRequests';
 import type { DockTransport } from '../transport';
 import { useTransport } from '../transport';
 import { DockChrome } from './DockChrome';
@@ -23,6 +26,7 @@ import { useDockEnvironment } from './DockEnvironment';
 import { DockFAB } from './DockFAB';
 import { DockSurface } from './DockSurface';
 import { NavRail, ROUTES } from './NavRail';
+import { filterNavRoutes } from './nav-route-filter';
 import { RouteFallback } from './RouteFallback';
 import { useDockMode } from './useDockMode';
 import { useKeyboardShortcuts } from './useKeyboardShortcuts';
@@ -50,6 +54,16 @@ export function DockShell() {
     return data.filter((c) => c.status === 'readyToLand' || c.status === 'awaitingClarification')
       .length;
   }, [conversations.data]);
+
+  // Worktree-flow tabs (Branches, Changes, PRs) only make sense when
+  // there's data in them — on MCP-runtime or inline-mode projects they
+  // stay permanently empty and become misleading dead nav. Treat
+  // pre-load (`undefined`) as "show by default" so the tabs don't
+  // flash hidden during the initial fetch. The active route always
+  // stays visible (handled inside `filterNavRoutes`).
+  const branches = useBranches();
+  const changes = useChanges();
+  const pullRequests = usePullRequests();
 
   // Disconnected = forced (?state=disconnected), HTTP failed, or the WS
   // bridge is down. Either signal is enough to surface the indicator;
@@ -79,6 +93,23 @@ export function DockShell() {
     [location.pathname],
   );
 
+  // Treat `undefined` (loading) as "non-empty" so the tab doesn't flash
+  // hidden before the first fetch lands. `Number.POSITIVE_INFINITY`
+  // makes the >0 check inside `filterNavRoutes` trivially true.
+  const visibleRoutes = useMemo(
+    () =>
+      filterNavRoutes({
+        routes: ROUTES,
+        counts: {
+          branches: branches.data?.length ?? Number.POSITIVE_INFINITY,
+          changes: changes.data?.length ?? Number.POSITIVE_INFINITY,
+          prs: pullRequests.data?.length ?? Number.POSITIVE_INFINITY,
+        },
+        activePath: location.pathname,
+      }),
+    [branches.data, changes.data, pullRequests.data, location.pathname],
+  );
+
   const surface = (
     <>
       <DockFAB open={dock.open} count={pendingCount} onToggle={dock.toggle} />
@@ -91,7 +122,7 @@ export function DockShell() {
           context={context}
         />
         <div className="flex flex-1 min-h-0">
-          <NavRail expanded={expandedNav} />
+          <NavRail expanded={expandedNav} routes={visibleRoutes} />
           <main aria-label="Dock content" className="flex flex-1 flex-col overflow-auto">
             <Suspense fallback={<RouteFallback />}>
               <Outlet />
