@@ -38,6 +38,14 @@ export type AuditAction =
    */
   | 'conversations_bulk_archived'
   | 'conversations_bulk_unarchived'
+  /**
+   * Bulk prune from the Branches view's multi-select. Payload:
+   * `{ ids: string[], count: number }`. Per-row
+   * `conversation_discarded` events still fire from `discardWorktree`
+   * so the per-conversation audit history stays intact; this bulk
+   * event is the summary row.
+   */
+  | 'worktrees_bulk_pruned'
   | 'pr_created';
 
 export interface AuditEventRecord {

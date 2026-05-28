@@ -13,7 +13,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import type { Branch } from '../fixtures/types';
-import { type PruneStaleResult, useTransport } from '../transport';
+import { type BulkPruneResult, type PruneStaleResult, useTransport } from '../transport';
 
 const KEY = ['branches'] as const;
 
@@ -51,6 +51,28 @@ export function usePruneStaleBranches(): UseMutationResult<PruneStaleResult, Err
       await Promise.all([
         qc.invalidateQueries({ queryKey: [...KEY, transport.kind] }),
         qc.invalidateQueries({ queryKey: ['conversations', transport.kind] }),
+      ]);
+    },
+  });
+}
+
+/**
+ * Bulk-prune a hand-picked batch of worktrees. Invalidates branches +
+ * conversations + changes (each pruned row is also a worktree discard
+ * that drops it from the Changes view) + auditLog (so the
+ * History → Activity tab picks up the single bulk audit entry).
+ */
+export function useBulkPruneBranches(): UseMutationResult<BulkPruneResult, Error, string[]> {
+  const transport = useTransport();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (feedbackIds: string[]) => transport.bulkPruneBranches(feedbackIds),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: [...KEY, transport.kind] }),
+        qc.invalidateQueries({ queryKey: ['conversations', transport.kind] }),
+        qc.invalidateQueries({ queryKey: ['changes', transport.kind] }),
+        qc.invalidateQueries({ queryKey: ['auditLog', transport.kind] }),
       ]);
     },
   });

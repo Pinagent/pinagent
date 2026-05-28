@@ -19,11 +19,13 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { z } from 'zod';
 import { discardWorktree } from './agent';
+import { recordAuditEvent } from './audit-log';
 import { runGitCapture } from './git-utils';
 import { enqueue } from './merge-queue';
 import { SettingsStore } from './settings-store';
-import { Storage } from './storage';
+import { ID_RE, Storage } from './storage';
 
 export interface BranchRecord {
   /** Stable id — uses the conversation id since 1 worktree = 1 conversation. */
@@ -184,6 +186,57 @@ export interface PruneStaleResult {
   failed: { feedbackId: string; error: string }[];
   /** Retention threshold (days) that was applied. Echoed for UI clarity. */
   retentionDays: number;
+}
+
+export interface BulkPruneResult {
+  pruned: string[];
+  failed: { feedbackId: string; error: string }[];
+}
+
+/**
+ * Wire body for `POST /__pinagent/branches/bulk-prune`. Capped at 200
+ * ids — well past the manual-select pain threshold and bounds the
+ * worst-case request.
+ */
+export const BulkPruneBodySchema = z.object({
+  feedbackIds: z.array(z.string().regex(ID_RE)).min(1).max(200),
+});
+export type BulkPruneBody = z.infer<typeof BulkPruneBodySchema>;
+
+/**
+ * Prune a hand-picked batch of worktrees. Each id goes through the
+ * existing per-row `pruneBranch` so the worktree teardown + per-row
+ * `conversation_discarded` audit emission stay intact; this function
+ * adds ONE summary `worktrees_bulk_pruned` event covering the batch.
+ *
+ * Serial loop matches `pruneStaleBranches`: each prune already
+ * serializes via the merge queue, so parallel calls wouldn't gain
+ * anything and a linear loop keeps the result order predictable for
+ * the dock's success toast.
+ */
+export async function pruneBranches(
+  projectRoot: string,
+  feedbackIds: string[],
+): Promise<BulkPruneResult> {
+  const pruned: string[] = [];
+  const failed: { feedbackId: string; error: string }[] = [];
+
+  for (const id of feedbackIds) {
+    const result = await pruneBranch(projectRoot, id);
+    if (result.ok) pruned.push(result.feedbackId);
+    else failed.push({ feedbackId: result.feedbackId, error: result.error ?? 'unknown' });
+  }
+
+  if (pruned.length > 0) {
+    await recordAuditEvent(projectRoot, {
+      conversationId: null,
+      actor: 'user',
+      action: 'worktrees_bulk_pruned',
+      payload: { ids: pruned, count: pruned.length },
+    });
+  }
+
+  return { pruned, failed };
 }
 
 /**

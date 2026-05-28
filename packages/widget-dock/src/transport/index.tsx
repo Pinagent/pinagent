@@ -39,6 +39,7 @@ export type {
   AuditActor,
   AuditEvent,
   BulkArchiveResult,
+  BulkPruneResult,
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,
