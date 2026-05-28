@@ -15,9 +15,10 @@ V8 contexts within a single Node process**:
 
 - **Next 16 / Turbopack:** route modules can be evaluated more than
   once. HMR, workers, and certain route-handler boundaries each get
-  their own context. Symptom: the dev-server log shows
-  `[pinagent] WebSocket server already running on port 53636 (duplicate
-  bind ignored)` — two `startWsServer()` calls both tried to bind.
+  their own context. Symptom: two `startWsServer()` calls both try to
+  bind. The second context's bind fails with `EADDRINUSE` on port
+  53636, and the dev-server log shows the fallback message
+  (`[pinagent] port 53636 in use … trying 53637`).
 - **Vite 8 environments:** the new
   [environment API](https://vite.dev/guide/api-environment.html)
   introduces SSR / RSC / worker environments that each have their
