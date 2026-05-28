@@ -444,6 +444,103 @@ describe('runFollowUpTurn', () => {
     expect(second.capturedParams?.prompt).toBe('and make it bold');
     expect(resultsSeen).toBeGreaterThanOrEqual(1);
   });
+
+  /**
+   * Regression for the lifecycle Re-open added in #91. The follow-up
+   * loop must survive a round trip through a terminal state:
+   *
+   *   agent finishes  → MCP resolve_feedback inline-promotes to landed
+   *   user clicks Re-open → reopenConversation flips back to pending/none
+   *   user sends a message → runFollowUpTurn resumes the SAME SDK session
+   *
+   * The dock's textarea is gated on `stream.done`, which is only set
+   * when the bus closes via `FINISHED_ROLE`. Re-open must NOT close the
+   * bus and must NOT clear `agentSessionId`, or the follow-up here
+   * would fail at the "no prior agent session" check.
+   */
+  it('supports a follow-up turn after the conversation has been reopened', async () => {
+    const { id, storage } = await makeFeedback('original comment');
+    const rec = await storage.read(id);
+
+    // Initial run: produces a session id we'll need to resume from later.
+    scriptQuery([
+      {
+        type: 'system',
+        subtype: 'init',
+        session_id: 'sess-reopen',
+        model: 'claude',
+        permissionMode: 'acceptEdits',
+        mcp_servers: [],
+        apiKeySource: 'oauth',
+      } as never,
+      {
+        type: 'result',
+        subtype: 'success',
+        num_turns: 1,
+        usage: { input_tokens: 1, output_tokens: 1 },
+        total_cost_usd: 0,
+        duration_ms: 1,
+      } as never,
+    ]);
+    const initialDone = collectUntil(id, (e) => e.type === 'result');
+    await agent.spawnAgent({ projectRoot: PROJECT_ROOT, feedback: rec!, mode: 'inline' });
+    await initialDone;
+    await waitForRunIdle(id);
+
+    // Simulate the post-resolve_feedback inline-mode terminal state
+    // (status=fixed, worktreeState=landed). This is what the MCP
+    // auto-promotion in PR #89 leaves behind, and what Re-open is
+    // built to reverse.
+    await storage.patch(id, { status: 'fixed', worktreeState: 'landed' });
+
+    // Re-open: the conversation moves back to the active list.
+    const logPath = join(PROJECT_ROOT, '.pinagent', 'logs', `${id}.md`);
+    const reopen = await agent.reopenConversation(PROJECT_ROOT, id, logPath);
+    expect(reopen.ok).toBe(true);
+
+    // Re-open must reset lifecycle metadata but preserve the SDK
+    // session id — otherwise the follow-up below has nothing to resume.
+    const afterReopen = await storage.read(id);
+    expect(afterReopen?.worktreeState).toBe('none');
+    expect(afterReopen?.status).toBe('pending');
+    expect(afterReopen?.agentSessionId).toBe('sess-reopen');
+
+    // Follow-up turn: should resume the original SDK session.
+    const second = scriptQuery([
+      {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'actually we need it bolder' }] },
+      } as never,
+      {
+        type: 'result',
+        subtype: 'success',
+        num_turns: 2,
+        usage: { input_tokens: 5, output_tokens: 5 },
+        total_cost_usd: 0,
+        duration_ms: 1,
+      } as never,
+    ]);
+
+    let resultsSeen = 0;
+    const followUpDone = new Promise<void>((resolve) => {
+      bus.getOrCreateBus(id).subscribe({
+        onEvent(e) {
+          if (e.type === 'result') {
+            resultsSeen += 1;
+            resolve();
+          }
+        },
+        onClose() {},
+      });
+    });
+
+    await agent.runFollowUpTurn(id, 'still not bold enough');
+    await followUpDone;
+
+    expect(second.capturedParams?.options?.resume).toBe('sess-reopen');
+    expect(second.capturedParams?.prompt).toBe('still not bold enough');
+    expect(resultsSeen).toBeGreaterThanOrEqual(1);
+  });
 });
 
 describe('interruptRun', () => {
