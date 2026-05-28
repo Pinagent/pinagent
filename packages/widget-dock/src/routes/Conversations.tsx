@@ -578,10 +578,12 @@ function safePath(url: string): string {
  * subscribes to the per-conversation WS bus for the transcript and
  * live agent events, and lets the user reply, land, or discard.
  *
- * Known limitation: the WS bus is kept in-memory with a ~5 minute TTL
- * after the agent finishes. Long-finished conversations show an empty
- * transcript with a placeholder — adding a persisted-messages HTTP
- * endpoint is follow-up work.
+ * Transcript persistence: every bus event is written to the SQLite
+ * `messages` table (see `agent-runner/src/bus.ts`). On subscribe, the
+ * bus replays the full history before streaming live events — so even
+ * long-finished conversations show their transcript. The HTTP
+ * `GET /__pinagent/feedback/:id/messages` endpoint reads the same
+ * source for callers that don't want a WS (external CLI, exports).
  */
 /**
  * One locally-pushed item that hasn't come back over the WS yet. Used

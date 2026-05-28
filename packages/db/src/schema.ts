@@ -120,10 +120,13 @@ export const widgetAnchors = sqliteTable('widget_anchors', {
  * `turn` increments per agent turn so we can group events for replay
  * and for the "Turn N" sections in the markdown log file.
  *
- * Note: the source-of-truth for live event streaming is still the
- * in-memory event bus (`packages/shared/src/event-bus.ts`). The SQLite
- * table is the durable record + the browser cache. Bus → SQLite
- * write-through happens in Phase 2 of this migration.
+ * This table IS the source of truth for the event stream. The bus
+ * (`packages/agent-runner/src/bus.ts`) writes every publish straight
+ * to this table and subscribers poll it — so cross-process delivery
+ * works even when Vite-style dual-context module loading would
+ * otherwise split an in-memory bus into separate instances. A `role`
+ * of `__finished` is the bus's end-of-run sentinel (excluded from
+ * external reads).
  */
 export const messages = sqliteTable('messages', {
   id: integer('id').primaryKey({ autoIncrement: true }),
