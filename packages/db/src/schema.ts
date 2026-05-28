@@ -110,6 +110,25 @@ export const widgetAnchors = sqliteTable('widget_anchors', {
   viewportH: integer('viewport_h'),
   /** From `navigator.userAgent` at pick time. Mostly for debugging. */
   userAgent: text('user_agent'),
+  /**
+   * Secondary elements picked via Cmd/Ctrl-click before the committing
+   * click. Same shape as the primary anchor's location columns, minus
+   * the viewport/userAgent context (those are shared at the conversation
+   * level). Null when the user picked exactly one element — the common
+   * case — so the column adds no cost to single-pick conversations.
+   */
+  additionalAnchors: text('additional_anchors', {
+    mode: 'json',
+  }).$type<
+    Array<{
+      file: string | null;
+      line: number | null;
+      col: number | null;
+      selector: string;
+      clickX: number;
+      clickY: number;
+    }>
+  >(),
 });
 
 /**

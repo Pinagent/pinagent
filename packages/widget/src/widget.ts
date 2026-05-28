@@ -50,12 +50,28 @@ const MAX_TA_H = 240;
  * unstrumented apps). `chips` is the element-aware quick-action set
  * — see quick-actions.ts.
  */
+interface ExtraAnchor {
+  file: string | null;
+  line: number | null;
+  col: number | null;
+  selector: string;
+  clickX: number;
+  clickY: number;
+}
+
 interface ComposerMeta {
   tag: string;
   label: string | null;
   loc: PaLoc | null;
   breadcrumbs: string[];
   chips: QuickAction[];
+  /**
+   * Number of Cmd/Ctrl-click extras the user queued before this
+   * committing click. 0 in the single-pick case (the default); when > 0
+   * the composer header renders a "+N" badge whose hover/leave events
+   * post messages to the parent so it can flash highlight outlines.
+   */
+  extraCount: number;
 }
 
 const ICON_CODE = `<svg class="hdr-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`;
@@ -140,6 +156,15 @@ interface Composer {
    */
   dataPaLoc: string | null;
   selector: string;
+  /**
+   * Extra elements the user added with Cmd/Ctrl-click before the
+   * committing click. Captured at pick time and sent through to the
+   * server in the submit payload. The composer is only visually pinned
+   * to the primary `target`; these are informational data for the
+   * agent + a hover-preview on the "+N" header badge. Empty in the
+   * common single-pick case.
+   */
+  extraAnchors: ExtraAnchor[];
   /**
    * True when neither `dataPaLoc` nor `selector` resolves to a live
    * element. The widget stays put at its last known coordinates with a
@@ -584,6 +609,16 @@ export function mount(): void {
   const composers = new Set<Composer>();
   let expandedComposer: Composer | null = null;
 
+  // Cmd-click (mac) / Ctrl-click (win/linux) accumulates targets during
+  // a single pick session. A plain click then commits the whole group
+  // (the plain-clicked element becomes the primary anchor; everything
+  // queued here becomes the additional anchors). Cleared on exit.
+  type PendingPick = { target: Element; click: { x: number; y: number }; outline: HTMLDivElement };
+  const pendingPicks: PendingPick[] = [];
+  let pendingPicksRaf: number | null = null;
+  const IS_MAC = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+  const MOD_LABEL = IS_MAC ? 'Cmd' : 'Ctrl';
+
   function enterPicking() {
     state.mode = 'picking';
     fab.classList.add('active');
@@ -591,9 +626,9 @@ export function mount(): void {
 
     const hint = document.createElement('div');
     hint.className = 'hint';
-    hint.textContent = 'Click an element. Esc to cancel.';
     hint.dataset.pp = 'hint';
     root.appendChild(hint);
+    updatePickHint();
 
     // Suspend pointer-events on the expanded composer iframe so clicks
     // pass through to the underlying page. Bubbles stay clickable so the
@@ -605,6 +640,14 @@ export function mount(): void {
     document.addEventListener('mousemove', onMove, true);
     document.addEventListener('click', onPick, true);
     document.addEventListener('keydown', onKey, true);
+
+    // Keep the persistent selection outlines pinned to their elements
+    // while the user keeps picking — the page may scroll or reflow.
+    const tick = () => {
+      for (const p of pendingPicks) positionSelectionOutline(p.outline, p.target);
+      pendingPicksRaf = requestAnimationFrame(tick);
+    };
+    pendingPicksRaf = requestAnimationFrame(tick);
   }
 
   function exitPicking() {
@@ -620,6 +663,11 @@ export function mount(): void {
     document.removeEventListener('mousemove', onMove, true);
     document.removeEventListener('click', onPick, true);
     document.removeEventListener('keydown', onKey, true);
+    clearPendingPicks();
+    if (pendingPicksRaf !== null) {
+      cancelAnimationFrame(pendingPicksRaf);
+      pendingPicksRaf = null;
+    }
   }
 
   function onMove(e: MouseEvent) {
@@ -652,8 +700,30 @@ export function mount(): void {
     }
     e.preventDefault();
     e.stopPropagation();
+
+    const additive = e.metaKey || e.ctrlKey;
+    if (additive) {
+      // Toggle: same element re-clicked with the modifier deselects.
+      const existingIdx = pendingPicks.findIndex((p) => p.target === target);
+      if (existingIdx >= 0) {
+        const removed = pendingPicks.splice(existingIdx, 1)[0];
+        if (removed) removed.outline.remove();
+      } else {
+        const ol = document.createElement('div');
+        ol.className = 'selection-outline';
+        root.appendChild(ol);
+        positionSelectionOutline(ol, target);
+        pendingPicks.push({ target, click: { x: e.clientX, y: e.clientY }, outline: ol });
+      }
+      updatePickHint();
+      return;
+    }
+
+    // Plain click — commit. Snapshot pending picks before exitPicking
+    // wipes them, then hand the array to the composer as extras.
+    const extras = pendingPicks.map((p) => ({ target: p.target, click: p.click }));
     exitPicking();
-    openComposer(target, { x: e.clientX, y: e.clientY });
+    openComposer(target, { x: e.clientX, y: e.clientY }, extras);
   }
 
   function onKey(e: KeyboardEvent) {
@@ -670,6 +740,30 @@ export function mount(): void {
     outline.style.left = `${r.left}px`;
     outline.style.width = `${r.width}px`;
     outline.style.height = `${r.height}px`;
+  }
+
+  function positionSelectionOutline(el: HTMLDivElement, target: Element): void {
+    const r = target.getBoundingClientRect();
+    el.style.top = `${r.top}px`;
+    el.style.left = `${r.left}px`;
+    el.style.width = `${r.width}px`;
+    el.style.height = `${r.height}px`;
+  }
+
+  function clearPendingPicks(): void {
+    for (const p of pendingPicks) p.outline.remove();
+    pendingPicks.length = 0;
+  }
+
+  function updatePickHint(): void {
+    const hint = root.querySelector('[data-pp="hint"]');
+    if (!hint) return;
+    if (pendingPicks.length === 0) {
+      hint.textContent = `Click an element. ${MOD_LABEL}-click to add more. Esc to cancel.`;
+    } else {
+      const n = pendingPicks.length;
+      hint.textContent = `${n} selected. Click to comment. ${MOD_LABEL}-click to add more. Esc to cancel.`;
+    }
   }
 
   function elementFromEvent(e: MouseEvent): Element | null {
@@ -732,11 +826,15 @@ export function mount(): void {
     if (next) swapTo(next);
   }
 
-  function openComposer(target: Element, click: { x: number; y: number }) {
+  function openComposer(
+    target: Element,
+    click: { x: number; y: number },
+    extras: Array<{ target: Element; click: { x: number; y: number } }> = [],
+  ) {
     if (expandedComposer) {
       expandedComposer.minimize();
     }
-    const composer = createComposer(target, click);
+    const composer = createComposer(target, click, extras);
     composers.add(composer);
     expandedComposer = composer;
   }
@@ -798,15 +896,31 @@ export function mount(): void {
     return true;
   }
 
-  function createComposer(target: Element, click: { x: number; y: number }): Composer {
+  function createComposer(
+    target: Element,
+    click: { x: number; y: number },
+    extras: Array<{ target: Element; click: { x: number; y: number } }> = [],
+  ): Composer {
     const loc = findLoc(target);
     const selector = shortSelector(target);
+    const extraAnchors: ExtraAnchor[] = extras.map(({ target: t, click: c }) => {
+      const eloc = findLoc(t);
+      return {
+        file: eloc?.file ?? null,
+        line: eloc?.line ?? null,
+        col: eloc?.col ?? null,
+        selector: shortSelector(t),
+        clickX: c.x,
+        clickY: c.y,
+      };
+    });
     const meta: ComposerMeta = {
       tag: target.tagName.toLowerCase(),
       label: describeElementLabel(target),
       loc,
       breadcrumbs: breadcrumbTags(target),
       chips: quickActionsFor(target),
+      extraCount: extraAnchors.length,
     };
     const dataPaLoc = loc ? `${loc.file}:${loc.line}:${loc.col}` : null;
 
@@ -993,6 +1107,7 @@ export function mount(): void {
       dragHandle,
       dataPaLoc,
       selector,
+      extraAnchors,
       anchorLost: false,
       userOffsetX: 0,
       userOffsetY: 0,
@@ -1013,6 +1128,7 @@ export function mount(): void {
         }
         if (rafHandle != null) cancelAnimationFrame(rafHandle);
         window.removeEventListener('message', onIframeMessage);
+        clearExtraFlashes();
         iframe.remove();
         bubble.remove();
         dragHandle.remove();
@@ -1099,10 +1215,47 @@ export function mount(): void {
     // by adding the delta from MIN_TA_H to COMPOSER_H. Skipped while
     // the stream pane is shown (post-submit) — that pane has its own
     // fixed STREAM_H height. Listener is removed in close().
+    // Flash outlines drawn while the user hovers the "+N" badge in the
+    // composer header. Resolved fresh on each hover so we pick up any
+    // DOM changes since the user committed.
+    let extraFlashes: HTMLDivElement[] = [];
+    function clearExtraFlashes(): void {
+      for (const el of extraFlashes) el.remove();
+      extraFlashes = [];
+    }
+    function flashExtras(): void {
+      clearExtraFlashes();
+      for (const a of composer.extraAnchors) {
+        const t = findReanchorTarget(
+          a.file && a.line != null && a.col != null ? `${a.file}:${a.line}:${a.col}` : null,
+          a.selector,
+        );
+        if (!t) continue;
+        const r = t.getBoundingClientRect();
+        const el = document.createElement('div');
+        el.className = 'selection-outline';
+        el.style.top = `${r.top}px`;
+        el.style.left = `${r.left}px`;
+        el.style.width = `${r.width}px`;
+        el.style.height = `${r.height}px`;
+        root.appendChild(el);
+        extraFlashes.push(el);
+      }
+    }
+
     function onIframeMessage(ev: MessageEvent) {
       if (ev.source !== iframe.contentWindow) return;
       const data = ev.data as { type?: string; taHeight?: number } | null;
-      if (!data || data.type !== 'pa-composer-resize-ta') return;
+      if (!data || typeof data.type !== 'string') return;
+      if (data.type === 'pa-extras-hover') {
+        flashExtras();
+        return;
+      }
+      if (data.type === 'pa-extras-leave') {
+        clearExtraFlashes();
+        return;
+      }
+      if (data.type !== 'pa-composer-resize-ta') return;
       if (composer.feedbackId) return;
       const ta = Math.min(MAX_TA_H, Math.max(MIN_TA_H, Number(data.taHeight) || MIN_TA_H));
       const next = COMPOSER_H + (ta - MIN_TA_H);
@@ -1176,6 +1329,19 @@ export function mount(): void {
         landBtn,
         discardBtn,
       };
+
+      // "+N more" badge — present only when extras > 0. Hover bounces a
+      // message up to the parent which flashes outlines on the extras
+      // on the underlying page.
+      const extrasBadge = idoc.getElementById('pa-extras');
+      if (extrasBadge) {
+        extrasBadge.addEventListener('mouseenter', () => {
+          iwin.parent.postMessage({ type: 'pa-extras-hover' }, '*');
+        });
+        extrasBadge.addEventListener('mouseleave', () => {
+          iwin.parent.postMessage({ type: 'pa-extras-leave' }, '*');
+        });
+      }
 
       if (loc2) {
         metaEl.classList.add('clickable');
@@ -1344,11 +1510,18 @@ export function mount(): void {
         submit.disabled = true;
         submit.textContent = 'Sending…';
         try {
+          // Union bbox of primary + all live extras. When the user
+          // multi-picked, this is what the agent gets — a crop tight
+          // enough that the elements + a little surrounding context are
+          // visible. When there are no extras, omit the crop and keep
+          // today's full-page screenshot behavior.
+          const cropRect = computeUnionCropRect(c.target, c.extraAnchors);
           const screenshot = await capturePageScreenshot(
             (node) =>
               node !== host &&
               node !== (c.iframe as unknown as HTMLElement) &&
               node !== (c.bubble as unknown as HTMLElement),
+            cropRect,
           );
           const payload = {
             comment: ta.value.trim(),
@@ -1359,6 +1532,7 @@ export function mount(): void {
             userAgent: navigator.userAgent,
             screenshot,
             createdAt: new Date().toISOString(),
+            additionalAnchors: c.extraAnchors.length > 0 ? c.extraAnchors : undefined,
           };
           const res = await fetch(ENDPOINT, {
             method: 'POST',
@@ -1404,6 +1578,7 @@ export function mount(): void {
                   clickY: click.y,
                   viewportW: payload.viewport.w,
                   viewportH: payload.viewport.h,
+                  additionalAnchors: c.extraAnchors.length > 0 ? c.extraAnchors : undefined,
                 },
               }).catch((err) =>
                 // eslint-disable-next-line no-console
@@ -2168,11 +2343,19 @@ function composerHTML(meta: ComposerMeta): string {
 function renderHeader(meta: ComposerMeta, esc: (s: string) => string): string {
   // Identity row: the picked element's tag pill + (optionally) a
   // quoted label. The pill uses the "selected" ink-on-cream palette
-  // so it visually matches the same tag in the breadcrumb below.
+  // so it visually matches the same tag in the breadcrumb below. When
+  // the user accumulated extras with Cmd/Ctrl-click, an "+N" badge
+  // tags along; hovering it asks the parent to flash highlights on
+  // the extras so the user remembers what they picked.
+  const extraBadge =
+    meta.extraCount > 0
+      ? `<span class="el-extras" id="pa-extras" title="${meta.extraCount} more selected">+${meta.extraCount}</span>`
+      : '';
   const identity =
     `<div class="hdr-row hdr-identity">` +
     `<span class="el-pill">&lt;${esc(meta.tag)}&gt;</span>` +
     (meta.label ? `<span class="el-label">"${esc(meta.label)}"</span>` : '') +
+    extraBadge +
     `</div>`;
 
   // File row: only rendered when data-pa-loc resolved. Hosts the
@@ -2230,6 +2413,59 @@ function buildPinIcon(size: number, fill: string): SVGSVGElement {
   path.setAttribute('fill', fill);
   svg.appendChild(path);
   return svg;
+}
+
+/**
+ * Compute the union bbox of the primary target plus any live extras,
+ * in document coords (CSS pixels including scroll). Returns null when
+ * there are no extras — single-pick conversations keep today's
+ * full-page screenshot. ~16px padding around the union gives the
+ * agent a little context.
+ */
+export function computeUnionCropRect(
+  primary: Element,
+  extras: ReadonlyArray<{
+    selector: string;
+    file: string | null;
+    line: number | null;
+    col: number | null;
+  }>,
+): { x: number; y: number; w: number; h: number } | null {
+  if (extras.length === 0) return null;
+
+  const rects: DOMRect[] = [];
+  if (primary.isConnected) rects.push(primary.getBoundingClientRect());
+
+  for (const a of extras) {
+    const t = findReanchorTarget(
+      a.file && a.line != null && a.col != null ? `${a.file}:${a.line}:${a.col}` : null,
+      a.selector,
+    );
+    if (t) rects.push(t.getBoundingClientRect());
+  }
+  if (rects.length === 0) return null;
+
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const r of rects) {
+    left = Math.min(left, r.left);
+    top = Math.min(top, r.top);
+    right = Math.max(right, r.right);
+    bottom = Math.max(bottom, r.bottom);
+  }
+  const pad = 16;
+  const docLeft = left + window.scrollX - pad;
+  const docTop = top + window.scrollY - pad;
+  const docRight = right + window.scrollX + pad;
+  const docBottom = bottom + window.scrollY + pad;
+  return {
+    x: Math.max(0, Math.floor(docLeft)),
+    y: Math.max(0, Math.floor(docTop)),
+    w: Math.ceil(docRight - docLeft),
+    h: Math.ceil(docBottom - docTop),
+  };
 }
 
 function resolveHotkey(): string | null {

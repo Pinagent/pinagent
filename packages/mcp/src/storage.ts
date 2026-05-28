@@ -31,6 +31,15 @@ export type Status = z.infer<typeof StatusSchema>;
 
 export type WorktreeState = 'none' | 'active' | 'landed' | 'discarded';
 
+export interface AdditionalAnchor {
+  file: string | null;
+  line: number | null;
+  col: number | null;
+  selector: string;
+  clickX: number;
+  clickY: number;
+}
+
 export interface FeedbackRecord {
   id: string;
   comment: string;
@@ -41,6 +50,12 @@ export interface FeedbackRecord {
   url: string;
   viewport: { w: number; h: number };
   userAgent: string;
+  /**
+   * Cmd/Ctrl-click extras the user accumulated before the committing
+   * click, in order. Null in the common single-pick case. v1 just
+   * surfaces them — the MCP agent prompt doesn't yet enumerate them.
+   */
+  additionalAnchors: AdditionalAnchor[] | null;
   screenshot: string;
   status: Status;
   worktreeState: WorktreeState;
@@ -293,6 +308,7 @@ function rowToRecord(row: {
     url: a?.url ?? '',
     viewport: { w: a?.viewportW ?? 0, h: a?.viewportH ?? 0 },
     userAgent: a?.userAgent ?? '',
+    additionalAnchors: a?.additionalAnchors ?? null,
     screenshot: join('screenshots', `${c.id}.png`),
     status: c.status,
     worktreeState: c.worktreeState,
