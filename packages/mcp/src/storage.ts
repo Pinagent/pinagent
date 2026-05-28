@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { asc, conversations, eq, widgetAnchors } from '@pinagent/db';
+import { asc, auditEvents, conversations, eq, widgetAnchors } from '@pinagent/db';
 import * as schema from '@pinagent/db/schema';
 import { drizzle, type SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy';
 import { z } from 'zod';
@@ -207,6 +207,34 @@ export class Storage {
         resolvedAt: rec.resolvedAt ? parseDate(rec.resolvedAt) : null,
       })
       .where(eq(conversations.id, rec.id));
+  }
+
+  /**
+   * Append a row to the audit log. Same table the dev-server's
+   * `recordAuditEvent` writes to, intentionally so the History →
+   * Activity feed shows every meaningful project event regardless of
+   * which process produced it. Best-effort: a DB failure here must not
+   * mask the calling `resolve_feedback` success.
+   */
+  async recordAuditEvent(input: {
+    conversationId: string | null;
+    actor: 'agent' | 'user' | 'system';
+    action: string;
+    payload?: Record<string, unknown>;
+  }): Promise<void> {
+    try {
+      const db = this.db();
+      await db.insert(auditEvents).values({
+        conversationId: input.conversationId,
+        actor: input.actor,
+        action: input.action,
+        payload: input.payload ?? {},
+      });
+    } catch {
+      // Migrations may not have applied yet, or the conversation row may
+      // have been deleted between read and audit-write. Either way, drop
+      // silently — the conversation change itself already succeeded.
+    }
   }
 }
 
