@@ -24,6 +24,8 @@ export function activate(context: vscode.ExtensionContext): void {
         switch (action) {
           case 'open-claude':
             return handleOpenClaude(uri);
+          case 'open-file':
+            return handleOpenFile(uri);
           default:
             void vscode.window.showWarningMessage(`Pinagent: unknown URI action "${action}"`);
         }
@@ -53,6 +55,54 @@ function handleOpenClaude(uri: vscode.Uri): void {
       term.sendText(prompt, false);
     }, PROMPT_DELAY_MS);
   }
+}
+
+async function handleOpenFile(uri: vscode.Uri): Promise<void> {
+  const params = new URLSearchParams(uri.query);
+  const path = params.get('path');
+  const line = clampPositive(parseInt(params.get('line') ?? '1', 10), 1);
+  const col = clampPositive(parseInt(params.get('col') ?? '1', 10), 1);
+
+  if (!path) {
+    void vscode.window.showWarningMessage('Pinagent: open-file requires a `path` query parameter.');
+    return;
+  }
+
+  // Resolve against the first open workspace folder when the path is
+  // relative. Pinagent stores project-relative locations (data-pa-loc
+  // is "src/Foo.tsx:42:8"), so this is the common case. Absolute paths
+  // pass through untouched so the same handler also serves "open this
+  // file by its full disk path" callers.
+  const target = resolveAgainstWorkspace(path);
+  if (!target) {
+    void vscode.window.showWarningMessage(
+      `Pinagent: no workspace folder is open — cannot resolve "${path}".`,
+    );
+    return;
+  }
+
+  try {
+    const doc = await vscode.workspace.openTextDocument(target);
+    const zeroBased = new vscode.Position(line - 1, col - 1);
+    await vscode.window.showTextDocument(doc, {
+      selection: new vscode.Range(zeroBased, zeroBased),
+      preserveFocus: false,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    void vscode.window.showWarningMessage(`Pinagent: couldn't open ${path} — ${message}`);
+  }
+}
+
+function resolveAgainstWorkspace(path: string): vscode.Uri | undefined {
+  if (path.startsWith('/')) return vscode.Uri.file(path);
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder) return undefined;
+  return vscode.Uri.joinPath(folder.uri, path);
+}
+
+function clampPositive(value: number, fallback: number): number {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 function ensureTerminal(): vscode.Terminal {
