@@ -28,6 +28,7 @@ import type {
   AuditEvent,
   BulkArchiveResult,
   BulkPruneResult,
+  BulkReopenResult,
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,
@@ -164,6 +165,24 @@ const BulkArchiveResultSchema = z
 const BulkPruneResultSchema = z
   .object({
     pruned: z.array(z.string()),
+    failed: z.array(
+      z
+        .object({
+          feedbackId: z.string(),
+          error: z.string(),
+        })
+        .loose(),
+    ),
+  })
+  .loose();
+
+/**
+ * Wire shape for `POST /__pinagent/feedback/bulk-reopen`. Mirrors the
+ * server-side BulkReopenResult shape in @pinagent/agent-runner.
+ */
+const BulkReopenResultSchema = z
+  .object({
+    reopened: z.array(z.string()),
     failed: z.array(
       z
         .object({
@@ -504,6 +523,15 @@ export class LocalTransport implements DockTransport {
       'POST',
       '/__pinagent/branches/bulk-prune',
       BulkPruneResultSchema,
+      { feedbackIds },
+    );
+  }
+
+  async bulkReopenConversations(feedbackIds: string[]): Promise<BulkReopenResult> {
+    return this.jsonWriteValidated(
+      'POST',
+      '/__pinagent/feedback/bulk-reopen',
+      BulkReopenResultSchema,
       { feedbackIds },
     );
   }

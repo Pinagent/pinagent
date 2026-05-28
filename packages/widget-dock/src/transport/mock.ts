@@ -24,6 +24,7 @@ import type {
   AuditEvent,
   BulkArchiveResult,
   BulkPruneResult,
+  BulkReopenResult,
   ChangeDiff,
   ConversationDetail,
   ConversationFilters,
@@ -162,6 +163,37 @@ export class MockTransport implements DockTransport {
       if (!seen.has(id)) failed.push({ feedbackId: id, error: 'conversation not found' });
     }
     return { pruned, failed };
+  }
+
+  async bulkReopenConversations(feedbackIds: string[]): Promise<BulkReopenResult> {
+    await sleep(SIMULATED_LATENCY_MS * 2);
+    const reopened: string[] = [];
+    const failed: { feedbackId: string; error: string }[] = [];
+    const now = new Date().toISOString();
+    // Mirror the server: flips status off of resolved (landed/discarded
+    // /error) back to pending. Anything else → failed.
+    for (const id of feedbackIds) {
+      const idx = this.conversations.findIndex((c) => c.id === id);
+      const existing = idx >= 0 ? this.conversations[idx] : undefined;
+      if (!existing) {
+        failed.push({ feedbackId: id, error: 'conversation not found' });
+        continue;
+      }
+      if (
+        existing.status !== 'landed' &&
+        existing.status !== 'discarded' &&
+        existing.status !== 'error'
+      ) {
+        failed.push({
+          feedbackId: id,
+          error: `cannot reopen: status is ${existing.status} (expected landed/discarded)`,
+        });
+        continue;
+      }
+      this.conversations[idx] = { ...existing, status: 'pending', updatedAt: now };
+      reopened.push(id);
+    }
+    return { reopened, failed };
   }
 
   async listPullRequests(): Promise<PullRequest[]> {

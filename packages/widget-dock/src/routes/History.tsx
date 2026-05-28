@@ -15,6 +15,7 @@
 
 import { StatusBadge } from '@pinagent/ui/components/status-badge';
 import { Badge } from '@pinagent/ui/components/ui/badge';
+import { Button } from '@pinagent/ui/components/ui/button';
 import { Input } from '@pinagent/ui/components/ui/input';
 import { cn } from '@pinagent/ui/lib/utils';
 import type { StatusKey } from '@pinagent/ui/tokens';
@@ -29,11 +30,12 @@ import {
   Search,
   XCircle,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { AnchorChip } from '../components/AnchorChip';
 import { ListRow } from '../components/ListRow';
 import { TimestampDot } from '../components/TimestampDot';
 import { useAuditLog } from '../hooks/useAuditLog';
+import { useBulkReopen } from '../hooks/useBulkReopen';
 import { useConversations } from '../hooks/useConversations';
 import { useDebouncedValue, useHistorySearch } from '../hooks/useHistorySearch';
 import { EmptyState, ErrorState, LoadingState } from '../shell/states';
@@ -112,6 +114,11 @@ function ConversationsTab() {
 
   const conversationsQuery = useConversations();
   const searchQuery = useHistorySearch({ query: debouncedQuery, status: activeFilter.status });
+  const bulkReopen = useBulkReopen();
+  // Selection set for bulk re-open. Persists across filter / search
+  // changes so a user can curate the set from multiple views before
+  // running the action.
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
 
   const isSearching = debouncedQuery.trim().length > 0;
 
@@ -126,6 +133,22 @@ function ConversationsTab() {
     () => (conversationsQuery.data ?? []).filter((c) => RESOLVED_STATUSES.has(c.status)).length,
     [conversationsQuery.data],
   );
+
+  const toggleSelected = useCallback((id: string, next: boolean) => {
+    setSelected((prev) => {
+      const out = new Set(prev);
+      if (next) out.add(id);
+      else out.delete(id);
+      return out;
+    });
+  }, []);
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
+
+  const handleBulkReopen = (): void => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    bulkReopen.mutate(ids, { onSuccess: () => clearSelection() });
+  };
 
   return (
     <>
@@ -173,11 +196,43 @@ function ConversationsTab() {
             query={conversationsQuery}
             items={filterItems}
             resolvedCount={resolvedCount}
+            selected={selected}
+            onSelectChange={toggleSelected}
           />
         ) : (
           <SearchView query={searchQuery} />
         )}
       </div>
+
+      {selected.size > 0 && (
+        <section
+          aria-label="Bulk re-open actions"
+          className={cn('border-t border-border bg-card px-3 py-2', 'flex items-center gap-2')}
+        >
+          <span className="text-xs text-muted-foreground">{selected.size} selected</span>
+          <div className="ml-auto flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handleBulkReopen}
+              disabled={bulkReopen.isPending}
+              className="h-7 gap-1.5 text-xs"
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+              {bulkReopen.isPending ? 'Re-opening…' : `Re-open ${selected.size}`}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearSelection}
+              disabled={bulkReopen.isPending}
+              className="h-7 text-xs"
+            >
+              Cancel
+            </Button>
+          </div>
+        </section>
+      )}
 
       <div className="border-t border-border bg-secondary/30 px-3 py-2">
         <p className="text-[11px] text-muted-foreground">
@@ -194,10 +249,14 @@ function ClientFilterView({
   query,
   items,
   resolvedCount,
+  selected,
+  onSelectChange,
 }: {
   query: ReturnType<typeof useConversations>;
   items: NonNullable<ReturnType<typeof useConversations>['data']>;
   resolvedCount: number;
+  selected: ReadonlySet<string>;
+  onSelectChange: (id: string, next: boolean) => void;
 }) {
   if (query.isLoading) return <LoadingState rows={5} />;
   if (query.isError) {
@@ -234,6 +293,9 @@ function ClientFilterView({
           key={c.id}
           status={c.status}
           title={c.title}
+          selected={selected.has(c.id)}
+          onSelectChange={(next) => onSelectChange(c.id, next)}
+          selectLabel={`Select ${c.title} for bulk re-open`}
           meta={
             <>
               {c.anchor.loc && <AnchorChip loc={c.anchor.loc} selector={c.anchor.selector} />}

@@ -55,6 +55,13 @@ export type AuditAction =
    * event is the summary row.
    */
   | 'worktrees_bulk_pruned'
+  /**
+   * Bulk re-open from History → Conversations multi-select. Payload:
+   * `{ ids: string[], count: number }`. Per-row
+   * `conversation_reopened` events still fire from the underlying
+   * `reopenConversation` calls; this bulk row is the summary.
+   */
+  | 'conversations_bulk_reopened'
   | 'pr_created';
 
 export interface AuditEventRecord {

@@ -2,6 +2,7 @@
 export const PACKAGE_NAME = '@pinagent/agent-runner';
 
 export {
+  type BulkReopenResult,
   computeWorktreeDiff,
   computeWorktreeStats,
   countWorktreeChanges,
@@ -10,6 +11,8 @@ export {
   interruptRun,
   type LandResult,
   mergeWorktree,
+  reopenConversation,
+  reopenConversations,
   resolveAgentMode,
   resolvePermissionMode,
   runFollowUpTurn,
@@ -57,6 +60,8 @@ export {
   applyBulkArchive,
   applyConversationPatch,
   type BulkArchiveResult,
+  type BulkReopenBody,
+  BulkReopenBodySchema,
   type BulkUpdateBody,
   BulkUpdateBodySchema,
 } from './conversation-patch';
