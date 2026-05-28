@@ -1,75 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { cn } from '@pinagent/ui/lib/utils';
-import {
-  CheckCheck,
-  GitMerge,
-  GitPullRequest,
-  MessageSquarePlus,
-  Pencil,
-  Trash2,
-} from 'lucide-react';
-import type { ComponentType, ReactNode, SVGAttributes } from 'react';
+import type { ReactNode } from 'react';
+import { ActivityRow } from '../components/ActivityRow';
 import { AnchorChip } from '../components/AnchorChip';
 import { ListRow } from '../components/ListRow';
-import { TimestampDot } from '../components/TimestampDot';
-import { type ActivityEvent, FIXTURE_ACTIVITY } from '../fixtures';
+import { useAuditLog } from '../hooks/useAuditLog';
 import { useConversations } from '../hooks/useConversations';
+import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
 import { OnboardingState } from '../shell/states/OnboardingState';
 import { useTransport } from '../transport';
-
-const EVENT_ICON: Record<ActivityEvent['type'], ComponentType<SVGAttributes<SVGSVGElement>>> = {
-  conversation_created: MessageSquarePlus,
-  conversation_updated: Pencil,
-  conversation_landed: CheckCheck,
-  pr_created: GitPullRequest,
-  pr_merged: GitMerge,
-  worktree_pruned: Trash2,
-};
-
-function eventDescription(event: ActivityEvent): ReactNode {
-  switch (event.type) {
-    case 'conversation_created':
-      return (
-        <>
-          New conversation · <span className="text-foreground">{event.conversationTitle}</span>
-        </>
-      );
-    case 'conversation_updated':
-      return (
-        <>
-          Update on <span className="text-foreground">{event.conversationTitle}</span>
-        </>
-      );
-    case 'conversation_landed':
-      return (
-        <>
-          Landed <span className="text-foreground">{event.conversationTitle}</span>
-        </>
-      );
-    case 'pr_created':
-      return (
-        <>
-          Opened PR <span className="text-foreground">#{event.prNumber}</span> from{' '}
-          <span className="font-mono text-[11px]">{event.branch}</span>
-        </>
-      );
-    case 'pr_merged':
-      return (
-        <>
-          Merged PR <span className="text-foreground">#{event.prNumber}</span>
-        </>
-      );
-    case 'worktree_pruned':
-      return (
-        <>
-          Pruned worktree <span className="font-mono text-[11px]">{event.branch}</span>
-        </>
-      );
-  }
-}
 
 function SectionHeader({
   title,
@@ -94,6 +35,9 @@ function SectionHeader({
 export function Overview() {
   const transport = useTransport();
   const conversations = useConversations();
+  // Top 7 mirrors what the prior fixture strip showed. The History route
+  // owns the full feed at limit 200; the Overview surface is a glance.
+  const activity = useAuditLog({ limit: 7 });
   const isMock = transport.kind === 'mock';
 
   return (
@@ -141,38 +85,33 @@ export function Overview() {
         </div>
       )}
 
-      <SectionHeader title="Recent activity" hint="fixtures" />
-      <ul className="flex flex-col gap-0.5 px-3 pb-4">
-        {FIXTURE_ACTIVITY.slice(0, 7).map((event) => {
-          const Icon = EVENT_ICON[event.type];
-          return (
-            <li
-              key={event.id}
-              className={cn(
-                'flex items-start gap-2.5 rounded-md px-2 py-1.5',
-                'hover:bg-secondary/40 transition-colors',
-              )}
-            >
-              <span
-                aria-hidden
-                className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground"
-              >
-                <Icon className="h-3 w-3" />
-              </span>
-              <div className="min-w-0 flex-1 text-[12.5px] leading-snug text-muted-foreground">
-                {eventDescription(event)}
-              </div>
-              <TimestampDot iso={event.at} />
-            </li>
-          );
-        })}
-      </ul>
+      <SectionHeader title="Recent activity" hint={isMock ? 'fixtures' : undefined} />
+      {activity.isLoading ? (
+        <LoadingState rows={3} />
+      ) : activity.isError ? (
+        <ErrorState
+          title="Couldn't load activity"
+          description="The audit feed didn't load. Conversations above might still be fresh."
+          onRetry={() => activity.refetch()}
+        />
+      ) : (activity.data ?? []).length === 0 ? (
+        <EmptyState
+          title="No activity yet"
+          description="Conversations created, landed, and discarded — plus PRs the composer opens — will appear here."
+        />
+      ) : (
+        <ol className="flex flex-col gap-1 px-3 pb-4">
+          {(activity.data ?? []).map((e) => (
+            <ActivityRow key={e.id} event={e} />
+          ))}
+        </ol>
+      )}
 
       <div className="mt-auto border-t border-border bg-secondary/30 px-3 py-2">
         <p className="text-[11px] text-muted-foreground">
           {isMock
             ? 'Fixtures · drop ?fixtures=on to read from a local pinagent dev-server.'
-            : 'Live · conversations refetch on project events. Activity feed still fixture-driven.'}
+            : 'Live · refreshes on project events.'}
         </p>
       </div>
     </div>

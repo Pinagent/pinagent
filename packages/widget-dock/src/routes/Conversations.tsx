@@ -380,6 +380,7 @@ export function Conversations() {
               key={f.status}
               type="button"
               onClick={() => setFilter(f.status)}
+              aria-pressed={filter === f.status}
               className={cn(
                 'rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
