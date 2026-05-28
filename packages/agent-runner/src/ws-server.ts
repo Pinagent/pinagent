@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { Server as HttpServer } from 'node:http';
 import { join } from 'node:path';
+import { conversations } from '@pinagent/db';
 import {
   type AgentEvent,
   type ClientMessage,
@@ -9,6 +10,7 @@ import {
   type ServerMessage,
   type WorktreeWireState,
 } from '@pinagent/shared';
+import { sql } from 'drizzle-orm';
 import { type WebSocket, WebSocketServer } from 'ws';
 import {
   countWorktreeChanges,
@@ -20,6 +22,7 @@ import {
 } from './agent';
 import { resolveAsk } from './ask-user';
 import { getOrCreateBus } from './bus';
+import { getDb } from './db/client';
 import { enqueue } from './merge-queue';
 import { onProjectChange } from './project-events';
 import { Storage } from './storage';
@@ -155,6 +158,11 @@ export async function startWsServer(): Promise<ServerHandle> {
     // Register the project-event fan-out listener exactly once. Safe to
     // call on every startWsServer invocation — singleton-guarded inside.
     ensureProjectListener();
+    // Same idea, but for writes that happen in OTHER processes (notably
+    // the MCP server's `resolve_feedback` handler). In-process emits
+    // bypass this poll loop entirely; it exists only to catch what the
+    // in-process listener can't see.
+    ensureCrossProcessProjectPoller();
 
     return handle;
   })();
@@ -245,6 +253,74 @@ function ensureProjectListener(): void {
   if (slot[PROJECT_LISTENER_SYMBOL]) return;
   const unsubscribe = onProjectChange((event) => fanoutProjectEvent(event));
   slot[PROJECT_LISTENER_SYMBOL] = unsubscribe;
+}
+
+/**
+ * Watches `conversations.updatedAt` so writes from OTHER processes
+ * (notably the MCP server's `resolve_feedback`, which runs as a child
+ * Node process under the SDK and never touches our in-process
+ * `emitProjectChange`) still trigger a dock refresh.
+ *
+ * Mirrors the polling pattern in `bus.ts` (per-conversation events).
+ * Latency upper bound is one poll interval; the dock's TanStack Query
+ * invalidation is idempotent, so the worst case if an in-process event
+ * also fires is one extra refetch ~`POLL_MS` later — harmless.
+ *
+ * The initial watermark is seeded asynchronously; until the seed
+ * resolves, the very first poll might fire a redundant
+ * `conversations_changed`. That's acceptable: project subscribers
+ * connect AFTER startWsServer, so they normally won't see it; if they
+ * do, it's one wasted refetch on first connect.
+ */
+const PROJECT_POLLER_SYMBOL = Symbol.for('pinagent.ws.projectPoller');
+const PROJECT_POLL_MS = 250;
+
+function ensureCrossProcessProjectPoller(): void {
+  const slot = globalThis as Record<symbol, unknown>;
+  if (slot[PROJECT_POLLER_SYMBOL]) return;
+
+  let lastSeenMs = 0;
+  let polling = false;
+
+  // Seed watermark with the current MAX so we don't fan out on every
+  // pre-existing row when the dev-server boots.
+  void (async () => {
+    try {
+      const db = getDb(projectRoot());
+      const rows = await db
+        .select({ max: sql<number | null>`MAX(${conversations.updatedAt})` })
+        .from(conversations);
+      const ms = rows[0]?.max ?? null;
+      if (ms !== null) lastSeenMs = Number(ms);
+    } catch {
+      // Migrations may not have run yet; seed stays at 0 and the first
+      // poll catches up.
+    }
+  })();
+
+  const interval = setInterval(() => {
+    if (polling) return;
+    polling = true;
+    void (async () => {
+      try {
+        const db = getDb(projectRoot());
+        const rows = await db
+          .select({ max: sql<number | null>`MAX(${conversations.updatedAt})` })
+          .from(conversations);
+        const ms = rows[0]?.max ?? null;
+        if (ms !== null && Number(ms) > lastSeenMs) {
+          lastSeenMs = Number(ms);
+          fanoutProjectEvent({ type: 'conversations_changed' });
+        }
+      } catch {
+        // Transient — skip this tick. The next one retries.
+      } finally {
+        polling = false;
+      }
+    })();
+  }, PROJECT_POLL_MS);
+
+  slot[PROJECT_POLLER_SYMBOL] = () => clearInterval(interval);
 }
 
 function fanoutProjectEvent(event: ProjectEvent): void {
