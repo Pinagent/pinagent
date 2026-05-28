@@ -127,6 +127,70 @@ describe('matchKeyboardShortcut', () => {
     });
   });
 
+  describe('widget pick hotkey forwarding', () => {
+    it('forwards a standalone c to the host when embedded', () => {
+      const action = matchKeyboardShortcut(makeEvent({ key: 'c' }), {
+        pendingG: false,
+        isOpen: true,
+        pickerHotkey: 'c',
+      });
+      expect(action).toEqual({ type: 'enter-picker' });
+    });
+
+    it('forwards regardless of whether the dock is open', () => {
+      const action = matchKeyboardShortcut(makeEvent({ key: 'c' }), {
+        pendingG: false,
+        isOpen: false,
+        pickerHotkey: 'c',
+      });
+      expect(action).toEqual({ type: 'enter-picker' });
+    });
+
+    it('is case-insensitive (C forwards too)', () => {
+      const action = matchKeyboardShortcut(makeEvent({ key: 'C' }), {
+        pendingG: false,
+        isOpen: true,
+        pickerHotkey: 'c',
+      });
+      expect(action).toEqual({ type: 'enter-picker' });
+    });
+
+    it('still navigates on g c rather than forwarding', () => {
+      const action = matchKeyboardShortcut(makeEvent({ key: 'c' }), {
+        pendingG: true,
+        isOpen: true,
+        pickerHotkey: 'c',
+      });
+      expect(action).toEqual({ type: 'navigate', to: '/conversations' });
+    });
+
+    it('does not forward when no picker hotkey is set (standalone dev preview)', () => {
+      const action = matchKeyboardShortcut(makeEvent({ key: 'c' }), {
+        pendingG: false,
+        isOpen: true,
+      });
+      expect(action).toEqual({ type: 'none' });
+    });
+
+    it('does not forward while typing in a field', () => {
+      const action = matchKeyboardShortcut(makeEvent({ key: 'c', target: makeInput() }), {
+        pendingG: false,
+        isOpen: true,
+        pickerHotkey: 'c',
+      });
+      expect(action).toEqual({ type: 'none' });
+    });
+
+    it('does not forward a modified hotkey (Cmd+C is copy)', () => {
+      const action = matchKeyboardShortcut(makeEvent({ key: 'c', metaKey: true }), {
+        pendingG: false,
+        isOpen: true,
+        pickerHotkey: 'c',
+      });
+      expect(action).toEqual({ type: 'none' });
+    });
+  });
+
   describe('/ focus search', () => {
     it('returns focus-search when open', () => {
       const action = matchKeyboardShortcut(makeEvent({ key: '/' }), {

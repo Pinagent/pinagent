@@ -15,6 +15,15 @@
  *                              one). The route components mark their
  *                              search inputs with `type="search"` for
  *                              this hook and for assistive tech.
+ *   - c (widget pick hotkey) — only while embedded in a host iframe:
+ *                              forward to the host so the widget opens
+ *                              its element picker. The host's keydown
+ *                              listeners (including the widget's own) only
+ *                              fire while focus is on the host page, so a
+ *                              `c` typed inside the focused dock would
+ *                              otherwise do nothing. Mirror of the
+ *                              `toggle-dock` bridge, in the other
+ *                              direction. See vite-plugin/index.ts.
  *
  * Esc-to-close lives in `useDockMode` (panel mode only) and is
  * intentionally untouched here — different concern.
@@ -26,6 +35,15 @@ import { useNavigate } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { ROUTE_PATHS } from '../route-paths';
 import { G_CHORD_TIMEOUT_MS, matchKeyboardShortcut, type ShortcutAction } from './shortcut-match';
+
+/**
+ * The widget's default pick hotkey — mirrors `resolveHotkey()` in
+ * `@pinagent/widget`. The host's custom-hotkey override
+ * (`window.__pinagentHotkey`) isn't forwarded into the dock iframe, so
+ * the dock assumes the default. A custom hotkey still works from the host
+ * page itself; only the from-inside-the-dock path falls back to `c`.
+ */
+const DEFAULT_PICKER_HOTKEY = 'c';
 
 export interface KeyboardShortcutOptions {
   /** Called when Cmd+Shift+P fires (or host-side bridge posts it). */
@@ -42,9 +60,21 @@ export interface KeyboardShortcutOptions {
    * open the dock to where they navigated (when closed).
    */
   isOpen: boolean;
+  /**
+   * True when the dock runs inside the host-injected iframe. Gates the
+   * `c` pick-hotkey forwarding: only an embedded dock needs to relay it
+   * to the host. In the standalone dev preview the widget shares the
+   * document and catches `c` itself, so forwarding would double-toggle.
+   */
+  embedded: boolean;
 }
 
-export function useKeyboardShortcuts({ onToggle, open, isOpen }: KeyboardShortcutOptions): void {
+export function useKeyboardShortcuts({
+  onToggle,
+  open,
+  isOpen,
+  embedded,
+}: KeyboardShortcutOptions): void {
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -86,6 +116,14 @@ export function useKeyboardShortcuts({ onToggle, open, isOpen }: KeyboardShortcu
           }
           return;
         }
+        case 'enter-picker':
+          // Relay to the host page; the widget IIFE (mounted there)
+          // listens for this and opens its element picker. Only reached
+          // when embedded, so `window.parent` is the host window.
+          e.preventDefault();
+          cancelChord();
+          window.parent.postMessage({ source: 'pinagent-dock', type: 'enter-picker' }, '*');
+          return;
         case 'start-g-chord':
           pendingG = true;
           if (chordTimer) clearTimeout(chordTimer);
@@ -99,8 +137,9 @@ export function useKeyboardShortcuts({ onToggle, open, isOpen }: KeyboardShortcu
       }
     };
 
+    const pickerHotkey = embedded ? DEFAULT_PICKER_HOTKEY : null;
     const onKey = (e: KeyboardEvent) => {
-      dispatch(e, matchKeyboardShortcut(e, { pendingG, isOpen }));
+      dispatch(e, matchKeyboardShortcut(e, { pendingG, isOpen, pickerHotkey }));
     };
 
     // Host-side bridge: the host page's keydown listener posts a
@@ -121,5 +160,5 @@ export function useKeyboardShortcuts({ onToggle, open, isOpen }: KeyboardShortcu
       window.removeEventListener('message', onMessage);
       cancelChord();
     };
-  }, [navigate, onToggle, open, isOpen]);
+  }, [navigate, onToggle, open, isOpen, embedded]);
 }
