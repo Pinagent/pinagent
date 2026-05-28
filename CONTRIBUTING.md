@@ -24,14 +24,19 @@ move code between the two zones.
 
 ## Development setup
 
-Prereqs: Node 20+ (`.nvmrc` pins it) and pnpm 11+ (`packageManager` in `package.json`).
+Prereqs: Node 22+ (`.nvmrc` pins it; `engines.node` is `>=22.18.0`) and pnpm 10+ (`packageManager` in `package.json` pins `pnpm@10.14.0`).
 
 ```bash
 pnpm install
 pnpm typecheck
 pnpm build
 pnpm test
+pnpm lint
 ```
+
+`pnpm lint` runs biome (formatting + lints) over the whole repo. If you want CI's full pre-merge check, the other `lint:*` scripts in `package.json` cover SPDX headers, workspace deps, undeclared imports, and peer-dep resolution.
+
+Every source file must carry an SPDX license header (`// SPDX-License-Identifier: Apache-2.0` for OSS code, `Elastic-2.0` under `ee/` and `apps/cloud/`). `pnpm lint:spdx` enforces this — copy a header from a neighbouring file when you add a new source file.
 
 Run an example app against the local packages:
 
