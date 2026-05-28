@@ -370,6 +370,7 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
           archived: r.archived,
           branch: r.branch,
           messageCount: r.messageCount,
+          totalCostUsd: r.totalCostUsd,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
           resolvedAt: r.resolvedAt,

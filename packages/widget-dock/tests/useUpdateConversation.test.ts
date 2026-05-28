@@ -35,6 +35,7 @@ const fixtureDetail: ConversationDetail = {
   anchor: { loc: '', selector: '' },
   branch: null,
   messageCount: 0,
+  totalCostUsd: 0,
   archived: false,
   updatedAt: '2026-05-28T00:00:00Z',
 } as ConversationDetail;

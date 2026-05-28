@@ -510,6 +510,11 @@ export function Conversations() {
                     {c.messageCount > 0 && (
                       <span className="text-[10px] tabular-nums">· {c.messageCount} msg</span>
                     )}
+                    {c.totalCostUsd > 0 && (
+                      <span className="text-[10px] tabular-nums" title="Running SDK cost">
+                        · {formatRowCost(c.totalCostUsd)}
+                      </span>
+                    )}
                   </>
                 }
                 updatedAt={c.updatedAt}
@@ -571,6 +576,17 @@ function safePath(url: string): string {
   } catch {
     return url;
   }
+}
+
+/**
+ * Compact USD formatter for the list-row cost badge. Sub-cent amounts
+ * show full precision (`$0.0023`) so a string of cheap turns still
+ * surfaces a non-zero badge; ≥$0.01 trims to two decimals (`$0.12`).
+ * Caller already gates on `> 0` so we never render `$0`.
+ */
+function formatRowCost(usd: number): string {
+  if (usd < 0.01) return `$${usd.toFixed(4)}`;
+  return `$${usd.toFixed(2)}`;
 }
 
 /**
@@ -1110,6 +1126,14 @@ function DetailHeader({
               </Badge>
             );
           })()}
+        {detail.totalCostUsd > 0 && (
+          <span
+            className="text-[10.5px] text-muted-foreground tabular-nums"
+            title="Running SDK cost for this conversation"
+          >
+            {formatRowCost(detail.totalCostUsd)}
+          </span>
+        )}
       </div>
     </div>
   );

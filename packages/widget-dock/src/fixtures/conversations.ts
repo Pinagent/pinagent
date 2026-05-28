@@ -26,6 +26,7 @@ export const FIXTURE_CONVERSATIONS: Conversation[] = [
     archived: false,
     lastMessage: 'Trying three variations now — will reply with options shortly.',
     messageCount: 4,
+    totalCostUsd: 0.12,
   },
   {
     id: 'cv_02',
@@ -43,6 +44,7 @@ export const FIXTURE_CONVERSATIONS: Conversation[] = [
     archived: false,
     lastMessage: 'Should the highlighted column be Pro or Business?',
     messageCount: 6,
+    totalCostUsd: 0.34,
   },
   {
     id: 'cv_03',
@@ -60,6 +62,7 @@ export const FIXTURE_CONVERSATIONS: Conversation[] = [
     archived: false,
     lastMessage: 'Added GitHub, LinkedIn, X. Matched existing footer rhythm.',
     messageCount: 3,
+    totalCostUsd: 0.08,
   },
   {
     id: 'cv_04',
@@ -77,6 +80,7 @@ export const FIXTURE_CONVERSATIONS: Conversation[] = [
     archived: false,
     lastMessage: 'Rules now appear under the field on focus, not on submit.',
     messageCount: 5,
+    totalCostUsd: 0.62,
   },
   {
     id: 'cv_05',
@@ -94,6 +98,7 @@ export const FIXTURE_CONVERSATIONS: Conversation[] = [
     archived: false,
     lastMessage: 'Queued — agent will pick this up next.',
     messageCount: 1,
+    totalCostUsd: 0.04,
   },
   {
     id: 'cv_06',
@@ -111,6 +116,7 @@ export const FIXTURE_CONVERSATIONS: Conversation[] = [
     archived: false,
     lastMessage: 'Landed to main in commit a91f3c.',
     messageCount: 8,
+    totalCostUsd: 1.18,
   },
   {
     id: 'cv_07',
@@ -128,6 +134,7 @@ export const FIXTURE_CONVERSATIONS: Conversation[] = [
     archived: false,
     lastMessage: 'Landed. Copy: "Spin up an org to invite your team."',
     messageCount: 4,
+    totalCostUsd: 0.27,
   },
   {
     id: 'cv_08',
@@ -145,6 +152,7 @@ export const FIXTURE_CONVERSATIONS: Conversation[] = [
     archived: false,
     lastMessage: 'Agent run failed — Anthropic 429 (rate limit). Retry queued.',
     messageCount: 2,
+    totalCostUsd: 0.09,
   },
   {
     id: 'cv_09',
@@ -164,6 +172,7 @@ export const FIXTURE_CONVERSATIONS: Conversation[] = [
     archived: true,
     lastMessage: 'Discarded — covered by the new “About you” redesign.',
     messageCount: 7,
+    totalCostUsd: 0.91,
   },
   {
     id: 'cv_10',
@@ -181,6 +190,7 @@ export const FIXTURE_CONVERSATIONS: Conversation[] = [
     archived: false,
     lastMessage: 'Anchor lost after the latest HMR — re-click to reattach.',
     messageCount: 3,
+    totalCostUsd: 0.21,
   },
   {
     id: 'cv_11',
@@ -198,6 +208,7 @@ export const FIXTURE_CONVERSATIONS: Conversation[] = [
     archived: false,
     lastMessage: 'Wiring local storage of recent queries; expect another commit shortly.',
     messageCount: 5,
+    totalCostUsd: 0.55,
   },
   {
     id: 'cv_12',
@@ -215,6 +226,7 @@ export const FIXTURE_CONVERSATIONS: Conversation[] = [
     archived: false,
     lastMessage: 'Added refund-policy FAQ pulled from /support/refunds.',
     messageCount: 4,
+    totalCostUsd: 0.18,
   },
 ];
 

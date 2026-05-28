@@ -9,6 +9,8 @@ import {
   conversations,
   count,
   eq,
+  gte,
+  lt,
   messages,
   notInArray,
   widgetAnchors,
@@ -105,6 +107,15 @@ export interface FeedbackRecord {
    * created rows before the agent has emitted anything.
    */
   messageCount: number;
+  /**
+   * Aggregate USD cost of every SDK turn recorded for this conversation,
+   * summed from the `total_cost_usd` field on each `result` event in
+   * the `messages` table. Drives the dock's running-cost badge and the
+   * per-conversation cap enforcement in `agent.ts`. 0 when no turn has
+   * finished yet (or for oauth/subscription-quota runs where the SDK
+   * reports notional cost as 0).
+   */
+  totalCostUsd: number;
 }
 
 export const PatchSchema = z.object({
@@ -275,6 +286,7 @@ export class Storage {
       resolvedAt: null,
       // Freshly created — no transcript yet.
       messageCount: 0,
+      totalCostUsd: 0,
     };
     // Notify project subscribers (the dock) that the conversation list
     // changed. Best-effort — emit failures shouldn't break the write.
@@ -308,7 +320,26 @@ export class Storage {
       .where(notInArray(messages.role, NON_MESSAGE_ROLES))
       .groupBy(messages.conversationId);
     const countByConvId = new Map(counts.map((c) => [c.id, c.n]));
-    return rows.map((r) => rowToRecord(r, countByConvId.get(r.conversations.id) ?? 0));
+    // Cost rolls up via JS (one row per `result` event in the messages
+    // table — typically 1–3 per conversation). The JSON column makes
+    // SUM-in-SQL awkward across SQLite/Postgres, and the row count
+    // here is small enough that the parse cost is invisible.
+    const costRows = await db
+      .select({ id: messages.conversationId, content: messages.content })
+      .from(messages)
+      .where(eq(messages.role, 'result'));
+    const costByConvId = new Map<string, number>();
+    for (const r of costRows) {
+      const c = extractResultCost(r.content);
+      if (c > 0) costByConvId.set(r.id, (costByConvId.get(r.id) ?? 0) + c);
+    }
+    return rows.map((r) =>
+      rowToRecord(
+        r,
+        countByConvId.get(r.conversations.id) ?? 0,
+        costByConvId.get(r.conversations.id) ?? 0,
+      ),
+    );
   }
 
   async read(id: string): Promise<FeedbackRecord | null> {
@@ -329,7 +360,51 @@ export class Storage {
       .select({ n: count() })
       .from(messages)
       .where(and(eq(messages.conversationId, id), notInArray(messages.role, NON_MESSAGE_ROLES)));
-    return rowToRecord(row, countRows[0]?.n ?? 0);
+    const totalCostUsd = await this.computeConversationCost(id);
+    return rowToRecord(row, countRows[0]?.n ?? 0, totalCostUsd);
+  }
+
+  /**
+   * Sum the SDK-reported `totalCostUsd` across every `result` event
+   * recorded for one conversation. Used both for the per-row display
+   * value and for the per-conversation cap check at spawn time.
+   */
+  async computeConversationCost(id: string): Promise<number> {
+    if (!ID_RE.test(id)) return 0;
+    const db = this.db();
+    const rows = await db
+      .select({ content: messages.content })
+      .from(messages)
+      .where(and(eq(messages.conversationId, id), eq(messages.role, 'result')));
+    let total = 0;
+    for (const r of rows) total += extractResultCost(r.content);
+    return total;
+  }
+
+  /**
+   * Sum the SDK-reported `totalCostUsd` across every `result` event
+   * recorded in the given UTC calendar month, across all conversations.
+   * Drives the `monthlyBudgetUsd` cap check. The `month` argument's
+   * day-of-month is ignored — we always span the calendar month it
+   * falls in. Callers pass `new Date()` for "current month".
+   */
+  async computeMonthlySpend(month: Date): Promise<number> {
+    const db = this.db();
+    const start = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1));
+    const end = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1));
+    const rows = await db
+      .select({ content: messages.content })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.role, 'result'),
+          gte(messages.createdAt, start),
+          lt(messages.createdAt, end),
+        ),
+      );
+    let total = 0;
+    for (const r of rows) total += extractResultCost(r.content);
+    return total;
   }
 
   /**
@@ -435,6 +510,7 @@ function rowToRecord(
     widget_anchors: typeof widgetAnchors.$inferSelect | null;
   },
   messageCount: number,
+  totalCostUsd: number,
 ): FeedbackRecord {
   const c = row.conversations;
   const a = row.widget_anchors;
@@ -463,7 +539,22 @@ function rowToRecord(
     updatedAt: c.updatedAt.toISOString(),
     resolvedAt: c.resolvedAt ? c.resolvedAt.toISOString() : null,
     messageCount,
+    totalCostUsd,
   };
+}
+
+/**
+ * Pull the `totalCostUsd` out of a stored `result` event's JSON content.
+ * Tolerant of missing/non-numeric values so a malformed historical row
+ * (or a future event shape) doesn't poison the aggregate — those just
+ * count as 0.
+ */
+function extractResultCost(content: unknown): number {
+  if (content && typeof content === 'object' && 'totalCostUsd' in content) {
+    const v = (content as { totalCostUsd?: unknown }).totalCostUsd;
+    if (typeof v === 'number' && Number.isFinite(v) && v >= 0) return v;
+  }
+  return 0;
 }
 
 export async function isInGitignore(root: string): Promise<boolean> {
