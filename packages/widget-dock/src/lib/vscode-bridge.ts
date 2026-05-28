@@ -100,3 +100,28 @@ function fireVSCodeUri(uri: string): void {
   link.click();
   link.remove();
 }
+
+// --------------------------------------------------------------------
+// Clipboard fallbacks. Editor-agnostic — paired with the VSCode-firing
+// helpers above so users without VSCode (or the Pinagent extension) get
+// a working alternative instead of the click silently doing nothing.
+// --------------------------------------------------------------------
+
+/**
+ * Build a shell-pasteable `claude` invocation that pipes `prompt` in as
+ * the initial message. Uses a single-quoted here-doc — bash/zsh/sh all
+ * accept this and it preserves newlines, quotes, and shell
+ * metacharacters in `prompt` without escaping.
+ */
+export function buildClaudeCommand(prompt: string): string {
+  return `claude -p "$(cat <<'PINAGENT_EOF'\n${prompt}\nPINAGENT_EOF\n)"`;
+}
+
+/**
+ * Copy a `claude` invocation seeded with `prompt` to the clipboard.
+ * Returns a promise so callers can await the write and surface a
+ * "Copied" affordance (or fall back to an error indicator).
+ */
+export function copyClaudeCommand(prompt: string): Promise<void> {
+  return navigator.clipboard.writeText(buildClaudeCommand(prompt));
+}

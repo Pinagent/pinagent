@@ -23,6 +23,7 @@ import {
   ArchiveRestore,
   ArrowLeft,
   Check,
+  ClipboardCopy,
   Filter,
   Pencil,
   Search,
@@ -50,7 +51,7 @@ import {
 } from '../hooks/useSavedFilters';
 import { useUpdateConversation } from '../hooks/useUpdateConversation';
 import { permissionModeDisplay } from '../lib/permissionMode';
-import { openInClaudeCode } from '../lib/vscode-bridge';
+import { copyClaudeCommand, openInClaudeCode } from '../lib/vscode-bridge';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
@@ -940,6 +941,14 @@ function DetailHeader({
     openInClaudeCode(detail.comment);
   };
 
+  const copyClaude = (): void => {
+    // Fire-and-forget — `navigator.clipboard.writeText` can reject when
+    // the document isn't focused (e.g. iframe edge cases), but there's
+    // nothing meaningful to retry. The menu closing on click is the
+    // user-visible signal that the action was taken.
+    void copyClaudeCommand(detail.comment);
+  };
+
   return (
     <div className="border-b border-border bg-card px-3 py-2.5">
       <div className="flex items-center gap-2 mb-2">
@@ -953,16 +962,29 @@ function DetailHeader({
           All conversations
         </Button>
         <div className="ml-auto flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={openInClaude}
-            className="h-7 w-7 text-muted-foreground hover:text-foreground"
-            aria-label="Open this conversation in Claude Code"
-            title="Open in Claude Code (VSCode)"
-          >
-            <Terminal className="h-3.5 w-3.5" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                aria-label="Hand this conversation to Claude Code"
+                title="Hand off to Claude Code"
+              >
+                <Terminal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onSelect={openInClaude} className="gap-2 text-sm">
+                <Terminal className="h-3.5 w-3.5" />
+                Open in Claude Code (VSCode)
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={copyClaude} className="gap-2 text-sm">
+                <ClipboardCopy className="h-3.5 w-3.5" />
+                Copy <code className="font-mono text-[11px]">claude</code> command
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="ghost"
             size="icon"
