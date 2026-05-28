@@ -1085,12 +1085,7 @@ function deriveEffectiveStatus(
   items: readonly StreamItem[],
   answeredAskIds: ReadonlySet<string>,
 ): StatusKey {
-  if (
-    base === 'landed' ||
-    base === 'discarded' ||
-    base === 'error' ||
-    base === 'readyToLand'
-  ) {
+  if (base === 'landed' || base === 'discarded' || base === 'error' || base === 'readyToLand') {
     return base;
   }
   const last = items[items.length - 1];
