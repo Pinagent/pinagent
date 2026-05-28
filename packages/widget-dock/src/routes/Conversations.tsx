@@ -51,6 +51,7 @@ import { useUpdateConversation } from '../hooks/useUpdateConversation';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
+import { OnboardingState } from '../shell/states/OnboardingState';
 import { type ConversationDetail, useTransport, type WorktreeStatePayload } from '../transport';
 
 const STATUS_FILTERS: { label: string; status: StatusKey | 'all' }[] = [
@@ -431,20 +432,31 @@ export function Conversations() {
         )}
 
         {conversationsQuery.isSuccess && items.length === 0 && (
-          <EmptyState
-            title={
-              (conversationsQuery.data ?? []).length === 0
-                ? 'No conversations yet'
-                : 'No conversations match this filter'
-            }
-            description={
-              (conversationsQuery.data ?? []).length === 0
-                ? `Click any element on your host app with the pinagent picker to start one.${
-                    transport.kind === 'mock' ? ' (Currently showing fixtures.)' : ''
-                  }`
-                : 'Try a different status or clear the search.'
-            }
-          />
+          <>
+            {(conversationsQuery.data ?? []).length === 0 ? (
+              // First-time: project has zero conversations. Show the
+              // full walkthrough pointing at the per-element widget.
+              <OnboardingState
+                title="Start your first conversation"
+                intro={
+                  transport.kind === 'mock' ? (
+                    <>
+                      Running on fixtures — switch off{' '}
+                      <code className="font-mono">?fixtures=on</code> to see real data. The
+                      walkthrough below is what new users see on first dock open.
+                    </>
+                  ) : undefined
+                }
+              />
+            ) : (
+              // Project has rows but none match the current filter +
+              // search combo. Keep the lightweight EmptyState here.
+              <EmptyState
+                title="No conversations match this filter"
+                description="Try a different status or clear the search."
+              />
+            )}
+          </>
         )}
 
         {items.length > 0 && (
