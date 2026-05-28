@@ -26,7 +26,10 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@pinagent/agent-runner": "workspace:*",
+    "@pinagent/vite-plugin": "workspace:*",
     "@types/node": "^22.10.1",
+    "nanoid": "^5.0.9",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3"
   }

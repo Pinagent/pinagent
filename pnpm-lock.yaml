@@ -42,9 +42,18 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@pinagent/agent-runner':
+        specifier: workspace:*
+        version: link:../../packages/agent-runner
+      '@pinagent/vite-plugin':
+        specifier: workspace:*
+        version: link:../../packages/vite-plugin
       '@types/node':
         specifier: ^22.10.1
         version: 22.19.19
+      nanoid:
+        specifier: ^5.0.9
+        version: 5.1.11
       tsdown:
         specifier: ^0.22.0
         version: 0.22.0(tsx@4.22.3)(typescript@6.0.3)

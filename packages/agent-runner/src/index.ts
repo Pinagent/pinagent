@@ -50,6 +50,7 @@ export {
   pruneBranches,
   pruneStaleBranches,
 } from './branches';
+export { getOrCreateBus, type SqliteEventBus } from './bus';
 export { type ChangeRecord, getChangeDiff, listChanges } from './changes';
 export {
   type AnthropicValidation,
