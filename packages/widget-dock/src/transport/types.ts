@@ -345,6 +345,12 @@ export interface PresentableConnections {
  * Mirrors `@pinagent/agent-runner.ProjectSettings`. Kept local to the
  * dock so the bundle doesn't pull Node-only deps. Defined here rather
  * than in fixtures/types.ts so the type evolves with the transport.
+ *
+ * Drift hazard: `DockProjectSettingsSchema` in `@pinagent/shared` is
+ * the runtime parser the LocalTransport actually uses to validate
+ * `GET /__pinagent/settings`. Keep these two declarations in sync — a
+ * new schema field that's missing here will silently strip from the
+ * static type and consumers won't see it.
  */
 export interface DockProjectSettings {
   baseBranch: string;
@@ -352,6 +358,13 @@ export interface DockProjectSettings {
   perConversationCapUsd: number;
   monthlyBudgetUsd: number | null;
   permissionMode: 'auto' | 'approve' | 'dry-run';
+  /**
+   * Server-derived read-only flag. Non-null when
+   * `PINAGENT_AGENT_PERMISSION_MODE` is set on the dev server and
+   * therefore overrides `permissionMode` at spawn time. The value is
+   * the resolved SDK mode (e.g. `'plan'`, `'acceptEdits'`).
+   */
+  permissionModeOverride: string | null;
 }
 
 export interface CreatePullRequestInput {

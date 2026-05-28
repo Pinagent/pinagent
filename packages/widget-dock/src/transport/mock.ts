@@ -73,6 +73,8 @@ export class MockTransport implements DockTransport {
     perConversationCapUsd: FIXTURE_SETTINGS.perConversationCapUsd,
     monthlyBudgetUsd: FIXTURE_SETTINGS.monthlyBudgetUsd,
     permissionMode: FIXTURE_SETTINGS.permissionMode,
+    // Mock transport has no dev-server, so no env override.
+    permissionModeOverride: null,
   };
 
   async listConversations(filters?: ConversationFilters): Promise<Conversation[]> {

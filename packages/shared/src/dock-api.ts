@@ -150,6 +150,17 @@ export const DockProjectSettingsSchema = z
     perConversationCapUsd: z.number(),
     monthlyBudgetUsd: z.number().nullable(),
     permissionMode: PermissionModeSchema,
+    /**
+     * If `PINAGENT_AGENT_PERMISSION_MODE` is set on the dev server, this
+     * carries the resolved SDK mode that will *actually* be used at
+     * spawn time — overriding the user's saved `permissionMode` above.
+     * `null` when no env override is active. Read-only on the wire:
+     * `ProjectSettingsPatchSchema.partial()` silently drops it on PATCH.
+     *
+     * Default is `null` so older servers without this field still parse
+     * cleanly into the dock.
+     */
+    permissionModeOverride: z.string().nullable().default(null),
   })
   .loose();
 export type DockProjectSettings = z.infer<typeof DockProjectSettingsSchema>;

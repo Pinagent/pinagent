@@ -15,6 +15,7 @@ export {
   reopenConversations,
   resolveAgentMode,
   resolvePermissionMode,
+  resolvePermissionModeOverride,
   runFollowUpTurn,
   type SpawnAgentMode,
   spawnAgent,
