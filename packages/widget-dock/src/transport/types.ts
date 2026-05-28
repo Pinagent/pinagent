@@ -19,7 +19,7 @@
  * Methods are intentionally narrow: every dock view talks through one
  * of these, never `fetch` or `new WebSocket()` directly.
  */
-import type { AgentEvent, ProjectEvent } from '@pinagent/shared';
+import type { AgentEvent, PermissionMode, ProjectEvent } from '@pinagent/shared';
 import type { Branch, Change, Conversation, PullRequest } from '../fixtures/types';
 import type { ConnectionStatus, ConversationHandlers } from './ws-client';
 
@@ -367,7 +367,7 @@ export interface DockProjectSettings {
   worktreeRetentionDays: number;
   perConversationCapUsd: number;
   monthlyBudgetUsd: number | null;
-  permissionMode: 'auto' | 'approve' | 'dry-run';
+  permissionMode: PermissionMode;
   /**
    * Server-derived read-only flag. Non-null when
    * `PINAGENT_AGENT_PERMISSION_MODE` is set on the dev server and

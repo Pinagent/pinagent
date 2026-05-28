@@ -13,10 +13,19 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import {
+  type PermissionMode,
+  PermissionModeSchema,
+  PROJECT_PERMISSION_MODES,
+} from '@pinagent/shared';
 import { z } from 'zod';
 
-export const PermissionModeSchema = z.enum(['auto', 'approve', 'dry-run']);
-export type PermissionMode = z.infer<typeof PermissionModeSchema>;
+// Re-export so existing consumers of `@pinagent/agent-runner` keep
+// resolving `PermissionMode` / `PermissionModeSchema` against the same
+// type that the dock wire-parses. The canonical definition lives in
+// `@pinagent/shared/dock-api`, co-located with the label table that
+// drives both the Settings picker and the detail-header chip.
+export { type PermissionMode, PermissionModeSchema, PROJECT_PERMISSION_MODES };
 
 const BRANCH_RE = /^[A-Za-z0-9][A-Za-z0-9/_.-]*$/;
 

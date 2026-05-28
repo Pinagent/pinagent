@@ -10,6 +10,14 @@
  * conversation-level property (not part of the agent-event stream)
  * and the Land / Discard UI keys off the latest known state.
  *
+ * Cold-load: in parallel with the WS subscribe we fire one HTTP
+ * `getConversationMessages` request. Its results are surfaced
+ * immediately as "prefetched" items so the detail view has content
+ * during the WS-connect window (and stays useful if the WS is broken).
+ * Once the WS starts delivering events those become authoritative and
+ * the prefetched items are hidden — so no duplicates render, and we
+ * never have to dedupe by content.
+ *
  * On `id` change (user navigated to a different conversation), the
  * previous subscription is cleaned up and state resets.
  */
@@ -40,9 +48,44 @@ const EMPTY_STREAM: ConversationStream = { items: [], worktree: null };
 export function useConversationStream(id: string | null): ConversationStream {
   const transport = useTransport();
   const [stream, setStream] = useState<ConversationStream>(EMPTY_STREAM);
+  const [prefetched, setPrefetched] = useState<StreamItem[]>([]);
   // Monotonic counter for stable React keys on each pushed item. Held
   // in a ref so it survives re-renders without re-triggering effects.
   const nextIdRef = useRef(0);
+
+  // HTTP transcript prefetch — one shot per id. Failures are silent;
+  // the WS replay is the authoritative source and will fill in on
+  // arrival. Aborted on id change via the `cancelled` flag.
+  useEffect(() => {
+    setPrefetched([]);
+    if (!id) return;
+    let cancelled = false;
+    transport
+      .getConversationMessages(id)
+      .then((events) => {
+        if (cancelled) return;
+        const ts = new Date().toISOString();
+        setPrefetched(
+          events.map((event, idx) => ({
+            kind: 'event' as const,
+            // Negative ids so they can't collide with the WS counter,
+            // and so the React key set is stable across the
+            // prefetch→WS swap.
+            id: -(idx + 1),
+            event,
+            receivedAt: ts,
+          })),
+        );
+      })
+      .catch(() => {
+        // Network / 404 / parse error — leave prefetched empty and let
+        // the WS replay populate. Worth a console hook later for
+        // observability; intentionally swallowed for now.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, transport]);
 
   useEffect(() => {
     setStream(EMPTY_STREAM);
@@ -82,5 +125,9 @@ export function useConversationStream(id: string | null): ConversationStream {
     return transport.subscribeConversation(id, handlers);
   }, [id, transport]);
 
-  return stream;
+  // WS items are authoritative once they arrive (the bus replays the
+  // full transcript on first poll, so any prefetched events are about
+  // to be re-delivered). Showing prefetched only while WS is empty
+  // avoids the dedupe problem entirely.
+  return stream.items.length > 0 ? stream : { ...stream, items: prefetched };
 }

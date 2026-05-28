@@ -6,6 +6,7 @@
  * authoritative read.
  */
 
+import { PROJECT_PERMISSION_MODES } from '@pinagent/shared';
 import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Button } from '@pinagent/ui/components/ui/button';
 import { Input } from '@pinagent/ui/components/ui/input';
@@ -19,18 +20,6 @@ import { LoadingState } from '../shell/states/LoadingState';
 import type { DockProjectSettings } from '../transport';
 
 type PermissionMode = DockProjectSettings['permissionMode'];
-
-const PERMISSION_LABEL: Record<PermissionMode, string> = {
-  auto: 'Auto-accept edits',
-  approve: 'Require approval',
-  'dry-run': 'Dry-run only',
-};
-
-const PERMISSION_DESCRIPTION: Record<PermissionMode, string> = {
-  auto: 'Agent edits land in the worktree without confirmation.',
-  approve: 'Each edit pauses for your approval before applying.',
-  'dry-run': 'Agents propose but never write. Useful for review-only setups.',
-};
 
 export function Settings() {
   const settingsQuery = useSettings();
@@ -180,13 +169,15 @@ function SettingsForm({ initial }: { initial: DockProjectSettings }) {
             <PermissionModeOverrideBanner mode={initial.permissionModeOverride} />
           )}
           <div className="space-y-1.5 p-2">
-            {(Object.keys(PERMISSION_LABEL) as PermissionMode[]).map((mode) => {
-              const active = mode === draft.permissionMode;
+            {PROJECT_PERMISSION_MODES.map((meta) => {
+              const active = meta.projectMode === draft.permissionMode;
               return (
                 <button
-                  key={mode}
+                  key={meta.projectMode}
                   type="button"
-                  onClick={() => setDraft({ ...draft, permissionMode: mode })}
+                  onClick={() =>
+                    setDraft({ ...draft, permissionMode: meta.projectMode as PermissionMode })
+                  }
                   className={cn(
                     'w-full text-left rounded-md border px-3 py-2 transition-colors',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
@@ -196,18 +187,14 @@ function SettingsForm({ initial }: { initial: DockProjectSettings }) {
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-foreground">
-                      {PERMISSION_LABEL[mode]}
-                    </span>
+                    <span className="text-xs font-semibold text-foreground">{meta.label}</span>
                     {active && (
                       <Badge variant="outline" className="text-[10px]">
                         current
                       </Badge>
                     )}
                   </div>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    {PERMISSION_DESCRIPTION[mode]}
-                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">{meta.description}</p>
                 </button>
               );
             })}

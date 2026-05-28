@@ -25,7 +25,11 @@ import { getDb } from './db/client';
 import { runGitCapture } from './git-utils';
 import { emitProjectChange } from './project-events';
 import { SecretsStore } from './secrets-store';
-import { type PermissionMode as ProjectPermissionMode, SettingsStore } from './settings-store';
+import {
+  PROJECT_PERMISSION_MODES,
+  type PermissionMode as ProjectPermissionMode,
+  SettingsStore,
+} from './settings-store';
 import { type FeedbackRecord, Storage } from './storage';
 
 /**
@@ -1085,22 +1089,19 @@ export function resolvePermissionModeOverride(env: NodeJS.ProcessEnv): Permissio
 }
 
 /**
- * Map the user-facing project setting (`auto` / `approve` / `dry-run` —
- * the three options the dock's Settings route exposes) to the SDK's
- * permission-mode value-space. The dock label for `auto` is
- * "Auto-accept edits", so it maps to `acceptEdits`; `approve` keeps the
- * SDK's default prompt-for-every-tool behaviour; `dry-run` maps to the
- * SDK's `plan` mode, which lets the agent reason without running tools.
+ * Map the user-facing project setting to the SDK's permission-mode
+ * value-space. Looks up the shared `PROJECT_PERMISSION_MODES` table so
+ * the mapping stays in sync with the dock's Settings labels and the
+ * detail-header chip.
  */
 export function toSdkPermissionMode(mode: ProjectPermissionMode): PermissionMode {
-  switch (mode) {
-    case 'auto':
-      return 'acceptEdits';
-    case 'approve':
-      return 'default';
-    case 'dry-run':
-      return 'plan';
-  }
+  // `find` always hits because `mode` is typed against the literal
+  // union derived from the same table; the `?? 'acceptEdits'` is just
+  // a belt-and-braces fallback that satisfies the type checker.
+  const meta = PROJECT_PERMISSION_MODES.find(
+    (m: (typeof PROJECT_PERMISSION_MODES)[number]) => m.projectMode === mode,
+  );
+  return (meta?.sdkMode as PermissionMode | undefined) ?? 'acceptEdits';
 }
 
 function renderHeader(
