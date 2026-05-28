@@ -21,7 +21,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@pinagent/mcp": "workspace:*"
+    "@pinagent/mcp": "workspace:*",
+    "@pinagent/shared": "workspace:*",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",

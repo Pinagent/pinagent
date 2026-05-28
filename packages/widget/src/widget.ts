@@ -33,6 +33,16 @@ const IFRAME_W = 400;
 const BUBBLE_SIZE = 36;
 
 /**
+ * Auto-grow envelope for the pre-submit composer. The textarea inside
+ * the iframe measures its natural scrollHeight on input and posts it
+ * to the parent; the parent grows or shrinks the iframe by the delta
+ * from MIN_TA_H, clamped to MAX_TA_H. Past the cap, the textarea
+ * scrolls internally rather than pushing the composer off-screen.
+ */
+const MIN_TA_H = 80;
+const MAX_TA_H = 240;
+
+/**
  * Composer header shape. Built once when the user picks an element
  * and passed straight into composerHTML; tag/label/breadcrumbs come
  * from the live DOM, `loc` is from data-pa-loc (may be null in
@@ -311,30 +321,24 @@ const DOC_STYLES = `
 
 .pa-drag-handle {
   position: absolute;
-  width: 28px;
-  height: 24px;
-  background: ${BRAND_CREAM};
-  border: 1px solid #e8dfb0;
-  border-radius: 6px;
+  width: 16px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: grab;
   z-index: 2147483646;
-  box-shadow: 0 2px 6px rgba(32, 27, 33, 0.10);
-  user-select: none;
-  color: #5c5546;
-  font-size: 16px;
-  line-height: 1;
-  font-family: ${FONT_SANS};
-  transition: background 100ms ease, color 100ms ease, box-shadow 100ms ease;
+  color: #8a8270;
+  border-radius: 4px;
+  transition: color 100ms ease, background 100ms ease, box-shadow 100ms ease;
 }
-.pa-drag-handle:hover { background: #f5efd0; color: ${BRAND_INK}; }
+.pa-drag-handle svg { display: block; }
+.pa-drag-handle:hover { color: ${BRAND_INK}; background: #f5efd0; }
 .pa-drag-handle.dragging {
   cursor: grabbing;
-  background: #f5efd0;
   color: ${BRAND_INK};
-  box-shadow: 0 0 0 3px ${BRAND_GOLD}, 0 2px 6px rgba(32, 27, 33, 0.10);
+  background: #f5efd0;
+  box-shadow: 0 0 0 3px ${BRAND_GOLD};
 }
 .pa-drag-handle[hidden] { display: none; }
 
@@ -864,14 +868,21 @@ export function mount(): void {
     bubble.innerHTML = '<div class="pa-bubble-spinner"></div>';
     document.body.appendChild(bubble);
 
-    // Drag grip — small visible handle in the top-right corner of the
-    // iframe. Lives in document.body (not inside the iframe) so we can
-    // track mousemove/mouseup on the parent document during a drag,
-    // which we couldn't do from inside the iframe.
+    // Drag grip — small visible handle inside the top-right corner of
+    // the iframe header. Lives in document.body (not inside the iframe)
+    // so we can track mousemove/mouseup on the parent document during a
+    // drag, which we couldn't do from inside the iframe. The 2x4 dots
+    // grid mirrors the redesign mock; styled in DOC_STYLES.
     const dragHandle = document.createElement('div');
     dragHandle.className = 'pa-drag-handle';
     dragHandle.title = 'Drag to reposition';
-    dragHandle.textContent = '⋮⋮';
+    dragHandle.innerHTML =
+      '<svg width="8" height="16" viewBox="0 0 8 16" aria-hidden="true" fill="currentColor">' +
+      '<circle cx="2" cy="2" r="1"/><circle cx="6" cy="2" r="1"/>' +
+      '<circle cx="2" cy="6" r="1"/><circle cx="6" cy="6" r="1"/>' +
+      '<circle cx="2" cy="10" r="1"/><circle cx="6" cy="10" r="1"/>' +
+      '<circle cx="2" cy="14" r="1"/><circle cx="6" cy="14" r="1"/>' +
+      '</svg>';
     document.body.appendChild(dragHandle);
 
     // Pointer tail — a small SVG triangle that sits on whichever edge
@@ -915,6 +926,12 @@ export function mount(): void {
     // absolute positioning, but layout changes (HMR, JS resize, etc.)
     // need a manual update.
     let rafHandle: number | null = null;
+    // Composer iframe height — starts at COMPOSER_H and grows as the
+    // user types (auto-grow), capped at MAX_COMPOSER_H. The iframe's
+    // textarea posts its desired scrollHeight via window.postMessage
+    // and the listener below clamps + applies it to iframe.style.height.
+    // Resets to COMPOSER_H when the composer flips to the stream pane.
+    let currentComposerH = COMPOSER_H;
     function positionLoop() {
       reposition();
       rafHandle = requestAnimationFrame(positionLoop);
@@ -953,7 +970,7 @@ export function mount(): void {
       // Anchor in viewport coords (used to decide above/below placement).
       const anchorViewportY = r.top + relY;
 
-      const composerH = composer.feedbackId ? STREAM_H : COMPOSER_H;
+      const composerH = composer.feedbackId ? STREAM_H : currentComposerH;
       const spaceBelow = window.innerHeight - anchorViewportY;
       const placeBelow = spaceBelow >= composerH + 16 || anchorViewportY < composerH + 16;
       const baseTop = placeBelow ? anchorDocY + 12 : anchorDocY - composerH - 12;
@@ -974,10 +991,13 @@ export function mount(): void {
       bubble.style.top = `${iframeTop - BUBBLE_SIZE / 2}px`;
       bubble.style.left = `${iframeLeft - BUBBLE_SIZE / 2}px`;
 
-      // Drag handle: top-right of the iframe (only visible when expanded).
-      const handleW = 28;
-      dragHandle.style.top = `${iframeTop - 12}px`;
-      dragHandle.style.left = `${iframeLeft + IFRAME_W - handleW + 12}px`;
+      // Drag handle: nestled inside the iframe's top-right header
+      // corner — 12px in from the iframe's right and top edges, lining
+      // up visually with the card's 12px padding. Hidden when the
+      // composer is minimized to a bubble.
+      const handleW = 16;
+      dragHandle.style.top = `${iframeTop + 12}px`;
+      dragHandle.style.left = `${iframeLeft + IFRAME_W - handleW - 12}px`;
       dragHandle.hidden = !composer.expanded;
 
       // Pointer tail. Sits on whichever widget edge faces the click;
@@ -1032,6 +1052,7 @@ export function mount(): void {
           }
         }
         if (rafHandle != null) cancelAnimationFrame(rafHandle);
+        window.removeEventListener('message', onIframeMessage);
         iframe.remove();
         bubble.remove();
         dragHandle.remove();
@@ -1041,7 +1062,7 @@ export function mount(): void {
       },
       expand() {
         composer.expanded = true;
-        iframe.style.height = `${composer.feedbackId ? STREAM_H : COMPOSER_H}px`;
+        iframe.style.height = `${composer.feedbackId ? STREAM_H : currentComposerH}px`;
         iframe.hidden = false;
         bubble.hidden = true;
         reposition();
@@ -1110,6 +1131,27 @@ export function mount(): void {
       }
       swapTo(composer);
     });
+
+    // Auto-grow: the iframe's textarea posts its desired scrollHeight
+    // here as it changes. We clamp to [MIN_TA_H, MAX_TA_H] (so a giant
+    // paste doesn't push the composer past the viewport — internal
+    // scroll takes over past the cap) and translate into iframe height
+    // by adding the delta from MIN_TA_H to COMPOSER_H. Skipped while
+    // the stream pane is shown (post-submit) — that pane has its own
+    // fixed STREAM_H height. Listener is removed in close().
+    function onIframeMessage(ev: MessageEvent) {
+      if (ev.source !== iframe.contentWindow) return;
+      const data = ev.data as { type?: string; taHeight?: number } | null;
+      if (!data || data.type !== 'pa-composer-resize-ta') return;
+      if (composer.feedbackId) return;
+      const ta = Math.min(MAX_TA_H, Math.max(MIN_TA_H, Number(data.taHeight) || MIN_TA_H));
+      const next = COMPOSER_H + (ta - MIN_TA_H);
+      if (next === currentComposerH) return;
+      currentComposerH = next;
+      if (composer.expanded) iframe.style.height = `${next}px`;
+      reposition();
+    }
+    window.addEventListener('message', onIframeMessage);
 
     reposition();
     positionLoop();
@@ -1289,8 +1331,27 @@ export function mount(): void {
       // Fresh composer: wire the composer-pane (textarea + submit/cancel).
       setTimeout(() => ta.focus(), 0);
 
+      // Auto-grow: measure the textarea's natural scrollHeight after
+      // each input and post it to the parent, which clamps + applies
+      // it to iframe.style.height. The 0-then-restore trick is the
+      // standard auto-grow pattern — without it, scrollHeight returns
+      // the current rendered height (clamped by flex sizing) instead
+      // of the content's natural height.
+      let lastReported = -1;
+      const postTextareaHeight = () => {
+        const saved = ta.style.height;
+        ta.style.height = '0';
+        const natural = ta.scrollHeight;
+        ta.style.height = saved;
+        if (natural !== lastReported) {
+          lastReported = natural;
+          iwin.parent.postMessage({ type: 'pa-composer-resize-ta', taHeight: natural }, '*');
+        }
+      };
+
       ta.addEventListener('input', () => {
         submit.disabled = ta.value.trim().length === 0;
+        postTextareaHeight();
       });
       ta.addEventListener('keydown', (e) => {
         // Cmd/Ctrl+Enter submits; plain Enter inserts a newline so
@@ -1313,6 +1374,7 @@ export function mount(): void {
           submit.disabled = ta.value.trim().length === 0;
           ta.focus();
           ta.setSelectionRange(ta.value.length, ta.value.length);
+          postTextareaHeight();
         });
       });
 

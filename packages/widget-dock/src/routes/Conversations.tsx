@@ -713,6 +713,19 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
     transport.reopenConversation(id);
   };
 
+  // Pending Stop click — keeps the button in "Stopping…" until the
+  // turn actually ends (or until the user navigates away). We clear it
+  // on turn-end via a `useEffect` below rather than racing the button
+  // disappearing on the same tick that `turnRunning` flips.
+  const [stopPending, setStopPending] = useState(false);
+  useEffect(() => {
+    if (!stream.turnRunning) setStopPending(false);
+  }, [stream.turnRunning]);
+  const performStop = (): void => {
+    setStopPending(true);
+    transport.sendInterrupt(id);
+  };
+
   if (detailQuery.isLoading) return <LoadingState rows={3} />;
   if (detailQuery.isError) {
     return (
@@ -738,8 +751,13 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
   const canReopen = worktreeState === 'landed' || worktreeState === 'discarded';
   const wsBusy = worktreeState === 'landing' || worktreeState === 'discarding';
   const showLifecycleBusy = wsBusy || intent !== null;
+  // The Stop button is the only control surfaced for inline-mode runs
+  // (no worktree → no Land/Discard), so include it in the action-row
+  // gate. Visible whenever an agent turn is in flight, on top of the
+  // existing land/discard/reopen controls.
+  const canStop = stream.turnRunning;
   const showActionRow =
-    canLand || canDiscard || canReopen || showLifecycleBusy || lifecycleError !== null;
+    canLand || canDiscard || canReopen || canStop || showLifecycleBusy || lifecycleError !== null;
 
   // The server's `status` field only flips on a terminal `resolve_feedback`
   // call — it doesn't track "agent started working" or "ask_user paused".
@@ -807,6 +825,17 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
               : lifecycleLabel(stream.worktree)}
           </span>
           <div className="flex items-center gap-1.5">
+            {canStop && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                disabled={stopPending || isMock}
+                onClick={performStop}
+              >
+                {stopPending ? 'Stopping…' : 'Stop'}
+              </Button>
+            )}
             {canReopen ? (
               <Button
                 size="sm"

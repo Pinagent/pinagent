@@ -41,9 +41,41 @@ export interface ConversationStream {
   items: StreamItem[];
   /** Latest worktree-state broadcast, if any. */
   worktree: WorktreeStatePayload | null;
+  /**
+   * True when an agent turn is in flight for this conversation —
+   * derived from the stream by `deriveTurnRunning`. Drives the Stop
+   * button visibility in the detail view; the per-element widget
+   * uses the same init/result toggle convention.
+   */
+  turnRunning: boolean;
 }
 
-const EMPTY_STREAM: ConversationStream = { items: [], worktree: null };
+const EMPTY_STREAM: ConversationStream = { items: [], worktree: null, turnRunning: false };
+
+/**
+ * Pure mirror of the per-element widget's `turnRunning` lifecycle: an
+ * `init` event flips the flag on, `result`/`error` AgentEvents (or a
+ * server-level `kind:'error'` stream item) flip it off. Walking the
+ * full item list keeps the answer right across multi-turn runs
+ * (replay → init → … → result → init → …) without needing extra state.
+ *
+ * Defaults to false on an empty stream: the dock detail view may be
+ * opened for a long-resolved conversation that's not running anything.
+ * Ask-user pauses keep `turnRunning` true on purpose — interrupting an
+ * awaiting `ask_user` is a legitimate use case the Stop button covers.
+ */
+export function deriveTurnRunning(items: StreamItem[]): boolean {
+  let running = false;
+  for (const it of items) {
+    if (it.kind === 'error') {
+      running = false;
+      continue;
+    }
+    if (it.event.type === 'init') running = true;
+    else if (it.event.type === 'result' || it.event.type === 'error') running = false;
+  }
+  return running;
+}
 
 /**
  * Pick which set of items the detail view renders. WS items are
@@ -64,7 +96,8 @@ export function mergeStreamView(
   wsStream: ConversationStream,
   prefetched: StreamItem[],
 ): ConversationStream {
-  return wsStream.items.length > 0 ? wsStream : { ...wsStream, items: prefetched };
+  const items = wsStream.items.length > 0 ? wsStream.items : prefetched;
+  return { ...wsStream, items, turnRunning: deriveTurnRunning(items) };
 }
 
 export function useConversationStream(id: string | null): ConversationStream {
