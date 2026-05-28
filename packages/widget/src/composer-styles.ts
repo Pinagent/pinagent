@@ -51,7 +51,10 @@ export const COMPOSER_STYLES = `
   .hdr-row[hidden] { display: none; }
 
   /* Identity row: tag pill + quoted label. Pill uses ink-on-cream so
-     it visually matches the same tag highlighted in the breadcrumb. */
+     it visually matches the same tag highlighted in the breadcrumb.
+     The right padding reserves space for the drag handle that the
+     parent positions inside the iframe's top-right corner. */
+  .hdr-identity { padding-right: 28px; }
   .el-pill {
     display: inline-flex;
     align-items: center;
