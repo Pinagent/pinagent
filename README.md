@@ -196,6 +196,7 @@ The dock surfaces a bottom-left FAB that opens panels for Conversations, Changes
 - **`@pinagent/mcp`** — stdio MCP server backing the CLI. Also ships the standalone `pinagent-mcp` bin.
 - **`@pinagent/babel-plugin`** — the JSX → `data-pa-loc` transform used by both plugins.
 - **`@pinagent/agent-runner`** — SDK-driven local runtime that backs `spawnAgent` in both plugins. WebSocket server, storage, worktree management, `ask_user`.
+- **`@pinagent/vscode-extension`** — optional VSCode bridge. Registers a `vscode://` URI handler so the dock can hand a conversation back into a Claude Code terminal. Sideload-only today; see [`packages/vscode-extension/README.md`](./packages/vscode-extension/README.md).
 - `@pinagent/browser-runtime`, `@pinagent/db`, `@pinagent/shared`, `@pinagent/ui` — internal.
 
 ## Invariants
