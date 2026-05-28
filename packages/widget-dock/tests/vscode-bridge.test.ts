@@ -5,7 +5,12 @@
  * here — those paths are validated by the manual smoke test.
  */
 import { describe, expect, it } from 'vitest';
-import { buildOpenClaudeUri, buildOpenFileUri, parseAnchorLoc } from '../src/lib/vscode-bridge';
+import {
+  buildClaudeCommand,
+  buildOpenClaudeUri,
+  buildOpenFileUri,
+  parseAnchorLoc,
+} from '../src/lib/vscode-bridge';
 
 describe('parseAnchorLoc', () => {
   it('parses a plain "path:line:col" anchor', () => {
@@ -49,6 +54,28 @@ describe('buildOpenFileUri', () => {
     const uri = buildOpenFileUri('src/with space & amp.tsx', 1, 1);
     // URLSearchParams encodes `&` as `%26` and spaces as `+`.
     expect(uri).toContain('path=src%2Fwith+space+%26+amp.tsx');
+  });
+});
+
+describe('buildClaudeCommand', () => {
+  it('wraps the prompt in a single-quoted here-doc so shell metacharacters survive', () => {
+    const cmd = buildClaudeCommand('hello "world" $(rm -rf /)');
+    expect(cmd).toBe(
+      `claude -p "$(cat <<'PINAGENT_EOF'\nhello "world" $(rm -rf /)\nPINAGENT_EOF\n)"`,
+    );
+  });
+
+  it('preserves newlines in the prompt verbatim', () => {
+    const cmd = buildClaudeCommand('line one\nline two\nline three');
+    expect(cmd).toContain('line one\nline two\nline three');
+    // The here-doc terminator must be on its own line — otherwise bash
+    // doesn't recognize it and the prompt swallows everything after.
+    expect(cmd).toMatch(/\nPINAGENT_EOF\n\)"$/);
+  });
+
+  it('handles an empty prompt without producing malformed shell', () => {
+    const cmd = buildClaudeCommand('');
+    expect(cmd).toBe(`claude -p "$(cat <<'PINAGENT_EOF'\n\nPINAGENT_EOF\n)"`);
   });
 });
 
