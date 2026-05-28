@@ -1,4 +1,53 @@
 // SPDX-License-Identifier: Apache-2.0
+
+/**
+ * Tag-only chain from a bounded ancestor down to `el`, used by the
+ * composer header to render a breadcrumb (`<div> > <section> > <button>`)
+ * where the last entry is the picked element. Stops at `html`/`body`
+ * if it reaches them inside `maxDepth`. Lowercased so the breadcrumb
+ * reads as HTML-style identifiers.
+ */
+export function breadcrumbTags(el: Element, maxDepth = 4): string[] {
+  const parts: string[] = [];
+  let cur: Element | null = el;
+  let depth = 0;
+  while (cur && cur.nodeType === 1 && depth < maxDepth) {
+    const tag = cur.tagName.toLowerCase();
+    parts.unshift(tag);
+    if (tag === 'html' || tag === 'body') break;
+    cur = cur.parentElement;
+    depth++;
+  }
+  return parts;
+}
+
+/**
+ * Short human label for the picked element. Tries the labelling
+ * sources users actually reach for in this order: `aria-label`, then
+ * visible text (textContent collapsed), then `title`, then `alt` (on
+ * <img>). Returns null when no label applies — the header omits the
+ * "quoted label" row in that case. Truncates to `max` so a paragraph
+ * doesn't blow up the header height.
+ */
+export function describeElementLabel(el: Element, max = 40): string | null {
+  const aria = el.getAttribute('aria-label');
+  if (aria?.trim()) return truncate(aria.trim(), max);
+  const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+  if (text.length > 0) return truncate(text, max);
+  const title = el.getAttribute('title');
+  if (title?.trim()) return truncate(title.trim(), max);
+  if (el.tagName.toLowerCase() === 'img') {
+    const alt = el.getAttribute('alt');
+    if (alt?.trim()) return truncate(alt.trim(), max);
+  }
+  return null;
+}
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return `${s.slice(0, Math.max(0, max - 1))}…`;
+}
+
 export function shortSelector(el: Element, maxDepth = 4): string {
   const parts: string[] = [];
   let cur: Element | null = el;

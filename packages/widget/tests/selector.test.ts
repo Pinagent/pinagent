@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { findLoc, findReanchorTarget, shortSelector } from '../src/selector';
+import {
+  breadcrumbTags,
+  describeElementLabel,
+  findLoc,
+  findReanchorTarget,
+  shortSelector,
+} from '../src/selector';
 
 beforeEach(() => {
   document.body.innerHTML = '';
@@ -101,6 +107,81 @@ describe('findLoc', () => {
       '<div data-pa-loc="far.tsx:1:1"><div data-pa-loc="near.tsx:2:2"><span>x</span></div></div>';
     const span = document.querySelector('span') as Element;
     expect(findLoc(span)).toEqual({ file: 'near.tsx', line: 2, col: 2 });
+  });
+});
+
+describe('breadcrumbTags', () => {
+  it('returns ancestors from outermost to the picked element', () => {
+    document.body.innerHTML = '<div><section><button>x</button></section></div>';
+    const button = document.querySelector('button') as Element;
+    // Default maxDepth=4 from <button> walks: button → section → div → body.
+    expect(breadcrumbTags(button)).toEqual(['body', 'div', 'section', 'button']);
+  });
+
+  it('lowercases tag names', () => {
+    document.body.innerHTML = '<DIV><BUTTON>x</BUTTON></DIV>';
+    const button = document.querySelector('button') as Element;
+    expect(breadcrumbTags(button)).toEqual(['body', 'div', 'button']);
+  });
+
+  it('honours maxDepth (caps the upward walk)', () => {
+    document.body.innerHTML = '<a><b><c><d><e>leaf</e></d></c></b></a>';
+    const leaf = document.querySelector('e') as Element;
+    expect(breadcrumbTags(leaf, 2)).toEqual(['d', 'e']);
+  });
+
+  it('stops at body when reached inside maxDepth', () => {
+    document.body.innerHTML = '<div><span>x</span></div>';
+    const span = document.querySelector('span') as Element;
+    const chain = breadcrumbTags(span);
+    expect(chain[0]).toBe('body');
+    expect(chain[chain.length - 1]).toBe('span');
+  });
+});
+
+describe('describeElementLabel', () => {
+  it('prefers aria-label over inner text', () => {
+    document.body.innerHTML = '<button aria-label="Dismiss">×</button>';
+    const button = document.querySelector('button') as Element;
+    expect(describeElementLabel(button)).toBe('Dismiss');
+  });
+
+  it('falls back to inner text when no aria-label', () => {
+    document.body.innerHTML = '<button>Get started</button>';
+    const button = document.querySelector('button') as Element;
+    expect(describeElementLabel(button)).toBe('Get started');
+  });
+
+  it('collapses internal whitespace in inner text', () => {
+    document.body.innerHTML = '<button>  Get   started  \n  now  </button>';
+    const button = document.querySelector('button') as Element;
+    expect(describeElementLabel(button)).toBe('Get started now');
+  });
+
+  it('returns alt for <img> when there is no other label', () => {
+    document.body.innerHTML = '<img alt="Logo" src="x.png">';
+    const img = document.querySelector('img') as Element;
+    expect(describeElementLabel(img)).toBe('Logo');
+  });
+
+  it('returns title when nothing else applies', () => {
+    document.body.innerHTML = '<div title="The hero"></div>';
+    const div = document.querySelector('div') as Element;
+    expect(describeElementLabel(div)).toBe('The hero');
+  });
+
+  it('returns null when no label source applies', () => {
+    document.body.innerHTML = '<div></div>';
+    const div = document.querySelector('div') as Element;
+    expect(describeElementLabel(div)).toBeNull();
+  });
+
+  it('truncates long labels with an ellipsis', () => {
+    document.body.innerHTML = `<button>${'a'.repeat(60)}</button>`;
+    const button = document.querySelector('button') as Element;
+    const label = describeElementLabel(button, 20);
+    expect(label?.length).toBe(20);
+    expect(label?.endsWith('…')).toBe(true);
   });
 });
 

@@ -13,17 +13,85 @@ import {
   recordUserMessage,
 } from './db/writes';
 import { capturePageScreenshot } from './screenshot';
-import { findLoc, findReanchorTarget, shortSelector } from './selector';
+import {
+  breadcrumbTags,
+  describeElementLabel,
+  findLoc,
+  findReanchorTarget,
+  type PaLoc,
+  shortSelector,
+} from './selector';
 import { STYLES } from './styles';
 
 const ENDPOINT = '/__pinagent/feedback';
 const RECONNECT_MIN_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
 
-const COMPOSER_H = 220;
+const COMPOSER_H = 320;
 const STREAM_H = 340;
-const IFRAME_W = 360;
+const IFRAME_W = 400;
 const BUBBLE_SIZE = 36;
+
+/**
+ * Composer header shape. Built once when the user picks an element
+ * and passed straight into composerHTML; tag/label/breadcrumbs come
+ * from the live DOM, `loc` is from data-pa-loc (may be null in
+ * unstrumented apps).
+ */
+interface ComposerMeta {
+  tag: string;
+  label: string | null;
+  loc: PaLoc | null;
+  breadcrumbs: string[];
+}
+
+/**
+ * Quick-action chips below the header. Clicking a chip drops the
+ * `prompt` into the textarea, focuses it, and places the cursor at
+ * the end so the user can finish the sentence ("Change the text to:
+ * Submit"). The list is deliberately small — these are the changes
+ * we expect most often; anything else, the user types from scratch.
+ */
+interface QuickAction {
+  label: string;
+  icon: string;
+  prompt: string;
+}
+
+const QA_ICON_ATTRS =
+  'class="qa-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+
+const QUICK_ACTIONS: ReadonlyArray<QuickAction> = [
+  {
+    label: 'Change text',
+    icon: `<svg ${QA_ICON_ATTRS}><path d="M4 20l6-14 6 14"/><path d="M7 13h6"/></svg>`,
+    prompt: 'Change the text to: ',
+  },
+  {
+    label: 'Recolor',
+    icon: `<svg ${QA_ICON_ATTRS}><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.12-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.66h1.99c3.05 0 5.56-2.5 5.56-5.55C21.97 6.01 17.46 2 12 2Z"/></svg>`,
+    prompt: 'Recolor this to ',
+  },
+  {
+    label: 'Add hover state',
+    icon: `<svg ${QA_ICON_ATTRS}><path d="M12 3l1.9 5.7L19.5 11l-5.6 1.9L12 18.5l-1.9-5.6L4.5 11l5.7-1.9L12 3z"/><path d="M19 3v3"/><path d="M5 17v3"/><path d="M17.5 4.5h3"/><path d="M3.5 18.5h3"/></svg>`,
+    prompt: 'Add a hover state that ',
+  },
+  {
+    label: 'Resize',
+    icon: `<svg ${QA_ICON_ATTRS}><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`,
+    prompt: 'Resize this element to ',
+  },
+  {
+    label: 'Make it a link',
+    icon: `<svg ${QA_ICON_ATTRS}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
+    prompt: 'Make this a link to ',
+  },
+];
+
+const ICON_CODE = `<svg class="hdr-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`;
+
+const ICON_EXTERNAL = `<svg class="hdr-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
 
 interface State {
   mode: 'idle' | 'picking';
@@ -770,7 +838,12 @@ export function mount(): void {
   function createComposer(target: Element, click: { x: number; y: number }): Composer {
     const loc = findLoc(target);
     const selector = shortSelector(target);
-    const metaText = loc ? `${loc.file}:${loc.line}:${loc.col}` : selector;
+    const meta: ComposerMeta = {
+      tag: target.tagName.toLowerCase(),
+      label: describeElementLabel(target),
+      loc,
+      breadcrumbs: breadcrumbTags(target),
+    };
     const dataPaLoc = loc ? `${loc.file}:${loc.line}:${loc.col}` : null;
 
     // Iframe lives in document.body (not the shadow root) so it scrolls
@@ -779,7 +852,7 @@ export function mount(): void {
     iframe.className = 'pa-iframe';
     iframe.title = 'Pinagent feedback';
     iframe.style.pointerEvents = 'auto';
-    iframe.srcdoc = composerHTML(metaText);
+    iframe.srcdoc = composerHTML(meta);
     iframe.style.width = `${IFRAME_W}px`;
     iframe.style.height = `${COMPOSER_H}px`;
     document.body.appendChild(iframe);
@@ -1220,10 +1293,27 @@ export function mount(): void {
         submit.disabled = ta.value.trim().length === 0;
       });
       ta.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        // Cmd/Ctrl+Enter submits; plain Enter inserts a newline so
+        // long-form prompts read naturally. Matches the "⌘↵ submit"
+        // hint shown in the composer footer.
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
           e.preventDefault();
           if (!submit.disabled) submit.click();
         }
+      });
+
+      // Quick-action chips: clicking one drops the chip's starter
+      // prompt into the textarea, focuses it, and parks the cursor
+      // at the end so the user can finish the sentence.
+      const chips = idoc.querySelectorAll<HTMLButtonElement>('.qa-chip');
+      chips.forEach((chip) => {
+        chip.addEventListener('click', () => {
+          const prompt = chip.getAttribute('data-prompt') ?? '';
+          ta.value = prompt;
+          submit.disabled = ta.value.trim().length === 0;
+          ta.focus();
+          ta.setSelectionRange(ta.value.length, ta.value.length);
+        });
       });
 
       cancel.addEventListener('click', () => c.close());
@@ -1994,19 +2084,23 @@ function attachStreamHandler(
   });
 }
 
-function composerHTML(metaText: string): string {
+function composerHTML(meta: ComposerMeta): string {
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   return `<!doctype html>
 <html><head><meta charset="utf-8"><style>${COMPOSER_STYLES}</style></head><body>
   <div class="card">
-    <div class="meta" id="pa-meta">${esc(metaText)}</div>
+    ${renderHeader(meta, esc)}
 
     <div class="pane" id="pa-composer-pane">
+      ${renderQuickActions(esc)}
       <textarea id="pa-ta" placeholder="Describe the change you want…"></textarea>
-      <div class="row">
-        <button class="btn ghost" id="pa-cancel" type="button">Cancel</button>
-        <button class="btn primary" id="pa-submit" type="button" disabled>Submit</button>
+      <div class="row spread footer-row">
+        <span class="kbd-hint"><kbd>⌘↵</kbd> submit · <kbd>esc</kbd> cancel</span>
+        <div class="row" style="gap:8px;">
+          <button class="btn ghost" id="pa-cancel" type="button">Cancel</button>
+          <button class="btn primary" id="pa-submit" type="button" disabled>Submit</button>
+        </div>
       </div>
     </div>
 
@@ -2034,6 +2128,57 @@ function composerHTML(metaText: string): string {
     </div>
   </div>
 </body></html>`;
+}
+
+function renderHeader(meta: ComposerMeta, esc: (s: string) => string): string {
+  // Identity row: the picked element's tag pill + (optionally) a
+  // quoted label. The pill uses the "selected" ink-on-cream palette
+  // so it visually matches the same tag in the breadcrumb below.
+  const identity =
+    `<div class="hdr-row hdr-identity">` +
+    `<span class="el-pill">&lt;${esc(meta.tag)}&gt;</span>` +
+    (meta.label ? `<span class="el-label">"${esc(meta.label)}"</span>` : '') +
+    `</div>`;
+
+  // File row: only rendered when data-pa-loc resolved. Hosts the
+  // open-in-editor click target — see `wireComposerIframe` for the
+  // POST handler. Keeps the same `#pa-meta` id so existing wiring
+  // grabs the right node.
+  const fileRow = meta.loc
+    ? `<div class="hdr-row hdr-file" id="pa-meta">${ICON_CODE}<span class="hdr-file-text">${esc(`${meta.loc.file}:${meta.loc.line}:${meta.loc.col}`)}</span>${ICON_EXTERNAL}</div>`
+    : `<div class="hdr-row hdr-file" id="pa-meta" hidden></div>`;
+
+  // Breadcrumb: last item is the picked element and gets the
+  // selected style. Items collapse with `>` separators between them.
+  // Show at most the last 4 hops so a deep tree doesn't blow up the
+  // header width.
+  const crumbs = meta.breadcrumbs.slice(-4);
+  const breadcrumb =
+    `<div class="hdr-row hdr-bc">` +
+    crumbs
+      .map((tag, i) => {
+        const isLast = i === crumbs.length - 1;
+        const cls = isLast ? 'bc-item bc-selected' : 'bc-item';
+        return (
+          `<span class="${cls}">&lt;${esc(tag)}&gt;</span>` +
+          (isLast ? '' : `<span class="bc-sep">›</span>`)
+        );
+      })
+      .join('') +
+    `</div>`;
+
+  return `<div class="header-block">${identity}${fileRow}${breadcrumb}</div>`;
+}
+
+function renderQuickActions(esc: (s: string) => string): string {
+  return (
+    `<div class="qa-chips">` +
+    QUICK_ACTIONS.map(
+      (a) =>
+        `<button class="qa-chip" type="button" data-prompt="${esc(a.prompt)}">${a.icon}<span>${esc(a.label)}</span></button>`,
+    ).join('') +
+    `</div>`
+  );
 }
 
 function buildPinIcon(size: number, fill: string): SVGSVGElement {
