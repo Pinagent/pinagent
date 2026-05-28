@@ -1249,7 +1249,7 @@ type DisplayItem =
   | { kind: 'stream'; key: string; receivedAt: string; item: StreamItem }
   | { kind: 'optimistic'; key: string; receivedAt: string; item: OptimisticItem };
 
-function StreamView({
+export function StreamView({
   stream,
   isMock,
   optimistic,
@@ -1284,13 +1284,18 @@ function StreamView({
   }, [stream.items, optimistic]);
 
   // Pin scroll to the bottom whenever new items arrive so live updates
-  // stay in view without the user having to scroll.
+  // stay in view without the user having to scroll. `scrollRef` points
+  // at the inner row wrapper, not at a scrollable element — setting
+  // `scrollTop` on it was a no-op, which is why the panel never
+  // followed the stream. Call `scrollIntoView({ block: 'end' })` on
+  // the last row instead and let the browser walk up to whichever
+  // ancestor actually scrolls.
   const count = merged.length;
   useEffect(() => {
     if (count === 0) return;
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    el.lastElementChild?.scrollIntoView({ block: 'end' });
   }, [count]);
 
   if (merged.length === 0) {
