@@ -75,9 +75,7 @@ describe('<Pinagent dock /> — dock iframe query forwarding', () => {
     act(() => {
       root.render(<Pinagent dock />);
     });
-    expect(getDockIframe()?.src).toContain(
-      '/__pinagent/dock/embedded.html?state=disconnected',
-    );
+    expect(getDockIframe()?.src).toContain('/__pinagent/dock/embedded.html?state=disconnected');
   });
 
   it('forwards both allowlisted params together', () => {
