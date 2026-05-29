@@ -162,6 +162,18 @@ export async function deleteConversation(db: BrowserDb, feedbackId: string): Pro
 }
 
 /**
+ * Drop just the cached messages for a conversation, leaving the
+ * conversation row (and its anchors) intact. Used on a WS reconnect: the
+ * server replays the full transcript from the start, so the widget wipes
+ * the mirror first and lets the replay re-record it once — otherwise each
+ * reconnect appends a duplicate copy of every event to the cache, which
+ * then resurfaces on the next page-reload restore.
+ */
+export async function deleteConversationMessages(db: BrowserDb, feedbackId: string): Promise<void> {
+  await db.delete(messages).where(eq(messages.conversationId, feedbackId));
+}
+
+/**
  * Drop conversations (and their cascaded messages + anchors) that
  * have been resolved for more than 30 days. Keeps the OPFS file from
  * growing forever in a project that gets steady pinagent use.

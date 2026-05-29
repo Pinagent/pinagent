@@ -22,6 +22,13 @@ export class WidgetWsClient {
   private reconnectDelay = RECONNECT_MIN_MS;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private explicitlyClosed = false;
+  /**
+   * True once a socket has opened at least once. Lets the open handler
+   * tell reconnects apart from the initial connect so it only resets
+   * per-feedback consumers (which would otherwise duplicate the replayed
+   * transcript) on the former.
+   */
+  private hasConnectedBefore = false;
 
   constructor(private readonly url: string) {}
 
@@ -107,8 +114,15 @@ export class WidgetWsClient {
       return;
     }
     this.socket.addEventListener('open', () => {
+      const isReconnect = this.hasConnectedBefore;
+      this.hasConnectedBefore = true;
       this.reconnectDelay = RECONNECT_MIN_MS;
-      for (const id of this.handlers.keys()) {
+      for (const [id, handler] of this.handlers) {
+        // On a reconnect the server replays this conversation's transcript
+        // from the start, so tell the consumer to drop its rendered +
+        // cached copy first — otherwise the replay duplicates every event.
+        // Skipped on the initial connect (nothing accumulated yet).
+        if (isReconnect) handler.onReset?.();
         this.socket?.send(JSON.stringify({ type: 'subscribe', feedbackId: id }));
       }
       // Restore the project subscription across reconnects.

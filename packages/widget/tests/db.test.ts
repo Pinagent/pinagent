@@ -6,6 +6,7 @@ import { getConversationMessages, listPendingForCurrentPage } from '../src/db/re
 import {
   type AnchorInput,
   deleteConversation,
+  deleteConversationMessages,
   markConversationResolved,
   pruneOldConversations,
   recordConversationStart,
@@ -348,5 +349,37 @@ describe('getConversationMessages', () => {
 
   it('returns [] for an unknown id', async () => {
     expect(await getConversationMessages(db, 'never')).toEqual([]);
+  });
+});
+
+describe('deleteConversationMessages', () => {
+  it('drops the conversation’s messages but keeps the conversation row', async () => {
+    await recordConversationStart(db, { feedbackId: 'fb', comment: 'c', anchor: anchor() });
+    await recordEvent(db, 'fb', 1, { type: 'init', sessionId: 's' });
+    await recordEvent(db, 'fb', 1, { type: 'text', text: 'a' });
+    await recordUserMessage(db, 'fb', 1, 'hi');
+    expect(await getConversationMessages(db, 'fb')).toHaveLength(3);
+
+    await deleteConversationMessages(db, 'fb');
+
+    // Messages gone; the conversation row (and anchor) survive so the
+    // reconnect replay can re-record into the same conversation.
+    expect(await getConversationMessages(db, 'fb')).toEqual([]);
+    const cs = await db.select().from(conversations).where(eq(conversations.id, 'fb'));
+    expect(cs).toHaveLength(1);
+    const as = await db.select().from(widgetAnchors).where(eq(widgetAnchors.conversationId, 'fb'));
+    expect(as).toHaveLength(1);
+  });
+
+  it('leaves other conversations’ messages untouched', async () => {
+    await recordConversationStart(db, { feedbackId: 'a', comment: '', anchor: anchor() });
+    await recordConversationStart(db, { feedbackId: 'b', comment: '', anchor: anchor() });
+    await recordEvent(db, 'a', 1, { type: 'text', text: 'a1' });
+    await recordEvent(db, 'b', 1, { type: 'text', text: 'b1' });
+
+    await deleteConversationMessages(db, 'a');
+
+    expect(await getConversationMessages(db, 'a')).toEqual([]);
+    expect(await getConversationMessages(db, 'b')).toHaveLength(1);
   });
 });

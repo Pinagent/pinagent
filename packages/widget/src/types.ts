@@ -95,6 +95,15 @@ export interface FeedbackHandler {
   onDone(): void;
   onError(message: string): void;
   /**
+   * Fired right before the client re-subscribes this conversation on a
+   * reconnect. The server replays the full transcript from the start on
+   * every fresh `subscribe`, so the consumer must drop what it has
+   * rendered (and cached) and let the replay rebuild it — otherwise every
+   * reconnect duplicates the whole transcript. Not fired on the initial
+   * connect (nothing to reset).
+   */
+  onReset?(): void;
+  /**
    * Phase H — the conversation's worktree lifecycle changed. Optional
    * because inline-mode conversations never call this and the widget
    * keeps working without a header lifecycle row.
