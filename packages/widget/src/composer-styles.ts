@@ -523,8 +523,65 @@ export const COMPOSER_STYLES = `
   #pa-follow-input { font-size: 12px; min-height: 0; }
   #pa-follow-send { white-space: nowrap; }
 
+  /* --- Mini progress card --------------------------------------- */
+  /* The minimized-while-running state. Same stream pane, condensed:
+     the identity/breadcrumb header, lifecycle row, follow-up box and
+     Stop button all collapse, leaving a status line, the last couple
+     of activity rows, and a turns/cost footer with an Expand control.
+     Driven by the parent toggling \`body.mini\`. */
+  body.mini .header-block,
+  body.mini #pa-lifecycle,
+  body.mini .follow,
+  body.mini #pa-stop { display: none; }
+  body.mini .card { gap: 6px; padding: 10px; cursor: pointer; }
+  body.mini .header {
+    display: block;
+    padding: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* Keep the running spinner inline with the (now block) header text. */
+  body.mini .header.running::before { vertical-align: middle; margin-right: 6px; }
+  body.mini .log {
+    flex: none;
+    max-height: 52px;
+    overflow: hidden;
+    gap: 4px;
+  }
+  /* Only the two most-recent activity rows stay visible — the tail of
+     the transcript is the part that reads as "what's happening now". */
+  body.mini .log > *:not(:nth-last-child(-n + 2)) { display: none; }
+  body.mini .log > * {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  body.mini .ask-form,
+  body.mini .ask-resolved,
+  body.mini .conflict-block { display: none; }
+
+  /* Terminal tint — the card border echoes the bubble palette so a
+     finished run reads done/errored at a glance even while minimized. */
+  body.mini[data-agent-state='done'] .card { border-color: ${STATUS.readyToLand.border}; }
+  body.mini[data-agent-state='error'] .card { border-color: ${STATUS.error.border}; }
+
+  /* Needs-input — the agent asked a question while we were minimized.
+     Pulse the awaiting-clarification ring so it pulls attention; the
+     card is click-to-expand to answer. */
+  body.mini.needs-input .card {
+    border-color: ${STATUS.awaitingClarification.border};
+    animation: pa-card-pulse 1.6s ease-out infinite;
+  }
+  @keyframes pa-card-pulse {
+    0%, 100% { box-shadow: 0 0 0 1px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(32, 27, 33, 0.18); }
+    50%      { box-shadow: 0 0 0 4px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(32, 27, 33, 0.18); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .meta, textarea, .btn, .ask-option { transition: none !important; }
     .header.running::before { animation: none; border-color: ${STATUS.working.fg}; }
+    body.mini.needs-input .card { animation: none; box-shadow: 0 0 0 2px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(32, 27, 33, 0.18); }
   }
 `;

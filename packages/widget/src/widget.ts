@@ -30,6 +30,10 @@ const RECONNECT_MAX_MS = 30_000;
 
 const COMPOSER_H = 320;
 const STREAM_H = 340;
+// Minimized "mini progress card" height — tall enough for the status
+// line, the last two activity rows, and the turns/cost footer. Reuses
+// IFRAME_W for width so reposition()/drag/pointer math is untouched.
+const MINI_H = 132;
 const IFRAME_W = 400;
 const BUBBLE_SIZE = 36;
 
@@ -1000,6 +1004,10 @@ export function mount(): void {
       if (next === 'done') bubble.innerHTML = '✓';
       else if (next === 'error') bubble.innerHTML = '✗';
       else bubble.innerHTML = '<div class="pa-bubble-spinner"></div>';
+      // Mirror onto the mini card so its border can echo the bubble
+      // palette (done = ready tint, error = error tint) while minimized.
+      const idoc = iframe.contentDocument;
+      if (idoc?.body) idoc.body.dataset.agentState = next;
     }
 
     // Click-relative-to-target offset, captured at creation time. The
@@ -1061,7 +1069,15 @@ export function mount(): void {
       // Anchor in viewport coords (used to decide above/below placement).
       const anchorViewportY = r.top + relY;
 
-      const composerH = composer.feedbackId ? STREAM_H : currentComposerH;
+      // When minimized post-submit we keep the iframe visible as the
+      // mini progress card (MINI_H); only the dashed anchor-lost dot
+      // falls back to hiding it. Expanded uses the full height.
+      const showDot = composer.anchorLost && !!composer.feedbackId;
+      const composerH = composer.expanded
+        ? composer.feedbackId
+          ? STREAM_H
+          : currentComposerH
+        : MINI_H;
       const spaceBelow = window.innerHeight - anchorViewportY;
       const placeBelow = spaceBelow >= composerH + 16 || anchorViewportY < composerH + 16;
       const baseTop = placeBelow ? anchorDocY + 12 : anchorDocY - composerH - 12;
@@ -1089,7 +1105,7 @@ export function mount(): void {
       const handleW = 16;
       dragHandle.style.top = `${iframeTop + 12}px`;
       dragHandle.style.left = `${iframeLeft + IFRAME_W - handleW - 12}px`;
-      dragHandle.hidden = !composer.expanded;
+      dragHandle.hidden = showDot || !composer.expanded;
 
       // Pointer tail. Sits on whichever widget edge faces the click;
       // horizontally aligned with the click's X, clamped so it stays
@@ -1113,7 +1129,15 @@ export function mount(): void {
       pointer.setAttribute('width', String(POINTER_W));
       pointer.setAttribute('height', String(POINTER_H));
       pointer.style.left = `${pointerLeft}px`;
-      pointer.style.display = composer.expanded ? '' : 'none';
+
+      // Single source of truth for iframe/dot/pointer visibility. The
+      // iframe is shown in both expanded and mini states; the dashed
+      // dot only takes over when the anchor was lost (no live element
+      // to pin a card to). The tail points at the element whenever the
+      // iframe is visible.
+      iframe.hidden = showDot;
+      bubble.hidden = !showDot;
+      pointer.style.display = showDot ? 'none' : '';
     }
 
     const composer: Composer = {
@@ -1156,23 +1180,35 @@ export function mount(): void {
       expand() {
         composer.expanded = true;
         iframe.style.height = `${composer.feedbackId ? STREAM_H : currentComposerH}px`;
-        iframe.hidden = false;
-        bubble.hidden = true;
+        applyMiniChrome();
         reposition();
       },
       minimize() {
+        // Minimized = the mini progress card, NOT a hidden iframe. The
+        // iframe stays visible at MINI_H with `body.mini` toggled on;
+        // reposition() decides iframe-vs-dot visibility. Multiple mini
+        // cards can coexist (one per anchored agent) — only the *full*
+        // expanded composer is tracked by expandedComposer.
         composer.expanded = false;
-        iframe.hidden = true;
-        bubble.hidden = false;
+        iframe.style.height = `${MINI_H}px`;
+        applyMiniChrome();
         reposition();
-        // Keep the outer registry honest: there's no expanded composer
-        // now. swapTo and openComposer reassign expandedComposer right
-        // after this returns, so the clear is mainly load-bearing for
-        // direct minimize() callers (e.g. Esc) where no replacement
-        // composer is taking over.
         if (expandedComposer === composer) expandedComposer = null;
       },
     };
+
+    // Reflect expanded/mini onto the iframe document: toggle `body.mini`
+    // (drives the condensed card CSS) and relabel the footer toggle
+    // button. Expanding also clears any needs-input attention state,
+    // since expanding is how the user gets to the answer form.
+    function applyMiniChrome() {
+      const idoc = iframe.contentDocument;
+      if (!idoc?.body) return;
+      idoc.body.classList.toggle('mini', !composer.expanded);
+      if (composer.expanded) idoc.body.classList.remove('needs-input');
+      const dismiss = idoc.getElementById('pa-dismiss');
+      if (dismiss) dismiss.textContent = composer.expanded ? 'Minimize' : 'Expand';
+    }
 
     // Drag: mousedown on handle starts tracking; iframe pointer-events
     // disabled mid-drag so a mousemove that crosses into the iframe
@@ -1366,6 +1402,22 @@ export function mount(): void {
         discardBtn,
       };
 
+      // Minimize ⇄ Expand toggle. Expanding routes through swapTo so any
+      // other full composer collapses to its own mini card first (only
+      // one expanded at a time). Wired here — not in attachStreamHandler
+      // — because swapTo lives in this scope.
+      dismissBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (c.expanded) c.minimize();
+        else swapTo(c);
+      });
+      // Clicking anywhere on a minimized card expands it. No-op while
+      // expanded so in-card interactions (text selection, follow-up,
+      // lifecycle buttons) aren't hijacked.
+      streamPane.addEventListener('click', () => {
+        if (!c.expanded) swapTo(c);
+      });
+
       // "+N more" badge — present only when extras > 0. Hovering it
       // does two things: bounces a message up to the parent to flash
       // outlines on the underlying-page extras, and opens an in-composer
@@ -1440,15 +1492,13 @@ export function mount(): void {
       iwin.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
           e.preventDefault();
-          // Three cases:
-          // - Pre-submit (composer pane): close — there's nothing alive
-          //   to preserve.
-          // - Post-submit, agent loading/running: minimize so the agent
-          //   keeps working in the background; bubble shows progress.
-          // - Post-submit, agent done/errored: close — nothing's
-          //   happening anymore, no point keeping it around.
-          const loading = c.agentState === 'pending' || c.agentState === 'running';
-          if (c.feedbackId && loading) c.minimize();
+          // Esc steps down one level:
+          // - Pre-submit (no agent): close — nothing alive to preserve.
+          // - Expanded post-submit: minimize to the mini progress card
+          //   (the agent keeps working / stays available for review).
+          // - Already minimized: close — dismiss the card.
+          if (!c.feedbackId) c.close();
+          else if (c.expanded) c.minimize();
           else c.close();
           return;
         }
@@ -1475,7 +1525,11 @@ export function mount(): void {
       if (c.feedbackId) {
         composerPane.hidden = true;
         streamPane.hidden = false;
-        if (c.expanded) iframe.style.height = `${STREAM_H}px`;
+        // Restored conversations come back minimized (restorePending
+        // calls minimize() before the iframe loads, so body.mini/height
+        // weren't applied yet). Sync the chrome now that idoc exists.
+        iframe.style.height = `${c.expanded ? STREAM_H : MINI_H}px`;
+        applyMiniChrome();
         void (async () => {
           const db = getBrowserDb();
           let replayed: ReplayMessage[] = [];
@@ -1505,7 +1559,6 @@ export function mount(): void {
             streamHeader,
             streamLog,
             streamFooter,
-            dismissBtn,
             stopBtn,
             followInput,
             followSend,
@@ -1656,12 +1709,15 @@ export function mount(): void {
               streamHeader,
               streamLog,
               streamFooter,
-              dismissBtn,
               stopBtn,
               followInput,
               followSend,
               lifecycle,
             );
+            // Auto-minimize on submit: the agent works in the background
+            // as a mini progress card anchored to the element, instead
+            // of the full stream popover taking over the screen.
+            c.minimize();
           } else {
             toast('Sent', 'success');
             c.close();
@@ -1842,7 +1898,6 @@ function attachStreamHandler(
   header: HTMLElement,
   log: HTMLElement,
   footer: HTMLElement,
-  dismissBtn: HTMLButtonElement,
   stopBtn: HTMLButtonElement,
   followInput: HTMLTextAreaElement,
   followSend: HTMLButtonElement,
@@ -1890,19 +1945,26 @@ function attachStreamHandler(
   }
   setHeaderRunning(true);
 
+  // The left footer button is "Stop" while a turn is in flight and
+  // "Dismiss" once it's terminal — giving an on-screen way to remove a
+  // finished conversation now that the right button is a Minimize/
+  // Expand toggle (wired in wireComposerIframe). showDismiss() flips it
+  // to the terminal mode.
   stopBtn.addEventListener('click', () => {
-    if (!turnRunning) return;
-    client.sendInterrupt(feedbackId);
-    stopBtn.disabled = true;
-    stopBtn.textContent = 'Stopping…';
-  });
-
-  dismissBtn.addEventListener('click', () => {
-    if (turnRunning || pendingAskId) {
+    if (turnRunning) {
       client.sendInterrupt(feedbackId);
+      stopBtn.disabled = true;
+      stopBtn.textContent = 'Stopping…';
+      return;
     }
     composer.close();
   });
+
+  function showDismiss() {
+    stopBtn.disabled = false;
+    stopBtn.textContent = 'Dismiss';
+    setStopVisible(true);
+  }
 
   function el(tag: string, className?: string, text?: string): HTMLElement {
     const node = idoc.createElement(tag);
@@ -2089,6 +2151,13 @@ function attachStreamHandler(
         const options = Array.isArray(event.options) ? (event.options as string[]) : undefined;
         if (!askId || !question) break;
         renderAskUserForm(askId, question, options);
+        // If we're minimized, the answer form isn't visible — pulse the
+        // card and swap the header so the developer knows the agent is
+        // blocked on them. Cleared when they expand (applyMiniChrome).
+        if (!composer.expanded) {
+          idoc.body.classList.add('needs-input');
+          header.textContent = '▲ Needs your input';
+        }
         break;
       }
       case 'error': {
@@ -2098,7 +2167,7 @@ function attachStreamHandler(
         setAgentState('error');
         turnRunning = false;
         setHeaderRunning(false);
-        setStopVisible(false);
+        showDismiss();
         if (!pendingAskId) setFollowEnabled(true);
         // Terminal: stop the conversation from restoring on next
         // reload. The transcript stays in the cache (it's still
@@ -2151,7 +2220,7 @@ function attachStreamHandler(
         }
         turnRunning = false;
         setHeaderRunning(false);
-        setStopVisible(false);
+        showDismiss();
         setAgentState(ok ? 'done' : 'error');
         if (!pendingAskId) setFollowEnabled(true);
         // Terminal: flip status so restoration scans skip this.
@@ -2190,7 +2259,7 @@ function attachStreamHandler(
       // so the user isn't stuck staring at a spinner.
       turnRunning = false;
       setHeaderRunning(false);
-      setStopVisible(false);
+      showDismiss();
       header.textContent = '(no transcript saved)';
       setFollowEnabled(true);
       setAgentState('done');
@@ -2410,7 +2479,7 @@ function composerHTML(meta: ComposerMeta): string {
         <div class="row" style="gap:6px;">
           <button class="btn ghost icon" id="pa-open-dock" type="button" title="Open in dock" aria-label="Open conversation in dock" hidden>${ICON_SIDEBAR}</button>
           <button class="btn ghost stop" id="pa-stop" type="button" hidden>Stop</button>
-          <button class="btn ghost cancel" id="pa-dismiss" type="button">Minimize</button>
+          <button class="btn ghost" id="pa-dismiss" type="button">Minimize</button>
         </div>
       </div>
     </div>
