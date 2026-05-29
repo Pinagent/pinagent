@@ -26,6 +26,7 @@ import { getDb } from './db/client';
 import { enqueue } from './merge-queue';
 import { onProjectChange } from './project-events';
 import { maybeStartRelayClient } from './relay-client';
+import { type ProjectSettingsPatch, SettingsStore } from './settings-store';
 import { Storage } from './storage';
 import { clearWarning, isStale, sweepStaleWorktrees } from './worktree-ttl';
 
@@ -584,6 +585,23 @@ async function handleClientMessage(
       // tell every dock subscriber presence is now live.
       extensionSockets.set(socket, msg.version);
       broadcastExtensionStatus();
+      return;
+    }
+    case 'set_branch_routing': {
+      // The control plane pushed an org's branch-routing policy down the
+      // relay channel; mirror it into local settings, where worktree.ts
+      // enforces it. `defaultBaseBranch: null` leaves the base branch as-is.
+      const patch: ProjectSettingsPatch = {
+        allowedBranchPatterns: msg.allowedBranchPatterns,
+      };
+      if (msg.defaultBaseBranch !== null) patch.baseBranch = msg.defaultBaseBranch;
+      try {
+        await new SettingsStore(projectRoot()).patch(patch);
+      } catch (err) {
+        // Bad policy (e.g. invalid branch name) shouldn't tear down the
+        // connection — log and move on; the prior settings stay in effect.
+        console.error('[pinagent] failed to apply pushed branch-routing policy:', err);
+      }
       return;
     }
     case 'query_extension': {

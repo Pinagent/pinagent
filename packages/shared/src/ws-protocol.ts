@@ -76,6 +76,20 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
    * presence without the full project fan-out.
    */
   z.object({ type: z.literal('query_extension') }),
+  /**
+   * Push the cloud's branch-routing policy down to this dev server, which
+   * applies it to local project settings (`baseBranch` + `allowedBranchPatterns`,
+   * enforced in agent-runner's `worktree.ts`). Carried over the relay channel
+   * from the control plane; fields are primitives so the protocol stays free
+   * of the Elastic-zone policy type. `defaultBaseBranch: null` means "leave the
+   * project's base branch unchanged" (the cloud's "repo default"). `*`-glob
+   * patterns; empty list = allow any branch.
+   */
+  z.object({
+    type: z.literal('set_branch_routing'),
+    defaultBaseBranch: z.string().min(1).max(128).nullable(),
+    allowedBranchPatterns: z.array(z.string().min(1).max(128)).max(50),
+  }),
   z.object({ type: z.literal('ping') }),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
