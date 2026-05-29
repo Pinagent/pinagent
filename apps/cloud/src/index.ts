@@ -8,6 +8,7 @@ export { PACKAGE_NAME as INFRA_PACKAGE } from '@pinagent/ee-infra';
 export { PACKAGE_NAME as RELAY_PACKAGE } from '@pinagent/ee-relay';
 export { PACKAGE_NAME as TEAM_FEATURES_PACKAGE } from '@pinagent/ee-team-features';
 
+export { createBearerAuthenticator } from './authenticators';
 export { type CloudConfig, loadCloudConfig } from './config';
 export {
   createNeonMembershipStore,
