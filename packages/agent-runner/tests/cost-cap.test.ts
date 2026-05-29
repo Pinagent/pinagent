@@ -89,6 +89,47 @@ describe('spawnAgent — cost cap enforcement', () => {
       expect(errMsg.message).toMatch(/per-conversation cost cap/);
       expect(errMsg.message).toMatch(/\$0.20/);
       expect(errMsg.message).toMatch(/\$0.10/);
+      // API-key run → the message states money was "spent".
+      expect(errMsg.message).toMatch(/spent/);
+    }
+  });
+
+  it('phrases the per-conversation breach as API-equivalent for an OAuth run', async () => {
+    const settings = new SettingsStore(root);
+    await settings.patch({ perConversationCapUsd: 0.1 });
+
+    const storage = new Storage(root);
+    const id = nanoid(10);
+    const rec = await storage.create(id, makeInput());
+    const bus = getOrCreateBus(id, root);
+    // An OAuth/subscription run records its credential source on init.
+    await bus.publish({
+      type: 'init',
+      sessionId: 'sess1234',
+      model: 'claude',
+      permissionMode: 'default',
+      apiKeySource: 'oauth',
+    });
+    await bus.publish({
+      type: 'result',
+      subtype: 'success',
+      numTurns: 1,
+      totalCostUsd: 0.2,
+      durationMs: 100,
+    });
+
+    await spawnAgent({ projectRoot: root, feedback: rec, mode: 'inline' });
+
+    const events = await storage.listMessages(id);
+    const errors = events.filter((e) => e.type === 'error');
+    expect(errors.length).toBeGreaterThan(0);
+    const errMsg = errors[0];
+    if (errMsg && errMsg.type === 'error') {
+      expect(errMsg.message).toMatch(/per-conversation cost cap/);
+      // Notional cost: framed as API-equivalent + subscription, never "spent".
+      expect(errMsg.message).toMatch(/API-equivalent/);
+      expect(errMsg.message).toMatch(/subscription/);
+      expect(errMsg.message).not.toMatch(/spent/);
     }
   });
 
