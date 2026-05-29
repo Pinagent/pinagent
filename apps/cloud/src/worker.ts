@@ -6,6 +6,7 @@ import { type CloudConfig, loadCloudConfig } from './config';
 import { createPgAuditSink } from './db/audit-sink';
 import { createNeonDb } from './db/client';
 import { createPgMembershipStore } from './db/membership-store';
+import { createPgMeterSink } from './db/meter-sink';
 
 /**
  * Cloudflare Worker entry / composition root for the Pinagent cloud control
@@ -30,6 +31,7 @@ async function buildApp(config: CloudConfig) {
   const db = await createNeonDb(config.databaseUrl);
   const store = createPgMembershipStore(db);
   const audit = createPgAuditSink(db);
+  const meter = createPgMeterSink(db);
 
   const connection: SsoConnection = {
     id: config.oidc.connectionId,
@@ -61,6 +63,7 @@ async function buildApp(config: CloudConfig) {
       relayUrl: config.relayPublicUrl,
       ttlSeconds: config.sessionTtlSeconds,
       audit,
+      meter,
     },
     login: {
       provider,
