@@ -18,6 +18,7 @@ packages/vite-plugin/src/__generated__
 *.tsbuildinfo
 coverage
 .cache
+node-compile-cache
 .env
 .env.*
 !.env.example
