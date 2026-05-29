@@ -29,6 +29,10 @@ export interface RawFeedback {
   status: ServerStatus;
   worktreeState: ServerWorktreeState;
   archived?: boolean;
+  /** Persisted message count — surfaced as the row's "N msg" badge. */
+  messageCount?: number | null;
+  /** Running SDK cost in USD — surfaced as the row's "$X.XX" badge. */
+  totalCostUsd?: number | null;
 }
 
 /** One row in the tray. `status` is the derived, unresolved dock status. */
@@ -37,6 +41,10 @@ export interface TrayAgent {
   title: string;
   selector: string | null;
   status: StatusKey;
+  /** Message count (0 when unknown) — drives the row's glanceable meta. */
+  messageCount: number;
+  /** Running cost in USD (0 when unknown). */
+  costUsd: number;
 }
 
 const MAX_TITLE_LEN = 80;
@@ -66,6 +74,8 @@ export function selectUnresolvedAgents(raw: readonly RawFeedback[]): TrayAgent[]
       title: titleFor(rec),
       selector: rec.selector ?? null,
       status,
+      messageCount: rec.messageCount ?? 0,
+      costUsd: rec.totalCostUsd ?? 0,
     });
   }
   return agents;

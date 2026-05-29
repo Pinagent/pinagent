@@ -181,10 +181,24 @@ export const STYLES = `
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
-.pa-tray-rowtitle {
+.pa-tray-rowmain {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.pa-tray-rowtitle {
+  min-width: 0;
   font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pa-tray-meta {
+  font-size: 10px;
+  color: rgba(252, 249, 232, 0.55);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

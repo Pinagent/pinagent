@@ -61,6 +61,15 @@ describe('selectUnresolvedAgents', () => {
     expect(withComment).toMatchObject({ title: 'Tweak the modal', selector: null });
     expect(untitled.title).toBe('Untitled');
   });
+
+  it('maps messageCount and totalCostUsd, defaulting missing values to 0', () => {
+    const [withMeta, withoutMeta] = selectUnresolvedAgents([
+      rec({ id: 'withmeta00', worktreeState: 'active', messageCount: 5, totalCostUsd: 0.34 }),
+      rec({ id: 'nometa0000', worktreeState: 'active' }),
+    ]);
+    expect(withMeta).toMatchObject({ messageCount: 5, costUsd: 0.34 });
+    expect(withoutMeta).toMatchObject({ messageCount: 0, costUsd: 0 });
+  });
 });
 
 /** A promise plus its resolver, for driving async fetches in the test. */
