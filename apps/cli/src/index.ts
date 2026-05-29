@@ -37,7 +37,7 @@ Subcommands:
                      the .pinagent store, register the MCP server in
                      .mcp.json, create the Next route handler (Next only),
                      and print the remaining manual wiring steps. Detects
-                     Vite vs Next automatically. Idempotent.
+                     Vite, Next, or Nuxt automatically. Idempotent.
 
                      Options:
                        --dir <path>   Project root to scaffold. Defaults

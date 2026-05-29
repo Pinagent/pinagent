@@ -127,6 +127,7 @@ describe('command helpers', () => {
   it('maps runtime to package', () => {
     expect(pluginPackage('vite')).toBe('@pinagent/vite-plugin');
     expect(pluginPackage('next')).toBe('@pinagent/next-plugin');
+    expect(pluginPackage('nuxt')).toBe('@pinagent/nuxt-plugin');
   });
 
   it('formats the add command per package manager', () => {
@@ -146,19 +147,28 @@ describe('fs detection + runInit', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('detects vite, next, and unknown runtimes', () => {
+  it('detects vite, next, nuxt, and unknown runtimes', () => {
     expect(detectRuntime(dir)).toBe('unknown');
     writeFileSync(join(dir, 'vite.config.ts'), '');
     expect(detectRuntime(dir)).toBe('vite');
     rmSync(join(dir, 'vite.config.ts'));
     writeFileSync(join(dir, 'next.config.mjs'), '');
     expect(detectRuntime(dir)).toBe('next');
+    rmSync(join(dir, 'next.config.mjs'));
+    writeFileSync(join(dir, 'nuxt.config.ts'), '');
+    expect(detectRuntime(dir)).toBe('nuxt');
+  });
+
+  it('detects nuxt ahead of a stray vite.config (Nuxt runs Vite under the hood)', () => {
+    writeFileSync(join(dir, 'vite.config.ts'), '');
+    writeFileSync(join(dir, 'nuxt.config.ts'), '');
+    expect(detectRuntime(dir)).toBe('nuxt');
   });
 
   it('reports both configs present (and detectRuntime tiebreaks to vite)', () => {
     writeFileSync(join(dir, 'vite.config.ts'), '');
     writeFileSync(join(dir, 'next.config.ts'), '');
-    expect(configsPresent(dir)).toEqual({ vite: true, next: true });
+    expect(configsPresent(dir)).toEqual({ vite: true, next: true, nuxt: false });
     expect(detectRuntime(dir)).toBe('vite');
   });
 
@@ -196,7 +206,7 @@ describe('fs detection + runInit', () => {
   it('returns code 1 and writes nothing for an unsupported project', () => {
     const r = runInit({ dir, dryRun: false });
     expect(r.code).toBe(1);
-    expect(r.lines.join('\n')).toContain('no vite.config.* or next.config.*');
+    expect(r.lines.join('\n')).toContain('no vite.config.*, next.config.*, or nuxt.config.*');
     expect(existsSync(join(dir, '.gitignore'))).toBe(false);
   });
 
@@ -209,6 +219,22 @@ describe('fs detection + runInit', () => {
       JSON.parse(readFileSync(join(dir, '.mcp.json'), 'utf8')).mcpServers.pinagent,
     ).toBeDefined();
     expect(r.lines.join('\n')).toContain('npm install -D @pinagent/vite-plugin');
+  });
+
+  it('scaffolds a nuxt project (gitignore + mcp.json, no route file, prints module step)', () => {
+    writeFileSync(join(dir, 'nuxt.config.ts'), '');
+    const r = runInit({ dir, dryRun: false });
+    expect(r.code).toBe(0);
+    expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toContain('.pinagent');
+    expect(
+      JSON.parse(readFileSync(join(dir, '.mcp.json'), 'utf8')).mcpServers.pinagent,
+    ).toBeDefined();
+    const out = r.lines.join('\n');
+    expect(out).toContain('detected Nuxt');
+    expect(out).toContain('npm install -D @pinagent/nuxt-plugin');
+    expect(out).toContain("modules: ['@pinagent/nuxt-plugin']");
+    // Nuxt needs no route handler (the module wires everything).
+    expect(existsSync(join(dir, 'app', 'pinagent'))).toBe(false);
   });
 
   it('scaffolds a next project including the route handler', () => {
