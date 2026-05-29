@@ -18,7 +18,10 @@ import WebSocket from 'ws';
  */
 
 const TEST_PORT = 53701;
-const WS_URL = `ws://127.0.0.1:${TEST_PORT}/__pinagent/ws`;
+// `startWsServer` falls back to the next free port if 53701 is busy, so we
+// connect to the actually-bound port it returns (set in beforeAll) rather
+// than the requested one — otherwise the client gets ECONNREFUSED.
+let WS_URL: string;
 
 const SINGLETON_KEY = Symbol.for('pinagent.ws-server');
 const WT_SUBS_KEY = Symbol.for('pinagent.ws.worktreeSubs');
@@ -59,7 +62,8 @@ beforeAll(async () => {
   server = await import('../src/ws-server');
   storageMod = await import('../src/storage');
 
-  await server.startWsServer();
+  const handle = await server.startWsServer();
+  WS_URL = `ws://127.0.0.1:${handle.port}/__pinagent/ws`;
 });
 
 afterAll(async () => {

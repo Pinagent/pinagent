@@ -13,14 +13,18 @@ import WebSocket from 'ws';
  * sending JSON over the wire. Asserts on the actual ServerMessage
  * frames the dev server would emit to the widget.
  *
- * Port choice: 53700 (out of the 53636 default range used by the
- * user's dev server). Each test file gets its own vitest worker, so
- * we don't need to randomise.
+ * Port choice: request 53700 (out of the 53636 default range used by
+ * the user's dev server). `startWsServer` falls back to the next free
+ * port if 53700 is busy (a stale dev server, a leftover run, a parallel
+ * CI job), so we connect to the *actually bound* port it returns rather
+ * than the requested one — otherwise the client races onto a port the
+ * server walked away from and gets ECONNREFUSED.
  */
 
 const TEST_PORT = 53700;
-const WS_URL = `ws://127.0.0.1:${TEST_PORT}/__pinagent/ws`;
 const PROJECT_ROOT = join(tmpdir(), `pa-ws-${nanoid(8)}`);
+// Set in beforeAll from the server handle's actual bound port.
+let WS_URL: string;
 
 // Symbol the ws-server uses to cache the singleton. Cleared in
 // beforeAll so a previous run's stale handle (if any) is dropped.
@@ -65,9 +69,10 @@ beforeAll(async () => {
   storageMod = await import('../src/storage');
   storage = new storageMod.Storage(PROJECT_ROOT);
   // startWsServer is async and probes for a free port (falling back from
-  // PINAGENT_WS_PORT if it's busy). Awaiting it is enough — the returned
-  // handle is already listening.
-  await server.startWsServer();
+  // PINAGENT_WS_PORT if it's busy). The returned handle is already
+  // listening; build the client URL from its actual bound port.
+  const handle = await server.startWsServer();
+  WS_URL = `ws://127.0.0.1:${handle.port}/__pinagent/ws`;
 });
 
 afterAll(async () => {
