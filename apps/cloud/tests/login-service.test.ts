@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Elastic-2.0
 import {
+  createInMemorySsoConnectionStore,
   type SsoConnection,
+  type SsoConnectionStore,
   type SsoProfile,
   type SsoProvider,
   verifyUserToken,
@@ -17,7 +19,7 @@ const connection: SsoConnection = {
   organizationId: 'acme',
   protocol: 'oidc',
   issuer: 'https://idp.test',
-  domains: [],
+  domains: ['acme.com'],
   enabled: true,
 };
 
@@ -37,10 +39,14 @@ function fakeProvider(overrides: Partial<SsoProvider> = {}): SsoProvider {
   };
 }
 
-function deps(provider: SsoProvider): LoginServiceDeps {
+function deps(
+  provider: SsoProvider,
+  connections: SsoConnectionStore = createInMemorySsoConnectionStore([connection]),
+): LoginServiceDeps {
   return {
     provider,
-    connection,
+    connections,
+    defaultConnectionId: 'conn-1',
     stateSecret: STATE_SECRET,
     userTokenSecret: USER_TOKEN_SECRET,
     cookieName: 'pa_session',
@@ -84,6 +90,44 @@ describe('GET /sso/start', () => {
     // The returnTo baked into the state must have fallen back to the default,
     // never the off-origin URL — verified at callback below.
     expect(calls).toHaveLength(1);
+  });
+
+  it('resolves an explicit ?connection= id', async () => {
+    const other: SsoConnection = { ...connection, id: 'conn-2', issuer: 'https://idp2.test' };
+    const provider = fakeProvider();
+    const res = await handleSsoStart(
+      new Request('https://cloud.test/sso/start?connection=conn-2'),
+      deps(provider, createInMemorySsoConnectionStore([connection, other])),
+    );
+    expect(res.status).toBe(302);
+    expect(provider.authorizationUrl).toHaveBeenCalledWith(other, expect.any(String));
+  });
+
+  it('discovers the connection from an ?email= domain', async () => {
+    const provider = fakeProvider();
+    const res = await handleSsoStart(
+      new Request('https://cloud.test/sso/start?email=bob@acme.com'),
+      deps(provider),
+    );
+    expect(res.status).toBe(302);
+    expect(provider.authorizationUrl).toHaveBeenCalledWith(connection, expect.any(String));
+  });
+
+  it('400s on an unknown connection (no default to fall back to)', async () => {
+    const res = await handleSsoStart(new Request('https://cloud.test/sso/start?connection=nope'), {
+      ...deps(fakeProvider()),
+      defaultConnectionId: undefined,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('400s when a resolved connection is disabled', async () => {
+    const disabled = createInMemorySsoConnectionStore([{ ...connection, enabled: false }]);
+    const res = await handleSsoStart(
+      new Request('https://cloud.test/sso/start'),
+      deps(fakeProvider(), disabled),
+    );
+    expect(res.status).toBe(400);
   });
 });
 
@@ -129,6 +173,16 @@ describe('GET /sso/callback', () => {
     const res = await handleSsoCallback(
       new Request(`https://cloud.test/sso/callback?code=abc&state=${forged}`),
       deps(fakeProvider()),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('400s when the state names a connection no longer in the store', async () => {
+    // State pinned conn-1, but the store no longer has it (deleted/disabled).
+    const state = await startedState();
+    const res = await handleSsoCallback(
+      new Request(`https://cloud.test/sso/callback?code=abc&state=${state}`),
+      deps(fakeProvider(), createInMemorySsoConnectionStore([])),
     );
     expect(res.status).toBe(400);
   });

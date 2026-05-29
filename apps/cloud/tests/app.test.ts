@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Elastic-2.0
 import {
+  createInMemorySsoConnectionStore,
   type MembershipStore,
   type OrganizationMembership,
   type SsoConnection,
@@ -79,7 +80,8 @@ function makeApp() {
     },
     login: {
       provider,
-      connection,
+      connections: createInMemorySsoConnectionStore([connection]),
+      defaultConnectionId: connection.id,
       stateSecret: STATE_SECRET,
       userTokenSecret: USER_TOKEN_SECRET,
       cookieName: COOKIE,

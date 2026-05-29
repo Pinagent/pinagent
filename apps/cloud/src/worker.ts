@@ -8,6 +8,7 @@ import { createNeonDb } from './db/client';
 import { createPgCostControlStore } from './db/cost-control-store';
 import { createPgMembershipStore } from './db/membership-store';
 import { createPgMeterSink } from './db/meter-sink';
+import { createPgSsoConnectionStore } from './db/sso-connection-store';
 import { createPgSubscriptionStore } from './db/subscription-store';
 
 /**
@@ -37,7 +38,12 @@ async function buildApp(config: CloudConfig) {
   const subscriptions = createPgSubscriptionStore(db);
   const costControls = createPgCostControlStore(db);
 
-  const connection: SsoConnection = {
+  // Connections are resolved from a store now. Seed the env-configured one so
+  // a single-connection deploy works with no DB rows; additional org IdPs can
+  // be added as rows (credential provisioning for those is a follow-up — only
+  // the configured connection has client credentials wired into `clientFor`).
+  const connections = createPgSsoConnectionStore(db);
+  const configuredConnection: SsoConnection = {
     id: config.oidc.connectionId,
     organizationId: config.oidc.organizationId,
     protocol: 'oidc',
@@ -45,13 +51,19 @@ async function buildApp(config: CloudConfig) {
     domains: [],
     enabled: true,
   };
+  await connections.upsert(configuredConnection);
 
   const provider = createOidcProvider({
-    clientFor: () => ({
-      clientId: config.oidc.clientId,
-      clientSecret: config.oidc.clientSecret,
-      redirectUri: config.oidc.redirectUri,
-    }),
+    clientFor: (connection) => {
+      if (connection.id !== config.oidc.connectionId) {
+        throw new Error(`no OIDC client configured for connection "${connection.id}"`);
+      }
+      return {
+        clientId: config.oidc.clientId,
+        clientSecret: config.oidc.clientSecret,
+        redirectUri: config.oidc.redirectUri,
+      };
+    },
     nonceSecret: config.oidcNonceSecret,
   });
 
@@ -73,7 +85,8 @@ async function buildApp(config: CloudConfig) {
     },
     login: {
       provider,
-      connection,
+      connections,
+      defaultConnectionId: config.oidc.connectionId,
       stateSecret: config.ssoStateSecret,
       userTokenSecret: config.userTokenSecret,
       userTokenTtlSeconds: config.userTokenTtlSeconds,
