@@ -8,6 +8,7 @@ import {
   startWsServer,
 } from '@pinagent/agent-runner';
 import { transformJsx } from '@pinagent/babel-plugin';
+import { transformVue } from '@pinagent/vue-plugin';
 import type { Plugin } from 'vite';
 import { createMiddleware } from './middleware';
 
@@ -229,17 +230,26 @@ export default function pinagent(options: PinagentOptions = {}): Plugin {
 
     transform(code, id) {
       if (!isServe) return null;
-      // Strip query strings (Vite adds e.g. ?v=hash, ?t=ts).
+      // Strip query strings (Vite adds e.g. ?v=hash, ?t=ts, and — for SFCs —
+      // ?vue&type=template on the compiled sub-modules).
       const cleanId = id.split('?')[0] ?? id;
-      if (!/\.(t|j)sx$/.test(cleanId)) return null;
+      const isVue = cleanId.endsWith('.vue');
+      const isJsx = /\.(t|j)sx$/.test(cleanId);
+      if (!isVue && !isJsx) return null;
       // Skip node_modules.
       if (cleanId.includes(`${sep}node_modules${sep}`) || cleanId.includes('/node_modules/')) {
         return null;
       }
 
       const rel = toPosix(relative(resolvedRoot, cleanId)) || cleanId;
-      const ts = /\.tsx$/.test(cleanId);
-      const transformed = transformJsx(code, { relPath: rel, ts });
+      // Vue SFCs aren't JSX — tag `<template>` markup via the Vue transform.
+      // `enforce: 'pre'` (above) means we rewrite the raw SFC before
+      // @vitejs/plugin-vue compiles it, so the attributes flow through to the
+      // compiled render fn. On the compiled `?vue&type=template` sub-module the
+      // transform is a no-op (it bails when there's no parseable SFC template).
+      const transformed = isVue
+        ? transformVue(code, { relPath: rel })
+        : transformJsx(code, { relPath: rel, ts: /\.tsx$/.test(cleanId) });
       if (!transformed) return null;
       // `map: null` lets Vite generate a fresh map from the diff. Safe here
       // because we only insert attributes inline; original line numbers
