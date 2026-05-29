@@ -54,4 +54,9 @@ export interface WidgetContext {
   bubbleOwner(el: HTMLElement): Composer | null;
   /** Transient corner toast. */
   toast(text: string, kind: 'success' | 'error'): void;
+  /**
+   * Reveal the dock surface, if one is mounted. Optional because most
+   * mounts run without the dock; callers use `ctx.openDock?.()`.
+   */
+  openDock?(): void;
 }
