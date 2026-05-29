@@ -2,7 +2,7 @@
 
 Vite plugin (dev-only) that:
 
-1. Tags every element with `data-pa-loc="<relPath>:<line>:<col>"` (and a `data-pa-comp` component name) — JSX opening elements via a Babel transform, and Vue SFC `<template>` markup via `@pinagent/vue-plugin`. The `transform` hook dispatches on extension, so React (`.tsx`/`.jsx`) and Vue (`.vue`) apps both work.
+1. Tags every element with `data-pa-loc="<relPath>:<line>:<col>"` (and a `data-pa-comp` component name) — JSX opening elements via a Babel transform, Vue SFC `<template>` markup via `@pinagent/vue-plugin`, and Svelte component markup via `@pinagent/svelte-plugin`. The `transform` hook dispatches on extension, so React (`.tsx`/`.jsx`), Vue (`.vue`), and Svelte (`.svelte`) apps all work.
 2. Injects a `<script src="/__pinagent/widget.js">` into served HTML.
 3. Serves middleware under `/__pinagent/*` that writes captured feedback to `.pinagent/feedback/`.
 
@@ -35,6 +35,19 @@ import pinagent from '@pinagent/vite-plugin';
 
 export default defineConfig({
   plugins: [pinagent(), vue()],
+});
+```
+
+Svelte is the same shape — `pinagent()` ahead of `@sveltejs/vite-plugin-svelte`
+so it tags the raw component before svelte compiles it:
+
+```ts
+// vite.config.ts
+import { svelte } from '@sveltejs/vite-plugin-svelte';
+import pinagent from '@pinagent/vite-plugin';
+
+export default defineConfig({
+  plugins: [pinagent(), svelte()],
 });
 ```
 

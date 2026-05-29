@@ -8,6 +8,7 @@ import {
   startWsServer,
 } from '@pinagent/agent-runner';
 import { transformJsx } from '@pinagent/babel-plugin';
+import { transformSvelte } from '@pinagent/svelte-plugin';
 import { transformVue } from '@pinagent/vue-plugin';
 import type { Plugin } from 'vite';
 import { createMiddleware } from './middleware';
@@ -271,22 +272,26 @@ export default function pinagent(options: PinagentOptions = {}): Plugin {
       // ?vue&type=template on the compiled sub-modules).
       const cleanId = id.split('?')[0] ?? id;
       const isVue = cleanId.endsWith('.vue');
+      const isSvelte = cleanId.endsWith('.svelte');
       const isJsx = /\.(t|j)sx$/.test(cleanId);
-      if (!isVue && !isJsx) return null;
+      if (!isVue && !isSvelte && !isJsx) return null;
       // Skip node_modules.
       if (cleanId.includes(`${sep}node_modules${sep}`) || cleanId.includes('/node_modules/')) {
         return null;
       }
 
       const rel = toPosix(relative(resolvedRoot, cleanId)) || cleanId;
-      // Vue SFCs aren't JSX — tag `<template>` markup via the Vue transform.
-      // `enforce: 'pre'` (above) means we rewrite the raw SFC before
-      // @vitejs/plugin-vue compiles it, so the attributes flow through to the
-      // compiled render fn. On the compiled `?vue&type=template` sub-module the
-      // transform is a no-op (it bails when there's no parseable SFC template).
+      // Dispatch on extension. Vue SFCs and Svelte components aren't JSX, so
+      // they go through their own transforms. `enforce: 'pre'` (above) means we
+      // rewrite the raw source before @vitejs/plugin-vue or
+      // @sveltejs/vite-plugin-svelte compiles it, so the attributes flow through
+      // to the compiled output; on the compiled `?vue`/`?svelte` sub-modules the
+      // transform is a no-op (it bails when there's no parseable component).
       const transformed = isVue
         ? transformVue(code, { relPath: rel })
-        : transformJsx(code, { relPath: rel, ts: /\.tsx$/.test(cleanId) });
+        : isSvelte
+          ? transformSvelte(code, { relPath: rel })
+          : transformJsx(code, { relPath: rel, ts: /\.tsx$/.test(cleanId) });
       if (!transformed) return null;
       // `map: null` lets Vite generate a fresh map from the diff. Safe here
       // because we only insert attributes inline; original line numbers
