@@ -25,6 +25,7 @@ import { getOrCreateBus } from './bus';
 import { getDb } from './db/client';
 import { enqueue } from './merge-queue';
 import { onProjectChange } from './project-events';
+import { maybeStartRelayClient } from './relay-client';
 import { Storage } from './storage';
 import { clearWarning, isStale, sweepStaleWorktrees } from './worktree-ttl';
 
@@ -163,6 +164,10 @@ export async function startWsServer(): Promise<ServerHandle> {
     // bypass this poll loop entirely; it exists only to catch what the
     // in-process listener can't see.
     ensureCrossProcessProjectPoller();
+
+    // Cloud mode (opt-in): dial out to the hosted relay as this session's
+    // device socket. No-op unless PINAGENT_RELAY_URL / _TOKEN are set.
+    maybeStartRelayClient();
 
     return handle;
   })();
@@ -379,7 +384,7 @@ function logPathFor(root: string, feedbackId: string): string {
 
 const PING_INTERVAL_MS = 30_000;
 
-function attachConnection(socket: WebSocket): void {
+export function attachConnection(socket: WebSocket): void {
   const state: ConnectionState = {
     subscriptions: new Map(),
     projectSubscribed: false,
