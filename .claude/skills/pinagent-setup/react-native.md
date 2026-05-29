@@ -25,18 +25,6 @@ app already provides (the last is what you just added). If
 `react-native-view-shot` is absent the widget still works — it submits a
 1×1 placeholder instead of a screenshot.
 
-### Native build approval (pnpm only)
-
-The agent backend uses `better-sqlite3` server-side. On pnpm 10+, approve
-its build once or comment submission 500s:
-
-```bash
-pnpm approve-builds   # select better-sqlite3
-pnpm install
-```
-
-(See the note in [vite.md](./vite.md) — same `better-sqlite3` caveat.)
-
 ## 2. Mount the widget at your app root
 
 ```tsx

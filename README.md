@@ -67,35 +67,6 @@ Source is tagged at dev-build time: JSX by `@pinagent/babel-plugin` (Vite) or a 
 pnpm add -D @pinagent/vite-plugin    # or @pinagent/next-plugin, or @pinagent/nuxt-plugin
 ```
 
-### Native build approval (pnpm only)
-
-pnpm 10+ blocks postinstall build scripts by default. Pinagent's agent runner uses `better-sqlite3` server-side, which needs its native `.node` binding compiled — otherwise comment submission returns a 500 with:
-
-```
-Could not locate the bindings file. Tried: .../better-sqlite3/build/Release/better_sqlite3.node ...
-```
-
-Pick one:
-
-```sh
-pnpm approve-builds                  # interactive; select better-sqlite3 in the picker
-pnpm install                         # re-run so the postinstall actually fires
-```
-
-Or — non-interactive, useful for team setup scripts — add to your project's `package.json`:
-
-```json
-{
-  "pnpm": {
-    "onlyBuiltDependencies": ["better-sqlite3"]
-  }
-}
-```
-
-…then `pnpm install`. Same outcome, no prompt.
-
-(npm and yarn build native binaries by default, so this step only matters on pnpm.)
-
 **Vite** (`vite.config.ts`)
 
 ```ts

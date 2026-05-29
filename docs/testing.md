@@ -7,7 +7,7 @@ new to the codebase — which areas to verify first.
 ## TL;DR
 
 ```bash
-pnpm install            # once, plus `pnpm approve-builds` to compile better-sqlite3
+pnpm install            # once (Node 22+, pnpm 10+); builds the widget test suite's better-sqlite3 automatically
 pnpm build              # turbo builds every package's dist (some tests import from src, others from built deps)
 pnpm test               # vitest run, picks up packages/*/tests/**/*.test.ts
 pnpm test:watch         # interactive watch mode
@@ -228,10 +228,12 @@ agent-runner can add fields without breaking old dock builds.
 
 ## Gotchas
 
-- **`better-sqlite3` native build.** Fresh checkouts on pnpm need
-  `pnpm approve-builds` (pick `better-sqlite3`) so the postinstall actually
-  compiles the binding. Without this, every test that touches storage
-  throws `Could not locate the bindings file`.
+- **`better-sqlite3` is test-only.** The runtime stores data via Node's
+  built-in `node:sqlite` (no native build) — `better-sqlite3` is used only by
+  the `@pinagent/widget` DB test helpers. It's listed in `pnpm-workspace.yaml`'s
+  `onlyBuiltDependencies`, so a plain `pnpm install` compiles its binding; no
+  `pnpm approve-builds` step is needed. If the binding is somehow missing, only
+  the widget DB tests fail with `Could not locate the bindings file`.
 - **Port 53636 collisions.** The widget connects to this port for the
   agent-runner WS. A stale dev server from another Pinagent project can
   silently steal the connection. Kill orphans before debugging WS tests.
