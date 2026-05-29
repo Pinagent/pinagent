@@ -27,7 +27,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-export type Runtime = 'vite' | 'next' | 'nuxt' | 'unknown';
+export type Runtime = 'vite' | 'next' | 'nuxt' | 'sveltekit' | 'unknown';
 export type PackageManager = 'pnpm' | 'yarn' | 'bun' | 'npm';
 
 const VITE_CONFIGS = ['vite.config.ts', 'vite.config.js', 'vite.config.mjs', 'vite.config.mts'];
@@ -47,16 +47,38 @@ export function configsPresent(root: string): { vite: boolean; next: boolean; nu
 }
 
 /**
- * Detect the host runtime from its config file. Pinagent supports React on
- * Vite or Next.js, and Vue on Nuxt. Nuxt is checked first because it runs
- * Vite under the hood — a Nuxt project's `nuxt.config.*` is the definitive
- * signal even if a stray `vite.config.*` is also present. If a project has
- * both vite and next configs, Vite wins here and `runInit` separately warns
- * about the ambiguity rather than letting the choice be silent.
+ * True if `root`'s package.json depends on `@sveltejs/kit` — the definitive
+ * SvelteKit signal. A SvelteKit project also has a `vite.config.*` (it runs
+ * Vite under the hood), so we can't tell it apart from a plain Svelte + Vite
+ * SPA by config files alone; the dependency is what distinguishes them. Plain
+ * Svelte + Vite falls through to the `vite` runtime (it's an SPA with an
+ * index.html, so the widget auto-injects — no SvelteKit hook needed).
+ */
+export function hasSvelteKit(root: string): boolean {
+  try {
+    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    return Boolean(pkg.dependencies?.['@sveltejs/kit'] ?? pkg.devDependencies?.['@sveltejs/kit']);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Detect the host runtime. Pinagent supports React on Vite or Next.js, Vue on
+ * Nuxt, and Svelte on SvelteKit. Nuxt and SvelteKit are checked first because
+ * both run Vite under the hood — their markers (`nuxt.config.*`,
+ * `@sveltejs/kit` dep) are definitive even though a `vite.config.*` is also
+ * present. If a project has both vite and next configs, Vite wins here and
+ * `runInit` separately warns about the ambiguity rather than letting the choice
+ * be silent.
  */
 export function detectRuntime(root: string): Runtime {
   const { vite, next, nuxt } = configsPresent(root);
   if (nuxt) return 'nuxt';
+  if (hasSvelteKit(root)) return 'sveltekit';
   if (vite) return 'vite';
   if (next) return 'next';
   return 'unknown';
@@ -92,7 +114,7 @@ export function detectPackageManager(root: string): PackageManager {
   }
 }
 
-export function pluginPackage(runtime: 'vite' | 'next' | 'nuxt'): string {
+export function pluginPackage(runtime: 'vite' | 'next' | 'nuxt' | 'sveltekit'): string {
   switch (runtime) {
     case 'vite':
       return '@pinagent/vite-plugin';
@@ -100,6 +122,9 @@ export function pluginPackage(runtime: 'vite' | 'next' | 'nuxt'): string {
       return '@pinagent/next-plugin';
     case 'nuxt':
       return '@pinagent/nuxt-plugin';
+    // SvelteKit is Vite-native — it uses the Vite plugin, not a dedicated package.
+    case 'sveltekit':
+      return '@pinagent/vite-plugin';
   }
 }
 
@@ -271,7 +296,9 @@ export function runInit(args: InitArgs): InitResult {
     note('pinagent init: no vite.config.*, next.config.*, or nuxt.config.* found in');
     note(`  ${root}`);
     note('');
-    note('pinagent supports React on Vite or Next.js (App Router), and Vue on Nuxt.');
+    note(
+      'pinagent supports React on Vite or Next.js (App Router), Vue on Nuxt, and Svelte on SvelteKit.',
+    );
     note('Run init from your project root, or pass it explicitly:');
     note('  pinagent init --dir /path/to/app');
     return { code: 1, lines };
@@ -282,7 +309,13 @@ export function runInit(args: InitArgs): InitResult {
   const tag = args.dryRun ? '[dry-run] would' : 'wrote';
 
   const runtimeLabel =
-    runtime === 'vite' ? 'Vite + React' : runtime === 'next' ? 'Next.js' : 'Nuxt';
+    runtime === 'vite'
+      ? 'Vite + React'
+      : runtime === 'next'
+        ? 'Next.js'
+        : runtime === 'nuxt'
+          ? 'Nuxt'
+          : 'SvelteKit';
   note(`pinagent init — detected ${runtimeLabel} (${pm})`);
   // Both configs present is genuinely ambiguous — surface it rather than
   // letting detectRuntime's silent "Vite wins" tiebreak stand unseen.
@@ -369,6 +402,28 @@ export function runInit(args: InitArgs): InitResult {
     note('       });');
     note('');
     note('  3. Start your dev server as usual (e.g. `npm run dev`).');
+  } else if (runtime === 'sveltekit') {
+    // `pkg` (= @pinagent/vite-plugin) is interpolated rather than written as a
+    // literal so the undeclared-import linter doesn't read these snippets as a
+    // real dependency of the CLI.
+    note('  2. Add the plugin to vite.config.* — pinagent() first, ahead of sveltekit():');
+    note(`       import pinagent from '${pkg}';`);
+    note('       export default defineConfig({');
+    note('         plugins: [pinagent(), sveltekit()],');
+    note('       });');
+    note('');
+    note('  3. Inject the widget (dev-only) in src/hooks.server.ts — SvelteKit');
+    note('     SSRs its own HTML, so add it via transformPageChunk:');
+    note("       import { dev } from '$app/environment';");
+    note(
+      '       const W = \'<script src="/__pinagent/widget.js" type="module"></scr\' + \'ipt>\';',
+    );
+    note('       export const handle = ({ event, resolve }) =>');
+    note('         resolve(event, { transformPageChunk: dev');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: printed snippet for the user — the `${W}` is literal SvelteKit code we want shown verbatim, not a template substitution here.
+    note("         ? ({ html }) => html.replace('</body>', `${W}</body>`) : undefined });");
+    note('');
+    note('  4. Start your dev server as usual (e.g. `npm run dev`).');
   } else {
     // `pkg` (= @pinagent/next-plugin) is interpolated rather than written
     // as a literal `from '...'` so the undeclared-import linter doesn't read
