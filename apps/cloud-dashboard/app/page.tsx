@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Elastic-2.0
+import { PageShell } from './_components/PageShell';
 import { Dashboard } from './Dashboard';
 
 /**
@@ -7,20 +8,9 @@ import { Dashboard } from './Dashboard';
  */
 export default async function Page({ searchParams }: { searchParams: Promise<{ org?: string }> }) {
   const { org } = await searchParams;
-
   return (
-    <main className="app">
-      <header className="app-header">
-        <h1>Pinagent Cloud</h1>
-        {org ? <span className="org-id">{org}</span> : null}
-      </header>
-      {org ? (
-        <Dashboard organizationId={org} />
-      ) : (
-        <p className="empty">
-          No organization selected. Append <code>?org=&lt;id&gt;</code> to the URL.
-        </p>
-      )}
-    </main>
+    <PageShell org={org} active="overview">
+      {org ? <Dashboard organizationId={org} /> : null}
+    </PageShell>
   );
 }
