@@ -101,8 +101,13 @@ const SCRIPT_TAG = '<script type="module" src="/__pinagent/widget.js"></script>'
  */
 export const DOCK_IFRAME_SCRIPT =
   '(function(){' +
-  'var allow=["fixtures","state"];' +
   'var p=new URLSearchParams(window.location.search);' +
+  // When loaded inside the dock worktree-preview iframe, suppress this
+  // nested dock so the preview does not stack a second dock on top of
+  // the worktree app. (Comment kept apostrophe-free: the script-body
+  // extractor in dock-iframe-forwarding.test.ts scans single quotes.)
+  'if(p.get("pinagent_dock")==="off")return;' +
+  'var allow=["fixtures","state"];' +
   'var kept=new URLSearchParams();' +
   'allow.forEach(function(k){var v=p.get(k);if(v!==null)kept.set(k,v);});' +
   'var qs=kept.toString();' +
@@ -149,6 +154,9 @@ const DOCK_IFRAME_TAG = `<script>${DOCK_IFRAME_SCRIPT}</script>`;
  */
 export const DOCK_HOST_BRIDGE_SCRIPT =
   '(function(){' +
+  // No dock here when suppressed (worktree-preview iframe), so skip the
+  // bridge too — it would otherwise wait on an iframe that never mounts.
+  'if(new URLSearchParams(window.location.search).get("pinagent_dock")==="off")return;' +
   'var f=null,rects=[];' +
   'function getF(){if(!f)f=document.getElementById("__pinagent-dock");return f;}' +
   'function over(x,y){for(var i=0;i<rects.length;i++){var r=rects[i];' +

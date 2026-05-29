@@ -12,6 +12,7 @@ import { cn } from '@pinagent/ui/lib/utils';
 import { Link, useLocation } from '@tanstack/react-router';
 import {
   Activity,
+  AppWindow,
   GitBranch,
   GitPullRequest,
   History as HistoryIcon,
@@ -42,6 +43,7 @@ export const ROUTES: readonly RouteDescriptor[] = [
   },
   { key: 'changes', path: ROUTE_PATHS.changes, label: 'Changes', Icon: Activity },
   { key: 'branches', path: ROUTE_PATHS.branches, label: 'Branches', Icon: GitBranch },
+  { key: 'preview', path: ROUTE_PATHS.preview, label: 'Preview', Icon: AppWindow },
   { key: 'prs', path: ROUTE_PATHS.prs, label: 'PRs', Icon: GitPullRequest },
   { key: 'connections', path: ROUTE_PATHS.connections, label: 'Connections', Icon: Plug },
   { key: 'settings', path: ROUTE_PATHS.settings, label: 'Settings', Icon: Settings },

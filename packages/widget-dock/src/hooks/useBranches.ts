@@ -18,9 +18,11 @@ import {
   type PruneStaleResult,
   type ServeBranchResult,
   useTransport,
+  type WorktreeServer,
 } from '../transport';
 
 const KEY = ['branches'] as const;
+const SERVERS_KEY = ['worktreeServers'] as const;
 
 export function useBranches(): UseQueryResult<Branch[]> {
   const transport = useTransport();
@@ -54,8 +56,30 @@ export function usePruneBranch(): UseMutationResult<void, Error, string> {
  */
 export function useServeBranch(): UseMutationResult<ServeBranchResult, Error, string> {
   const transport = useTransport();
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (feedbackId: string) => transport.serveBranch(feedbackId),
+    // A successful start changes the running-server set — refresh the
+    // switcher's list so the new server shows up without waiting for the
+    // poll interval.
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...SERVERS_KEY, transport.kind] });
+    },
+  });
+}
+
+/**
+ * The on-demand worktree dev servers currently running. Polled so a
+ * server started elsewhere (another dock, the Branches "Open app"
+ * button) surfaces in the switcher; `useServeBranch` also invalidates
+ * this key on success for an immediate update.
+ */
+export function useWorktreeServers(): UseQueryResult<WorktreeServer[]> {
+  const transport = useTransport();
+  return useQuery({
+    queryKey: [...SERVERS_KEY, transport.kind],
+    queryFn: () => transport.listWorktreeServers(),
+    refetchInterval: 4000,
   });
 }
 

@@ -23,6 +23,7 @@ import {
   listChanges,
   listGitBranches,
   listPullRequests,
+  listWorktreeServers,
   openInEditor,
   PatchSchema,
   ProjectSettingsPatchSchema,
@@ -176,6 +177,12 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
   if (slug.length === 1 && slug[0] === 'git-branches') {
     const branches = await listGitBranches(storage.root);
     return json(200, branches);
+  }
+
+  // /__pinagent/worktree-servers — running on-demand worktree dev
+  // servers, for the dock's switcher. Mirror of the vite-plugin handler.
+  if (slug.length === 1 && slug[0] === 'worktree-servers') {
+    return json(200, listWorktreeServers());
   }
 
   // /__pinagent/prs — read mirror of PRs the compose flow has opened.

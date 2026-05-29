@@ -24,6 +24,7 @@ import {
   listChanges,
   listGitBranches,
   listPullRequests,
+  listWorktreeServers,
   openInEditor,
   PatchSchema,
   ProjectSettingsPatchSchema,
@@ -224,6 +225,14 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       if (req.method === 'GET' && url === '/__pinagent/git-branches') {
         const branches = await listGitBranches(storage.root);
         return json(res, 200, branches);
+      }
+
+      // GET /__pinagent/worktree-servers — the on-demand dev servers
+      // currently running for worktrees (from the serve registry). Backs
+      // the dock's worktree switcher so it knows which worktrees already
+      // have a live app to point the preview iframe at.
+      if (req.method === 'GET' && url === '/__pinagent/worktree-servers') {
+        return json(res, 200, listWorktreeServers());
       }
 
       // POST /__pinagent/branches/prune-stale — bulk-prune every

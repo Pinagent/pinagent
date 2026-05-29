@@ -280,6 +280,14 @@ export interface DockTransport {
   serveBranch(feedbackId: string): Promise<ServeBranchResult>;
 
   /**
+   * List the on-demand worktree dev servers currently running (from the
+   * server's serve registry). Backs the worktree switcher so it knows
+   * which worktrees already have a live app to preview, without having to
+   * (re)start one. Returns `[]` when none are running.
+   */
+  listWorktreeServers(): Promise<WorktreeServer[]>;
+
+  /**
    * Bulk-prune every worktree older than the project's configured
    * `worktreeRetentionDays`. Returns the per-row outcome so the UI can
    * report "pruned 5, 1 failed".
@@ -368,6 +376,16 @@ export interface ServeBranchResult {
   port: number;
   /** True when an already-running server for this worktree was reused. */
   reused: boolean;
+}
+
+export interface WorktreeServer {
+  /** Conversation id of the worktree this server is rooted in. */
+  feedbackId: string;
+  port: number;
+  /** Loadable app URL, e.g. `http://localhost:53700`. */
+  url: string;
+  /** `'starting'` until the port answers, then `'running'`. */
+  status: 'starting' | 'running';
 }
 
 export interface BulkReopenResult {

@@ -25,7 +25,7 @@ export interface FilterNavRoutesInput {
   activePath: string;
 }
 
-const HIDE_WHEN_EMPTY_KEYS = new Set(['branches', 'changes', 'prs']);
+const HIDE_WHEN_EMPTY_KEYS = new Set(['branches', 'changes', 'preview', 'prs']);
 
 export function filterNavRoutes({
   routes,
@@ -40,6 +40,10 @@ export function filterNavRoutes({
         return counts.branches > 0;
       case 'changes':
         return counts.changes > 0;
+      // Preview only makes sense when there are worktrees to preview, so
+      // gate it on the same branch count.
+      case 'preview':
+        return counts.branches > 0;
       case 'prs':
         return counts.prs > 0;
       default:

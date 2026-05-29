@@ -30,6 +30,14 @@ export function Pinagent({ dock }: PinagentProps = {}): null {
     if (process.env.NODE_ENV !== 'development') return;
     if (typeof document === 'undefined') return;
 
+    // When this page is loaded inside the dock's worktree-preview iframe,
+    // suppress the nested dock (iframe + host bridge) — otherwise the
+    // preview stacks a second dock on top of the worktree app. The
+    // per-element widget below is still mounted so the preview stays
+    // clickable. Mirror of the vite-plugin `pinagent_dock=off` guard.
+    const dockSuppressed =
+      new URLSearchParams(window.location.search).get('pinagent_dock') === 'off';
+
     if (!document.getElementById('__pinagent-script')) {
       const s = document.createElement('script');
       s.id = '__pinagent-script';
@@ -42,7 +50,7 @@ export function Pinagent({ dock }: PinagentProps = {}): null {
     // injection (see packages/vite-plugin/src/index.ts::DOCK_IFRAME_TAG).
     // Full-viewport, pointer-events:none, z-index just under the widget
     // FAB's 2147483647 so neither surface visually steals from the other.
-    if (dockEnabled && !document.getElementById('__pinagent-dock')) {
+    if (dockEnabled && !dockSuppressed && !document.getElementById('__pinagent-dock')) {
       // Forward an allowlist of dock query params from the parent URL into
       // the iframe src — mirror of vite-plugin's DOCK_IFRAME_TAG injection.
       // Without this the iframe sees only its own (static) location and
@@ -89,7 +97,7 @@ export function Pinagent({ dock }: PinagentProps = {}): null {
     //     interactive rects via postMessage; we toggle the iframe's
     //     `pointer-events` on every mousemove so the FAB is reachable
     //     but the host page stays clickable everywhere the dock isn't.
-    if (!dockEnabled) return;
+    if (!dockEnabled || dockSuppressed) return;
     let rects: Array<{ left: number; top: number; right: number; bottom: number }> = [];
     const getIframe = (): HTMLIFrameElement | null => {
       const el = document.getElementById('__pinagent-dock');
