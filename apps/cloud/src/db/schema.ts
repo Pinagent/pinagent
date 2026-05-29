@@ -24,6 +24,20 @@ export const organizations = authSchema.table('organizations', {
   createdAt: text('created_at').notNull(),
 });
 
+/**
+ * Users provisioned just-in-time on SSO login — backs `@pinagent/ee-auth`'s
+ * `UserStore`. Mirrors the `User` interface exactly. `id` is the IdP subject
+ * for now (what memberships key on); ISO-8601 `text` timestamps, consistent
+ * with the rest of the `auth` schema.
+ */
+export const users = authSchema.table('users', {
+  id: text('id').primaryKey(),
+  email: text('email').notNull(),
+  displayName: text('display_name'),
+  createdAt: text('created_at').notNull(),
+  lastLoginAt: text('last_login_at').notNull(),
+});
+
 export const organizationMemberships = authSchema.table(
   'organization_memberships',
   {
@@ -108,6 +122,7 @@ export const subscriptions = billingSchema.table('subscriptions', {
 export const schema = {
   organizations,
   organizationMemberships,
+  users,
   ssoConnections,
   auditEvents,
   costControls,

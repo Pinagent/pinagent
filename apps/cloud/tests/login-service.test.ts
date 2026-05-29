@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Elastic-2.0
 import {
   createInMemorySsoConnectionStore,
+  createInMemoryUserStore,
   type SsoConnection,
   type SsoConnectionStore,
   type SsoProfile,
@@ -155,6 +156,28 @@ describe('GET /sso/callback', () => {
     const setCookie = res.headers.get('set-cookie') ?? '';
     expect(setCookie).toMatch(/HttpOnly/);
     expect(setCookie).toMatch(/SameSite=Lax/);
+  });
+
+  it('just-in-time provisions the user when a store is wired', async () => {
+    const users = createInMemoryUserStore();
+    const state = await startedState('/');
+    const res = await handleSsoCallback(
+      new Request(`https://cloud.test/sso/callback?code=abc&state=${state}`),
+      { ...deps(fakeProvider()), users },
+    );
+    expect(res.status).toBe(302);
+    // The user behind the profile now exists, keyed on the IdP subject so the
+    // token + memberships still match.
+    const provisioned = await users.get('idp-user-9');
+    expect(provisioned).toMatchObject({
+      id: 'idp-user-9',
+      email: 'bob@acme.com',
+      displayName: 'Bob',
+    });
+    const token = getCookieToken(res);
+    const verified = await verifyUserToken(token as string, USER_TOKEN_SECRET);
+    expect(verified.ok).toBe(true);
+    if (verified.ok) expect(verified.claims.userId).toBe('idp-user-9');
   });
 
   it('400s on missing code or state', async () => {
