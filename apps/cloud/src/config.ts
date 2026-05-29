@@ -33,6 +33,8 @@ export interface CloudConfig {
   ssoStateSecret: string;
   /** HMAC secret the OIDC provider derives the per-request `nonce` from. */
   oidcNonceSecret: string;
+  /** Shared secret the relay presents when reporting lifecycle events. */
+  relayInternalSecret: string;
   /** The configured OIDC connection. */
   oidc: OidcConnectionConfig;
   /** Where to send the browser after a successful login (default `/`). */
@@ -58,6 +60,7 @@ export function loadCloudConfig(env: Record<string, string | undefined>): CloudC
     userTokenSecret: required(env, 'USER_TOKEN_SECRET'),
     ssoStateSecret: required(env, 'SSO_STATE_SECRET'),
     oidcNonceSecret: required(env, 'OIDC_NONCE_SECRET'),
+    relayInternalSecret: required(env, 'RELAY_INTERNAL_SECRET'),
     oidc: {
       connectionId: required(env, 'OIDC_CONNECTION_ID'),
       organizationId: required(env, 'OIDC_ORG_ID'),

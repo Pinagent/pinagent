@@ -4,6 +4,7 @@ import {
   handleCostControlConfig,
   handleSubscriptionConfig,
 } from './config-service';
+import { handleRelayEvents, type InternalServiceDeps } from './internal-service';
 import { handleSsoCallback, handleSsoStart, type LoginServiceDeps } from './login-service';
 import { handleAudit, handleMembers, handleUsage, type ReadServiceDeps } from './read-service';
 import { handleSessionRequest, type SessionServiceDeps } from './session-service';
@@ -21,6 +22,7 @@ import { handleSessionRequest, type SessionServiceDeps } from './session-service
  *   GET      /members          → organization members (admin read)
  *   GET/PUT  /subscriptions    → read/set the org's plan (admin config)
  *   GET/PUT  /cost-controls    → read/set the org's cost cap (admin config)
+ *   POST     /internal/relay/events → relay lifecycle ingest (service auth)
  *   GET      /healthz          → liveness
  */
 export interface CloudAppDeps {
@@ -28,6 +30,7 @@ export interface CloudAppDeps {
   login: LoginServiceDeps;
   read: ReadServiceDeps;
   config: ConfigServiceDeps;
+  internal: InternalServiceDeps;
 }
 
 export function createCloudApp(deps: CloudAppDeps): { fetch(request: Request): Promise<Response> } {
@@ -51,6 +54,8 @@ export function createCloudApp(deps: CloudAppDeps): { fetch(request: Request): P
           return handleSubscriptionConfig(request, deps.config);
         case '/cost-controls':
           return handleCostControlConfig(request, deps.config);
+        case '/internal/relay/events':
+          return handleRelayEvents(request, deps.internal);
         case '/healthz':
           return Promise.resolve(new Response('ok', { status: 200 }));
         default:

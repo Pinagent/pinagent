@@ -35,6 +35,7 @@ export {
   usageEvents,
 } from './db/schema';
 export { createPgSubscriptionStore } from './db/subscription-store';
+export { handleRelayEvents, type InternalServiceDeps } from './internal-service';
 export { handleSsoCallback, handleSsoStart, type LoginServiceDeps } from './login-service';
 export {
   handleAudit,
