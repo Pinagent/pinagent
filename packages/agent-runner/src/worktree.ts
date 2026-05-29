@@ -6,7 +6,9 @@ import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { recordAuditEvent } from './audit-log';
+import { isBranchAllowed } from './branch-routing';
 import { appendLog, runGit, runGitCapture } from './git-utils';
+import { SettingsStore } from './settings-store';
 import { type FeedbackRecord, Storage } from './storage';
 
 export async function createWorktree(
@@ -23,7 +25,24 @@ export async function createWorktree(
   const worktreePath = join(worktreeDir, feedbackId);
   const branch = `pinagent/${feedbackId}`;
 
-  await runGit(projectRoot, ['worktree', 'add', '-b', branch, worktreePath], logPath);
+  // Branch-routing: fork from the configured base branch so the agent works
+  // against the policy's base rather than whatever happens to be checked out.
+  // Fall back to HEAD when the base branch doesn't resolve (e.g. a project
+  // configured for `main` opened on a repo that uses a different default).
+  const { baseBranch } = await new SettingsStore(projectRoot).read();
+  const baseResolves =
+    (await runGitCapture(projectRoot, ['rev-parse', '--verify', '--quiet', baseBranch])).code === 0;
+  const addArgs = baseResolves
+    ? ['worktree', 'add', '-b', branch, worktreePath, baseBranch]
+    : ['worktree', 'add', '-b', branch, worktreePath];
+  if (!baseResolves) {
+    await appendLog(
+      logPath,
+      `> [pinagent] base branch \`${baseBranch}\` not found; forking worktree from HEAD\n`,
+    );
+  }
+
+  await runGit(projectRoot, addArgs, logPath);
 
   // Persist so the widget can read `worktreeState='active'` and surface
   // Land/Discard controls without polling the filesystem, and so a TTL
@@ -100,6 +119,22 @@ export async function mergeWorktree(
   const targetBranch = head.stdout.trim();
   if (targetBranch === rec.branch) {
     return { ok: false, error: `project HEAD is already on ${rec.branch}; nothing to land` };
+  }
+
+  // Branch-routing: refuse to land onto a target the policy disallows. An
+  // empty pattern list (the default) allows any branch, so this is a no-op
+  // until a policy is configured. Checked before any mutation.
+  const { allowedBranchPatterns } = await new SettingsStore(projectRoot).read();
+  if (!isBranchAllowed(allowedBranchPatterns, targetBranch)) {
+    const allowed = allowedBranchPatterns.join(', ');
+    await appendLog(
+      logPath,
+      `> [pinagent] branch routing blocked landing onto \`${targetBranch}\` (allowed: ${allowed})\n`,
+    );
+    return {
+      ok: false,
+      error: `branch routing policy does not allow landing onto "${targetBranch}" (allowed: ${allowed})`,
+    };
   }
 
   // Commit any uncommitted edits on the worktree's branch. The agent

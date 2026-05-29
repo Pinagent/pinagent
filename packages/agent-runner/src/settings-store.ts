@@ -35,6 +35,10 @@ export const ProjectSettingsSchema = z.object({
   perConversationCapUsd: z.number().min(0.1).max(1000),
   monthlyBudgetUsd: z.number().min(0).max(100_000).nullable(),
   permissionMode: PermissionModeSchema,
+  // Branch-routing policy (the dev-side mirror of the cloud's
+  // `allowedBranchPatterns`). `*`-glob patterns of branches a worktree may
+  // land on; empty = any branch allowed. Enforced in `worktree.ts`.
+  allowedBranchPatterns: z.array(z.string().min(1).max(128)).max(50),
 });
 export type ProjectSettings = z.infer<typeof ProjectSettingsSchema>;
 
@@ -47,6 +51,7 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   perConversationCapUsd: 5,
   monthlyBudgetUsd: null,
   permissionMode: 'auto',
+  allowedBranchPatterns: [],
 };
 
 export class SettingsStore {

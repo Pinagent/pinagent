@@ -81,4 +81,15 @@ describe('SettingsStore.patch', () => {
   it('rejects an out-of-range cost cap at patch time', async () => {
     await expect(new SettingsStore(root).patch({ perConversationCapUsd: 0 })).rejects.toThrow();
   });
+
+  it('defaults allowedBranchPatterns to [] and round-trips a set policy', async () => {
+    expect((await new SettingsStore(root).read()).allowedBranchPatterns).toEqual([]);
+    const store = new SettingsStore(root);
+    const next = await store.patch({ allowedBranchPatterns: ['feat/*', 'fix/*'] });
+    expect(next.allowedBranchPatterns).toEqual(['feat/*', 'fix/*']);
+    expect((await new SettingsStore(root).read()).allowedBranchPatterns).toEqual([
+      'feat/*',
+      'fix/*',
+    ]);
+  });
 });
