@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import type { Change } from '../fixtures';
+import { useSettings } from '../hooks/useSettings';
 import {
   type CreatePullRequestInput,
   type CreatePullRequestResult,
@@ -76,9 +77,17 @@ export function Composer({ selected, onCancel, onSuccess }: ComposerProps) {
   const transport = useTransport();
   const isMock = transport.kind === 'mock';
 
+  // Default the base branch to the project's configured branch rather
+  // than assuming `main`. `baseOverride` holds the user's edit (if any);
+  // until then we track the setting, falling back to `main` while it
+  // loads or on a project that hasn't set one.
+  const settingsQuery = useSettings();
+  const defaultBaseBranch = settingsQuery.data?.baseBranch ?? 'main';
+  const [baseOverride, setBaseOverride] = useState<string | null>(null);
+  const baseBranch = baseOverride ?? defaultBaseBranch;
+
   const [order, setOrder] = useState<Change[]>(selected);
   const [branchName, setBranchName] = useState(() => suggestBranchName(selected));
-  const [baseBranch, setBaseBranch] = useState('main');
   const [title, setTitle] = useState(() => suggestTitle(selected));
   const [description, setDescription] = useState(() => suggestDescription(selected));
   const [submitting, setSubmitting] = useState(false);
@@ -158,7 +167,7 @@ export function Composer({ selected, onCancel, onSuccess }: ComposerProps) {
         <Field label="Base branch" hint="Compose branch starts here; PR targets it.">
           <Input
             value={baseBranch}
-            onChange={(e) => setBaseBranch(e.target.value)}
+            onChange={(e) => setBaseOverride(e.target.value)}
             spellCheck={false}
             className="h-8 max-w-[260px] font-mono text-xs"
           />
