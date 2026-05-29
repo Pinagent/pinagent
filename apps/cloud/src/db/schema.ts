@@ -72,4 +72,17 @@ export const usageEvents = billingSchema.table('usage_events', {
   metadata: jsonb('metadata').$type<Record<string, unknown>>(),
 });
 
-export const schema = { organizations, organizationMemberships, auditEvents, usageEvents };
+/** One row per org: which plan it's on and the current billing period start. */
+export const subscriptions = billingSchema.table('subscriptions', {
+  organizationId: text('organization_id').primaryKey(),
+  planId: text('plan_id').notNull(),
+  currentPeriodStart: text('current_period_start').notNull(),
+});
+
+export const schema = {
+  organizations,
+  organizationMemberships,
+  auditEvents,
+  usageEvents,
+  subscriptions,
+};

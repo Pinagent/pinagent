@@ -24,8 +24,10 @@ export {
   organizationMemberships,
   organizations,
   schema,
+  subscriptions,
   usageEvents,
 } from './db/schema';
+export { createPgSubscriptionStore } from './db/subscription-store';
 export { handleSsoCallback, handleSsoStart, type LoginServiceDeps } from './login-service';
 export {
   type AuthenticatedUser,

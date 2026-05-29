@@ -7,7 +7,12 @@ import {
   type Permission,
   type UserId,
 } from '@pinagent/ee-auth';
-import { type MeterSink, USAGE_KINDS } from '@pinagent/ee-billing';
+import {
+  checkQuota,
+  type MeterSink,
+  type SubscriptionStore,
+  USAGE_KINDS,
+} from '@pinagent/ee-billing';
 import { AUDIT_ACTIONS, type AuditSink } from '@pinagent/ee-team-features';
 import { isoFromSeconds } from './clock';
 
@@ -62,6 +67,11 @@ export interface SessionServiceDeps {
   audit?: AuditSink;
   /** Optional usage meter — records a billable relay-session unit on success. */
   meter?: MeterSink;
+  /**
+   * Optional subscription store. When present together with `meter`, session
+   * issuance is gated on the org's plan quota (over-limit → 402).
+   */
+  subscriptions?: SubscriptionStore;
   /** Override the issued-at clock (epoch seconds) — for tests. */
   nowSeconds?: number;
 }
@@ -109,6 +119,32 @@ export async function handleSessionRequest(
       nowSeconds: deps.nowSeconds,
     });
     const occurredAt = isoFromSeconds(deps.nowSeconds);
+
+    // Enforce plan quota (membership + RBAC already passed inside `issue`).
+    // The token was signed above but isn't delivered when over quota.
+    if (deps.subscriptions && deps.meter) {
+      const decision = await checkQuota(
+        { subscriptions: deps.subscriptions, meter: deps.meter },
+        { organizationId: body.organizationId, kind: USAGE_KINDS.relaySession },
+      );
+      if (!decision.allowed) {
+        await deps.audit?.record({
+          occurredAt,
+          organizationId: body.organizationId,
+          actorUserId: user.userId,
+          action: AUDIT_ACTIONS.sessionDenied,
+          targetId: body.sessionId,
+          metadata: {
+            reason: 'quota',
+            plan: decision.plan.id,
+            used: decision.used,
+            limit: decision.limit,
+          },
+        });
+        return json({ error: 'plan quota exceeded' }, 402);
+      }
+    }
+
     await deps.audit?.record({
       occurredAt,
       organizationId: body.organizationId,
