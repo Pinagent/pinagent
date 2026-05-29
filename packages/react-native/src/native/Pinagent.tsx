@@ -17,10 +17,11 @@
  * builds.
  *
  * Flow: tap the 💬 FAB to arm picking → tap a view → we resolve its source
- * via the RN Inspector and capture a screenshot → type a comment → submit
- * POSTs to the Metro middleware, which stores it and (optionally) spawns
- * an agent. This is a proof-of-concept: single-pick only, no live agent
- * streaming back into the widget (pull mode via MCP works on day one).
+ * via the RN Inspector, hide our own overlay, and capture a screenshot →
+ * type a comment → submit POSTs to the Metro middleware, which stores it
+ * and (optionally) spawns an agent. This is a proof-of-concept: single-pick
+ * only, no live agent streaming back into the widget (pull mode via MCP
+ * works on day one).
  */
 import type { ReactElement } from 'react';
 import { useCallback, useRef, useState } from 'react';
@@ -52,7 +53,20 @@ export interface PinagentProps {
   screenName?: string;
 }
 
-type Phase = 'idle' | 'picking' | 'composing' | 'sending' | 'sent';
+type Phase = 'idle' | 'picking' | 'capturing' | 'composing' | 'sending' | 'sent';
+
+/**
+ * Resolve after the next painted frame. We flip to the `capturing` phase to
+ * tear down our own overlay (picking tint, hint, FAB), then wait for that
+ * render to reach the screen before `react-native-view-shot` snaps it —
+ * otherwise pinagent's UI lands in the screenshot. Double-rAF is RN's
+ * idiom for "after the next paint".
+ */
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
 
 /**
  * Hard dev-only gate. `__DEV__` is `false` in release bundles, so the
@@ -76,13 +90,15 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
 
   const onPickTap = useCallback(
     async (x: number, y: number) => {
-      // Capture the screen first (before the composer covers it), then
-      // resolve which component was under the tap.
-      const [screenshot, picked] = await Promise.all([
-        captureScreenshot(),
-        resolvePick(findNodeHandle(rootRef.current), x, y, projectRoot),
-      ]);
-      setShot(screenshot);
+      // Resolve the tapped component while the picking overlay is still up
+      // (the Inspector hit-test environment is unchanged from today), then
+      // drop our overlay and FAB and wait a frame so the screenshot doesn't
+      // include pinagent's own UI — the web widget excludes its host node
+      // from the html-to-image render for the same reason.
+      const picked = await resolvePick(findNodeHandle(rootRef.current), x, y, projectRoot);
+      setPhase('capturing');
+      await nextPaint();
+      setShot(await captureScreenshot());
       setPick(picked);
       setPhase('composing');
     },
@@ -211,13 +227,16 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
       </Modal>
 
       {/* Floating action button. Toggles picking; shows status while
-          sending. */}
-      <Pressable
-        onPress={() => setPhase((p) => (p === 'picking' ? 'idle' : 'picking'))}
-        style={[styles.fab, phase === 'picking' && styles.fabActive]}
-      >
-        <Text style={styles.fabText}>{phase === 'sending' ? '…' : '💬'}</Text>
-      </Pressable>
+          sending. Hidden during `capturing` so it stays out of the
+          screenshot. */}
+      {phase !== 'capturing' && (
+        <Pressable
+          onPress={() => setPhase((p) => (p === 'picking' ? 'idle' : 'picking'))}
+          style={[styles.fab, phase === 'picking' && styles.fabActive]}
+        >
+          <Text style={styles.fabText}>{phase === 'sending' ? '…' : '💬'}</Text>
+        </Pressable>
+      )}
 
       {toast && (
         <View pointerEvents="none" style={styles.toast}>
