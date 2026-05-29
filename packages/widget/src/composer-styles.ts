@@ -317,6 +317,8 @@ export const COMPOSER_STYLES = `
   .btn.ghost.cancel { color: ${STATUS.error.fg}; }
   .btn.ghost.stop:hover,
   .btn.ghost.cancel:hover { background: ${STATUS.error.bg}; }
+  .btn.icon { padding: 6px; display: inline-flex; align-items: center; }
+  .btn.icon svg { width: 16px; height: 16px; display: block; }
 
   .header {
     font-size: 12px;
