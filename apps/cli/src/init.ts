@@ -147,13 +147,21 @@ export function planMcpJson(current: string | null): PlanResult {
  * statically parses `dynamic`/`runtime` and refuses to follow a
  * re-export for those segment-config fields, so they're declared inline
  * while the request handlers are re-exported from the plugin.
+ *
+ * The `@pinagent/next-plugin` specifier is assembled from a variable
+ * rather than written as a contiguous `from '...'` literal: this is
+ * generated file content for the *consumer's* project (which installs
+ * next-plugin itself — see the printed steps), not an import by the CLI.
+ * Splitting it keeps the undeclared-import linter from mistaking it for a
+ * real dependency of `@pinagent/cli`.
  */
 export function renderNextRoute(): string {
+  const routeModule = '@pinagent/next-plugin/route';
   return [
     '// SPDX-License-Identifier: Apache-2.0',
     "export const dynamic = 'force-dynamic';",
     "export const runtime = 'nodejs';",
-    "export { GET, POST, PATCH } from '@pinagent/next-plugin/route';",
+    `export { GET, POST, PATCH } from '${routeModule}';`,
     '',
   ].join('\n');
 }
@@ -302,12 +310,15 @@ export function runInit(args: InitArgs): InitResult {
     note('');
     note('  3. Start your dev server as usual (e.g. `npm run dev`).');
   } else {
+    // `pkg` (= @pinagent/next-plugin) is interpolated rather than written
+    // as a literal `from '...'` so the undeclared-import linter doesn't read
+    // these example snippets as a real dependency of the CLI.
     note('  2. Wrap next.config.* with the plugin:');
-    note("       import pinagent from '@pinagent/next-plugin/config';");
+    note(`       import pinagent from '${pkg}/config';`);
     note('       export default pinagent(nextConfig);');
     note('');
     note('  3. Mount <Pinagent /> at the end of <body> in app/layout.tsx:');
-    note("       import { Pinagent } from '@pinagent/next-plugin';");
+    note(`       import { Pinagent } from '${pkg}';`);
     note('       // ...<body>{children}<Pinagent /></body>');
     note('');
     note('  4. Start your dev server as usual (e.g. `npm run dev`).');

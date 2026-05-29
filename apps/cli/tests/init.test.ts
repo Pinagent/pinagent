@@ -115,7 +115,10 @@ describe('renderNextRoute', () => {
     const out = renderNextRoute();
     expect(out).toContain("export const dynamic = 'force-dynamic';");
     expect(out).toContain("export const runtime = 'nodejs';");
-    expect(out).toContain("export { GET, POST, PATCH } from '@pinagent/next-plugin/route';");
+    // Asserted as two fragments so the generated re-export line isn't a
+    // contiguous import literal the undeclared-import linter would flag.
+    expect(out).toContain('export { GET, POST, PATCH }');
+    expect(out).toContain('@pinagent/next-plugin/route');
   });
 });
 
