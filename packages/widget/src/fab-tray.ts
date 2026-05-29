@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-import { createAgentTray, type RawFeedback, type TrayAgent } from './agent-tray';
+import { createAgentTray, type RawFeedback, shouldAutoExpand, type TrayAgent } from './agent-tray';
 import { BRAND_CREAM } from './brand';
-import { ENDPOINT, ICON_GRIP, STATUS_LABEL, trayRowMeta } from './constants';
+import { ENDPOINT, ICON_GRIP, ICON_MINIMIZE, STATUS_LABEL, trayRowMeta } from './constants';
 import type { WidgetContext } from './context';
 import { buildPinIcon } from './pin-icon';
 
@@ -55,6 +55,12 @@ export function createFabTray(ctx: WidgetContext): {
   let currentCorner: Corner = loadCorner();
   // The agents currently shown in the tray (empty → collapsed pin).
   let trayAgents: TrayAgent[] = [];
+  // User minimized the tray while agents are still running: collapse to
+  // the pin (which then shows a running badge) instead of the panel. Held
+  // in memory, not persisted — a reload returns to the expanded default.
+  // Reset whenever a *new* agent appears or the list empties (see the tray
+  // render callback) so "auto-expand on a new run" still holds.
+  let minimized = false;
 
   function snapFabToCorner(corner: Corner) {
     const isTop = corner === 'tl' || corner === 'tr';
@@ -136,6 +142,13 @@ export function createFabTray(ctx: WidgetContext): {
     // In tray mode the rows + the header's pick button own their clicks;
     // a click on the panel background does nothing.
     if (fab.classList.contains('tray')) return;
+    // Minimized pin with agents behind it: a click re-expands the tray
+    // rather than starting a pick.
+    if (minimized && trayAgents.length > 0) {
+      minimized = false;
+      applyFabPresentation();
+      return;
+    }
     if (state.mode === 'picking') ctx.exitPicking();
     else if (state.mode === 'idle') ctx.enterPicking();
   });
@@ -146,6 +159,11 @@ export function createFabTray(ctx: WidgetContext): {
     if (fab.classList.contains('tray')) return;
     if (e.key !== 'Enter' && e.key !== ' ') return;
     e.preventDefault();
+    if (minimized && trayAgents.length > 0) {
+      minimized = false;
+      applyFabPresentation();
+      return;
+    }
     if (state.mode === 'picking') ctx.exitPicking();
     else if (state.mode === 'idle') ctx.enterPicking();
   });
@@ -153,9 +171,34 @@ export function createFabTray(ctx: WidgetContext): {
   // Collapsed pin: the pick icon plus (when the dock is mounted) a small
   // chip teaching the ⌘⇧P dock shortcut. Decorative + pointer-events:none,
   // so a click on the chip falls through to the FAB → opens the picker.
-  function renderPinContent() {
+  //
+  // `hidden` carries the agents the user minimized away (empty when the
+  // pin is collapsed for the ordinary no-agents reason). When present the
+  // pin grows a count badge — and a pulse ring while any of them is still
+  // working — so the developer can see at a glance that runs are live
+  // behind the minimized pin, and a click re-expands the tray.
+  function renderPinContent(hidden: TrayAgent[] = []) {
     fab.replaceChildren();
     fab.appendChild(buildPinIcon(26, BRAND_CREAM));
+
+    const working = hidden.filter((a) => a.status === 'working').length;
+    fab.classList.toggle('running', working > 0);
+
+    if (hidden.length > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'fab-agent-badge';
+      badge.textContent = String(hidden.length);
+      badge.setAttribute('aria-hidden', 'true');
+      fab.appendChild(badge);
+      const label =
+        working > 0
+          ? `${hidden.length} agent${hidden.length === 1 ? '' : 's'} running — click to expand`
+          : `${hidden.length} agent${hidden.length === 1 ? '' : 's'} — click to expand`;
+      fab.title = label;
+      fab.setAttribute('aria-label', label);
+      return;
+    }
+
     let title = ctx.hotkeyChar
       ? `Pinagent — press ${ctx.hotkeyChar.toUpperCase()} or click to pick · Shift+N to hop between active widgets`
       : 'Pinagent — pick an element';
@@ -286,6 +329,20 @@ export function createFabTray(ctx: WidgetContext): {
     const heading = document.createElement('span');
     heading.className = 'pa-tray-title';
     heading.textContent = `Agents · ${agents.length}`;
+    // Collapse the tray back to the pin while agents keep running. The pin
+    // then carries a count badge + pulse (see renderPinContent); a new run
+    // or a click re-expands.
+    const min = document.createElement('button');
+    min.type = 'button';
+    min.className = 'pa-tray-min';
+    min.title = 'Minimize';
+    min.setAttribute('aria-label', 'Minimize running-agents tray');
+    min.innerHTML = ICON_MINIMIZE;
+    min.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      minimized = true;
+      applyFabPresentation();
+    });
     // The tray replaces the pin, so keep a way to start a new pick.
     const pick = document.createElement('button');
     pick.type = 'button';
@@ -298,7 +355,7 @@ export function createFabTray(ctx: WidgetContext): {
       if (state.mode === 'picking') ctx.exitPicking();
       else ctx.enterPicking();
     });
-    handle.append(grip, heading, pick);
+    handle.append(grip, heading, min, pick);
     fab.appendChild(handle);
 
     const list = document.createElement('ul');
@@ -308,7 +365,8 @@ export function createFabTray(ctx: WidgetContext): {
   }
 
   function applyFabPresentation() {
-    const showTray = state.mode !== 'picking' && trayAgents.length > 0;
+    const hasAgents = state.mode !== 'picking' && trayAgents.length > 0;
+    const showTray = hasAgents && !minimized;
     fab.classList.toggle('tray', showTray);
     if (showTray) {
       renderTrayContent(trayAgents);
@@ -316,10 +374,14 @@ export function createFabTray(ctx: WidgetContext): {
       fab.setAttribute('role', 'region');
       fab.setAttribute('aria-label', `Running agents (${trayAgents.length})`);
     } else {
-      renderPinContent();
+      // Minimized-with-agents collapses to the pin but passes the hidden
+      // agents through so it can show the running badge + pulse and its
+      // own aria-label. The ordinary no-agents pin renders the picker hint.
+      const hidden = hasAgents ? trayAgents : [];
+      renderPinContent(hidden);
       fab.setAttribute('tabindex', '0');
       fab.setAttribute('role', 'button');
-      fab.setAttribute('aria-label', 'Pinagent — pick an element');
+      if (hidden.length === 0) fab.setAttribute('aria-label', 'Pinagent — pick an element');
     }
     // Pin and panel have very different sizes; re-anchor to the same corner
     // so the swap doesn't push the surface off-screen near an edge.
@@ -333,6 +395,12 @@ export function createFabTray(ctx: WidgetContext): {
         .then((d) => (Array.isArray(d) ? (d as RawFeedback[]) : [])),
     subscribeProject: (cb) => wsClient.subscribeProject(cb),
     render: (agents) => {
+      // A newly-appeared agent (or the list emptying) returns the FAB to
+      // its expanded default — minimize only suppresses the agents that
+      // were present when the user collapsed, so "auto-expand on a new
+      // run" still holds.
+      const prevIds = new Set(trayAgents.map((a) => a.id));
+      if (shouldAutoExpand(prevIds, agents)) minimized = false;
       trayAgents = agents;
       applyFabPresentation();
     },

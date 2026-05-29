@@ -88,6 +88,45 @@ export const STYLES = `
   pointer-events: none;
 }
 
+/* Running-agents indicator on the collapsed pin. Shown only when the tray
+   was minimized while agents are still live (renderPinContent passes the
+   hidden agents through). The badge counts them; the pulse ring flags that
+   at least one is actively working. Colour mirrors the tray's working dot so
+   the minimized and expanded presentations read the same. */
+.fab-agent-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: ${STATUS.working.fg};
+  color: ${BRAND_CREAM};
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(32, 27, 33, 0.28);
+  pointer-events: none;
+}
+.fab.running::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid ${STATUS.working.fg};
+  opacity: 0.6;
+  animation: pa-fab-pulse 1.6s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes pa-fab-pulse {
+  0% { transform: scale(0.92); opacity: 0.6; }
+  70% { transform: scale(1.18); opacity: 0; }
+  100% { transform: scale(1.18); opacity: 0; }
+}
+
 /* ---- Running-agents tray ------------------------------------------------
    The same fixed element as the FAB (so drag + corner-snap are reused),
    re-skinned from a 48px circle into a panel when agents are running.
@@ -146,6 +185,20 @@ export const STYLES = `
   cursor: pointer;
 }
 .pa-tray-pick:hover { background: rgba(252, 249, 232, 0.22); }
+.pa-tray-min {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(252, 249, 232, 0.7);
+  cursor: pointer;
+}
+.pa-tray-min:hover { background: rgba(252, 249, 232, 0.12); color: ${BRAND_CREAM}; }
 
 .pa-tray-list {
   list-style: none;
@@ -337,5 +390,6 @@ export const STYLES = `
   }
   .fab:hover { transform: none; }
   .pa-status-dot[data-status="working"] { animation: none; }
+  .fab.running::after { animation: none; }
 }
 `;

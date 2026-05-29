@@ -88,6 +88,22 @@ export function selectUnresolvedAgents(raw: readonly RawFeedback[]): TrayAgent[]
   return agents;
 }
 
+/**
+ * Pure: should a tray refresh force the FAB back to its expanded default,
+ * overriding a user "minimize"? Yes when a *newly-appeared* agent shows up
+ * (so a fresh run is never hidden) or the list empties (nothing left to
+ * minimize). A refresh that only shrinks or restatuses the agents the user
+ * already saw keeps the minimized pin. `prevIds` is the id set shown before
+ * this refresh.
+ */
+export function shouldAutoExpand(
+  prevIds: ReadonlySet<string>,
+  next: readonly TrayAgent[],
+): boolean {
+  if (next.length === 0) return true;
+  return next.some((a) => !prevIds.has(a.id));
+}
+
 export interface AgentTrayDeps {
   /** Fetch the shallow conversation list (GET /__pinagent/feedback). */
   fetchFeedback: () => Promise<RawFeedback[]>;
