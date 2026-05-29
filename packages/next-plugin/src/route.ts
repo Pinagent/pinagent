@@ -35,6 +35,7 @@ import {
   SettingsStore,
   Storage,
   searchHistory,
+  serveBranch,
   spawnAgent,
   startWsServer,
   validateAnthropicKey,
@@ -337,6 +338,17 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
     const storage = getStorage();
     const result = await pruneBranches(storage.root, parsed.data.feedbackIds);
     return json(200, result);
+  }
+
+  // /__pinagent/branches/:id/serve — stand up (or reuse) an on-demand
+  // dev server rooted at this worktree and return its URL, backing the
+  // dock's "Open app" action. Mirror of the vite-plugin handler.
+  if (slug.length === 3 && slug[0] === 'branches' && slug[2] === 'serve') {
+    const id = slug[1] ?? '';
+    if (!ID_RE.test(id)) return json(400, { error: 'invalid id' });
+    const storage = getStorage();
+    const result = await serveBranch(storage.root, id);
+    return json(result.ok ? 200 : 422, result);
   }
 
   // /__pinagent/prs — compose a PR from multiple conversations. See

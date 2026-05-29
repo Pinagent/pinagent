@@ -13,7 +13,12 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import type { Branch } from '../fixtures/types';
-import { type BulkPruneResult, type PruneStaleResult, useTransport } from '../transport';
+import {
+  type BulkPruneResult,
+  type PruneStaleResult,
+  type ServeBranchResult,
+  useTransport,
+} from '../transport';
 
 const KEY = ['branches'] as const;
 
@@ -39,6 +44,18 @@ export function usePruneBranch(): UseMutationResult<void, Error, string> {
         qc.invalidateQueries({ queryKey: ['conversations', transport.kind] }),
       ]);
     },
+  });
+}
+
+/**
+ * Stand up (or reuse) an on-demand dev server for one worktree. No cache
+ * invalidation — serving doesn't change the branch list; the caller just
+ * opens the returned URL in a new tab.
+ */
+export function useServeBranch(): UseMutationResult<ServeBranchResult, Error, string> {
+  const transport = useTransport();
+  return useMutation({
+    mutationFn: (feedbackId: string) => transport.serveBranch(feedbackId),
   });
 }
 

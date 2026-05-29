@@ -49,6 +49,8 @@ export {
   pruneBranch,
   pruneBranches,
   pruneStaleBranches,
+  type ServeBranchResult,
+  serveBranch,
 } from './branches';
 export { getOrCreateBus, type SqliteEventBus } from './bus';
 export { type ChangeRecord, getChangeDiff, listChanges } from './changes';
@@ -134,4 +136,10 @@ export {
   type WorktreeState,
   WorktreeStateSchema,
 } from './storage';
+export {
+  resolveServeCommand,
+  type ServeResult,
+  serveWorktree,
+  stopWorktreeServer,
+} from './worktree-serve';
 export { startWsServer } from './ws-server';

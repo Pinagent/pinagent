@@ -26,6 +26,7 @@ import { runGitCapture } from './git-utils';
 import { enqueue } from './merge-queue';
 import { SettingsStore } from './settings-store';
 import { ID_RE, Storage } from './storage';
+import { type ServeResult, serveWorktree, stopWorktreeServer } from './worktree-serve';
 
 export interface BranchRecord {
   /** Stable id — uses the conversation id since 1 worktree = 1 conversation. */
@@ -179,6 +180,11 @@ export async function pruneBranch(projectRoot: string, feedbackId: string): Prom
   const logPath = join(projectRoot, '.pinagent', 'logs', `${feedbackId}.md`);
   await mkdir(join(projectRoot, '.pinagent', 'logs'), { recursive: true });
 
+  // Tear down any dev server we stood up for this worktree before the
+  // worktree directory itself goes away — otherwise the child server is
+  // left rooted in a path that's about to be removed.
+  stopWorktreeServer(feedbackId);
+
   try {
     await enqueue(projectRoot, () => discardWorktree(projectRoot, feedbackId, logPath));
     return { ok: true, feedbackId };
@@ -188,6 +194,33 @@ export async function pruneBranch(projectRoot: string, feedbackId: string): Prom
       feedbackId,
       error: e instanceof Error ? e.message : String(e),
     };
+  }
+}
+
+export interface ServeBranchResult {
+  ok: boolean;
+  url?: string;
+  port?: number;
+  reused?: boolean;
+  error?: string;
+}
+
+/**
+ * Stand up (or reuse) an on-demand dev server for one conversation's
+ * worktree, so the dock's "Open app" action can point a browser tab at the
+ * worktree's running app. Delegates to `serveWorktree`; wraps failures in a
+ * structured result so the HTTP layer can return a 422 with a message
+ * instead of a 500.
+ */
+export async function serveBranch(
+  projectRoot: string,
+  feedbackId: string,
+): Promise<ServeBranchResult> {
+  try {
+    const result: ServeResult = await serveWorktree(projectRoot, feedbackId);
+    return { ok: true, url: result.url, port: result.port, reused: result.reused };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 

@@ -40,6 +40,7 @@ import type {
   ListAuditEventsQuery,
   PresentableConnections,
   PruneStaleResult,
+  ServeBranchResult,
 } from './types';
 import type { ConnectionStatus, ConversationHandlers, ExtensionStatus } from './ws-client';
 
@@ -130,6 +131,14 @@ export class MockTransport implements DockTransport {
     if (this.branches.length === before) {
       throw new Error('Branch already pruned (mock validation)');
     }
+  }
+
+  async serveBranch(feedbackId: string): Promise<ServeBranchResult> {
+    await sleep(SIMULATED_LATENCY_MS * 2);
+    const branch = this.branches.find((b) => b.conversationId === feedbackId);
+    if (!branch) throw new Error('Branch not found (mock validation)');
+    // Deterministic fake port so the mock UI is stable across renders.
+    return { url: 'http://localhost:53700', port: 53700, reused: false };
   }
 
   async pruneStaleBranches(): Promise<PruneStaleResult> {

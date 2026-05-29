@@ -36,6 +36,7 @@ import {
   type SpawnAgentMode,
   type Storage,
   searchHistory,
+  serveBranch,
   spawnAgent,
   validateAnthropicKey,
   validateGithubToken,
@@ -233,6 +234,20 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
         if (!parsed.success) return badRequest(res, parsed.error.message);
         const result = await pruneBranches(storage.root, parsed.data.feedbackIds);
         return json(res, 200, result);
+      }
+
+      // POST /__pinagent/branches/:id/serve — stand up (or reuse) an
+      // on-demand dev server rooted at this worktree and return its URL,
+      // so the dock's "Open app" action can open the worktree's running
+      // app in a browser tab. Matched BEFORE the `/:id` DELETE so the
+      // trailing `/serve` segment isn't parsed as part of the id.
+      const serveMatch =
+        req.method === 'POST' && /^\/__pinagent\/branches\/([^/]+)\/serve$/.exec(url);
+      if (serveMatch) {
+        const id = serveMatch[1] ?? '';
+        if (!ID_RE.test(id)) return badRequest(res, 'invalid id');
+        const result = await serveBranch(storage.root, id);
+        return json(res, result.ok ? 200 : 422, result);
       }
 
       // DELETE /__pinagent/branches/:id — prune one worktree. Same
