@@ -68,9 +68,10 @@ const ICON_GRIP =
 const COMPOSER_H = 320;
 const STREAM_H = 340;
 // Minimized "mini progress card" height — tall enough for the status
-// line, the last two activity rows, and the turns/cost footer. Reuses
-// IFRAME_W for width so reposition()/drag/pointer math is untouched.
-const MINI_H = 132;
+// line, the component/loop context line, the last two activity rows,
+// and the turns/cost footer. Reuses IFRAME_W for width so
+// reposition()/drag/pointer math is untouched.
+const MINI_H = 150;
 const IFRAME_W = 400;
 const BUBBLE_SIZE = 36;
 
@@ -2382,6 +2383,38 @@ function attachStreamHandler(
     if (!composer.expanded) idoc.body.classList.add('activity');
   }
 
+  // Enclosing-component + loop-instance context (from #166), surfaced in
+  // the stream pane as two spans:
+  //  - `.sc-comp` (`in <Component>`) mirrors what the expanded
+  //    header-block shows, for when that block is hidden in the mini
+  //    card; CSS hides it again when expanded to avoid duplication.
+  //  - `.sc-instance` (`item N of M`) is shown in both states — the
+  //    loop instance isn't surfaced anywhere else in the UI.
+  // Populated once; the anchor is fixed for the conversation's life.
+  (function renderStreamContext() {
+    const ctx = idoc.getElementById('pa-stream-context');
+    if (!ctx) return;
+    let any = false;
+    if (composer.component) {
+      const comp = el('span', 'sc-comp', `in <${composer.component}>`);
+      if (composer.componentPath.length > 1) comp.title = composer.componentPath.join(' › ');
+      ctx.appendChild(comp);
+      any = true;
+    }
+    if (composer.instance && composer.instance.total > 1) {
+      // 0-based index → human "item N of M".
+      ctx.appendChild(
+        el(
+          'span',
+          'sc-instance',
+          `item ${composer.instance.index + 1} of ${composer.instance.total}`,
+        ),
+      );
+      any = true;
+    }
+    ctx.hidden = !any;
+  })();
+
   function setFollowEnabled(enabled: boolean) {
     followInput.disabled = !enabled;
     followSend.disabled = !enabled || followInput.value.trim().length === 0;
@@ -2882,6 +2915,7 @@ function composerHTML(meta: ComposerMeta): string {
 
     <div class="pane" id="pa-stream-pane" hidden>
       <div class="header" id="pa-stream-header">Working…</div>
+      <div class="stream-context" id="pa-stream-context" hidden></div>
       <div class="lifecycle" id="pa-lifecycle" hidden>
         <span class="lifecycle-label" id="pa-lifecycle-label"></span>
         <div class="lifecycle-actions">

@@ -76,6 +76,41 @@ const STATUS_FILTERS: { label: string; status: StatusKey | 'all' }[] = [
   { label: 'Landed', status: 'landed' },
 ];
 
+/**
+ * Enclosing-component + loop-instance context (#166), shown next to the
+ * AnchorChip in both the list row and the detail header. `in <Component>`
+ * and, when the picked element was one of several `.map()` instances,
+ * `item N of M`. Renders nothing for uninstrumented / single-pick anchors.
+ * Typed structurally so it doesn't couple to the full Conversation type.
+ */
+function AnchorContext({
+  anchor,
+}: {
+  anchor: {
+    component?: string | null;
+    instanceIndex?: number | null;
+    instanceTotal?: number | null;
+  };
+}) {
+  const hasInstance =
+    anchor.instanceTotal != null && anchor.instanceTotal > 1 && anchor.instanceIndex != null;
+  if (!anchor.component && !hasInstance) return null;
+  return (
+    <>
+      {anchor.component && (
+        <span className="font-mono text-[10.5px] text-muted-foreground truncate">
+          in &lt;{anchor.component}&gt;
+        </span>
+      )}
+      {hasInstance && (
+        <span className="font-mono text-[10.5px] text-muted-foreground tabular-nums">
+          item {(anchor.instanceIndex as number) + 1} of {anchor.instanceTotal}
+        </span>
+      )}
+    </>
+  );
+}
+
 export function Conversations() {
   // `?id=<conversation-id>` drives the detail view. Sourcing it from
   // the URL (not local state) makes detail pages share-able as deep
@@ -513,6 +548,7 @@ export function Conversations() {
                   <>
                     {c.archived && <span className="text-[10px]">archived</span>}
                     {c.anchor.loc && <AnchorChip loc={c.anchor.loc} selector={c.anchor.selector} />}
+                    <AnchorContext anchor={c.anchor} />
                     {c.page && (
                       <span className="truncate font-mono text-[10.5px]">{safePath(c.page)}</span>
                     )}
@@ -1185,6 +1221,7 @@ function DetailHeader({
         {detail.anchor.loc && (
           <AnchorChip loc={detail.anchor.loc} selector={detail.anchor.selector} />
         )}
+        <AnchorContext anchor={detail.anchor} />
         {detail.branch && (
           <span className="text-[11px] text-muted-foreground font-mono truncate">
             {detail.branch}
