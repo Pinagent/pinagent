@@ -637,6 +637,16 @@ export class LocalTransport implements DockTransport {
     return this.jsonGetValidated('/__pinagent/worktree-servers', z.array(WorktreeServerSchema));
   }
 
+  async stopWorktreeServer(feedbackId: string): Promise<void> {
+    const response = await fetch(
+      this.url(`/__pinagent/worktree-servers/${encodeURIComponent(feedbackId)}`),
+      { method: 'DELETE', headers: { Accept: 'application/json' } },
+    );
+    if (response.ok) return;
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `${response.status} ${response.statusText}`);
+  }
+
   async pruneStaleBranches(): Promise<PruneStaleResult> {
     return this.jsonWriteValidated(
       'POST',

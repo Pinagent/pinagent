@@ -288,6 +288,13 @@ export interface DockTransport {
   listWorktreeServers(): Promise<WorktreeServer[]>;
 
   /**
+   * Stop the on-demand dev server for one worktree (frees its port; the
+   * worktree itself is untouched). Idempotent — stopping a worktree with
+   * no running server resolves without error.
+   */
+  stopWorktreeServer(feedbackId: string): Promise<void>;
+
+  /**
    * Bulk-prune every worktree older than the project's configured
    * `worktreeRetentionDays`. Returns the per-row outcome so the UI can
    * report "pruned 5, 1 failed".

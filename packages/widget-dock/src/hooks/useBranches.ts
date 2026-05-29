@@ -83,6 +83,23 @@ export function useWorktreeServers(): UseQueryResult<WorktreeServer[]> {
   });
 }
 
+/**
+ * Stop one worktree's dev server (frees its port). Invalidates the
+ * server list so the switcher drops the row; the project subscription
+ * also picks up the `worktree_servers_changed` event for live updates
+ * from other dock instances.
+ */
+export function useStopWorktreeServer(): UseMutationResult<void, Error, string> {
+  const transport = useTransport();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (feedbackId: string) => transport.stopWorktreeServer(feedbackId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...SERVERS_KEY, transport.kind] });
+    },
+  });
+}
+
 export function usePruneStaleBranches(): UseMutationResult<PruneStaleResult, Error, void> {
   const transport = useTransport();
   const qc = useQueryClient();

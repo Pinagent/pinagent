@@ -10,6 +10,12 @@
  * `serveBranch`; selecting "Main app" hides the iframe so the host page
  * (which the dock overlays) shows through.
  *
+ * The active selection lives in the route's `?id` search param, so it is
+ * deep-linkable (the Branches "Open in dock" action sets it) and survives
+ * in-dock navigation. Live updates: a `worktree_servers_changed` project
+ * event invalidates the server list, so starts/exits/stops from anywhere
+ * (this dock, the Branches "Open app" button, a crash) reflect here.
+ *
  * The iframe URL carries `?pinagent_dock=off` so the worktree app — which
  * runs the same pinagent plugin — doesn't stack a second dock inside the
  * preview (the plugins honor that flag; see vite-plugin DOCK_IFRAME_SCRIPT
@@ -18,16 +24,19 @@
 
 import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
-import { AppWindow, ExternalLink, RefreshCw } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useNavigate, useSearch } from '@tanstack/react-router';
+import { AppWindow, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Branch } from '../fixtures/types';
-import { useBranches, useServeBranch, useWorktreeServers } from '../hooks/useBranches';
+import {
+  useBranches,
+  useServeBranch,
+  useStopWorktreeServer,
+  useWorktreeServers,
+} from '../hooks/useBranches';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
-
-/** `'main'` shows the host app (iframe hidden); otherwise a worktree id. */
-type Selection = 'main' | string;
 
 /** Append `?pinagent_dock=off` so the previewed app doesn't nest a dock. */
 function suppressDock(url: string): string {
@@ -45,9 +54,10 @@ export function WorktreePreview() {
   const branchesQuery = useBranches();
   const serversQuery = useWorktreeServers();
   const serveMutation = useServeBranch();
+  const stopMutation = useStopWorktreeServer();
 
-  const [active, setActive] = useState<Selection>('main');
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const { id: selectedId } = useSearch({ from: '/preview' });
+  const navigate = useNavigate();
   // Bumped to force the iframe to remount on "reload" (changing `key`).
   const [reloadNonce, setReloadNonce] = useState(0);
 
@@ -68,23 +78,32 @@ export function WorktreePreview() {
     return map;
   }, [serversQuery.data]);
 
-  const select = (target: Selection): void => {
-    if (target === 'main') {
-      setActive('main');
-      setPreviewUrl(null);
+  const select = (target: string | null): void => {
+    void navigate({ to: '/preview', search: target ? { id: target } : {} });
+  };
+
+  // Auto-start the selected worktree's server if it isn't running yet —
+  // covers deep-links from the Branches "Open in dock" action. Guarded by
+  // a ref so we attempt each id at most once (the mutation invalidates the
+  // server list, which would otherwise re-trigger this effect).
+  const attemptedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedId) {
+      attemptedRef.current = null;
       return;
     }
-    const running = serverByConv.get(target);
-    if (running) {
-      setActive(target);
-      setPreviewUrl(running.url);
-      return;
-    }
-    // No server yet — start one, then point the iframe at it.
-    serveMutation.mutate(target, {
-      onSuccess: (result) => {
-        setActive(target);
-        setPreviewUrl(result.url);
+    if (serverByConv.has(selectedId)) return;
+    if (attemptedRef.current === selectedId) return;
+    if (!worktrees.some((w) => w.conversationId === selectedId)) return;
+    attemptedRef.current = selectedId;
+    serveMutation.mutate(selectedId);
+  }, [selectedId, serverByConv, worktrees, serveMutation]);
+
+  const handleStop = (id: string): void => {
+    stopMutation.mutate(id, {
+      // If we stopped the worktree we're viewing, fall back to the main app.
+      onSuccess: () => {
+        if (id === selectedId) select(null);
       },
     });
   };
@@ -113,28 +132,28 @@ export function WorktreePreview() {
     serveMutation.isPending && typeof serveMutation.variables === 'string'
       ? serveMutation.variables
       : null;
-  const iframeSrc = previewUrl ? suppressDock(previewUrl) : null;
+  const activeServer = selectedId ? serverByConv.get(selectedId) : undefined;
+  const iframeSrc = activeServer ? suppressDock(activeServer.url) : null;
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
       {/* Switcher */}
       <div className="border-b border-border bg-card px-3 py-2.5 flex items-center gap-2 flex-wrap">
         <h2 className="text-sm font-semibold tracking-tight mr-1">Preview</h2>
-        <SwitcherButton
-          label="Main app"
-          active={active === 'main'}
-          onClick={() => select('main')}
-        />
+        <SwitcherChip label="Main app" active={!selectedId} onClick={() => select(null)} />
         {worktrees.map((b) => {
           const server = serverByConv.get(b.conversationId);
+          const isRunning = server?.status === 'running';
           return (
-            <SwitcherButton
+            <SwitcherChip
               key={b.conversationId}
               label={b.name}
-              active={active === b.conversationId}
-              running={server?.status === 'running'}
+              active={selectedId === b.conversationId}
+              running={isRunning}
               starting={startingId === b.conversationId || server?.status === 'starting'}
               onClick={() => select(b.conversationId)}
+              onStop={isRunning ? () => handleStop(b.conversationId) : undefined}
+              stopPending={stopMutation.isPending && stopMutation.variables === b.conversationId}
             />
           );
         })}
@@ -180,8 +199,14 @@ export function WorktreePreview() {
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-center">
             <p className="max-w-sm text-sm text-muted-foreground leading-relaxed">
-              Showing your <span className="text-foreground">main app</span>. Pick a worktree above
-              to start its dev server and preview its running app here.
+              {selectedId ? (
+                'Starting the dev server…'
+              ) : (
+                <>
+                  Showing your <span className="text-foreground">main app</span>. Pick a worktree
+                  above to start its dev server and preview its running app here.
+                </>
+              )}
             </p>
           </div>
         )}
@@ -190,41 +215,65 @@ export function WorktreePreview() {
   );
 }
 
-function SwitcherButton({
+function SwitcherChip({
   label,
   active,
   running,
   starting,
   onClick,
+  onStop,
+  stopPending,
 }: {
   label: string;
   active: boolean;
   running?: boolean;
   starting?: boolean;
   onClick: () => void;
+  /** Present only for worktrees with a running server. */
+  onStop?: () => void;
+  stopPending?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={starting}
-      aria-current={active ? 'true' : undefined}
+    <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium max-w-[200px]',
-        'transition-colors disabled:opacity-60 disabled:cursor-wait',
+        'inline-flex items-center rounded-full border max-w-[220px]',
         active
           ? 'border-foreground/40 bg-secondary text-foreground'
-          : 'border-border bg-card text-muted-foreground hover:text-foreground hover:bg-secondary/60',
+          : 'border-border bg-card text-muted-foreground',
       )}
     >
-      {running && (
-        <span
-          aria-hidden
-          className="h-1.5 w-1.5 shrink-0 rounded-full bg-status-landed-fg"
-          title="Server running"
-        />
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={starting}
+        aria-current={active ? 'true' : undefined}
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium',
+          'transition-colors disabled:opacity-60 disabled:cursor-wait',
+          !active && 'hover:text-foreground',
+        )}
+      >
+        {running && (
+          <span
+            aria-hidden
+            className="h-1.5 w-1.5 shrink-0 rounded-full bg-status-landed-fg"
+            title="Server running"
+          />
+        )}
+        <span className="truncate font-mono">{starting ? 'Starting…' : label}</span>
+      </button>
+      {onStop && (
+        <button
+          type="button"
+          onClick={onStop}
+          disabled={stopPending}
+          title="Stop this worktree's dev server"
+          aria-label={`Stop ${label} dev server`}
+          className="inline-flex items-center pr-2 pl-0.5 text-muted-foreground hover:text-status-error-fg disabled:opacity-60"
+        >
+          <X className="h-3 w-3" />
+        </button>
       )}
-      <span className="truncate font-mono">{starting ? 'Starting…' : label}</span>
-    </button>
+    </span>
   );
 }

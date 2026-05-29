@@ -30,7 +30,13 @@ import { createWriteStream, existsSync, readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { createConnection, createServer } from 'node:net';
 import { join } from 'node:path';
+import { emitProjectChange } from './project-events';
 import { Storage } from './storage';
+
+/** Tell project subscribers (the dock's switcher) the running-server set changed. */
+function emitServersChanged(): void {
+  emitProjectChange({ type: 'worktree_servers_changed' });
+}
 
 /** Base port for the per-worktree dev-server probe. Steps upward to find a
  *  free port. Kept clear of the WS server's 53636..53645 fallback window. */
@@ -242,25 +248,31 @@ export async function serveWorktree(
   const entry: ServeEntry = { port, child, ready, status: 'starting' };
   registry.set(feedbackId, entry);
   // Flip to 'running' once the port answers so the switcher can show a
-  // live (vs starting) state. Swallow rejection — the catch below + the
-  // exit handler handle the failure path.
+  // live (vs starting) state, and nudge subscribers to refetch. Swallow
+  // rejection — the catch below + the exit handler handle the failure path.
   ready.then(
     () => {
       entry.status = 'running';
+      emitServersChanged();
     },
     () => {},
   );
 
   // If the child dies before we ever marked it ready, drop the entry so a
-  // retry re-spawns rather than reusing a corpse.
+  // retry re-spawns rather than reusing a corpse, and tell subscribers.
   child.once('exit', () => {
-    if (registry.get(feedbackId)?.child === child) registry.delete(feedbackId);
+    if (registry.get(feedbackId)?.child === child) {
+      registry.delete(feedbackId);
+      emitServersChanged();
+    }
   });
 
   try {
     await ready;
   } catch (err) {
     killEntry(feedbackId);
+    // The brief 'starting' entry is gone — let subscribers drop it.
+    emitServersChanged();
     throw err;
   }
 
@@ -269,7 +281,11 @@ export async function serveWorktree(
 
 /** Stop the dev server for one worktree, if any. No-op when none is running. */
 export function stopWorktreeServer(feedbackId: string): void {
+  const existed = registry.has(feedbackId);
   killEntry(feedbackId);
+  // killEntry deletes the entry synchronously, so the child's own exit
+  // handler won't fan out (its registry check fails) — emit here instead.
+  if (existed) emitServersChanged();
 }
 
 function killEntry(feedbackId: string): void {

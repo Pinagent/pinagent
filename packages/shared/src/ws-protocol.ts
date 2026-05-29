@@ -89,10 +89,14 @@ export type ClientMessage = z.infer<typeof ClientMessageSchema>;
  * a discriminated union so future event types can be added without
  * breaking existing subscribers.
  */
-export type ProjectEvent = { type: 'conversations_changed' };
+export type ProjectEvent = { type: 'conversations_changed' } | { type: 'worktree_servers_changed' };
 
 export const ProjectEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('conversations_changed') }).loose(),
+  // The set of running on-demand worktree dev servers changed (one
+  // started, exited, or was stopped) — the dock's worktree switcher
+  // refetches `/__pinagent/worktree-servers`.
+  z.object({ type: z.literal('worktree_servers_changed') }).loose(),
 ]);
 
 // ---------- Server → client ----------
