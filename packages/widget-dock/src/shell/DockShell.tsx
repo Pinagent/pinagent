@@ -78,8 +78,9 @@ export function DockShell() {
     embedded,
   });
 
-  // The widget's running-agents tray posts `open-dock-conversation` when
-  // the user clicks "Open" on an agent row — open the dock to that detail.
+  // The widget posts `open-conversation` from two places — the composer's
+  // "open in dock" button and the agent tray's per-row "Open" — to jump the
+  // dock to that conversation's detail.
   useOpenConversationBridge(() => dock.setOpen(true));
 
   const expandedNav = dock.mode !== 'panel';

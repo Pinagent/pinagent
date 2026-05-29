@@ -27,9 +27,10 @@
  *
  * Host bridge messages handled here:
  *   - `toggle-dock`       — toggle open/close (see above).
- *   - `open-conversation` — `{ feedbackId }` from the widget's open
- *                            conversation view: open the dock (if closed)
- *                            and navigate to that conversation.
+ *
+ * `open-conversation` (jump the dock to a specific conversation) lives in
+ * `useOpenConversationBridge` — a separate concern with its own widget
+ * entry points (composer + agent tray).
  *
  * Esc-to-close lives in `useDockMode` (panel mode only) and is
  * intentionally untouched here — different concern.
@@ -153,21 +154,11 @@ export function useKeyboardShortcuts({
     // iframe. See vite-plugin/index.ts and next-plugin/component.tsx
     // for the host-side script.
     const onMessage = (e: MessageEvent) => {
-      const data = e.data as { source?: string; type?: string; feedbackId?: unknown } | null;
+      const data = e.data as { source?: string; type?: string } | null;
       if (!data || typeof data !== 'object') return;
       if (data.source !== 'pinagent-host') return;
       if (data.type === 'toggle-dock') {
         onToggle();
-      } else if (data.type === 'open-conversation') {
-        // The widget's open-conversation view posts this to jump the dock
-        // to that conversation. `open()` is idempotent, so the same path
-        // serves "open the closed dock to it" and "navigate the already-open
-        // dock". See widget/src/widget.ts wireComposerIframe.
-        const id = data.feedbackId;
-        if (typeof id === 'string' && id.length > 0) {
-          open();
-          void navigate({ to: ROUTE_PATHS.conversations, search: { id } });
-        }
       }
     };
 
