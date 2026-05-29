@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Elastic-2.0
-import { integer, jsonb, pgSchema, primaryKey, text } from 'drizzle-orm/pg-core';
+import { boolean, integer, jsonb, pgSchema, primaryKey, text } from 'drizzle-orm/pg-core';
 
 /**
  * Postgres schema backing `@pinagent/ee-auth`'s `MembershipStore`.
@@ -36,6 +36,23 @@ export const organizationMemberships = authSchema.table(
   },
   (t) => [primaryKey({ columns: [t.organizationId, t.userId] })],
 );
+
+/**
+ * Configured IdP connections, one or more per org — backs
+ * `@pinagent/ee-auth`'s `SsoConnectionStore`. Mirrors the `SsoConnection`
+ * interface exactly. Stores connection *metadata* only: client credentials
+ * stay with the provider's `clientFor` (keyed by id), so secrets never live
+ * here. `protocol` is `text` (not a pg enum) per the repo convention; `domains`
+ * is a JSON string array for email-domain IdP discovery.
+ */
+export const ssoConnections = authSchema.table('sso_connections', {
+  id: text('id').primaryKey(),
+  organizationId: text('organization_id').notNull(),
+  protocol: text('protocol').notNull(),
+  issuer: text('issuer').notNull(),
+  domains: jsonb('domains').$type<string[]>().notNull(),
+  enabled: boolean('enabled').notNull(),
+});
 
 /**
  * `team` schema — governance/team features. The append-only audit log
@@ -91,6 +108,7 @@ export const subscriptions = billingSchema.table('subscriptions', {
 export const schema = {
   organizations,
   organizationMemberships,
+  ssoConnections,
   auditEvents,
   costControls,
   usageEvents,

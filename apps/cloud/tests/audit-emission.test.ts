@@ -7,6 +7,7 @@ import type {
   SsoProfile,
   SsoProvider,
 } from '@pinagent/ee-auth';
+import { createInMemorySsoConnectionStore } from '@pinagent/ee-auth';
 import { AUDIT_ACTIONS, createInMemoryAuditSink } from '@pinagent/ee-team-features';
 import { describe, expect, it } from 'vitest';
 import { handleSsoCallback } from '../src/login-service';
@@ -151,7 +152,8 @@ describe('audit emission — login', () => {
       new Request(`https://cloud.test/sso/callback?code=abc&state=${state}`),
       {
         provider,
-        connection,
+        connections: createInMemorySsoConnectionStore([connection]),
+        defaultConnectionId: connection.id,
         stateSecret: STATE_SECRET,
         userTokenSecret: USER_SECRET,
         cookieName: 'pa_session',

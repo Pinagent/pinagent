@@ -68,9 +68,11 @@ export {
   verifySessionToken,
 } from './session-token';
 export {
+  createInMemorySsoConnectionStore,
   isSsoProtocol,
   type SsoCallback,
   type SsoConnection,
+  type SsoConnectionStore,
   type SsoProfile,
   type SsoProtocol,
   type SsoProvider,
