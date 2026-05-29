@@ -3,7 +3,9 @@ import { createOidcProvider, type SsoConnection } from '@pinagent/ee-auth';
 import { createCloudApp } from './app';
 import { createBearerAuthenticator } from './authenticators';
 import { type CloudConfig, loadCloudConfig } from './config';
-import { createNeonMembershipStore } from './db/membership-store';
+import { createPgAuditSink } from './db/audit-sink';
+import { createNeonDb } from './db/client';
+import { createPgMembershipStore } from './db/membership-store';
 
 /**
  * Cloudflare Worker entry / composition root for the Pinagent cloud control
@@ -24,7 +26,10 @@ export default {
 };
 
 async function buildApp(config: CloudConfig) {
-  const store = await createNeonMembershipStore(config.databaseUrl);
+  // One Neon connection pool shared by every Postgres adapter.
+  const db = await createNeonDb(config.databaseUrl);
+  const store = createPgMembershipStore(db);
+  const audit = createPgAuditSink(db);
 
   const connection: SsoConnection = {
     id: config.oidc.connectionId,
@@ -55,6 +60,7 @@ async function buildApp(config: CloudConfig) {
       secret: config.relayAuthSecret,
       relayUrl: config.relayPublicUrl,
       ttlSeconds: config.sessionTtlSeconds,
+      audit,
     },
     login: {
       provider,
@@ -64,6 +70,7 @@ async function buildApp(config: CloudConfig) {
       userTokenTtlSeconds: config.userTokenTtlSeconds,
       cookieName: config.sessionCookieName,
       defaultReturnTo: config.loginReturnTo,
+      audit,
     },
   });
 }

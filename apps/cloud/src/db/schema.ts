@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Elastic-2.0
-import { pgSchema, primaryKey, text } from 'drizzle-orm/pg-core';
+import { jsonb, pgSchema, primaryKey, text } from 'drizzle-orm/pg-core';
 
 /**
  * Postgres schema backing `@pinagent/ee-auth`'s `MembershipStore`.
@@ -37,4 +37,23 @@ export const organizationMemberships = authSchema.table(
   (t) => [primaryKey({ columns: [t.organizationId, t.userId] })],
 );
 
-export const schema = { organizations, organizationMemberships };
+/**
+ * `team` schema — governance/team features. The append-only audit log
+ * (`@pinagent/ee-team-features`'s `AuditSink`). Per the per-domain-schema
+ * convention, team-features tables live here rather than in `auth`.
+ */
+export const teamSchema = pgSchema('team');
+
+export const auditEvents = teamSchema.table('audit_events', {
+  /** App-generated UUID (no DB extension needed). */
+  id: text('id').primaryKey(),
+  occurredAt: text('occurred_at').notNull(),
+  organizationId: text('organization_id').notNull(),
+  /** Null for unauthenticated actors (e.g. a denied login). */
+  actorUserId: text('actor_user_id'),
+  action: text('action').notNull(),
+  targetId: text('target_id'),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+});
+
+export const schema = { organizations, organizationMemberships, auditEvents };

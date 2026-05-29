@@ -7,6 +7,8 @@ import {
   type Permission,
   type UserId,
 } from '@pinagent/ee-auth';
+import { AUDIT_ACTIONS, type AuditSink } from '@pinagent/ee-team-features';
+import { isoFromSeconds } from './clock';
 
 /**
  * The relay session-issuance endpoint — how the dock and CLI obtain a token
@@ -55,6 +57,8 @@ export interface SessionServiceDeps {
    * later, per-connection, at the relay.
    */
   requirePermission?: Permission;
+  /** Optional audit sink — records session grants and denials when present. */
+  audit?: AuditSink;
   /** Override the issued-at clock (epoch seconds) — for tests. */
   nowSeconds?: number;
 }
@@ -91,7 +95,7 @@ export async function handleSessionRequest(
   }
 
   try {
-    const { token } = await issueRelaySessionToken({
+    const { token, principal } = await issueRelaySessionToken({
       store: deps.store,
       userId: user.userId,
       organizationId: body.organizationId,
@@ -101,11 +105,27 @@ export async function handleSessionRequest(
       requirePermission: deps.requirePermission ?? DEFAULT_REQUIRED_PERMISSION,
       nowSeconds: deps.nowSeconds,
     });
+    await deps.audit?.record({
+      occurredAt: isoFromSeconds(deps.nowSeconds),
+      organizationId: body.organizationId,
+      actorUserId: user.userId,
+      action: AUDIT_ACTIONS.sessionIssued,
+      targetId: body.sessionId,
+      metadata: { role: principal.role },
+    });
     return json({ token, sessionId: body.sessionId, relayUrl: deps.relayUrl }, 200);
   } catch (err) {
     // Authorization failures are the expected non-2xx outcomes; collapse both
     // to 403 so we don't leak whether the org/user exists.
     if (err instanceof MembershipRequiredError || err instanceof AccessDeniedError) {
+      await deps.audit?.record({
+        occurredAt: isoFromSeconds(deps.nowSeconds),
+        organizationId: body.organizationId,
+        actorUserId: user.userId,
+        action: AUDIT_ACTIONS.sessionDenied,
+        targetId: body.sessionId,
+        metadata: { reason: err instanceof AccessDeniedError ? 'permission' : 'membership' },
+      });
       return json({ error: 'forbidden' }, 403);
     }
     throw err;

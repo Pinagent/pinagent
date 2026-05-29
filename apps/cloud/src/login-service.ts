@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { type SsoConnection, type SsoProvider, signUserToken } from '@pinagent/ee-auth';
+import { AUDIT_ACTIONS, type AuditSink } from '@pinagent/ee-team-features';
+import { isoFromSeconds } from './clock';
 import { signLoginState, verifyLoginState } from './sso-state';
 
 /**
@@ -28,6 +30,8 @@ export interface LoginServiceDeps {
   cookieName: string;
   /** Fallback post-login redirect when the request gives no `returnTo`. */
   defaultReturnTo: string;
+  /** Optional audit sink — records successful logins when present. */
+  audit?: AuditSink;
   /** Override the clock (epoch seconds) — for tests. */
   nowSeconds?: number;
 }
@@ -78,6 +82,13 @@ export async function handleSsoCallback(
     userToken = await signUserToken(profile.subject, deps.userTokenSecret, {
       ttlSeconds: deps.userTokenTtlSeconds,
       nowSeconds: deps.nowSeconds,
+    });
+    await deps.audit?.record({
+      occurredAt: isoFromSeconds(deps.nowSeconds),
+      organizationId: deps.connection.organizationId,
+      actorUserId: profile.subject,
+      action: AUDIT_ACTIONS.login,
+      metadata: { connectionId: deps.connection.id },
     });
   } catch {
     // Generic — never leak why the IdP handshake failed to the browser.
