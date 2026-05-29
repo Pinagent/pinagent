@@ -13,7 +13,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { ConversationStream, StreamItem } from '../src/hooks/useConversationStream';
-import { StreamView } from '../src/routes/Conversations';
+import { StreamView } from '../src/routes/ConversationStream';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

@@ -14,7 +14,7 @@ import type { StatusKey } from '@pinagent/ui/tokens';
 import { describe, expect, it } from 'vitest';
 
 import type { StreamItem } from '../src/hooks/useConversationStream';
-import { deriveEffectiveStatus } from '../src/routes/Conversations';
+import { deriveEffectiveStatus } from '../src/routes/conversation-status';
 import type { WorktreeStatePayload } from '../src/transport';
 
 const NO_ASKED: ReadonlySet<string> = new Set();
