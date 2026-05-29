@@ -19,8 +19,12 @@ import type { AgentEvent } from './event-bus';
  * the caller can write the result unconditionally to stdout.
  */
 export function renderTranscript(events: AgentEvent[]): string {
-  if (events.length === 0) return '(no events recorded)\n';
-  return `${events.map(renderEvent).join('\n\n')}\n`;
+  // `progress` events are a transient live-turn signal (delivered via the
+  // bus so they hit the messages table), not transcript content — drop
+  // them so the rendered log stays clean.
+  const rendered = events.filter((e) => e.type !== 'progress');
+  if (rendered.length === 0) return '(no events recorded)\n';
+  return `${rendered.map(renderEvent).join('\n\n')}\n`;
 }
 
 function renderEvent(event: AgentEvent): string {
@@ -36,6 +40,9 @@ function renderEvent(event: AgentEvent): string {
       return `[tool_use] ${event.name}${event.summary ? ` · ${event.summary}` : ''}`;
     case 'tool_result':
       return `[tool_result] ${event.ok ? 'ok' : 'error'}`;
+    case 'progress':
+      // Filtered out in renderTranscript; handled here for exhaustiveness.
+      return '';
     case 'ask_user': {
       const opts = event.options?.length ? ` · options: ${event.options.join(' | ')}` : '';
       const ctx = event.context ? `\n  ${event.context}` : '';

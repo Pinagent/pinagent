@@ -467,6 +467,12 @@ async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<v
   let sessionId: string | null = null;
   let sessionRecorded = false;
   let resultRendered = false;
+  // Live turn counter for this run. Each `assistant` SDK message is one
+  // model turn, so we count them and publish a `progress` event the
+  // widget can surface in real time. Resets per run (a follow-up starts
+  // its own consumeStream), matching the per-run `numTurns` the SDK
+  // reports on the terminal `result` message.
+  let turn = 0;
   const bus = getOrCreateBus(opts.feedbackId);
 
   try {
@@ -483,6 +489,14 @@ async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<v
       }
 
       for (const ev of toAgentEvents(message)) await bus.publish(ev);
+
+      // One assistant message = one model turn. Publish the running
+      // count so the widget's footer ticks up live, ahead of the
+      // authoritative `numTurns` on the final `result`.
+      if (message.type === 'assistant') {
+        turn += 1;
+        await bus.publish({ type: 'progress', turn });
+      }
 
       if (message.type === 'system' && message.subtype === 'init') {
         await appendLog(opts.logPath, renderInitFooter(message));

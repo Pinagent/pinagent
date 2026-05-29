@@ -250,14 +250,21 @@ describe('spawnAgent', () => {
     // publishes. Wait for activeRuns to clear before asserting on the file.
     await waitForRunIdle(id);
 
-    // init → text → tool_use → tool_result → result, in order.
+    // init → text → progress → tool_use → progress → tool_result → result.
+    // A `progress` event follows each assistant message (one model turn),
+    // carrying the running turn count.
     expect(events.map((e) => e.type)).toEqual([
       'init',
       'text',
+      'progress',
       'tool_use',
+      'progress',
       'tool_result',
       'result',
     ]);
+
+    // The progress events tick the live turn counter up across the run.
+    expect(events.filter((e) => e.type === 'progress').map((e) => e.turn)).toEqual([1, 2]);
 
     // Init carries through the session/model/permission/apiKeySource fields.
     expect(events[0]).toMatchObject({
