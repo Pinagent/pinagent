@@ -2,7 +2,7 @@
 
 Click a UI element in your dev server, leave a comment, and your coding agent picks it up — with `file:line` and a screenshot — over MCP.
 
-Pinagent is a localhost-only dev plugin for Vite, Next.js, and Nuxt. It tags every element with its source location — JSX for React, `<template>` markup for Vue SFCs — drops a small 💬 widget into the page, and persists each captured comment to a local SQLite database under `.pinagent/`. An MCP server surfaces the queue inside your existing Claude Code session, so the next thing you say can be "fix the pending feedback."
+Pinagent is a localhost-only dev plugin for Vite, Next.js, Nuxt, and SvelteKit. It tags every element with its source location — JSX for React, `<template>` markup for Vue SFCs, component markup for Svelte — drops a small 💬 widget into the page, and persists each captured comment to a local SQLite database under `.pinagent/`. An MCP server surfaces the queue inside your existing Claude Code session, so the next thing you say can be "fix the pending feedback."
 
 There's also an opt-in **dock** surface (`@pinagent/widget-dock`) — a project-management UI for browsing conversations, reviewing diffs, composing PRs from resolved comments, and managing worktrees. Off by default; flip on with `dock: true` on either plugin.
 
@@ -27,11 +27,12 @@ The full feedback record persists to a local SQLite database at `.pinagent/db.sq
 
 If the dev server returns 500 on `POST /__pinagent/feedback`, the plugin dist is stale — `pnpm build` from the repo root forces a clean rebuild. See [examples/react-vite/README.md](./examples/react-vite/README.md) for more.
 
-The Next.js and Nuxt examples work the same way:
+The Next.js, Nuxt, and SvelteKit examples work the same way:
 
 ```bash
 pnpm --filter next-app-example dev          # :3000
 pnpm --filter nuxt-app-example dev           # :3000 (Nuxt + Vue)
+pnpm --filter sveltekit-app-example dev      # :5173 (SvelteKit + Svelte)
 ```
 
 ## How it works
