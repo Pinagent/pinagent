@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: Apache-2.0
+import type { Composer } from './types';
+import type { WidgetWsClient } from './ws-client';
+
+export interface State {
+  mode: 'idle' | 'picking';
+}
+
+export type Click = { x: number; y: number };
+
+/** A single Cmd/Ctrl-click pick: its element plus where the cursor hit. */
+export type PickExtra = { target: Element; click: Click };
+
+/**
+ * Shared state + cross-controller actions for one mounted widget.
+ *
+ * `mount()` builds the DOM and a single `WidgetContext`, then hands it to
+ * the three controllers (`composer`, `picker`, `fab-tray`). Each controller
+ * reads the DOM/state fields directly and calls the *other* controllers
+ * through the late-bound action methods below. Those methods are assigned
+ * by `mount()` right after each controller is constructed — controllers
+ * only invoke them at event time, never during construction, so the
+ * cyclic wiring resolves cleanly.
+ */
+export interface WidgetContext {
+  readonly host: HTMLElement;
+  readonly root: ShadowRoot;
+  readonly fab: HTMLElement;
+  readonly outline: HTMLDivElement;
+  readonly state: State;
+  readonly wsClient: WidgetWsClient;
+  readonly hotkeyChar: string | null;
+  readonly dockEnabled: boolean;
+  readonly isMac: boolean;
+  /** Every live composer (expanded or minimized), in insertion order. */
+  readonly composers: Set<Composer>;
+  /** The one expanded composer, or null. Owned by the composer controller. */
+  expandedComposer: Composer | null;
+
+  // ---- late-bound cross-controller actions (assigned in mount) ----
+  /** Picker: enter element-picking mode. */
+  enterPicking(): void;
+  /** Picker: leave element-picking mode. */
+  exitPicking(): void;
+  /** FAB/tray: re-render the FAB as pin or running-agents tray. */
+  applyFabPresentation(): void;
+  /** Composer: expand `c`, minimizing whatever was expanded before. */
+  swapTo(c: Composer): void;
+  /** Composer: cycle the expanded composer to the next in-flight agent. */
+  hopToNextActive(): void;
+  /** Composer: open a fresh composer for a freshly-picked element. */
+  openComposer(target: Element, click: Click, extras?: PickExtra[]): void;
+  /** Composer: find the composer a bubble element belongs to, if any. */
+  bubbleOwner(el: HTMLElement): Composer | null;
+  /** Transient corner toast. */
+  toast(text: string, kind: 'success' | 'error'): void;
+}
