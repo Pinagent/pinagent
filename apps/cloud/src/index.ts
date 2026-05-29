@@ -13,10 +13,12 @@ export { createBearerAuthenticator } from './authenticators';
 export { type CloudConfig, loadCloudConfig, type OidcConnectionConfig } from './config';
 export {
   type ConfigServiceDeps,
+  handleBranchRoutingConfig,
   handleCostControlConfig,
   handleSubscriptionConfig,
 } from './config-service';
 export { createPgAuditSink } from './db/audit-sink';
+export { createPgBranchRoutingStore } from './db/branch-routing-store';
 export { createNeonDb } from './db/client';
 export { createPgCostControlStore } from './db/cost-control-store';
 export {
@@ -27,6 +29,7 @@ export {
 export { createPgMeterSink } from './db/meter-sink';
 export {
   auditEvents,
+  branchRouting,
   costControls,
   organizationMemberships,
   organizations,

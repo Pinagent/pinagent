@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: Elastic-2.0
 import type { MembershipStore, OrganizationMembership, Role } from '@pinagent/ee-auth';
 import { createInMemorySubscriptionStore } from '@pinagent/ee-billing';
-import { createInMemoryCostControlStore } from '@pinagent/ee-team-features';
+import {
+  createInMemoryBranchRoutingStore,
+  createInMemoryCostControlStore,
+} from '@pinagent/ee-team-features';
 import { describe, expect, it } from 'vitest';
 import {
   type ConfigServiceDeps,
+  handleBranchRoutingConfig,
   handleCostControlConfig,
   handleSubscriptionConfig,
 } from '../src/config-service';
@@ -43,6 +47,7 @@ function deps(asUserId: string | null): ConfigServiceDeps {
     authenticate: async () => (asUserId ? { userId: asUserId } : null),
     subscriptions: createInMemorySubscriptionStore(),
     costControls: createInMemoryCostControlStore(),
+    branchRouting: createInMemoryBranchRoutingStore(),
   };
 }
 
@@ -166,6 +171,49 @@ describe('/cost-controls', () => {
         maxRelaySessionsPerPeriod: 10,
         enforcement: 'nuke',
       }),
+      deps('u-admin'),
+    );
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('/branch-routing', () => {
+  it('PUT (admin) sets the policy, GET reads it back; viewer is forbidden', async () => {
+    const d = deps('u-admin');
+    const put = await handleBranchRoutingConfig(
+      req('PUT', '/branch-routing?organizationId=acme', {
+        defaultBaseBranch: 'develop',
+        allowedBranchPatterns: ['feat/*', 'fix/*'],
+      }),
+      d,
+    );
+    expect(put.status).toBe(200);
+    expect(await d.branchRouting.get('acme')).toMatchObject({
+      defaultBaseBranch: 'develop',
+      allowedBranchPatterns: ['feat/*', 'fix/*'],
+    });
+
+    const viewerGet = await handleBranchRoutingConfig(
+      req('GET', '/branch-routing?organizationId=acme'),
+      deps('u-viewer'),
+    );
+    expect(viewerGet.status).toBe(403); // org:settings required
+  });
+
+  it('PUT accepts a null defaultBaseBranch and empty patterns', async () => {
+    const res = await handleBranchRoutingConfig(
+      req('PUT', '/branch-routing?organizationId=acme', {
+        defaultBaseBranch: null,
+        allowedBranchPatterns: [],
+      }),
+      deps('u-admin'),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('PUT 400s on a malformed body', async () => {
+    const res = await handleBranchRoutingConfig(
+      req('PUT', '/branch-routing?organizationId=acme', { allowedBranchPatterns: 'feat/*' }),
       deps('u-admin'),
     );
     expect(res.status).toBe(400);

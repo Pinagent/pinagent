@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Elastic-2.0
 import {
   type ConfigServiceDeps,
+  handleBranchRoutingConfig,
   handleCostControlConfig,
   handleSubscriptionConfig,
 } from './config-service';
@@ -22,6 +23,7 @@ import { handleSessionRequest, type SessionServiceDeps } from './session-service
  *   GET      /members          → organization members (admin read)
  *   GET/PUT  /subscriptions    → read/set the org's plan (admin config)
  *   GET/PUT  /cost-controls    → read/set the org's cost cap (admin config)
+ *   GET/PUT  /branch-routing   → read/set the org's branch policy (admin config)
  *   POST     /internal/relay/events → relay lifecycle ingest (service auth)
  *   GET      /healthz          → liveness
  */
@@ -54,6 +56,8 @@ export function createCloudApp(deps: CloudAppDeps): { fetch(request: Request): P
           return handleSubscriptionConfig(request, deps.config);
         case '/cost-controls':
           return handleCostControlConfig(request, deps.config);
+        case '/branch-routing':
+          return handleBranchRoutingConfig(request, deps.config);
         case '/internal/relay/events':
           return handleRelayEvents(request, deps.internal);
         case '/healthz':
