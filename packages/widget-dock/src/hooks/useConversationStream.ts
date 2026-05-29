@@ -22,8 +22,10 @@
  * previous subscription is cleaned up and state resets.
  */
 import type { AgentEvent } from '@pinagent/shared';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { type ConversationHandlers, useTransport, type WorktreeStatePayload } from '../transport';
+import { CONVERSATIONS_CHANGED_KEYS } from './useProjectSubscription';
 
 /**
  * Each stream item carries a monotonic `id` assigned at push time so
@@ -135,6 +137,7 @@ export function mergeStreamView(
 
 export function useConversationStream(id: string | null): ConversationStream {
   const transport = useTransport();
+  const queryClient = useQueryClient();
   const [stream, setStream] = useState<ConversationStream>(EMPTY_STREAM);
   const [prefetched, setPrefetched] = useState<StreamItem[]>([]);
   // Monotonic counter for stable React keys on each pushed item. Held
@@ -179,6 +182,18 @@ export function useConversationStream(id: string | null): ConversationStream {
     setStream(EMPTY_STREAM);
     nextIdRef.current = 0;
     if (!id) return;
+    // A lifecycle write only fans out a cross-process `conversations_changed`
+    // event after a poll cycle (250ms upper bound — and not at all if the
+    // dock's project socket is on a different/stale dev-server, the WS-port
+    // collision case). Meanwhile the same `status_changed` / worktree
+    // transition is already in this conversation's live stream. Invalidate
+    // the list / cached detail status / activity feed off that live signal
+    // too, so they don't sit stale until the project poll catches up.
+    const invalidateConversationQueries = (): void => {
+      for (const queryKey of CONVERSATIONS_CHANGED_KEYS) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    };
     const handlers: ConversationHandlers = {
       onEvent(event) {
         const itemId = ++nextIdRef.current;
@@ -189,9 +204,20 @@ export function useConversationStream(id: string | null): ConversationStream {
             { kind: 'event', id: itemId, event, receivedAt: new Date().toISOString() },
           ],
         }));
+        // `status_changed` resolves the conversation; `result` ends a turn
+        // and rolls up the run's cost — both are reflected on the list row,
+        // detail header, and audit feed.
+        if (event.type === 'status_changed' || event.type === 'result') {
+          invalidateConversationQueries();
+        }
       },
       onWorktreeState(state) {
         setStream((prev) => ({ ...prev, worktree: state }));
+        // Land / discard are terminal lifecycle transitions that also write
+        // audit rows and flip the conversation's stored status.
+        if (state.state === 'landed' || state.state === 'discarded') {
+          invalidateConversationQueries();
+        }
       },
       onError(message) {
         const itemId = ++nextIdRef.current;
@@ -211,7 +237,7 @@ export function useConversationStream(id: string | null): ConversationStream {
       onDone() {},
     };
     return transport.subscribeConversation(id, handlers);
-  }, [id, transport]);
+  }, [id, transport, queryClient]);
 
   return mergeStreamView(stream, prefetched);
 }
