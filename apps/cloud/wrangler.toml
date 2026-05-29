@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Elastic-2.0
+# Cloudflare Workers config for the Pinagent cloud control plane.
+#
+# Deploy:  pnpm --filter @pinagent/cloud deploy
+# Local:   pnpm --filter @pinagent/cloud dev:worker
+#
+# Secrets (set via `wrangler secret put` / dashboard, NOT here):
+#   RELAY_AUTH_SECRET, DATABASE_URL, USER_TOKEN_SECRET, SSO_STATE_SECRET,
+#   OIDC_NONCE_SECRET, OIDC_CLIENT_SECRET
+# Plain vars: PINAGENT_RELAY_PUBLIC_URL, OIDC_CONNECTION_ID, OIDC_ORG_ID,
+#   OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_REDIRECT_URI, LOGIN_RETURN_TO
+name = "pinagent-cloud"
+main = "src/worker.ts"
+compatibility_date = "2026-05-01"
+# Neon serverless driver pulls in Node built-ins (e.g. crypto/stream shims).
+compatibility_flags = ["nodejs_compat"]

@@ -12,11 +12,32 @@ function withAuth(header?: string): Request {
   });
 }
 
+function withCookie(cookie: string): Request {
+  return new Request('https://cloud.pinagent.test/sessions', {
+    method: 'POST',
+    headers: { Cookie: cookie },
+  });
+}
+
 describe('createBearerAuthenticator', () => {
   it('resolves the user from a valid bearer token', async () => {
     const authenticate = createBearerAuthenticator(SECRET);
     const token = await signUserToken('user-42', SECRET);
     expect(await authenticate(withAuth(`Bearer ${token}`))).toEqual({ userId: 'user-42' });
+  });
+
+  it('resolves the user from the session cookie when configured', async () => {
+    const authenticate = createBearerAuthenticator(SECRET, { cookieName: 'pa_session' });
+    const token = await signUserToken('user-42', SECRET);
+    expect(await authenticate(withCookie(`other=x; pa_session=${token}; foo=bar`))).toEqual({
+      userId: 'user-42',
+    });
+  });
+
+  it('ignores the cookie when no cookieName is configured', async () => {
+    const authenticate = createBearerAuthenticator(SECRET);
+    const token = await signUserToken('user-42', SECRET);
+    expect(await authenticate(withCookie(`pa_session=${token}`))).toBeNull();
   });
 
   it('is case-insensitive on the scheme', async () => {
