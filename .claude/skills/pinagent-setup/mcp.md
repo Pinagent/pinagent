@@ -101,7 +101,9 @@ cd /path/to/target
 claude --dangerously-load-development-channels server:pinagent
 ```
 
-The `server:pinagent` token must match the key in `.mcp.json`. The `--dangerously-load-development-channels` flag is required during Claude Code's [channels research preview](https://code.claude.com/docs/en/channels) — pinagent isn't on the Anthropic-curated allowlist yet.
+The `server:pinagent` token must match the key in `.mcp.json`. The `--dangerously-load-development-channels` flag is required during Claude Code's [channels research preview](https://code.claude.com/docs/en/channels) (needs Claude Code **v2.1.80+**) — pinagent isn't on the Anthropic-curated allowlist yet.
+
+Note: only comments left **after** the session starts are pushed as channel events. The watcher ignores the backlog already in the store at boot; reach pre-existing comments with `list_pending_feedback` / `get_feedback`.
 
 If you see `no MCP server configured with that name`, you're launching from the wrong directory. Either `cd` to where `.mcp.json` lives, or pass `--mcp-config /absolute/path/to/.mcp.json` explicitly.
 
