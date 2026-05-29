@@ -26,7 +26,36 @@ framework-agnostic and needs **zero** changes.
   (no template, no elements, or an unparseable file) — the same "null means
   skip" contract as the babel plugin, so bundler glue can treat both
   identically.
+- **`vite.ts`** (`@pinagent/vue-plugin/vite`) — a minimal Vite plugin,
+  `vitePlugin()`, that runs `transformVue` on `.vue` files. It uses
+  `enforce: 'pre'` so it tags the **raw** SFC source before `@vitejs/plugin-vue`
+  compiles it; plugin-vue then re-parses the tagged source, so the attributes
+  flow through to the compiled template. Dev-only (`command === 'serve'`),
+  matching Pinagent's "production builds are untouched" invariant. This is a
+  demonstration of the bundler glue, not the full integration — it does not yet
+  inject the widget or the `/__pinagent` middleware.
 - **`index.ts`** — public surface: `transformVue`, `TransformOptions`.
+
+### End-to-end demonstration
+
+`tests/vite.test.ts` spins up a real Vite dev server with `vitePlugin()` ahead
+of `@vitejs/plugin-vue`, SSR-renders `tests/fixtures/App.vue`, and asserts the
+rendered DOM carries the attributes. The actual output:
+
+```html
+<main data-pa-loc="App.vue:9:3" class="demo">
+  <h1 data-pa-loc="App.vue:10:5">Pinagent Vue demo</h1>
+  <button data-pa-loc="App.vue:11:5">Count is 0</button>
+  <ul data-pa-loc="App.vue:12:5">
+    <li data-pa-loc="App.vue:13:7">Apples</li>
+    <li data-pa-loc="App.vue:13:7">Pears</li>
+  </ul>
+  <p data-pa-loc="App.vue:16:5">not yet</p>
+</main>
+```
+
+The widget walks up from a clicked node to the nearest `data-pa-loc` — exactly
+as it does for React — so this is all the source mapping a Vue app needs.
 
 ## What it skips
 

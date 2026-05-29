@@ -2,7 +2,7 @@
 import { defineConfig } from 'tsdown';
 
 export default defineConfig({
-  entry: { index: 'src/index.ts' },
+  entry: { index: 'src/index.ts', vite: 'src/vite.ts' },
   format: ['esm', 'cjs'],
   dts: true,
   target: 'node20',
