@@ -2233,6 +2233,9 @@ function attachStreamHandler(
   const feedbackId = composer.feedbackId;
   let activeTextBlock: HTMLElement | null = null;
   let lastToolChip: HTMLElement | null = null;
+  // Human-readable label of the most recent tool call, reused for the
+  // mini-card tooltip on both tool_use (running) and tool_result (done).
+  let lastToolLabel: string | null = null;
   let pendingAskId: string | null = null;
   let pendingAskFormRoot: HTMLElement | null = null;
   let apiKeySource: string | null = null;
@@ -2299,6 +2302,20 @@ function attachStreamHandler(
   function append(node: HTMLElement) {
     log.appendChild(node);
     log.scrollTop = log.scrollHeight;
+  }
+
+  // Mini-card activity affordance. When minimized the user can't watch
+  // the transcript scroll, so each new tool activity (a) sets a tooltip
+  // on the card with the current action and (b) briefly pulses the card
+  // border. The pulse is a one-shot CSS animation; removing the class on
+  // `animationend` lets the next activity re-trigger it.
+  const card = idoc.querySelector('.card') as HTMLElement | null;
+  idoc.body.addEventListener('animationend', (e) => {
+    if (e.animationName === 'pa-activity-pulse') idoc.body.classList.remove('activity');
+  });
+  function noteActivity(label: string) {
+    if (card) card.title = label;
+    if (!composer.expanded) idoc.body.classList.add('activity');
   }
 
   function setFollowEnabled(enabled: boolean) {
@@ -2460,7 +2477,9 @@ function attachStreamHandler(
         const status = el('span', 'chip-status', '…');
         chip.appendChild(status);
         lastToolChip = chip;
+        lastToolLabel = summary ? `${name} · ${summary}` : name;
         append(chip);
+        noteActivity(lastToolLabel);
         break;
       }
       case 'tool_result': {
@@ -2474,6 +2493,7 @@ function attachStreamHandler(
         } else {
           append(el('div', `chip ${ok ? '' : 'err'}`, ok ? '✓ tool result' : '✗ tool result'));
         }
+        if (lastToolLabel && card) card.title = `${lastToolLabel} ${ok ? '✓' : '✗'}`;
         lastToolChip = null;
         break;
       }

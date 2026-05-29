@@ -579,9 +579,23 @@ export const COMPOSER_STYLES = `
     50%      { box-shadow: 0 0 0 4px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(32, 27, 33, 0.18); }
   }
 
+  /* One-shot gold flash when a new tool activity lands while minimized,
+     so a glance catches that the agent just did something. Skipped while
+     'needs-input' owns the (infinite) pulse — that state is louder and
+     takes precedence. The class is removed on animationend so the next
+     activity re-triggers it. */
+  body.mini.activity:not(.needs-input) .card {
+    animation: pa-activity-pulse 0.45s ease-out;
+  }
+  @keyframes pa-activity-pulse {
+    0%   { box-shadow: 0 0 0 3px ${BRAND_GOLD}, 0 10px 25px rgba(32, 27, 33, 0.18); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0), 0 10px 25px rgba(32, 27, 33, 0.18); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .meta, textarea, .btn, .ask-option { transition: none !important; }
     .header.running::before { animation: none; border-color: ${STATUS.working.fg}; }
     body.mini.needs-input .card { animation: none; box-shadow: 0 0 0 2px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(32, 27, 33, 0.18); }
+    body.mini.activity .card { animation: none; }
   }
 `;

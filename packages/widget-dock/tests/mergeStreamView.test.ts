@@ -13,6 +13,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type ConversationStream,
+  deriveLiveTurn,
   deriveTurnRunning,
   mergeStreamView,
   type StreamItem,
@@ -37,7 +38,7 @@ const prefetchedItem = (id: number, text: string): StreamItem => ({
 const wsStream = (
   items: StreamItem[],
   worktree: ConversationStream['worktree'] = null,
-): ConversationStream => ({ items, worktree, turnRunning: false });
+): ConversationStream => ({ items, worktree, turnRunning: false, liveTurn: 0 });
 
 describe('mergeStreamView', () => {
   it('returns the prefetched items when the WS stream is empty', () => {
@@ -130,6 +131,13 @@ const askItem = (id: number, askId: string): StreamItem => ({
   receivedAt: '2026-05-28T00:00:00.000Z',
 });
 
+const progressItem = (id: number, turn: number): StreamItem => ({
+  kind: 'event',
+  id,
+  event: { type: 'progress', turn },
+  receivedAt: '2026-05-28T00:00:00.000Z',
+});
+
 describe('deriveTurnRunning', () => {
   it('is false for an empty stream', () => {
     expect(deriveTurnRunning([])).toBe(false);
@@ -179,5 +187,26 @@ describe('mergeStreamView — turnRunning passthrough', () => {
     // turnRunning should be honest about what those events say.
     const merged = mergeStreamView(wsStream([]), [initItem(-1)]);
     expect(merged.turnRunning).toBe(true);
+  });
+});
+
+describe('deriveLiveTurn', () => {
+  it('is 0 for an empty stream', () => {
+    expect(deriveLiveTurn([])).toBe(0);
+  });
+
+  it('tracks the latest progress turn within a run', () => {
+    expect(
+      deriveLiveTurn([initItem(1), progressItem(2, 1), wsItem(3, 'thinking'), progressItem(4, 2)]),
+    ).toBe(2);
+  });
+
+  it('resets to 0 on a fresh init (follow-up turn)', () => {
+    expect(deriveLiveTurn([initItem(1), progressItem(2, 3), resultItem(3), initItem(4)])).toBe(0);
+  });
+
+  it('passes through mergeStreamView from either source', () => {
+    expect(mergeStreamView(wsStream([initItem(1), progressItem(2, 2)]), []).liveTurn).toBe(2);
+    expect(mergeStreamView(wsStream([]), [initItem(-1), progressItem(-2, 1)]).liveTurn).toBe(1);
   });
 });
