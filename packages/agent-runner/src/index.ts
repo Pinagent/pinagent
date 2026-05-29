@@ -96,6 +96,14 @@ export {
 } from './providers';
 export { listPullRequests, type PullRequestRecord } from './pull-requests';
 export {
+  buildDeviceUrl,
+  maybeStartRelayClient,
+  nextBackoff,
+  type RelayClientHandle,
+  type RelayClientOptions,
+  startRelayClient,
+} from './relay-client';
+export {
   type PresentableConnections,
   type SecretsFile,
   SecretsFileSchema,
