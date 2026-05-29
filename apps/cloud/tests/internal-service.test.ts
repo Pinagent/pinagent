@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Elastic-2.0
+import { createInMemoryMeterSink, USAGE_KINDS } from '@pinagent/ee-billing';
 import { createInMemoryAuditSink } from '@pinagent/ee-team-features';
 import { describe, expect, it } from 'vitest';
 import { handleRelayEvents } from '../src/internal-service';
@@ -89,5 +90,55 @@ describe('POST /internal/relay/events', () => {
         })
       ).status,
     ).toBe(405);
+  });
+
+  it('meters connection seconds from a disconnect duration', async () => {
+    const audit = createInMemoryAuditSink();
+    const meter = createInMemoryMeterSink();
+    const events = {
+      events: [
+        {
+          type: 'client.connected',
+          organizationId: 'acme',
+          sessionId: 'sess-1',
+          occurredAt: '2026-05-29T00:00:00Z',
+        },
+        {
+          type: 'client.disconnected',
+          organizationId: 'acme',
+          sessionId: 'sess-1',
+          occurredAt: '2026-05-29T00:02:30Z',
+          durationMs: 150_000, // 2.5 min → 150 s
+        },
+      ],
+    };
+    const res = await handleRelayEvents(post(events, `Bearer ${SECRET}`), {
+      audit,
+      meter,
+      relayInternalSecret: SECRET,
+    });
+    expect(res.status).toBe(200);
+    // Only the disconnect (with durationMs) meters; the connect does not.
+    expect(meter.events).toEqual([
+      {
+        occurredAt: '2026-05-29T00:02:30Z',
+        organizationId: 'acme',
+        kind: USAGE_KINDS.relayConnectionSeconds,
+        quantity: 150,
+        metadata: { sessionId: 'sess-1', side: 'client' },
+      },
+    ]);
+    expect(await meter.summarize({ organizationId: 'acme' })).toEqual({
+      'relay.connection.seconds': 150,
+    });
+  });
+
+  it('records audit without metering when no meter is configured', async () => {
+    const audit = createInMemoryAuditSink();
+    const res = await handleRelayEvents(post(batch, `Bearer ${SECRET}`), {
+      audit,
+      relayInternalSecret: SECRET,
+    });
+    expect(res.status).toBe(200); // no meter dep → audit only, no throw
   });
 });

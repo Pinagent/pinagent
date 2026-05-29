@@ -83,6 +83,6 @@ async function buildApp(config: CloudConfig) {
     },
     read: { store, authenticate, audit, meter },
     config: { store, authenticate, subscriptions, costControls },
-    internal: { audit, relayInternalSecret: config.relayInternalSecret },
+    internal: { audit, meter, relayInternalSecret: config.relayInternalSecret },
   });
 }
