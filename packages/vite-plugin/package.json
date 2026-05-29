@@ -46,6 +46,7 @@
     "@vue/compiler-sfc": "^3.5.13",
     "drizzle-orm": "^0.38.0",
     "nanoid": "^5.0.9",
+    "svelte": "^5.0.0",
     "ws": "^8.21.0",
     "zod": "^4.4.3"
   },
@@ -56,6 +57,7 @@
     "@pinagent/db": "workspace:*",
     "@pinagent/next-plugin": "workspace:*",
     "@pinagent/shared": "workspace:*",
+    "@pinagent/svelte-plugin": "workspace:*",
     "@pinagent/vue-plugin": "workspace:*",
     "@pinagent/widget": "workspace:*",
     "@types/babel__traverse": "^7.20.6",

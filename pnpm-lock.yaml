@@ -646,6 +646,9 @@ importers:
       nanoid:
         specifier: ^5.0.9
         version: 5.1.11
+      svelte:
+        specifier: ^5.0.0
+        version: 5.55.10
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -671,6 +674,9 @@ importers:
       '@pinagent/shared':
         specifier: workspace:*
         version: link:../shared
+      '@pinagent/svelte-plugin':
+        specifier: workspace:*
+        version: link:../svelte-plugin
       '@pinagent/vue-plugin':
         specifier: workspace:*
         version: link:../vue-plugin
