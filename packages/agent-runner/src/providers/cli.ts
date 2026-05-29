@@ -78,11 +78,16 @@ export class CliAgentProvider implements AgentProvider {
     if (req.abortSignal.aborted) onAbort();
     else req.abortSignal.addEventListener('abort', onAbort, { once: true });
 
-    if (config.promptMode === 'stdin') {
-      child.stdin.write(req.prompt);
+    // A wrapped CLI may exit before reading stdin (or fail to spawn), which
+    // turns our write/end into an `EPIPE`/`ERR_STREAM_DESTROYED` 'error' on
+    // the stream — fatal to the dev server if unhandled. Swallow it; the
+    // run's outcome is owned by the exit/error handlers below.
+    child.stdin.on('error', () => {});
+    try {
+      if (config.promptMode === 'stdin') child.stdin.write(req.prompt);
       child.stdin.end();
-    } else {
-      child.stdin.end();
+    } catch {
+      // Stream already destroyed (child gone) — nothing to feed it.
     }
 
     // Bridge the child's line-buffered stdout/stderr into an async queue we
@@ -102,18 +107,42 @@ export class CliAgentProvider implements AgentProvider {
     stdout.on('close', onClose);
     stderr.on('close', onClose);
 
-    const exit = new Promise<number>((resolve) => {
-      child.on('exit', (code) => resolve(code ?? 0));
-      child.on('error', () => resolve(1));
+    // `error` fires when the command can't be spawned at all (ENOENT, EACCES);
+    // `exit` carries either an exit `code` or a terminating `signal`. We keep
+    // all three so the result can distinguish "exited non-zero" from "killed
+    // by a signal" from "never started". Folding the spawn error into the
+    // resolved value (rather than a closure-mutated var) keeps control-flow
+    // narrowing working at the use site below.
+    const exit = new Promise<{
+      code: number | null;
+      signal: NodeJS.Signals | null;
+      spawnError: Error | null;
+    }>((resolve) => {
+      child.on('exit', (code, signal) => resolve({ code, signal, spawnError: null }));
+      child.on('error', (err) =>
+        resolve({
+          code: null,
+          signal: null,
+          spawnError: err instanceof Error ? err : new Error(String(err)),
+        }),
+      );
     });
 
     let turn = 0;
     for await (const { line, stream } of queue) {
+      // stderr is diagnostics, not model output: always render it as tagged
+      // text (never parse it as stream-json, where a non-JSON diagnostic
+      // would masquerade as untagged assistant output) and never let it tick
+      // the turn counter, which tracks assistant turns for the widget footer.
       const events =
-        config.format === 'stream-json' ? parseStreamJsonLine(line) : parseTextLine(line, stream);
+        stream === 'stderr'
+          ? parseTextLine(line, stream)
+          : config.format === 'stream-json'
+            ? parseStreamJsonLine(line)
+            : parseTextLine(line, stream);
       if (events.length === 0) continue;
       // Count assistant text chunks as turns so the widget footer ticks.
-      if (events.some((e) => e.type === 'text')) {
+      if (stream === 'stdout' && events.some((e) => e.type === 'text')) {
         turn += 1;
         events.push({ type: 'progress', turn });
       }
@@ -121,9 +150,12 @@ export class CliAgentProvider implements AgentProvider {
     }
 
     req.abortSignal.removeEventListener('abort', onAbort);
-    const code = await exit;
+    const { code, signal, spawnError } = await exit;
     const aborted = req.abortSignal.aborted;
-    const subtype = aborted ? 'aborted' : code === 0 ? 'success' : 'error';
+    // Success is a clean exit 0 that we didn't abort and that wasn't killed by
+    // a signal. A non-abort signal (SIGKILL on OOM, SIGSEGV on a crash) leaves
+    // `code` null — without the signal check that would slip through as 0.
+    const subtype = aborted ? 'aborted' : spawnError || signal || code !== 0 ? 'error' : 'success';
     const resultEvent: AgentEvent = {
       type: 'result',
       subtype,
@@ -134,7 +166,12 @@ export class CliAgentProvider implements AgentProvider {
       durationMs: Date.now() - startedAt,
     };
     if (subtype !== 'success') {
-      resultEvent.errors = [aborted ? 'run aborted' : `${config.argv[0]} exited with code ${code}`];
+      let reason: string;
+      if (aborted) reason = 'run aborted';
+      else if (spawnError) reason = `failed to start ${config.argv[0]}: ${spawnError.message}`;
+      else if (signal) reason = `${config.argv[0]} terminated by signal ${signal}`;
+      else reason = `${config.argv[0]} exited with code ${code}`;
+      resultEvent.errors = [reason];
     }
     yield {
       events: [resultEvent],

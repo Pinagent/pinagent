@@ -144,4 +144,103 @@ describe('CliAgentProvider', () => {
       process.env = prior;
     }
   });
+
+  it('reports a signal-terminated child as an error, not success', async () => {
+    const prior = { ...process.env };
+    // Child kills itself with SIGKILL: exit `code` is null, `signal` set.
+    // Without the signal check this slipped through as `code ?? 0 === 0`.
+    process.env.PINAGENT_AGENT_CLI_COMMAND = JSON.stringify([
+      process.execPath,
+      '-e',
+      'process.kill(process.pid, "SIGKILL")',
+    ]);
+    delete process.env.PINAGENT_AGENT_CLI_FORMAT;
+    try {
+      const events = await collect(new CliAgentProvider(), makeRequest());
+      const result = events.find((e) => e.type === 'result') as Extract<
+        AgentEvent,
+        { type: 'result' }
+      >;
+      expect(result.subtype).toBe('error');
+      expect(result.errors?.[0]).toMatch(/terminated by signal/);
+    } finally {
+      process.env = prior;
+    }
+  });
+
+  it('surfaces a spawn failure (missing command) as a clear error', async () => {
+    const prior = { ...process.env };
+    process.env.PINAGENT_AGENT_CLI_COMMAND = 'pinagent-no-such-binary-xyz';
+    delete process.env.PINAGENT_AGENT_CLI_FORMAT;
+    try {
+      const events = await collect(new CliAgentProvider(), makeRequest());
+      const result = events.find((e) => e.type === 'result') as Extract<
+        AgentEvent,
+        { type: 'result' }
+      >;
+      expect(result.subtype).toBe('error');
+      // The real ENOENT, not a misleading "exited with code 1".
+      expect(result.errors?.[0]).toMatch(/failed to start pinagent-no-such-binary-xyz/);
+    } finally {
+      process.env = prior;
+    }
+  });
+
+  it('does not crash when a child exits before reading stdin', async () => {
+    const prior = { ...process.env };
+    // promptMode=stdin + a child that exits immediately → the prompt write
+    // races into a closed pipe (EPIPE). Must be swallowed, not thrown.
+    process.env.PINAGENT_AGENT_CLI_COMMAND = JSON.stringify([
+      process.execPath,
+      '-e',
+      'process.exit(0)',
+    ]);
+    process.env.PINAGENT_AGENT_CLI_PROMPT = 'stdin';
+    delete process.env.PINAGENT_AGENT_CLI_FORMAT;
+    try {
+      const events = await collect(
+        new CliAgentProvider(),
+        makeRequest({ prompt: 'x'.repeat(100_000) }),
+      );
+      const result = events.find((e) => e.type === 'result') as Extract<
+        AgentEvent,
+        { type: 'result' }
+      >;
+      expect(result.subtype).toBe('success');
+    } finally {
+      process.env = prior;
+    }
+  });
+
+  it('tags stderr and excludes it from the turn count', async () => {
+    const prior = { ...process.env };
+    // One stdout assistant turn + one stderr diagnostic. In stream-json mode
+    // the stderr line must stay tagged text (not parsed as JSON) and must not
+    // tick the turn counter.
+    const stdoutLine = JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: 'editing the file' }] },
+    });
+    const script = `console.error("warming up model"); console.log(${JSON.stringify(stdoutLine)})`;
+    process.env.PINAGENT_AGENT_CLI_COMMAND = JSON.stringify([process.execPath, '-e', script]);
+    process.env.PINAGENT_AGENT_CLI_FORMAT = 'stream-json';
+    delete process.env.PINAGENT_AGENT_CLI_PROMPT;
+    try {
+      const events = await collect(new CliAgentProvider(), makeRequest());
+      const texts = events
+        .filter((e) => e.type === 'text')
+        .map((e) => (e as { text: string }).text);
+      expect(texts).toContain('editing the file');
+      // stderr stayed tagged rather than masquerading as untagged model text.
+      expect(texts).toContain('[stderr] warming up model');
+      const result = events.find((e) => e.type === 'result') as Extract<
+        AgentEvent,
+        { type: 'result' }
+      >;
+      // Only the stdout text counts — stderr did not inflate the turn count.
+      expect(result.numTurns).toBe(1);
+    } finally {
+      process.env = prior;
+    }
+  });
 });
