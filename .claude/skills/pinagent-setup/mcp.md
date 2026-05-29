@@ -11,7 +11,7 @@ echo ".pinagent" >> .gitignore
 # .gitignore lookup walks up.
 ```
 
-Feedback records (JSON + PNG) are user-local and shouldn't be committed. The MCP server (and the Vite/Next route handler) write the `.pinagent/feedback/` and `.pinagent/screenshots/` directories lazily on first submit.
+Feedback records (a local SQLite DB + PNG screenshots) are user-local and shouldn't be committed. The MCP server (and the Vite/Next route handler) create `.pinagent/db.sqlite` and the `.pinagent/screenshots/` directory lazily on first submit.
 
 ## 2. Register the MCP server
 
@@ -19,8 +19,10 @@ Two scopes:
 
 | Scope | When | Command |
 | ----- | ---- | ------- |
-| **Project** | Tied to one repo. Recommended for testing. Writes `.mcp.json` in the project root. | `claude mcp add pinagent -s project -- node /Users/jacksonmalloy/code/pinagent/packages/mcp/dist/index.js` |
-| **User**    | Global — available in any project. | `claude mcp add pinagent -s user -- node /Users/jacksonmalloy/code/pinagent/packages/mcp/dist/index.js` |
+| **Project** | Tied to one repo. Recommended for testing. Writes `.mcp.json` in the project root. | `claude mcp add pinagent -s project -- pnpm dlx @pinagent/mcp` |
+| **User**    | Global — available in any project. | `claude mcp add pinagent -s user -- pnpm dlx @pinagent/mcp` |
+
+`@pinagent/mcp` is published to npm and ships the `pinagent-mcp` server binary; `pnpm dlx` fetches and runs it without a global install. (If `@pinagent/mcp` is already a project dependency, `claude mcp add pinagent pinagent-mcp` runs the installed bin directly.)
 
 In a monorepo, the MCP server's project root resolution (walks up looking for `.pinagent/` then `package.json`) may land at the wrong directory. **Pin it explicitly** by editing `.mcp.json`:
 
@@ -29,8 +31,8 @@ In a monorepo, the MCP server's project root resolution (walks up looking for `.
   "mcpServers": {
     "pinagent": {
       "type": "stdio",
-      "command": "node",
-      "args": ["/Users/jacksonmalloy/code/pinagent/packages/mcp/dist/index.js"],
+      "command": "pnpm",
+      "args": ["dlx", "@pinagent/mcp"],
       "env": {
         "PINAGENT_PROJECT_ROOT": "/absolute/path/to/apps/your-app"
       }
@@ -48,7 +50,7 @@ From the project directory:
 ```bash
 cd /path/to/target/repo
 claude mcp list 2>&1 | grep pinagent
-# expect:  pinagent: node /Users/.../@pinagent/mcp/dist/index.js - ✓ Connected
+# expect:  pinagent: pnpm dlx @pinagent/mcp - ✓ Connected
 ```
 
 If it isn't connected:
@@ -85,7 +87,7 @@ Four options. Match the mode to what kind of feedback flow you want.
 
 ### Channel mode (recommended for live, single-session work)
 
-The MCP server watches `.pinagent/feedback/` and pushes a `notifications/claude/channel` event into the running Claude Code session each time a new comment lands. The agent reacts immediately in the same session — no spawn cost, no context reset.
+The MCP server polls `.pinagent/db.sqlite` and pushes a `notifications/claude/channel` event into the running Claude Code session each time a new comment lands. The agent reacts immediately in the same session — no spawn cost, no context reset.
 
 Launch:
 

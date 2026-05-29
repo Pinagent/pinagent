@@ -1,0 +1,14 @@
+{
+  "name": "pinagent-setup",
+  "description": "Wire Pinagent into a Vite or Next.js project — click a UI element, leave a comment, and a Claude agent picks it up with file:line and a screenshot. Detects the runtime, installs the plugin, registers the MCP server, and sets tool permissions.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Pinagent",
+    "url": "https://github.com/Pinagent/pinagent"
+  },
+  "homepage": "https://github.com/Pinagent/pinagent",
+  "repository": "https://github.com/Pinagent/pinagent",
+  "license": "Apache-2.0",
+  "keywords": ["pinagent", "feedback", "vite", "nextjs", "mcp", "claude-code"],
+  "skills": "./.claude/skills"
+}

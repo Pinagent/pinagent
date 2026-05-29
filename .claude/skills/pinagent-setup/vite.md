@@ -2,31 +2,27 @@
 
 Target: any React app using Vite 5/6/7 in dev. The plugin is no-op on `vite build`.
 
-## 1. Build & pack the plugin
-
-From the pinagent repo:
-
-```bash
-cd /Users/jacksonmalloy/code/pinagent
-pnpm --filter @pinagent/widget build
-pnpm --filter @pinagent/vite-plugin build
-cd packages/vite-plugin
-pnpm pack
-# produces pinagent-vite-plugin-<version>.tgz
-```
-
-If pinagent code hasn't changed since last pack, skip — the existing tarball is fine.
-
-## 2. Install in the target
+## 1. Install the plugin
 
 ```bash
 cd /path/to/target/repo
-pnpm add -D /Users/jacksonmalloy/code/pinagent/packages/vite-plugin/pinagent-vite-plugin-<version>.tgz
+pnpm add -D @pinagent/vite-plugin
 ```
 
 If the consumer's `postinstall` hook is flaky (sherif lint, etc.) and rolls back the install, pass `--ignore-scripts` and the install will land cleanly — no pinagent behavior depends on those scripts.
 
-## 3. Add to `vite.config.ts`
+### Native build approval (pnpm only)
+
+pnpm 10+ blocks postinstall build scripts by default. The agent runner uses `better-sqlite3` server-side, which needs its native `.node` binding compiled — otherwise comment submission returns a 500 (`Could not locate the bindings file`). Approve it once:
+
+```bash
+pnpm approve-builds   # interactive; select better-sqlite3
+pnpm install          # re-run so the postinstall fires
+```
+
+Or non-interactively, add `{ "pnpm": { "onlyBuiltDependencies": ["better-sqlite3"] } }` to the target's `package.json`, then `pnpm install`. (npm and yarn build native binaries by default, so this only matters on pnpm.)
+
+## 2. Add to `vite.config.ts`
 
 ```ts
 import react from '@vitejs/plugin-react';
@@ -49,7 +45,7 @@ That's it for the build. The plugin handles:
 
 No layout/component changes needed (unlike Next).
 
-## 4. Common: gitignore + MCP
+## 3. Common: gitignore + MCP
 
 Continue with [mcp.md](./mcp.md) for the MCP server setup and `.gitignore` entry.
 
@@ -66,7 +62,7 @@ Then open the browser:
 
 1. 💬 button bottom-right
 2. Inspect any element → DOM has `data-pa-loc="src/Foo.tsx:42:7"`
-3. Click 💬 → pick element → submit → file lands at `<root>/.pinagent/feedback/`
+3. Click 💬 → pick element → submit → a row lands in `<root>/.pinagent/db.sqlite` and the screenshot at `<root>/.pinagent/screenshots/<id>.png`
 
 ## Configuration knobs
 
@@ -82,8 +78,8 @@ pinagent({
   //   'worktree'  — same, but in a fresh git worktree at
   //                 `.pinagent/worktrees/<id>` on a `pinagent/<id>` branch.
   //                 True parallel agents; review each branch like a PR.
-  //   'off'/false — no per-submit spawn. Use with channel mode or with
-  //                 `@pinagent/cli mcp` to drive the loop from your own agent.
+  //   'off'/false — no per-submit spawn. Use with channel mode or the
+  //                 `@pinagent/mcp` server to drive the loop from your own agent.
   spawnAgent: 'inline',
 });
 ```
