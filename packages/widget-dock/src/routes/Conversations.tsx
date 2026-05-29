@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import type { AgentEvent } from '@pinagent/shared';
+import { type AgentEvent, isNotionalCost } from '@pinagent/shared';
 import { StatusBadge } from '@pinagent/ui/components/status-badge';
 import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Button } from '@pinagent/ui/components/ui/button';
@@ -520,7 +520,12 @@ export function Conversations() {
                       <span className="text-[10px] tabular-nums">· {c.messageCount} msg</span>
                     )}
                     {c.totalCostUsd > 0 && (
-                      <CostChip cost={c.totalCostUsd} cap={capUsd} prefix="· " />
+                      <CostChip
+                        cost={c.totalCostUsd}
+                        cap={capUsd}
+                        prefix="· "
+                        apiKeySource={c.apiKeySource}
+                      />
                     )}
                   </>
                 }
@@ -592,6 +597,13 @@ function safePath(url: string): string {
  * a long-running conversation surfaces the cliff *before* the next
  * turn gets refused by `agent.ts.checkCostCaps`.
  *
+ * For OAuth/subscription runs (`isNotionalCost(apiKeySource)`), the
+ * dollar figure is notional — billed against the Claude subscription
+ * quota, not a card — so we relabel to `subscription` and tuck the
+ * API-equivalent amount into the tooltip, mirroring the in-page widget
+ * footer. The cap comparison/tone is skipped since there's no real
+ * spend to track against it.
+ *
  * Caller already gates rendering on `cost > 0` — we never render `$0`.
  */
 function CostChip({
@@ -599,20 +611,30 @@ function CostChip({
   cap,
   prefix = '',
   size = 'sm',
+  apiKeySource,
 }: {
   cost: number;
   cap: number | null | undefined;
   prefix?: string;
   size?: 'sm' | 'md';
+  apiKeySource?: string | null;
 }) {
+  const sizeClass = size === 'sm' ? 'text-[10px]' : 'text-[10.5px]';
+  if (isNotionalCost(apiKeySource)) {
+    return (
+      <span
+        className={cn('tabular-nums', sizeClass, 'text-muted-foreground')}
+        title={`≈ $${cost.toFixed(4)} API-equivalent (not billed — Claude subscription)`}
+      >
+        {prefix}
+        subscription
+      </span>
+    );
+  }
   const badge = formatCostBadge(cost, cap ?? undefined);
   return (
     <span
-      className={cn(
-        'tabular-nums',
-        size === 'sm' ? 'text-[10px]' : 'text-[10.5px]',
-        toneToClass(badge.tone),
-      )}
+      className={cn('tabular-nums', sizeClass, toneToClass(badge.tone))}
       title={
         cap
           ? `Running SDK cost — per-conversation cap is ${formatCostBadge(cap, undefined).label}`
@@ -852,6 +874,7 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
           answeredAskIds={answeredAskIds}
           onAnswerAsk={handleAnswerAsk}
           askDisabled={isMock}
+          apiKeySource={detail.apiKeySource}
         />
       </div>
 
@@ -1176,7 +1199,14 @@ function DetailHeader({
               </Badge>
             );
           })()}
-        {detail.totalCostUsd > 0 && <CostChip cost={detail.totalCostUsd} cap={capUsd} size="md" />}
+        {detail.totalCostUsd > 0 && (
+          <CostChip
+            cost={detail.totalCostUsd}
+            cap={capUsd}
+            size="md"
+            apiKeySource={detail.apiKeySource}
+          />
+        )}
       </div>
     </div>
   );
@@ -1341,6 +1371,8 @@ interface StreamViewProps {
   onAnswerAsk: (askId: string, answer: string) => void;
   /** Disable ask-user reply input — set when the run is done or mock. */
   askDisabled: boolean;
+  /** Run's credential source, so the `result` row can relabel notional cost. */
+  apiKeySource?: string | null;
 }
 
 type DisplayItem =
@@ -1354,6 +1386,7 @@ export function StreamView({
   answeredAskIds,
   onAnswerAsk,
   askDisabled,
+  apiKeySource,
 }: StreamViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -1417,6 +1450,7 @@ export function StreamView({
             answeredAskIds={answeredAskIds}
             onAnswerAsk={onAnswerAsk}
             askDisabled={askDisabled}
+            apiKeySource={apiKeySource}
           />
         ) : (
           <OptimisticRow key={d.key} item={d.item} />
@@ -1448,9 +1482,16 @@ interface StreamRowProps {
   answeredAskIds: ReadonlySet<string>;
   onAnswerAsk: (askId: string, answer: string) => void;
   askDisabled: boolean;
+  apiKeySource?: string | null;
 }
 
-function StreamRow({ item, answeredAskIds, onAnswerAsk, askDisabled }: StreamRowProps) {
+function StreamRow({
+  item,
+  answeredAskIds,
+  onAnswerAsk,
+  askDisabled,
+  apiKeySource,
+}: StreamRowProps) {
   if (item.kind === 'error') {
     return (
       <div className="rounded-lg border border-status-error-border bg-status-error-bg px-3 py-2 text-[12px] text-status-error-fg">
@@ -1465,6 +1506,7 @@ function StreamRow({ item, answeredAskIds, onAnswerAsk, askDisabled }: StreamRow
       answeredAskIds={answeredAskIds}
       onAnswerAsk={onAnswerAsk}
       disabled={askDisabled}
+      apiKeySource={apiKeySource}
     />
   );
 }
@@ -1475,9 +1517,17 @@ interface EventRowProps {
   answeredAskIds: ReadonlySet<string>;
   onAnswerAsk: (askId: string, answer: string) => void;
   disabled: boolean;
+  apiKeySource?: string | null;
 }
 
-function EventRow({ event, at, answeredAskIds, onAnswerAsk, disabled }: EventRowProps) {
+function EventRow({
+  event,
+  at,
+  answeredAskIds,
+  onAnswerAsk,
+  disabled,
+  apiKeySource,
+}: EventRowProps) {
   switch (event.type) {
     case 'init':
       return (
@@ -1542,15 +1592,22 @@ function EventRow({ event, at, answeredAskIds, onAnswerAsk, disabled }: EventRow
           {event.message}
         </div>
       );
-    case 'result':
+    case 'result': {
+      // OAuth/subscription runs report notional cost — label it as
+      // subscription quota rather than a billed dollar amount, matching
+      // the list/detail CostChip and the in-page widget footer.
+      const costLabel = isNotionalCost(apiKeySource)
+        ? `subscription (≈ $${event.totalCostUsd.toFixed(4)} API-equivalent)`
+        : `$${event.totalCostUsd.toFixed(4)}`;
       return (
         <RowFrame speaker="Agent" at={at} tone="meta">
           <p className="text-foreground/70 text-[11px]">
-            Result · {event.numTurns} turn{event.numTurns === 1 ? '' : 's'} · {event.durationMs}ms ·
-            ${event.totalCostUsd.toFixed(4)}
+            Result · {event.numTurns} turn{event.numTurns === 1 ? '' : 's'} · {event.durationMs}ms ·{' '}
+            {costLabel}
           </p>
         </RowFrame>
       );
+    }
     case 'status_changed':
       return (
         <div className="rounded-md border border-border bg-secondary/40 px-2.5 py-1 text-[10.5px] text-muted-foreground">

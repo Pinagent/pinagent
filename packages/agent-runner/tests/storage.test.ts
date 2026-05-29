@@ -413,6 +413,46 @@ describe('Storage', () => {
       expect(await s.computeConversationCost('aBcDeFgHiJ')).toBe(0);
     });
   });
+
+  describe('apiKeySource derivation', () => {
+    it('freshly created row (no init) reports apiKeySource: null', async () => {
+      const s = new Storage(root);
+      const id = nanoid(10);
+      await s.create(id, makeInput());
+      expect(await s.readApiKeySource(id)).toBeNull();
+      const read = await s.read(id);
+      expect(read?.apiKeySource).toBeNull();
+      const [listed] = await s.list();
+      expect(listed?.apiKeySource).toBeNull();
+    });
+
+    it('list + read surface apiKeySource from the persisted init event', async () => {
+      const bus = await import('../src/bus');
+      const s = new Storage(root);
+      const id = nanoid(10);
+      await s.create(id, makeInput());
+      const b = bus.getOrCreateBus(id, root);
+      await b.publish({
+        type: 'init',
+        sessionId: 'sess1234',
+        model: 'claude',
+        permissionMode: 'default',
+        apiKeySource: 'oauth',
+      });
+
+      expect(await s.readApiKeySource(id)).toBe('oauth');
+      const read = await s.read(id);
+      expect(read?.apiKeySource).toBe('oauth');
+      const list = await s.list();
+      expect(list.find((r) => r.id === id)?.apiKeySource).toBe('oauth');
+    });
+
+    it('readApiKeySource returns null for unknown / invalid ids', async () => {
+      const s = new Storage(root);
+      expect(await s.readApiKeySource('!')).toBeNull();
+      expect(await s.readApiKeySource('aBcDeFgHiJ')).toBeNull();
+    });
+  });
 });
 
 describe('isInGitignore', () => {

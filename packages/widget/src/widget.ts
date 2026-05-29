@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { WorktreeWireState } from '@pinagent/shared';
+import { isNotionalCost, type WorktreeWireState } from '@pinagent/shared';
 import { BRAND_GOLD, FONT_SANS, STATUS, type StatusKey } from '@pinagent/ui/tokens';
 import { createAgentTray, type RawFeedback, type TrayAgent } from './agent-tray';
 import { BRAND_CREAM, BRAND_INK, BRAND_VIEWBOX, PICKER_CURSOR_DATA_URL, PIN_PATH } from './brand';
@@ -2477,7 +2477,7 @@ function attachStreamHandler(
         const ok = subtype === 'success';
         header.textContent = ok ? '✓ Done' : `Ended: ${subtype}`;
         const turnsLabel = `${turns} turn${turns === 1 ? '' : 's'}`;
-        if (apiKeySource === 'oauth') {
+        if (isNotionalCost(apiKeySource)) {
           footer.textContent = `${turnsLabel} · subscription`;
           footer.title = `≈ $${cost.toFixed(4)} API-equivalent (not billed — Claude subscription)`;
         } else {
