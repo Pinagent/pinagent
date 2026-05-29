@@ -13,6 +13,7 @@ export { createBearerAuthenticator } from './authenticators';
 export { type CloudConfig, loadCloudConfig, type OidcConnectionConfig } from './config';
 export { createPgAuditSink } from './db/audit-sink';
 export { createNeonDb } from './db/client';
+export { createPgCostControlStore } from './db/cost-control-store';
 export {
   createNeonMembershipStore,
   createPgMembershipStore,
@@ -21,6 +22,7 @@ export {
 export { createPgMeterSink } from './db/meter-sink';
 export {
   auditEvents,
+  costControls,
   organizationMemberships,
   organizations,
   schema,
