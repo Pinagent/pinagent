@@ -78,5 +78,6 @@ async function buildApp(config: CloudConfig) {
       defaultReturnTo: config.loginReturnTo,
       audit,
     },
+    read: { store, authenticate, audit, meter },
   });
 }

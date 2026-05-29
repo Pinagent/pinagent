@@ -16,6 +16,7 @@
  */
 export const PACKAGE_NAME = '@pinagent/ee-auth';
 
+export { authorizeOrgMember } from './authz';
 export {
   AccessDeniedError,
   AuthError,

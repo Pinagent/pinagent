@@ -1,20 +1,25 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { handleSsoCallback, handleSsoStart, type LoginServiceDeps } from './login-service';
+import { handleAudit, handleMembers, handleUsage, type ReadServiceDeps } from './read-service';
 import { handleSessionRequest, type SessionServiceDeps } from './session-service';
 
 /**
- * The cloud control-plane HTTP surface, composed from the session + login
- * services. Framework-agnostic (`{ fetch }`), so `worker.ts` (or a Node
+ * The cloud control-plane HTTP surface, composed from the session, login, and
+ * read services. Framework-agnostic (`{ fetch }`), so `worker.ts` (or a Node
  * server) just builds the deps and forwards requests here.
  *
  *   GET  /sso/start            → begin IdP login
  *   GET  /sso/callback         → complete login, set session cookie
  *   POST /sessions             → exchange the session for a relay token
+ *   GET  /usage                → usage summary (admin read)
+ *   GET  /audit                → audit events (admin read)
+ *   GET  /members              → organization members (admin read)
  *   GET  /healthz              → liveness
  */
 export interface CloudAppDeps {
   session: SessionServiceDeps;
   login: LoginServiceDeps;
+  read: ReadServiceDeps;
 }
 
 export function createCloudApp(deps: CloudAppDeps): { fetch(request: Request): Promise<Response> } {
@@ -28,6 +33,12 @@ export function createCloudApp(deps: CloudAppDeps): { fetch(request: Request): P
           return handleSsoCallback(request, deps.login);
         case '/sessions':
           return handleSessionRequest(request, deps.session);
+        case '/usage':
+          return handleUsage(request, deps.read);
+        case '/audit':
+          return handleAudit(request, deps.read);
+        case '/members':
+          return handleMembers(request, deps.read);
         case '/healthz':
           return Promise.resolve(new Response('ok', { status: 200 }));
         default:
