@@ -65,6 +65,14 @@ jobs:
       - name: Lint SPDX headers
         run: pnpm lint:spdx
 
+      # Max-lines check: source files (.ts/.tsx/.js/.jsx/.mjs/.cjs/.css)
+      # must stay under 1000 lines to keep modules reviewable. Generated
+      # files (__generated__/, *.d.ts, dist/) are exempt. A short allowlist
+      # in scripts/check-max-lines.mjs grandfathers in files that predate
+      # the cap — split them and remove the entry, don't add new ones.
+      - name: Lint max lines
+        run: pnpm lint:max-lines
+
       # Workspace-deps check: every @pinagent/* entry in a package's
       # `dependencies` must be imported by at least one file in src/,
       # tests/, scripts/, or *.config.*. Catches stale runtime

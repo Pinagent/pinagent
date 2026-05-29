@@ -13,6 +13,7 @@
     "lint:deps": "sherif --ignore-package react-vite-example --ignore-package next-app-example",
     "lint:deps:fix": "sherif --fix --ignore-package react-vite-example --ignore-package next-app-example",
     "lint:spdx": "node scripts/check-spdx.mjs",
+    "lint:max-lines": "node scripts/check-max-lines.mjs",
     "lint:widget-cascade": "node scripts/widget-cascade-check.mjs",
     "lint:workspace-deps": "node scripts/check-workspace-deps.mjs",
     "lint:undeclared-imports": "node scripts/check-undeclared-imports.mjs",
