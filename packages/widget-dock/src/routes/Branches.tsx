@@ -15,14 +15,7 @@ import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
 import { useNavigate } from '@tanstack/react-router';
-import {
-  AlertTriangle,
-  AppWindow,
-  ExternalLink,
-  GitBranch,
-  MessageSquare,
-  Trash2,
-} from 'lucide-react';
+import { AlertTriangle, AppWindow, GitBranch, MessageSquare, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TimestampDot } from '../components/TimestampDot';
 import type { Branch } from '../fixtures/types';
@@ -31,7 +24,6 @@ import {
   useBulkPruneBranches,
   usePruneBranch,
   usePruneStaleBranches,
-  useServeBranch,
   useWorktreeServers,
 } from '../hooks/useBranches';
 import { useSettings } from '../hooks/useSettings';
@@ -448,24 +440,10 @@ function BranchRow({
   onOpenInDock: (() => void) | null;
 }) {
   const pruneMutation = usePruneBranch();
-  const serveMutation = useServeBranch();
   const disabled = isMock || !branch.conversationId || pruneMutation.isPending || bulkPending;
   const handlePrune = (): void => {
     if (!branch.conversationId) return;
     pruneMutation.mutate(branch.conversationId);
-  };
-  // "Open app" stands up (or reuses) a dev server rooted at this worktree
-  // and opens its URL in a new browser tab. Disabled in mock mode (the
-  // fake URL points nowhere) and for inline-mode rows (no worktree).
-  const serveDisabled =
-    isMock || !branch.conversationId || serveMutation.isPending || pruneMutation.isPending;
-  const handleServe = (): void => {
-    if (!branch.conversationId) return;
-    serveMutation.mutate(branch.conversationId, {
-      onSuccess: (result) => {
-        window.open(result.url, '_blank', 'noopener,noreferrer');
-      },
-    });
   };
 
   return (
@@ -537,11 +515,6 @@ function BranchRow({
               · prune failed
             </span>
           )}
-          {serveMutation.isError && (
-            <span className="text-[10px] text-status-error-fg" title={serveMutation.error.message}>
-              · couldn't start dev server
-            </span>
-          )}
         </div>
       </div>
       {onOpenInDock && (
@@ -551,27 +524,11 @@ function BranchRow({
           disabled={isMock || !branch.conversationId}
           onClick={onOpenInDock}
           className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-          title="Preview this worktree's app inside the dock"
+          title="Preview this worktree's app in the dock (use the preview's ↗ button for a new tab)"
         >
           <AppWindow className="h-3 w-3" />
         </Button>
       )}
-      <Button
-        size="sm"
-        variant="ghost"
-        disabled={serveDisabled}
-        onClick={handleServe}
-        className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-        title={
-          isMock
-            ? 'Mock mode — fake serve'
-            : serveMutation.isPending
-              ? 'Starting dev server…'
-              : 'Open this worktree’s app in a new tab'
-        }
-      >
-        {serveMutation.isPending ? '…' : <ExternalLink className="h-3 w-3" />}
-      </Button>
       <Button
         size="sm"
         variant="ghost"

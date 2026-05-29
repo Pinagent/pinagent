@@ -50,6 +50,29 @@ function suppressDock(url: string): string {
   }
 }
 
+// Persist the last-viewed worktree so it's restored after a full dock
+// reload (embedded mode uses memory history, so the `?id` search param is
+// lost on reload). All access is wrapped — localStorage can throw in
+// locked-down/incognito contexts, and we'd rather degrade than crash.
+const LAST_WORKTREE_KEY = 'pinagent.dock.preview.lastWorktree';
+
+function readLastWorktree(): string | null {
+  try {
+    return window.localStorage.getItem(LAST_WORKTREE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeLastWorktree(id: string | null): void {
+  try {
+    if (id) window.localStorage.setItem(LAST_WORKTREE_KEY, id);
+    else window.localStorage.removeItem(LAST_WORKTREE_KEY);
+  } catch {
+    // Persistence is best-effort.
+  }
+}
+
 export function WorktreePreview() {
   const branchesQuery = useBranches();
   const serversQuery = useWorktreeServers();
@@ -79,8 +102,29 @@ export function WorktreePreview() {
   }, [serversQuery.data]);
 
   const select = (target: string | null): void => {
+    // Persist on explicit selection (including "main" → clear) so we never
+    // re-restore a worktree the user just dismissed.
+    writeLastWorktree(target);
     void navigate({ to: '/preview', search: target ? { id: target } : {} });
   };
+
+  // Restore the last-viewed worktree on a cold open (no `?id` yet), once
+  // the worktree list has loaded so we can drop a stale (pruned) id. Runs
+  // at most once; an explicit/deep-linked selection always wins.
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current) return;
+    if (selectedId) {
+      restoredRef.current = true;
+      return;
+    }
+    if (worktrees.length === 0) return; // wait for the list
+    restoredRef.current = true;
+    const last = readLastWorktree();
+    if (last && worktrees.some((w) => w.conversationId === last)) {
+      void navigate({ to: '/preview', search: { id: last }, replace: true });
+    }
+  }, [selectedId, worktrees, navigate]);
 
   // Auto-start the selected worktree's server if it isn't running yet —
   // covers deep-links from the Branches "Open in dock" action. Guarded by
