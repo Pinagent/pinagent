@@ -17,9 +17,14 @@ import { type QuickAction, quickActionsFor } from './quick-actions';
 import { capturePageScreenshot } from './screenshot';
 import {
   breadcrumbTags,
+  componentOf,
+  componentPath,
   describeElementLabel,
+  elementFingerprint,
   findLoc,
+  findLocEl,
   findReanchorTarget,
+  locInstanceInfo,
   type PaLoc,
   shortSelector,
 } from './selector';
@@ -93,12 +98,27 @@ interface ExtraAnchor {
   selector: string;
   clickX: number;
   clickY: number;
+  /** Enclosing component name (`data-pa-comp`) for this extra pick. */
+  component?: string | null;
+}
+
+/**
+ * Loop-instance disambiguation for the primary target, populated only
+ * when its `data-pa-loc` is shared by more than one live element (a
+ * `.map()`). `index` is the 0-based position among those siblings.
+ */
+interface InstanceInfo {
+  index: number;
+  total: number;
+  fingerprint: string;
 }
 
 interface ComposerMeta {
   tag: string;
   label: string | null;
   loc: PaLoc | null;
+  /** Enclosing component name from `data-pa-comp`; null when uninstrumented. */
+  component: string | null;
   breadcrumbs: string[];
   chips: QuickAction[];
   /**
@@ -212,6 +232,16 @@ interface Composer {
    * common single-pick case.
    */
   extraAnchors: ExtraAnchor[];
+  /**
+   * Enclosing-component context for the primary target, captured at pick
+   * time from `data-pa-comp`. `component` is the nearest component name;
+   * `componentPath` the outer→inner chain; `instance` is set only when
+   * the target's `data-pa-loc` is rendered more than once (loop). All
+   * forwarded to the server in the submit payload.
+   */
+  component: string | null;
+  componentPath: string[];
+  instance: InstanceInfo | null;
   /**
    * True when neither `dataPaLoc` nor `selector` resolves to a live
    * element. The widget stays put at its last known coordinates with a
@@ -1003,8 +1033,27 @@ export function mount(): void {
     click: { x: number; y: number },
     extras: Array<{ target: Element; click: { x: number; y: number } }> = [],
   ): Composer {
-    const loc = findLoc(target);
+    const locHit = findLocEl(target);
+    const loc = locHit?.loc ?? null;
     const selector = shortSelector(target);
+    // Enclosing-component context (from `data-pa-comp`). `component` and
+    // the path read off the same walk-up as the loc; `instance` is only
+    // meaningful when the resolved loc is shared by several live nodes
+    // (a `.map()`), so we leave it null otherwise to keep single-pick
+    // payloads byte-identical to before.
+    const component = componentOf(target);
+    const compPath = componentPath(target);
+    let instance: InstanceInfo | null = null;
+    if (locHit) {
+      const info = locInstanceInfo(locHit.el, locHit.raw);
+      if (info.total > 1) {
+        instance = {
+          index: Math.max(0, info.index),
+          total: info.total,
+          fingerprint: elementFingerprint(locHit.el),
+        };
+      }
+    }
     // Resolve each extra once, deriving both the wire anchor (sent to
     // the server on submit) and the display row (the badge popover).
     const extraData = extras.map(({ target: t, click: c }) => {
@@ -1017,6 +1066,7 @@ export function mount(): void {
           selector: shortSelector(t),
           clickX: c.x,
           clickY: c.y,
+          component: componentOf(t),
         } as ExtraAnchor,
         display: { tag: t.tagName.toLowerCase(), label: describeElementLabel(t), loc: eloc },
       };
@@ -1026,6 +1076,7 @@ export function mount(): void {
       tag: target.tagName.toLowerCase(),
       label: describeElementLabel(target),
       loc,
+      component,
       breadcrumbs: breadcrumbTags(target),
       chips: quickActionsFor(target),
       extraCount: extraAnchors.length,
@@ -1237,6 +1288,9 @@ export function mount(): void {
       dataPaLoc,
       selector,
       extraAnchors,
+      component,
+      componentPath: compPath,
+      instance,
       anchorLost: false,
       userOffsetX: 0,
       userOffsetY: 0,
@@ -1736,6 +1790,11 @@ export function mount(): void {
             screenshot,
             createdAt: new Date().toISOString(),
             additionalAnchors: c.extraAnchors.length > 0 ? c.extraAnchors : undefined,
+            // Enclosing-component context (omitted when uninstrumented so
+            // the wire shape is unchanged for non-Babel-tagged apps).
+            component: c.component ?? undefined,
+            componentPath: c.componentPath.length > 0 ? c.componentPath : undefined,
+            instance: c.instance ?? undefined,
           };
           const res = await fetch(ENDPOINT, {
             method: 'POST',
@@ -1781,6 +1840,11 @@ export function mount(): void {
                   clickY: click.y,
                   viewportW: payload.viewport.w,
                   viewportH: payload.viewport.h,
+                  component: c.component,
+                  componentPath: c.componentPath.length > 0 ? c.componentPath : null,
+                  instanceIndex: c.instance?.index ?? null,
+                  instanceTotal: c.instance?.total ?? null,
+                  instanceFingerprint: c.instance?.fingerprint ?? null,
                   additionalAnchors: c.extraAnchors.length > 0 ? c.extraAnchors : undefined,
                 },
               }).catch((err) =>
@@ -2861,6 +2925,10 @@ function renderHeader(meta: ComposerMeta, esc: (s: string) => string): string {
     `<div class="hdr-row hdr-identity">` +
     `<span class="el-pill">&lt;${esc(meta.tag)}&gt;</span>` +
     (meta.label ? `<span class="el-label">"${esc(meta.label)}"</span>` : '') +
+    // Enclosing component (from data-pa-comp), when instrumented — tells
+    // the user (and, via the payload, the agent) which component owns the
+    // picked element, e.g. `in <PriceCard>`.
+    (meta.component ? `<span class="el-comp">in &lt;${esc(meta.component)}&gt;</span>` : '') +
     extraBadge +
     `</div>`;
 

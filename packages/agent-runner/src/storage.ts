@@ -42,8 +42,22 @@ const AdditionalAnchorSchema = z.object({
   selector: z.string().max(2000),
   clickX: z.number().int().min(-1_000_000).max(1_000_000),
   clickY: z.number().int().min(-1_000_000).max(1_000_000),
+  /** Enclosing component name for this extra pick, when instrumented. */
+  component: z.string().max(256).nullable().optional(),
 });
 export type AdditionalAnchor = z.infer<typeof AdditionalAnchorSchema>;
+
+/**
+ * Loop-instance disambiguation captured at pick time. Present only when
+ * the target's `data-pa-loc` is shared by more than one live element (a
+ * `.map()`), so the agent can tell which item was clicked.
+ */
+const InstanceInfoSchema = z.object({
+  index: z.number().int().min(0).max(1_000_000),
+  total: z.number().int().min(1).max(1_000_000),
+  fingerprint: z.string().max(512),
+});
+export type InstanceInfo = z.infer<typeof InstanceInfoSchema>;
 
 export const FeedbackInputSchema = z.object({
   comment: z.string().min(1).max(8000),
@@ -69,6 +83,13 @@ export const FeedbackInputSchema = z.object({
    * to keep a runaway client from blowing up the JSON column.
    */
   additionalAnchors: z.array(AdditionalAnchorSchema).max(32).optional(),
+  /**
+   * Enclosing-component context from `data-pa-comp`. All optional for
+   * backward compatibility with clients that predate the attribute.
+   */
+  component: z.string().max(256).nullable().optional(),
+  componentPath: z.array(z.string().max(256)).max(16).optional(),
+  instance: InstanceInfoSchema.nullable().optional(),
 });
 export type FeedbackInput = z.infer<typeof FeedbackInputSchema>;
 
@@ -94,6 +115,20 @@ export interface FeedbackRecord {
    * v1; the agent prompt doesn't yet enumerate them.
    */
   additionalAnchors: AdditionalAnchor[] | null;
+  /**
+   * Enclosing component name (`data-pa-comp`) of the primary target, e.g.
+   * `PriceCard`. Null in uninstrumented apps or outside any component.
+   */
+  component: string | null;
+  /** Outer→inner chain of distinct enclosing component names. Null when uninstrumented. */
+  componentPath: string[] | null;
+  /**
+   * Loop-instance disambiguation: which of N elements sharing the target's
+   * `data-pa-loc` was clicked. All null unless the loc was ambiguous.
+   */
+  instanceIndex: number | null;
+  instanceTotal: number | null;
+  instanceFingerprint: string | null;
   /** Path relative to .pinagent/, e.g. `screenshots/abc.png`. */
   screenshot: string;
   status: Status;
@@ -262,6 +297,11 @@ export class Storage {
         viewportW: rec.viewport.w,
         viewportH: rec.viewport.h,
         userAgent: rec.userAgent,
+        component: rec.component,
+        componentPath: rec.componentPath,
+        instanceIndex: rec.instanceIndex,
+        instanceTotal: rec.instanceTotal,
+        instanceFingerprint: rec.instanceFingerprint,
         additionalAnchors: rec.additionalAnchors,
       })
       .onConflictDoNothing();
@@ -284,6 +324,8 @@ export class Storage {
       createdAt,
       updatedAt: createdAt,
     });
+    const componentPath =
+      input.componentPath && input.componentPath.length > 0 ? input.componentPath : null;
     await db.insert(widgetAnchors).values({
       conversationId: id,
       url: input.url,
@@ -294,6 +336,11 @@ export class Storage {
       viewportW: input.viewport.w,
       viewportH: input.viewport.h,
       userAgent: input.userAgent,
+      component: input.component ?? null,
+      componentPath,
+      instanceIndex: input.instance?.index ?? null,
+      instanceTotal: input.instance?.total ?? null,
+      instanceFingerprint: input.instance?.fingerprint ?? null,
       additionalAnchors:
         input.additionalAnchors && input.additionalAnchors.length > 0
           ? input.additionalAnchors
@@ -314,6 +361,11 @@ export class Storage {
         input.additionalAnchors && input.additionalAnchors.length > 0
           ? input.additionalAnchors
           : null,
+      component: input.component ?? null,
+      componentPath,
+      instanceIndex: input.instance?.index ?? null,
+      instanceTotal: input.instance?.total ?? null,
+      instanceFingerprint: input.instance?.fingerprint ?? null,
       screenshot: pngRel,
       status: 'pending',
       note: null,
@@ -602,6 +654,11 @@ function rowToRecord(
     viewport: { w: a?.viewportW ?? 0, h: a?.viewportH ?? 0 },
     userAgent: a?.userAgent ?? '',
     additionalAnchors: a?.additionalAnchors ?? null,
+    component: a?.component ?? null,
+    componentPath: a?.componentPath ?? null,
+    instanceIndex: a?.instanceIndex ?? null,
+    instanceTotal: a?.instanceTotal ?? null,
+    instanceFingerprint: a?.instanceFingerprint ?? null,
     // Derived from id — every screenshot lives at the same path.
     screenshot: join('screenshots', `${c.id}.png`),
     status: c.status,

@@ -1359,12 +1359,41 @@ function buildInitialPrompt(rec: FeedbackRecord, mode: SpawnAgentMode, cwd: stri
         ].join('\n')
       : '';
 
+  const componentLine = rec.component ? `Component: <${rec.component}>` : '';
+  const componentPathLine =
+    rec.componentPath && rec.componentPath.length > 1
+      ? `Component path: ${rec.componentPath.join(' › ')}`
+      : '';
+  // When the target's file:line is shared by several rendered instances
+  // (a `.map()`), the bare location is ambiguous. Tell the agent which
+  // instance was clicked and how to recognise it, so it edits the right
+  // list item rather than the first match.
+  const instanceNote =
+    rec.instanceTotal && rec.instanceTotal > 1
+      ? [
+          '',
+          `Heads up: this target's source location is rendered ${rec.instanceTotal} times`,
+          `(likely a list/.map()). The developer clicked instance #${
+            (rec.instanceIndex ?? 0) + 1
+          } of ${rec.instanceTotal}.`,
+          rec.instanceFingerprint ? `That instance's content: ${rec.instanceFingerprint}` : '',
+          `The file:line points at the *shared* JSX literal — edit there, but use the`,
+          `screenshot and the content above to act on the correct item if the change is`,
+          `instance-specific (e.g. its data source) rather than the markup itself.`,
+        ]
+          .filter((l) => l !== '')
+          .join('\n')
+      : '';
+
   return [
     'A developer submitted Pinagent feedback. Address it autonomously.',
     '',
     `Feedback id: ${rec.id}`,
     `Target: ${where}`,
+    componentLine,
+    componentPathLine,
     `Comment: "${rec.comment.replace(/\s+/g, ' ').slice(0, 200)}"`,
+    instanceNote,
     worktreeContext,
     '',
     'Workflow:',

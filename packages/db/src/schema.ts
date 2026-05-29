@@ -111,6 +111,38 @@ export const widgetAnchors = sqliteTable('widget_anchors', {
   /** From `navigator.userAgent` at pick time. Mostly for debugging. */
   userAgent: text('user_agent'),
   /**
+   * Enclosing component name, from the `data-pa-comp` attribute the
+   * Babel plugin stamps next to `data-pa-loc`. Lets the agent prompt say
+   * "you clicked inside `<PriceCard>`" rather than a bare file:line. Null
+   * in uninstrumented apps or when the element sits outside any
+   * PascalCase component.
+   */
+  component: text('component'),
+  /**
+   * Outer→inner chain of distinct enclosing component names, e.g.
+   * `["App", "PriceList", "PriceCard"]`. Gives the agent structural
+   * context about where in the component tree the target lives. Null
+   * when nothing is instrumented.
+   */
+  componentPath: text('component_path', { mode: 'json' }).$type<string[]>(),
+  /**
+   * Loop-instance disambiguation. When the same JSX literal is rendered
+   * more than once (a `.map()`), `data-pa-loc` is ambiguous: many DOM
+   * nodes share one file:line. These capture *which* instance the user
+   * clicked — `instanceIndex` is the 0-based position among siblings
+   * sharing the loc and `instanceTotal` the count. Both null for the
+   * common unique-loc case so single-pick rows are unchanged.
+   */
+  instanceIndex: integer('instance_index'),
+  instanceTotal: integer('instance_total'),
+  /**
+   * A short content fingerprint (text snippet + identity-ish attributes)
+   * of the clicked instance, so the agent can locate the right `.map()`
+   * item from the screenshot + source even though the file:line points
+   * at the shared JSX literal. Null unless the loc was ambiguous.
+   */
+  instanceFingerprint: text('instance_fingerprint'),
+  /**
    * Secondary elements picked via Cmd/Ctrl-click before the committing
    * click. Same shape as the primary anchor's location columns, minus
    * the viewport/userAgent context (those are shared at the conversation
@@ -127,6 +159,8 @@ export const widgetAnchors = sqliteTable('widget_anchors', {
       selector: string;
       clickX: number;
       clickY: number;
+      /** Enclosing component name for this extra pick, when instrumented. */
+      component?: string | null;
     }>
   >(),
 });

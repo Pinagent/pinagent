@@ -77,6 +77,16 @@ export const COMPOSER_STYLES = `
     white-space: nowrap;
     min-width: 0;
   }
+  /* Enclosing component name (data-pa-comp), e.g. "in <PriceCard>". Muted
+     mono so it reads as source metadata next to the element label. */
+  .el-comp {
+    font-family: ${FONT_MONO};
+    font-size: 11px;
+    color: ${BRAND_INK};
+    opacity: 0.6;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
   /* "+N more" badge for Cmd/Ctrl-click extras. Same shape as el-pill
      but gold so it stands out as "additional selections". Cursor: help
      so the hover-to-preview affordance reads. */
