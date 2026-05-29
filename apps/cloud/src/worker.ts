@@ -1,0 +1,69 @@
+// SPDX-License-Identifier: Elastic-2.0
+import { createOidcProvider, type SsoConnection } from '@pinagent/ee-auth';
+import { createCloudApp } from './app';
+import { createBearerAuthenticator } from './authenticators';
+import { type CloudConfig, loadCloudConfig } from './config';
+import { createNeonMembershipStore } from './db/membership-store';
+
+/**
+ * Cloudflare Worker entry / composition root for the Pinagent cloud control
+ * plane. Wires config + Neon membership store + OIDC provider + the session
+ * and login services into one fetch handler. The app is built once per isolate
+ * (the Neon pool and discovery cache are reused across requests).
+ */
+
+type CloudEnv = Record<string, string | undefined>;
+
+let appPromise: Promise<{ fetch(request: Request): Promise<Response> }> | null = null;
+
+export default {
+  fetch(request: Request, env: CloudEnv): Promise<Response> {
+    appPromise ??= buildApp(loadCloudConfig(env));
+    return appPromise.then((app) => app.fetch(request));
+  },
+};
+
+async function buildApp(config: CloudConfig) {
+  const store = await createNeonMembershipStore(config.databaseUrl);
+
+  const connection: SsoConnection = {
+    id: config.oidc.connectionId,
+    organizationId: config.oidc.organizationId,
+    protocol: 'oidc',
+    issuer: config.oidc.issuer,
+    domains: [],
+    enabled: true,
+  };
+
+  const provider = createOidcProvider({
+    clientFor: () => ({
+      clientId: config.oidc.clientId,
+      clientSecret: config.oidc.clientSecret,
+      redirectUri: config.oidc.redirectUri,
+    }),
+    nonceSecret: config.oidcNonceSecret,
+  });
+
+  const authenticate = createBearerAuthenticator(config.userTokenSecret, {
+    cookieName: config.sessionCookieName,
+  });
+
+  return createCloudApp({
+    session: {
+      store,
+      authenticate,
+      secret: config.relayAuthSecret,
+      relayUrl: config.relayPublicUrl,
+      ttlSeconds: config.sessionTtlSeconds,
+    },
+    login: {
+      provider,
+      connection,
+      stateSecret: config.ssoStateSecret,
+      userTokenSecret: config.userTokenSecret,
+      userTokenTtlSeconds: config.userTokenTtlSeconds,
+      cookieName: config.sessionCookieName,
+      defaultReturnTo: config.loginReturnTo,
+    },
+  });
+}

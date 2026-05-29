@@ -8,14 +8,16 @@ export { PACKAGE_NAME as INFRA_PACKAGE } from '@pinagent/ee-infra';
 export { PACKAGE_NAME as RELAY_PACKAGE } from '@pinagent/ee-relay';
 export { PACKAGE_NAME as TEAM_FEATURES_PACKAGE } from '@pinagent/ee-team-features';
 
+export { type CloudAppDeps, createCloudApp } from './app';
 export { createBearerAuthenticator } from './authenticators';
-export { type CloudConfig, loadCloudConfig } from './config';
+export { type CloudConfig, loadCloudConfig, type OidcConnectionConfig } from './config';
 export {
   createNeonMembershipStore,
   createPgMembershipStore,
   type MembershipDb,
 } from './db/membership-store';
 export { organizationMemberships, organizations, schema } from './db/schema';
+export { handleSsoCallback, handleSsoStart, type LoginServiceDeps } from './login-service';
 export {
   type AuthenticatedUser,
   type Authenticator,
@@ -25,5 +27,6 @@ export {
   handleSessionRequest,
   type SessionServiceDeps,
 } from './session-service';
+export { type LoginState, signLoginState, verifyLoginState } from './sso-state';
 
 export const PACKAGE_NAME = '@pinagent/cloud';

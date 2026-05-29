@@ -75,7 +75,13 @@ export {
   type SsoProvider,
   unimplementedSsoProvider,
 } from './sso';
-export type { CodecFailure, VerifyOutcome } from './token-codec';
+export {
+  type CodecFailure,
+  nowSeconds,
+  signClaims,
+  type VerifyOutcome,
+  verifyClaims,
+} from './token-codec';
 export {
   type SignUserTokenOptions,
   signUserToken,
