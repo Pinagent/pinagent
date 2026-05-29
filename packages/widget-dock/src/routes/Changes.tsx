@@ -50,10 +50,13 @@ export function Changes() {
   const isMock = transport.kind === 'mock';
 
   // "Create PR" hands the selection off to the /prs/new composer route
-  // via `?ids=` — that route owns the picker + compose form. Stale ids
-  // (a row that auto-landed before navigation) just don't match there.
-  const compose = () =>
-    void navigate({ to: ROUTE_PATHS.prsNew, search: { ids: [...selected].join(',') } });
+  // via `?ids=` — that route owns the picker + compose form. We resolve
+  // the selected change-ids to conversationIds (the identity the picker
+  // pre-checks on); stale rows that already dropped out are skipped.
+  const compose = () => {
+    const ids = ready.filter((c) => selected.has(c.id)).map((c) => c.conversationId);
+    void navigate({ to: ROUTE_PATHS.prsNew, search: { ids: ids.join(',') } });
+  };
 
   return (
     <div className="flex flex-1 flex-col min-h-0">

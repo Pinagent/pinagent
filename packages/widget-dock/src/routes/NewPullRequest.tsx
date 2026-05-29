@@ -43,9 +43,10 @@ export function NewPullRequest() {
     [changesQuery.data],
   );
 
-  // Seed the check state from `?ids=` once. Keyed on Change.id to match
-  // the identity the Changes view selects on. Stale ids (no longer ready)
-  // simply don't match any row, so they drop out silently.
+  // Seed the check state from `?ids=` once. Keyed on conversationId —
+  // the identity both the Changes multi-select and the conversation
+  // detail view emit, and what Composer ultimately submits. Stale ids
+  // (no longer ready) simply don't match any row, so they drop silently.
   const [picked, setPicked] = useState<Set<string>>(() => new Set(parseComposeIds(search)));
   // Snapshot of the conversations taken when the user hits "Continue".
   // Held independently of `picked` so clearing the selection on success
@@ -63,7 +64,10 @@ export function NewPullRequest() {
   // Resolve the picked ids against the latest ready list — the same
   // staleness guard the Changes view used (a conversation may have
   // auto-landed between selection and "Continue"). Order follows the list.
-  const pickedChanges = useMemo(() => ready.filter((c) => picked.has(c.id)), [ready, picked]);
+  const pickedChanges = useMemo(
+    () => ready.filter((c) => picked.has(c.conversationId)),
+    [ready, picked],
+  );
 
   if (composing) {
     return (
@@ -127,8 +131,8 @@ export function NewPullRequest() {
             <PickerRow
               key={c.id}
               change={c}
-              checked={picked.has(c.id)}
-              onToggle={() => toggle(c.id)}
+              checked={picked.has(c.conversationId)}
+              onToggle={() => toggle(c.conversationId)}
             />
           ))}
       </div>

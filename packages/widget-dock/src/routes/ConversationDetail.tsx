@@ -13,12 +13,14 @@ import { Input } from '@pinagent/ui/components/ui/input';
 import { Textarea } from '@pinagent/ui/components/ui/textarea';
 import { cn } from '@pinagent/ui/lib/utils';
 import type { StatusKey } from '@pinagent/ui/tokens';
+import { useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Archive,
   ArchiveRestore,
   ArrowLeft,
   ClipboardCopy,
+  GitPullRequest,
   Pencil,
   Send,
   Terminal,
@@ -34,6 +36,7 @@ import { useSettings } from '../hooks/useSettings';
 import { useUpdateConversation } from '../hooks/useUpdateConversation';
 import { permissionModeDisplay } from '../lib/permissionMode';
 import { copyClaudeCommand, openInClaudeCode } from '../lib/vscode-bridge';
+import { ROUTE_PATHS } from '../route-paths';
 import { useExtensionLaunch } from '../shell/ExtensionLaunch';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
@@ -63,6 +66,7 @@ import { deriveEffectiveStatus } from './conversation-status';
  */
 export function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void }) {
   const transport = useTransport();
+  const navigate = useNavigate();
   const detailQuery = useConversation(id);
   const stream = useConversationStream(id);
   const isMock = transport.kind === 'mock';
@@ -325,6 +329,17 @@ export function ConversationDetailView({ id, onBack }: { id: string; onBack: () 
               </Button>
             ) : (
               <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1.5 text-xs"
+                  disabled={!canLand || showLifecycleBusy}
+                  onClick={() => void navigate({ to: ROUTE_PATHS.prsNew, search: { ids: id } })}
+                  title="Open a PR for this conversation"
+                >
+                  <GitPullRequest className="h-3.5 w-3.5" />
+                  Create PR
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
