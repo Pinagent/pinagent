@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { isRole, type Role } from '@pinagent/ee-auth';
+import type { RelayEventType } from './relay-events';
 import { type ClientAttachment, RelayHub, type RelaySocket } from './relay-hub';
+import {
+  createRelayReporter,
+  type RelayReporter,
+  relayReporterConfigFromEnv,
+} from './relay-reporter';
 import type { Env } from './worker';
 
 type Side = 'device' | 'client';
@@ -8,14 +14,20 @@ type Side = 'device' | 'client';
 /**
  * Persisted per-socket state. `side` is the connection role (which end of the
  * relay this socket is); the fields inherited from {@link ClientAttachment}
- * — including the member's RBAC `role` — describe a client socket.
+ * — including the member's RBAC `role` — describe a client socket. `tenantId`
+ * + `sessionId` (forwarded from the verified token) are kept so a lifecycle
+ * event can be reported on close, even after hibernation.
  */
 interface RelayAttachment extends Partial<ClientAttachment> {
   side: Side;
+  tenantId?: string;
+  sessionId?: string;
 }
 
 const SIDE_HEADER = 'X-Pinagent-Role';
 const MEMBER_ROLE_HEADER = 'X-Pinagent-Member-Role';
+const TENANT_HEADER = 'X-Pinagent-Tenant';
+const SESSION_HEADER = 'X-Pinagent-Session';
 
 /**
  * `RelaySession` — one Durable Object instance per tenant session. Holds
@@ -34,9 +46,12 @@ export class RelaySession {
   private hub: RelayHub | null = null;
   /** Stable RelaySocket wrapper per live WebSocket (hub keys by identity). */
   private readonly socketFor = new Map<WebSocket, RelaySocket>();
+  /** Reports connect/disconnect to the control plane (no-op if unconfigured). */
+  private readonly reporter: RelayReporter;
 
-  constructor(ctx: DurableObjectState, _env: Env) {
+  constructor(ctx: DurableObjectState, env: Env) {
     this.ctx = ctx;
+    this.reporter = createRelayReporter(relayReporterConfigFromEnv(env));
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -44,6 +59,8 @@ export class RelaySession {
       return new Response('expected websocket upgrade', { status: 426 });
     }
     const side: Side = request.headers.get(SIDE_HEADER) === 'device' ? 'device' : 'client';
+    const tenantId = request.headers.get(TENANT_HEADER) ?? undefined;
+    const sessionId = request.headers.get(SESSION_HEADER) ?? undefined;
 
     const pair = new WebSocketPair();
     const client = pair[0];
@@ -53,16 +70,24 @@ export class RelaySession {
     const sock = this.wrap(server);
 
     if (side === 'device') {
-      server.serializeAttachment({ side: 'device' } satisfies RelayAttachment);
+      server.serializeAttachment({ side: 'device', tenantId, sessionId } satisfies RelayAttachment);
       this.ctx.acceptWebSocket(server, ['device']);
       hub.attachDevice(sock);
     } else {
       const role = parseRole(request.headers.get(MEMBER_ROLE_HEADER));
-      server.serializeAttachment({ side: 'client', feedbackIds: [], project: false, role });
+      server.serializeAttachment({
+        side: 'client',
+        feedbackIds: [],
+        project: false,
+        role,
+        tenantId,
+        sessionId,
+      });
       this.ctx.acceptWebSocket(server, ['client']);
       hub.attachClient(sock, role);
     }
 
+    this.report(`${side}.connected`, tenantId, sessionId);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -78,7 +103,14 @@ export class RelaySession {
     hub.fromClient(sock, raw);
     const snapshot = hub.snapshotClient(sock);
     if (snapshot) {
-      ws.serializeAttachment({ side: 'client', ...snapshot } satisfies RelayAttachment);
+      // Preserve tenantId/sessionId — re-serializing only the subscription
+      // snapshot would otherwise drop them, losing the disconnect report.
+      ws.serializeAttachment({
+        side: 'client',
+        ...snapshot,
+        tenantId: att.tenantId,
+        sessionId: att.sessionId,
+      } satisfies RelayAttachment);
     }
   }
 
@@ -93,9 +125,28 @@ export class RelaySession {
   private detach(ws: WebSocket): void {
     const hub = this.getHub();
     const sock = this.wrap(ws);
-    if (this.readAttachment(ws).side === 'device') hub.detachDevice(sock);
+    const att = this.readAttachment(ws);
+    if (att.side === 'device') hub.detachDevice(sock);
     else hub.detachClient(sock);
     this.socketFor.delete(ws);
+    this.report(`${att.side}.disconnected`, att.tenantId, att.sessionId);
+  }
+
+  /**
+   * Fire-and-forget a lifecycle event to the control plane. Skipped when the
+   * tenant/session aren't known (e.g. dev-fallback with no forwarded headers);
+   * `waitUntil` keeps the DO alive until the best-effort POST settles.
+   */
+  private report(type: RelayEventType, tenantId?: string, sessionId?: string): void {
+    if (!tenantId || !sessionId) return;
+    this.ctx.waitUntil(
+      this.reporter.report({
+        type,
+        organizationId: tenantId,
+        sessionId,
+        occurredAt: new Date().toISOString(),
+      }),
+    );
   }
 
   /** Rebuild the hub from surviving sockets on first use after a wake. */
