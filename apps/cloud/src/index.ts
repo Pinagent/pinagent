@@ -10,6 +10,12 @@ export { PACKAGE_NAME as TEAM_FEATURES_PACKAGE } from '@pinagent/ee-team-feature
 
 export { type CloudConfig, loadCloudConfig } from './config';
 export {
+  createNeonMembershipStore,
+  createPgMembershipStore,
+  type MembershipDb,
+} from './db/membership-store';
+export { organizationMemberships, organizations, schema } from './db/schema';
+export {
   type AuthenticatedUser,
   type Authenticator,
   createCloudFetch,
