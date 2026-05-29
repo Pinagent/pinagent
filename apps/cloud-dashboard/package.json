@@ -1,0 +1,28 @@
+{
+  "name": "@pinagent/cloud-dashboard",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pinagent cloud admin dashboard. Source-available under the Elastic License v2.",
+  "license": "Elastic-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pinagent/ee-auth": "workspace:*",
+    "@pinagent/ee-billing": "workspace:*",
+    "@pinagent/ee-team-features": "workspace:*",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14"
+  }
+}
