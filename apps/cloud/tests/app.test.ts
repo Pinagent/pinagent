@@ -92,6 +92,7 @@ function makeApp() {
       subscriptions: createInMemorySubscriptionStore(),
       costControls: createInMemoryCostControlStore(),
     },
+    internal: { audit, relayInternalSecret: 'internal-secret' },
   });
 }
 
