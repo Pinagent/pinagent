@@ -22,3 +22,6 @@ node-compile-cache
 .env
 .env.*
 !.env.example
+
+# Node.js compile cache emitted by tsdown/node:sqlite builds
+node-compile-cache/

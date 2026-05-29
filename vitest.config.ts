@@ -26,6 +26,31 @@ export default defineConfig({
     ],
     exclude: ['**/node_modules/**', '**/dist/**', '**/.next/**'],
     isolate: true,
+    // Coverage is opt-in via `pnpm test:coverage` (or `--coverage`). It is
+    // reporting-only — no thresholds are enforced yet, so it never fails a
+    // build; the goal is visibility into which modules the suite exercises.
+    // Scope to actual runtime source under each package's `src/`, and
+    // exclude declarative / presentational / stub trees where unit tests
+    // add little (see the test-coverage analysis): the @pinagent/ui
+    // component wrappers + tokens, the apps/web marketing site, the ee/*
+    // placeholder packages, generated code, and the browser-only worker
+    // source string.
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'json-summary'],
+      include: ['packages/*/src/**/*.{ts,tsx}', 'apps/*/src/**/*.{ts,tsx}'],
+      exclude: [
+        '**/*.d.ts',
+        '**/__generated__/**',
+        '**/fixtures/**',
+        '**/*.config.*',
+        'packages/ui/**',
+        'packages/browser-runtime/src/db-worker-source.ts',
+        'ee/packages/**',
+        'apps/web/**',
+        'apps/cloud/**',
+      ],
+    },
     // better-sqlite3 is a native module — Vite's resolver can't
     // transform it. Externalize so it goes through Node's normal
     // require/import path instead of Vite's. Same for @sqlite.org/*

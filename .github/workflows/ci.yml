@@ -123,13 +123,15 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      # ~180 unit + integration tests via Vitest. better-sqlite3's
-      # native binding gets compiled at `pnpm install` time (allowed
-      # by pnpm-workspace.yaml's `onlyBuiltDependencies`); the WS
-      # server tests bind 127.0.0.1:53700 which is unused on Actions
-      # runners.
+      # Unit + integration tests via Vitest, with a v8 coverage summary
+      # printed to the run log. better-sqlite3's native binding gets
+      # compiled at `pnpm install` time (allowed by pnpm-workspace.yaml's
+      # `onlyBuiltDependencies`); the WS server tests bind 127.0.0.1:53700
+      # which is unused on Actions runners. Coverage is reporting-only —
+      # no thresholds are enforced (see vitest.config.ts), so this step
+      # fails only on a real test failure, never on a coverage dip.
       - name: Test
-        run: pnpm test
+        run: pnpm test:coverage
 
       # Build last so a green test run still catches packaging
       # regressions (tsdown config, embed-widget script, exports map).

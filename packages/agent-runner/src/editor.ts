@@ -9,7 +9,7 @@ import { isAbsolute, resolve, sep } from 'node:path';
  *   2. EDITOR / VISUAL — standard *nix env vars
  *   3. 'code' — VSCode CLI, the most common default
  */
-function detectEditor(env: NodeJS.ProcessEnv): string {
+export function detectEditor(env: NodeJS.ProcessEnv): string {
   return env.PINAGENT_EDITOR || env.EDITOR || env.VISUAL || 'code';
 }
 
@@ -25,7 +25,7 @@ interface Command {
  * JetBrains tools use `--line` and `--column` flags. Sublime takes
  * `file:line:col` without a flag. Fallback: pass just the file path.
  */
-function buildCommand(editor: string, file: string, line?: number, col?: number): Command {
+export function buildCommand(editor: string, file: string, line?: number, col?: number): Command {
   const name = editor.split(/[\\/]/).pop()?.toLowerCase() ?? editor.toLowerCase();
 
   const locator =
