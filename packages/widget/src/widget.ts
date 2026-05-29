@@ -1452,7 +1452,7 @@ export function mount(): void {
       // to the dock iframe (the composer iframe is same-origin, so this
       // handler runs in the host page context). `open-conversation` opens
       // the dock if closed and navigates either way — see the dock's
-      // useKeyboardShortcuts onMessage handler.
+      // useOpenConversationBridge (shared with the agent tray's "Open").
       if (openDockBtn && resolveDockEnabled()) {
         openDockBtn.hidden = false;
         openDockBtn.addEventListener('click', () => {
@@ -1974,12 +1974,14 @@ export function mount(): void {
   }
 
   // Tell the dock (a sibling iframe the host bridge mounted) to open and
-  // navigate to this conversation. Mirrors the host→dock toggle-dock frame.
+  // navigate to this conversation. Same `open-conversation` frame the
+  // composer's "open in dock" button posts — see the dock's
+  // useOpenConversationBridge.
   function openInDock(feedbackId: string) {
     const iframe = document.getElementById('__pinagent-dock');
     if (iframe instanceof HTMLIFrameElement && iframe.contentWindow) {
       iframe.contentWindow.postMessage(
-        { source: 'pinagent-host', type: 'open-dock-conversation', feedbackId },
+        { source: 'pinagent-host', type: 'open-conversation', feedbackId },
         '*',
       );
     }

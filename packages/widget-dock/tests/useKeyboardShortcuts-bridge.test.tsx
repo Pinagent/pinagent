@@ -6,8 +6,10 @@
  * host page posts `{ source: 'pinagent-host', ... }` frames into the
  * dock iframe; here we render the hook and dispatch those frames.
  *
- *   - `toggle-dock`       → onToggle()
- *   - `open-conversation` → open() + navigate to the conversation
+ *   - `toggle-dock` → onToggle()
+ *
+ * `open-conversation` is owned by `useOpenConversationBridge` now — see
+ * `useOpenConversationBridge.test.tsx`.
  *
  * `useNavigate` is mocked so the hook needs no router context.
  */
@@ -15,7 +17,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ROUTE_PATHS } from '../src/route-paths';
 import { useKeyboardShortcuts } from '../src/shell/useKeyboardShortcuts';
 
 const { navigateSpy } = vi.hoisted(() => ({ navigateSpy: vi.fn() }));
@@ -69,65 +70,25 @@ describe('useKeyboardShortcuts host-bridge messages', () => {
     expect(navigateSpy).not.toHaveBeenCalled();
   });
 
-  it('opens and navigates to the conversation on open-conversation', () => {
-    mount();
-    postHost({ source: 'pinagent-host', type: 'open-conversation', feedbackId: 'fb_abc123' });
-    expect(open).toHaveBeenCalledTimes(1);
-    expect(navigateSpy).toHaveBeenCalledTimes(1);
-    expect(navigateSpy).toHaveBeenCalledWith({
-      to: ROUTE_PATHS.conversations,
-      search: { id: 'fb_abc123' },
-    });
-    // open-conversation must not also fire the open/close toggle.
-    expect(onToggle).not.toHaveBeenCalled();
-  });
-
-  it('navigates even when the dock is already open (idempotent open)', () => {
-    mount({ isOpen: true });
-    postHost({ source: 'pinagent-host', type: 'open-conversation', feedbackId: 'fb_xyz' });
-    expect(open).toHaveBeenCalledTimes(1);
-    expect(navigateSpy).toHaveBeenCalledWith({
-      to: ROUTE_PATHS.conversations,
-      search: { id: 'fb_xyz' },
-    });
-  });
-
-  it('ignores open-conversation with a missing feedbackId', () => {
-    mount();
-    postHost({ source: 'pinagent-host', type: 'open-conversation' });
-    expect(open).not.toHaveBeenCalled();
-    expect(navigateSpy).not.toHaveBeenCalled();
-  });
-
-  it('ignores open-conversation with an empty feedbackId', () => {
-    mount();
-    postHost({ source: 'pinagent-host', type: 'open-conversation', feedbackId: '' });
-    expect(open).not.toHaveBeenCalled();
-    expect(navigateSpy).not.toHaveBeenCalled();
-  });
-
-  it('ignores open-conversation with a non-string feedbackId', () => {
-    mount();
-    postHost({ source: 'pinagent-host', type: 'open-conversation', feedbackId: 42 });
-    expect(open).not.toHaveBeenCalled();
-    expect(navigateSpy).not.toHaveBeenCalled();
-  });
-
   it('ignores frames from other sources', () => {
     mount();
-    postHost({ source: 'pinagent-dock', type: 'open-conversation', feedbackId: 'fb_1' });
-    postHost({ type: 'open-conversation', feedbackId: 'fb_1' });
+    postHost({ source: 'pinagent-dock', type: 'toggle-dock' });
+    postHost({ type: 'toggle-dock' });
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it('no longer handles open-conversation (moved to useOpenConversationBridge)', () => {
+    mount();
+    postHost({ source: 'pinagent-host', type: 'open-conversation', feedbackId: 'fb_abc123' });
     expect(open).not.toHaveBeenCalled();
     expect(navigateSpy).not.toHaveBeenCalled();
-    expect(onToggle).not.toHaveBeenCalled();
   });
 
   it('detaches the listener on unmount', () => {
     mount();
     act(() => root.unmount());
-    postHost({ source: 'pinagent-host', type: 'open-conversation', feedbackId: 'fb_1' });
-    expect(open).not.toHaveBeenCalled();
-    expect(navigateSpy).not.toHaveBeenCalled();
+    postHost({ source: 'pinagent-host', type: 'toggle-dock' });
+    expect(onToggle).not.toHaveBeenCalled();
     // Re-mount so afterEach's unmount has a live root.
     root = createRoot(container);
     mount();
