@@ -1,0 +1,101 @@
+/* SPDX-License-Identifier: Elastic-2.0 */
+:root {
+  --fg: #1a1a1a;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --accent: #4f46e5;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: var(--fg);
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.app-header h1 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.org-id {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-family: ui-monospace, monospace;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin: 0 0 2rem;
+}
+
+.stat {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.stat dt {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.stat dd {
+  margin: 0.25rem 0 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+table.members {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+table.members th,
+table.members td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+table.members th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.empty,
+.loading,
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: #b91c1c;
+}
+
+.signin-button {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--accent);
+  color: white;
+  border-radius: 6px;
+  text-decoration: none;
+}
