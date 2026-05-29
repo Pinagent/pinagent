@@ -86,6 +86,8 @@ const ICON_CODE = `<svg class="hdr-icon" viewBox="0 0 24 24" fill="none" stroke=
 
 const ICON_EXTERNAL = `<svg class="hdr-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
 
+const ICON_SIDEBAR = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="15" y1="4" x2="15" y2="20"/></svg>`;
+
 interface State {
   mode: 'idle' | 'picking';
 }
@@ -1311,6 +1313,7 @@ export function mount(): void {
       const streamFooter = idoc.getElementById('pa-stream-footer');
       const dismissBtn = idoc.getElementById('pa-dismiss') as HTMLButtonElement | null;
       const stopBtn = idoc.getElementById('pa-stop') as HTMLButtonElement | null;
+      const openDockBtn = idoc.getElementById('pa-open-dock') as HTMLButtonElement | null;
       const followInput = idoc.getElementById('pa-follow-input') as HTMLTextAreaElement | null;
       const followSend = idoc.getElementById('pa-follow-send') as HTMLButtonElement | null;
       const lifecycleRow = idoc.getElementById('pa-lifecycle') as HTMLElement | null;
@@ -1337,6 +1340,24 @@ export function mount(): void {
         !discardBtn
       ) {
         return;
+      }
+      // When the host also mounts the dock, offer a jump from the open
+      // conversation to that same conversation in the dock. Posts straight
+      // to the dock iframe (the composer iframe is same-origin, so this
+      // handler runs in the host page context). `open-conversation` opens
+      // the dock if closed and navigates either way — see the dock's
+      // useKeyboardShortcuts onMessage handler.
+      if (openDockBtn && resolveDockEnabled()) {
+        openDockBtn.hidden = false;
+        openDockBtn.addEventListener('click', () => {
+          const fid = c.feedbackId;
+          if (!fid) return;
+          const dockFrame = document.getElementById('__pinagent-dock') as HTMLIFrameElement | null;
+          dockFrame?.contentWindow?.postMessage(
+            { source: 'pinagent-host', type: 'open-conversation', feedbackId: fid },
+            '*',
+          );
+        });
       }
       const lifecycle: LifecycleEls = {
         row: lifecycleRow,
@@ -2387,6 +2408,7 @@ function composerHTML(meta: ComposerMeta): string {
       <div class="row spread">
         <span class="footer-note" id="pa-stream-footer"></span>
         <div class="row" style="gap:6px;">
+          <button class="btn ghost icon" id="pa-open-dock" type="button" title="Open in dock" aria-label="Open conversation in dock" hidden>${ICON_SIDEBAR}</button>
           <button class="btn ghost stop" id="pa-stop" type="button" hidden>Stop</button>
           <button class="btn ghost cancel" id="pa-dismiss" type="button">Minimize</button>
         </div>
