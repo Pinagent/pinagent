@@ -8,6 +8,7 @@
  * (letting us call `setup` directly) and `addVitePlugin` is a spy — no real
  * Nuxt context required.
  */
+import { DOCK_HOST_BRIDGE_SCRIPT, DOCK_IFRAME_SCRIPT } from '@pinagent/vite-plugin';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const addVitePlugin = vi.fn();
@@ -60,11 +61,21 @@ describe('@pinagent/nuxt-plugin module', () => {
     expect(plugin?.apply).toBe('serve');
   });
 
-  it('injects the widget loader into the app head at body-close', () => {
+  it('injects only the widget loader into the app head when dock is off', () => {
     const nuxt = fakeNuxt(true);
     setup({ spawnAgent: 'off' }, nuxt);
     expect(nuxt.options.app.head.script).toEqual([
       { src: '/__pinagent/widget.js', type: 'module', tagPosition: 'bodyClose' },
+    ]);
+  });
+
+  it('also injects the dock iframe + host bridge when dock: true', () => {
+    const nuxt = fakeNuxt(true);
+    setup({ spawnAgent: 'off', dock: true }, nuxt);
+    expect(nuxt.options.app.head.script).toEqual([
+      { src: '/__pinagent/widget.js', type: 'module', tagPosition: 'bodyClose' },
+      { innerHTML: DOCK_IFRAME_SCRIPT, tagPosition: 'bodyClose' },
+      { innerHTML: DOCK_HOST_BRIDGE_SCRIPT, tagPosition: 'bodyClose' },
     ]);
   });
 

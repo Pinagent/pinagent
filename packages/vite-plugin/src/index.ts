@@ -74,8 +74,15 @@ const SCRIPT_TAG = '<script type="module" src="/__pinagent/widget.js"></script>'
  * The matching `standalone.html` entry is for the future hosted
  * dashboard, not iframed.
  */
-const DOCK_IFRAME_TAG =
-  '<script>(function(){' +
+/**
+ * Inner JS of the dock iframe loader (the IIFE, no `<script>` wrapper).
+ * Exported so non-Vite hosts can inject it their own way — e.g.
+ * `@pinagent/nuxt-plugin` adds it to the Nuxt app head, since Vite's
+ * `transformIndexHtml` doesn't run for SSR'd documents. `DOCK_IFRAME_TAG`
+ * below wraps it for this plugin's own HTML injection.
+ */
+export const DOCK_IFRAME_SCRIPT =
+  '(function(){' +
   'var allow=["fixtures","state"];' +
   'var p=new URLSearchParams(window.location.search);' +
   'var kept=new URLSearchParams();' +
@@ -87,7 +94,8 @@ const DOCK_IFRAME_TAG =
   'f.style.cssText="position:fixed;inset:0;width:100vw;height:100vh;border:0;' +
   'background:transparent;pointer-events:none;z-index:2147483646;color-scheme:light";' +
   'document.body.appendChild(f);' +
-  '})();</script>';
+  '})();';
+const DOCK_IFRAME_TAG = `<script>${DOCK_IFRAME_SCRIPT}</script>`;
 
 /**
  * Tiny host-side bridge:
@@ -116,8 +124,13 @@ const DOCK_IFRAME_TAG =
  * Inline rather than a separate file so there's no extra request and
  * no race with the iframe load.
  */
-const DOCK_HOST_BRIDGE_TAG =
-  '<script>(function(){' +
+/**
+ * Inner JS of the dock host-bridge (the IIFE, no `<script>` wrapper).
+ * Exported for the same reason as {@link DOCK_IFRAME_SCRIPT}.
+ * `DOCK_HOST_BRIDGE_TAG` below wraps it for this plugin's HTML injection.
+ */
+export const DOCK_HOST_BRIDGE_SCRIPT =
+  '(function(){' +
   'var f=null,rects=[];' +
   'function getF(){if(!f)f=document.getElementById("__pinagent-dock");return f;}' +
   'function over(x,y){for(var i=0;i<rects.length;i++){var r=rects[i];' +
@@ -136,7 +149,8 @@ const DOCK_HOST_BRIDGE_TAG =
   '}else if(e.key==="Escape"){var ec=getF();' +
   'if(ec&&ec.contentWindow){ec.contentWindow.postMessage({source:"pinagent-host",type:"close-dock"},"*");}' +
   '}});' +
-  '})();</script>';
+  '})();';
+const DOCK_HOST_BRIDGE_TAG = `<script>${DOCK_HOST_BRIDGE_SCRIPT}</script>`;
 const DEFAULT_WS_PORT = 53636;
 
 /**

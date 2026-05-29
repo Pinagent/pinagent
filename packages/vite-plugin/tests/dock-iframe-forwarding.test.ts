@@ -28,17 +28,17 @@ let dockIframeScriptBody: string;
 
 beforeAll(async () => {
   const src = await readFile(INDEX_PATH, 'utf8');
-  // Pull the body out of the `DOCK_IFRAME_TAG` template — a chain of
-  // string concatenations between `'<script>(function(){'` and the
-  // closing `'})();</script>'`. The literal is short and stable; if
-  // someone rewrites the constant we want a loud failure here, not a
-  // silent pass against a stale extraction.
+  // Pull the body out of the exported `DOCK_IFRAME_SCRIPT` — a chain of
+  // string concatenations between `'(function(){'` and the closing
+  // `'})();'`. The literal is short and stable; if someone rewrites the
+  // constant we want a loud failure here, not a silent pass against a
+  // stale extraction.
   const match = src.match(
-    /const DOCK_IFRAME_TAG[\s\S]*?'<script>\(function\(\)\{'\s*\+([\s\S]*?)'\}\)\(\);<\/script>';/,
+    /const DOCK_IFRAME_SCRIPT[\s\S]*?'\(function\(\)\{'\s*\+([\s\S]*?)'\}\)\(\);';/,
   );
   if (!match) {
     throw new Error(
-      'failed to extract DOCK_IFRAME_TAG body from vite-plugin/src/index.ts — ' +
+      'failed to extract DOCK_IFRAME_SCRIPT body from vite-plugin/src/index.ts — ' +
         'the constant was likely renamed or refactored; update this test.',
     );
   }
