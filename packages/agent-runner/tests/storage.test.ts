@@ -231,6 +231,38 @@ describe('Storage', () => {
     });
   });
 
+  describe('isRunning', () => {
+    it('freshly created row reports isRunning: false', async () => {
+      const s = new Storage(root);
+      const id = nanoid(10);
+      const created = await s.create(id, makeInput());
+      expect(created.isRunning).toBe(false);
+      expect((await s.read(id))?.isRunning).toBe(false);
+    });
+
+    it('list + read report isRunning while an active_runs row exists', async () => {
+      const { getDb } = await import('../src/db/client');
+      const { activeRuns, eq } = await import('@pinagent/db');
+      const s = new Storage(root);
+      const id = nanoid(10);
+      await s.create(id, makeInput());
+
+      const db = getDb(root);
+      await db
+        .insert(activeRuns)
+        .values({ conversationId: id, startedAt: new Date(), currentTurn: 1 });
+
+      expect((await s.read(id))?.isRunning).toBe(true);
+      const list = await s.list();
+      expect(list.find((r) => r.id === id)?.isRunning).toBe(true);
+
+      // Run ends → row cleared → no longer flagged as running.
+      await db.delete(activeRuns).where(eq(activeRuns.conversationId, id));
+      expect((await s.read(id))?.isRunning).toBe(false);
+      expect((await s.list()).find((r) => r.id === id)?.isRunning).toBe(false);
+    });
+  });
+
   describe('messageCount + listMessages', () => {
     it('freshly created row reports messageCount: 0', async () => {
       const s = new Storage(root);

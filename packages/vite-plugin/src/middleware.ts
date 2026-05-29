@@ -395,6 +395,7 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
           component: r.component,
           instanceIndex: r.instanceIndex,
           instanceTotal: r.instanceTotal,
+          isRunning: r.isRunning,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
           resolvedAt: r.resolvedAt,

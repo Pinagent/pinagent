@@ -4,6 +4,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import {
+  activeRuns,
   and,
   asc,
   conversations,
@@ -185,6 +186,14 @@ export interface FeedbackRecord {
    * with no recorded `init` (created but never run, or pre-dating this).
    */
   apiKeySource: string | null;
+  /**
+   * True iff an SDK turn is currently in flight for this conversation —
+   * i.e. an `active_runs` row exists. The widget's running-agents tray
+   * uses this to surface live inline-mode runs (which otherwise persist
+   * as the terminal `(pending, none)` and would never appear). Cleared
+   * the moment the run ends. See `deriveDockStatus`'s `isRunning` axis.
+   */
+  isRunning: boolean;
 }
 
 export const PatchSchema = z.object({
@@ -384,6 +393,8 @@ export class Storage {
       totalCostUsd: 0,
       // No init event recorded until an agent runs against this row.
       apiKeySource: null,
+      // No SDK turn has started for a freshly-created row.
+      isRunning: false,
     };
     // Notify project subscribers (the dock) that the conversation list
     // changed. Best-effort — emit failures shouldn't break the write.
@@ -442,12 +453,17 @@ export class Storage {
       const src = extractApiKeySource(r.content);
       if (src) apiKeySourceByConvId.set(r.id, src);
     }
+    // One batched read of the in-flight runs so each row can advertise
+    // `isRunning` without an N+1 probe. Typically 0–1 rows.
+    const runningRows = await db.select({ id: activeRuns.conversationId }).from(activeRuns);
+    const runningIds = new Set(runningRows.map((r) => r.id));
     return rows.map((r) =>
       rowToRecord(
         r,
         countByConvId.get(r.conversations.id) ?? 0,
         costByConvId.get(r.conversations.id) ?? 0,
         apiKeySourceByConvId.get(r.conversations.id) ?? null,
+        runningIds.has(r.conversations.id),
       ),
     );
   }
@@ -472,7 +488,18 @@ export class Storage {
       .where(and(eq(messages.conversationId, id), notInArray(messages.role, NON_MESSAGE_ROLES)));
     const totalCostUsd = await this.computeConversationCost(id);
     const apiKeySource = await this.readApiKeySource(id);
-    return rowToRecord(row, countRows[0]?.n ?? 0, totalCostUsd, apiKeySource);
+    const runningRows = await db
+      .select({ id: activeRuns.conversationId })
+      .from(activeRuns)
+      .where(eq(activeRuns.conversationId, id))
+      .limit(1);
+    return rowToRecord(
+      row,
+      countRows[0]?.n ?? 0,
+      totalCostUsd,
+      apiKeySource,
+      runningRows.length > 0,
+    );
   }
 
   /**
@@ -640,6 +667,7 @@ function rowToRecord(
   messageCount: number,
   totalCostUsd: number,
   apiKeySource: string | null,
+  isRunning: boolean,
 ): FeedbackRecord {
   const c = row.conversations;
   const a = row.widget_anchors;
@@ -676,6 +704,7 @@ function rowToRecord(
     messageCount,
     totalCostUsd,
     apiKeySource,
+    isRunning,
   };
 }
 

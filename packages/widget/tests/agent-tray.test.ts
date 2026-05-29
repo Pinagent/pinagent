@@ -41,6 +41,24 @@ describe('selectUnresolvedAgents', () => {
     expect(selectUnresolvedAgents(raw)).toEqual([]);
   });
 
+  it('surfaces a running inline-mode agent (pending, none, isRunning) as working', () => {
+    // The default-mode case: an inline run persists as (pending, none),
+    // which on its own is dropped (see above) — isRunning is what lets the
+    // tray show it live.
+    const raw = [
+      rec({ id: 'inlinerun0', status: 'pending', worktreeState: 'none', isRunning: true }),
+    ];
+    const [agent] = selectUnresolvedAgents(raw);
+    expect(agent).toMatchObject({ id: 'inlinerun0', status: 'working' });
+  });
+
+  it('still drops an idle inline row once its run ends (isRunning false)', () => {
+    const raw = [
+      rec({ id: 'inlinedone', status: 'pending', worktreeState: 'none', isRunning: false }),
+    ];
+    expect(selectUnresolvedAgents(raw)).toEqual([]);
+  });
+
   it('prefers the explicit title, else the comment first line, mapping selector', () => {
     const [withTitle, withComment, untitled] = selectUnresolvedAgents([
       rec({

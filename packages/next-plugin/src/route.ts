@@ -262,6 +262,7 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
       component: r.component,
       instanceIndex: r.instanceIndex,
       instanceTotal: r.instanceTotal,
+      isRunning: r.isRunning,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
       resolvedAt: r.resolvedAt,

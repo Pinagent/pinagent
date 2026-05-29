@@ -33,6 +33,13 @@ export interface RawFeedback {
   messageCount?: number | null;
   /** Running SDK cost in USD — surfaced as the row's "$X.XX" badge. */
   totalCostUsd?: number | null;
+  /**
+   * Whether an SDK turn is in flight (an `active_runs` row exists). Lets
+   * the tray surface a live inline-mode run, which otherwise persists as
+   * a terminal `(pending, none)` row and would never appear. Optional so
+   * a widget talking to an older server (no field) still parses.
+   */
+  isRunning?: boolean;
 }
 
 /** One row in the tray. `status` is the derived, unresolved dock status. */
@@ -67,7 +74,7 @@ export function selectUnresolvedAgents(raw: readonly RawFeedback[]): TrayAgent[]
   const agents: TrayAgent[] = [];
   for (const rec of raw) {
     if (!rec || rec.archived) continue;
-    const status = deriveDockStatus(rec.status, rec.worktreeState);
+    const status = deriveDockStatus(rec.status, rec.worktreeState, rec.isRunning === true);
     if (!isUnresolvedStatus(status)) continue;
     agents.push({
       id: rec.id,
