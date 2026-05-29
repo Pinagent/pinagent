@@ -129,7 +129,7 @@ import { Pinagent } from '@pinagent/next-plugin';
 // app/pinagent/[[...slug]]/route.ts
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-export { GET, POST, PATCH } from '@pinagent/next-plugin/route';
+export { GET, POST, PATCH, PUT, DELETE } from '@pinagent/next-plugin/route';
 ```
 
 ## Connect your agent
@@ -137,14 +137,12 @@ export { GET, POST, PATCH } from '@pinagent/next-plugin/route';
 Register the MCP server with Claude Code. The easiest path uses `pnpm dlx` so you don't need a global install:
 
 ```bash
-claude mcp add pinagent -- pnpm dlx @pinagent/mcp
+claude mcp add pinagent -- pnpm dlx @pinagent/cli mcp
 ```
 
-If `@pinagent/mcp` is already installed (e.g. as a project dep), the direct-bin form also works:
+Equivalent lower-level forms: `pnpm dlx @pinagent/mcp` (the server package directly), or `claude mcp add pinagent pinagent-mcp` if `@pinagent/mcp` is already a project dependency.
 
-```bash
-claude mcp add pinagent pinagent-mcp
-```
+> Tip: `pnpm dlx @pinagent/cli init` scaffolds the `.gitignore` entry, the `.mcp.json` registration, and (on Next) the route handler for you.
 
 That's it. In your next Claude Code session, ask it to "address pending Pinagent feedback" and it will call the tools below.
 

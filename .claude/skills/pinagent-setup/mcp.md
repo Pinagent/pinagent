@@ -19,10 +19,12 @@ Two scopes:
 
 | Scope | When | Command |
 | ----- | ---- | ------- |
-| **Project** | Tied to one repo. Recommended for testing. Writes `.mcp.json` in the project root. | `claude mcp add pinagent -s project -- pnpm dlx @pinagent/mcp` |
-| **User**    | Global — available in any project. | `claude mcp add pinagent -s user -- pnpm dlx @pinagent/mcp` |
+| **Project** | Tied to one repo. Recommended for testing. Writes `.mcp.json` in the project root. | `claude mcp add pinagent -s project -- pnpm dlx @pinagent/cli mcp` |
+| **User**    | Global — available in any project. | `claude mcp add pinagent -s user -- pnpm dlx @pinagent/cli mcp` |
 
-`@pinagent/mcp` is published to npm and ships the `pinagent-mcp` server binary; `pnpm dlx` fetches and runs it without a global install. (If `@pinagent/mcp` is already a project dependency, `claude mcp add pinagent pinagent-mcp` runs the installed bin directly.)
+`@pinagent/cli` is the published entrypoint; `pnpm dlx @pinagent/cli mcp` fetches it and starts the stdio MCP server without a global install. Equivalent lower-level forms: `pnpm dlx @pinagent/mcp` (the server package directly), or `claude mcp add pinagent pinagent-mcp` if `@pinagent/mcp` is already a project dependency.
+
+> **Shortcut:** `pnpm dlx @pinagent/cli init` scaffolds most of this for you — it adds `.pinagent` to `.gitignore`, registers the MCP server in `.mcp.json`, and (on Next) writes the route handler. You still wire the plugin into your config and mount `<Pinagent />` by hand.
 
 In a monorepo, the MCP server's project root resolution (walks up looking for `.pinagent/` then `package.json`) may land at the wrong directory. **Pin it explicitly** by editing `.mcp.json`:
 
@@ -32,7 +34,7 @@ In a monorepo, the MCP server's project root resolution (walks up looking for `.
     "pinagent": {
       "type": "stdio",
       "command": "pnpm",
-      "args": ["dlx", "@pinagent/mcp"],
+      "args": ["dlx", "@pinagent/cli", "mcp"],
       "env": {
         "PINAGENT_PROJECT_ROOT": "/absolute/path/to/apps/your-app"
       }
@@ -50,7 +52,7 @@ From the project directory:
 ```bash
 cd /path/to/target/repo
 claude mcp list 2>&1 | grep pinagent
-# expect:  pinagent: pnpm dlx @pinagent/mcp - ✓ Connected
+# expect:  pinagent: pnpm dlx @pinagent/cli mcp - ✓ Connected
 ```
 
 If it isn't connected:
@@ -101,7 +103,9 @@ cd /path/to/target
 claude --dangerously-load-development-channels server:pinagent
 ```
 
-The `server:pinagent` token must match the key in `.mcp.json`. The `--dangerously-load-development-channels` flag is required during Claude Code's [channels research preview](https://code.claude.com/docs/en/channels) — pinagent isn't on the Anthropic-curated allowlist yet.
+The `server:pinagent` token must match the key in `.mcp.json`. The `--dangerously-load-development-channels` flag is required during Claude Code's [channels research preview](https://code.claude.com/docs/en/channels) (needs Claude Code **v2.1.80+**) — pinagent isn't on the Anthropic-curated allowlist yet.
+
+Note: only comments left **after** the session starts are pushed as channel events. The watcher ignores the backlog already in the store at boot; reach pre-existing comments with `list_pending_feedback` / `get_feedback`.
 
 If you see `no MCP server configured with that name`, you're launching from the wrong directory. Either `cd` to where `.mcp.json` lives, or pass `--mcp-config /absolute/path/to/.mcp.json` explicitly.
 

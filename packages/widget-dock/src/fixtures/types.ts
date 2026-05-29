@@ -28,6 +28,16 @@ export interface Conversation {
     selector: string;
     /** Snippet of the clicked element's text/HTML. */
     snippet: string;
+    /**
+     * Enclosing-component context (from #166), null/undefined when the
+     * app is uninstrumented or it's a single-pick non-loop element.
+     * `component` is the nearest component name (`PriceCard`);
+     * `instanceIndex`/`instanceTotal` locate which `.map()` item was
+     * picked (0-based index, surfaced as "item N of M").
+     */
+    component?: string | null;
+    instanceIndex?: number | null;
+    instanceTotal?: number | null;
   };
   branch: string;
   /**

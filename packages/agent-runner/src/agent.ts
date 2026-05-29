@@ -3,55 +3,26 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
-import {
-  type Options,
-  type PermissionMode,
-  query,
-  type SDKMessage,
-} from '@anthropic-ai/claude-agent-sdk';
+// Type-only: keeps the public `resolvePermissionMode`/`toSdkPermissionMode`
+// signatures stable without pulling the SDK into this module at runtime.
+// The actual SDK call lives behind the provider abstraction (./providers).
+import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { activeRuns as activeRunsTable } from '@pinagent/db';
-import { type AgentEvent, isNotionalCost } from '@pinagent/shared';
+import { isNotionalCost } from '@pinagent/shared';
 import { eq } from 'drizzle-orm';
-import {
-  renderInitFooter,
-  renderMessage,
-  renderResultFooter,
-  summariseToolInput,
-} from './agent-render';
-import { ASK_USER_TOOL_NAME, createAskUserMcpServer, rejectAsk } from './ask-user';
+import { rejectAsk } from './ask-user';
 import { recordAuditEvent } from './audit-log';
 import { getOrCreateBus } from './bus';
 import { getDb } from './db/client';
 import { runGitCapture } from './git-utils';
 import { emitProjectChange } from './project-events';
-import { SecretsStore } from './secrets-store';
+import { type AgentPermissionMode, type AgentRunRequest, resolveProvider } from './providers';
 import {
   PROJECT_PERMISSION_MODES,
   type PermissionMode as ProjectPermissionMode,
   SettingsStore,
 } from './settings-store';
 import { type FeedbackRecord, Storage } from './storage';
-
-/**
- * @pinagent/mcp tool names the spawned agent needs to do its job:
- *
- * - `get_feedback`         — fetch the full feedback record incl. screenshot
- * - `resolve_feedback`     — mark fixed/wontfix/deferred when done
- * - `get_source_context`   — read a window of source around file:line
- * - `list_pending_feedback`— rarely needed by a spawned agent (it knows its
- *                            own id), included for parity with pull mode
- *
- * They are surfaced to the SDK via the user's `.mcp.json` (loaded by
- * `settingSources: ['user', 'project', 'local']`). Allowlisting them
- * makes the spawned agent auto-accept the calls instead of timing out
- * waiting for a non-existent permission prompt.
- */
-const PINAGENT_MCP_TOOLS = [
-  'mcp__pinagent__get_feedback',
-  'mcp__pinagent__resolve_feedback',
-  'mcp__pinagent__get_source_context',
-  'mcp__pinagent__list_pending_feedback',
-];
 
 export type SpawnAgentMode = 'worktree' | 'inline' | false;
 
@@ -425,51 +396,23 @@ async function runQuery(opts: RunQueryOpts): Promise<void> {
   // window is tiny and the local-Map check covers same-context callers.
   void recordActiveRun(opts.projectRoot, opts.feedbackId);
 
-  // The `ask_user` tool can block for up to 10 min waiting for a human
-  // response. SDK MCP tool calls time out at 60s by default; bump it to
-  // ~12 min to cover the full ASK_TTL window in ask-user.ts.
-  const env: Record<string, string | undefined> = {
-    ...process.env,
-    PINAGENT_PROJECT_ROOT: opts.projectRoot,
-    CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '720000',
-  };
-
-  // Dock-stored Anthropic key (set via Connections route) wins over an
-  // existing env var so the user can override CI-style auth without
-  // restarting the dev-server. No-op when the user hasn't set one.
-  const storedKey = await new SecretsStore(opts.projectRoot).getAnthropicKey();
-  if (storedKey) env.ANTHROPIC_API_KEY = storedKey;
-
-  const sdkOptions: Options = {
+  // Pick the agent backend (Claude Agent SDK by default, a wrapped CLI
+  // when PINAGENT_AGENT_PROVIDER=cli). The provider owns the backend
+  // specifics; consumeStream below treats its output uniformly.
+  const provider = resolveProvider(process.env);
+  const request: AgentRunRequest = {
+    projectRoot: opts.projectRoot,
+    feedbackId: opts.feedbackId,
     cwd: opts.cwd,
-    permissionMode,
-    env,
-    settingSources: ['user', 'project', 'local'],
-    abortController: abort,
-    mcpServers: {
-      'pinagent-ask-user': createAskUserMcpServer(opts.feedbackId),
-    },
-    allowedTools: [ASK_USER_TOOL_NAME, ...PINAGENT_MCP_TOOLS],
-    systemPrompt: {
-      type: 'preset',
-      preset: 'claude_code',
-      append: [
-        '',
-        'You are running inside Pinagent, a tool that lets developers click a UI',
-        'element in the browser and leave a comment for you to act on. The user',
-        'is watching your output stream into a small widget pane next to the',
-        'element they clicked.',
-        '',
-        `If you need clarification mid-task, call the \`${ASK_USER_TOOL_NAME}\``,
-        'tool with a clear question (and optional `options` for closed-ended',
-        'answers). Prefer asking over guessing on ambiguous requirements.',
-      ].join('\n'),
-    },
+    prompt: opts.prompt,
+    isInitial: opts.isInitial,
+    permissionMode: permissionMode as AgentPermissionMode,
+    resume: opts.resume,
+    abortSignal: abort.signal,
   };
-  if (opts.resume) sdkOptions.resume = opts.resume;
 
   try {
-    await consumeStream(opts, sdkOptions);
+    await consumeStream(opts, provider.run(request));
   } finally {
     activeRuns.delete(opts.feedbackId);
     process.off(INTERRUPT_EVENT, onInterrupt);
@@ -484,66 +427,49 @@ async function runQuery(opts: RunQueryOpts): Promise<void> {
   }
 }
 
-async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<void> {
-  let sessionId: string | null = null;
+/**
+ * Drive one provider run: publish its events to the bus, append its log
+ * chunks to the transcript, persist the session id, and finalize the
+ * resolution block. Provider-neutral — every backend funnels through the
+ * same `ProviderRunItem` stream, so cost/session/status handling is shared.
+ */
+async function consumeStream(
+  opts: RunQueryOpts,
+  stream: AsyncIterable<import('./providers').ProviderRunItem>,
+): Promise<void> {
   let sessionRecorded = false;
   let resultRendered = false;
-  // Live turn counter for this run. Each `assistant` SDK message is one
-  // model turn, so we count them and publish a `progress` event the
-  // widget can surface in real time. Resets per run (a follow-up starts
-  // its own consumeStream), matching the per-run `numTurns` the SDK
-  // reports on the terminal `result` message.
-  let turn = 0;
-  // Captured from the run's `system/init` message so the result footer can
-  // relabel notional (subscription) cost. Stays null until init arrives,
-  // which always precedes the result.
-  let apiKeySource: string | null = null;
   const bus = getOrCreateBus(opts.feedbackId);
 
   try {
-    for await (const message of query({
-      prompt: opts.prompt,
-      options: sdkOptions,
-    }) as AsyncIterable<SDKMessage>) {
-      if (!sessionId && 'session_id' in message && typeof message.session_id === 'string') {
-        sessionId = message.session_id;
-      }
-      if (!sessionRecorded && sessionId) {
+    for await (const item of stream) {
+      if (!sessionRecorded && item.sessionId) {
         sessionRecorded = true;
-        await persistSessionId(opts.projectRoot, opts.feedbackId, sessionId);
+        await persistSessionId(opts.projectRoot, opts.feedbackId, item.sessionId);
       }
 
-      for (const ev of toAgentEvents(message)) await bus.publish(ev);
+      for (const ev of item.events ?? []) await bus.publish(ev);
 
-      // One assistant message = one model turn. Publish the running
-      // count so the widget's footer ticks up live, ahead of the
-      // authoritative `numTurns` on the final `result`.
-      if (message.type === 'assistant') {
-        turn += 1;
-        await bus.publish({ type: 'progress', turn });
-      }
-
-      if (message.type === 'system' && message.subtype === 'init') {
-        apiKeySource = message.apiKeySource ?? null;
-        await appendLog(opts.logPath, renderInitFooter(message));
-        continue;
-      }
-
-      if (message.type === 'result') {
+      if (item.isResult) {
         resultRendered = true;
-        await appendLog(opts.logPath, renderMessage(message));
+        if (item.log) await appendLog(opts.logPath, item.log);
         if (opts.isInitial) {
-          await appendResolution(opts.projectRoot, opts.feedbackId, opts.logPath, message);
-        } else {
-          await appendLog(opts.logPath, `\n${renderResultFooter(message, apiKeySource)}\n`);
+          await appendResolution(
+            opts.projectRoot,
+            opts.feedbackId,
+            opts.logPath,
+            item.resultFooter ?? null,
+          );
+        } else if (item.resultFooter) {
+          await appendLog(opts.logPath, `\n${item.resultFooter}\n`);
         }
-        // If the agent flipped this feedback out of `pending` via the
-        // MCP `resolve_feedback` tool, fan that out to the widget so
-        // its cache catches up immediately instead of waiting on a
-        // reload-time scan. The MCP server lives in a child process, so
-        // its SQLite write doesn't trigger our in-process project-events
-        // bus — we re-emit `conversations_changed` here to invalidate
-        // the dock's list/Changes/History caches.
+        // If the agent flipped this feedback out of `pending` (e.g. via the
+        // MCP `resolve_feedback` tool), fan that out to the widget so its
+        // cache catches up immediately instead of waiting on a reload-time
+        // scan. The MCP server lives in a child process, so its SQLite
+        // write doesn't trigger our in-process project-events bus — we
+        // re-emit `conversations_changed` here to invalidate the dock's
+        // list/Changes/History caches.
         try {
           const storage = new Storage(opts.projectRoot);
           const rec = await storage.read(opts.feedbackId);
@@ -564,8 +490,7 @@ async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<v
         continue;
       }
 
-      const chunk = renderMessage(message);
-      if (chunk) await appendLog(opts.logPath, chunk);
+      if (item.log) await appendLog(opts.logPath, item.log);
     }
   } catch (err) {
     const msg = stringifyErr(err);
@@ -578,79 +503,6 @@ async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<v
       // was already written).
       await appendResolution(opts.projectRoot, opts.feedbackId, opts.logPath, null);
     }
-  }
-}
-
-function toAgentEvents(message: SDKMessage): AgentEvent[] {
-  switch (message.type) {
-    case 'system':
-      if (message.subtype === 'init') {
-        return [
-          {
-            type: 'init',
-            sessionId: message.session_id,
-            model: message.model,
-            permissionMode: message.permissionMode,
-            apiKeySource: message.apiKeySource,
-          },
-        ];
-      }
-      return [];
-    case 'assistant': {
-      const out: AgentEvent[] = [];
-      const blocks = message.message?.content;
-      if (!Array.isArray(blocks)) return out;
-      for (const block of blocks) {
-        if (block.type === 'text' && block.text.trim()) {
-          out.push({ type: 'text', text: block.text });
-        } else if (block.type === 'tool_use') {
-          // ask_user calls are surfaced by the tool handler itself (it
-          // publishes an 'ask_user' event with the question). Suppress
-          // the bare tool_use chip so the widget doesn't render a
-          // duplicate "[ask_user]" line alongside the form.
-          if (block.name === ASK_USER_TOOL_NAME) continue;
-          out.push({
-            type: 'tool_use',
-            name: block.name,
-            summary: summariseToolInput(block.name, block.input),
-          });
-        }
-      }
-      if (message.error) {
-        out.push({ type: 'error', message: `assistant error: ${message.error}` });
-      }
-      return out;
-    }
-    case 'user': {
-      const out: AgentEvent[] = [];
-      const blocks = message.message?.content;
-      if (!Array.isArray(blocks)) return out;
-      for (const block of blocks) {
-        if (
-          typeof block === 'object' &&
-          block !== null &&
-          (block as { type?: string }).type === 'tool_result'
-        ) {
-          out.push({ type: 'tool_result', ok: !(block as { is_error?: boolean }).is_error });
-        }
-      }
-      return out;
-    }
-    case 'result': {
-      const event: AgentEvent = {
-        type: 'result',
-        subtype: message.subtype,
-        numTurns: message.num_turns,
-        totalCostUsd: message.total_cost_usd,
-        durationMs: message.duration_ms,
-      };
-      if (message.subtype !== 'success' && Array.isArray(message.errors)) {
-        event.errors = message.errors;
-      }
-      return [event];
-    }
-    default:
-      return [];
   }
 }
 
@@ -1291,7 +1143,7 @@ async function appendResolution(
   projectRoot: string,
   feedbackId: string,
   logPath: string,
-  result: Extract<SDKMessage, { type: 'result' }> | null,
+  footer: string | null,
 ): Promise<void> {
   const storage = new Storage(projectRoot);
   const updated = await storage.read(feedbackId);
@@ -1303,8 +1155,8 @@ async function appendResolution(
   lines.push('');
   lines.push(`**Finished:** ${finishedAt}  `);
 
-  if (result) {
-    lines.push(renderResultFooter(result, updated?.apiKeySource ?? null));
+  if (footer) {
+    lines.push(footer);
   } else {
     lines.push('> Stream ended without a `result` message.');
   }
@@ -1359,12 +1211,41 @@ function buildInitialPrompt(rec: FeedbackRecord, mode: SpawnAgentMode, cwd: stri
         ].join('\n')
       : '';
 
+  const componentLine = rec.component ? `Component: <${rec.component}>` : '';
+  const componentPathLine =
+    rec.componentPath && rec.componentPath.length > 1
+      ? `Component path: ${rec.componentPath.join(' › ')}`
+      : '';
+  // When the target's file:line is shared by several rendered instances
+  // (a `.map()`), the bare location is ambiguous. Tell the agent which
+  // instance was clicked and how to recognise it, so it edits the right
+  // list item rather than the first match.
+  const instanceNote =
+    rec.instanceTotal && rec.instanceTotal > 1
+      ? [
+          '',
+          `Heads up: this target's source location is rendered ${rec.instanceTotal} times`,
+          `(likely a list/.map()). The developer clicked instance #${
+            (rec.instanceIndex ?? 0) + 1
+          } of ${rec.instanceTotal}.`,
+          rec.instanceFingerprint ? `That instance's content: ${rec.instanceFingerprint}` : '',
+          `The file:line points at the *shared* JSX literal — edit there, but use the`,
+          `screenshot and the content above to act on the correct item if the change is`,
+          `instance-specific (e.g. its data source) rather than the markup itself.`,
+        ]
+          .filter((l) => l !== '')
+          .join('\n')
+      : '';
+
   return [
     'A developer submitted Pinagent feedback. Address it autonomously.',
     '',
     `Feedback id: ${rec.id}`,
     `Target: ${where}`,
+    componentLine,
+    componentPathLine,
     `Comment: "${rec.comment.replace(/\s+/g, ' ').slice(0, 200)}"`,
+    instanceNote,
     worktreeContext,
     '',
     'Workflow:',

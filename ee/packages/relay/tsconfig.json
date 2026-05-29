@@ -2,7 +2,12 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    // Cloudflare Workers runtime, not the browser: drop the DOM lib so the
+    // workerd globals (WebSocket, Response, DurableObjectState, …) come from
+    // @cloudflare/workers-types instead of colliding with DOM's.
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types"]
   },
   "include": ["src/**/*"]
 }

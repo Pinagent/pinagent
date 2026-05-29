@@ -124,3 +124,83 @@ describe('transformJsx', () => {
     expect(matches.length).toBe(3);
   });
 });
+
+describe('transformJsx — data-pa-comp (enclosing component)', () => {
+  it('tags the enclosing function component name', () => {
+    const out = transform(`
+      function PriceCard() {
+        return <div><button>Buy</button></div>;
+      }
+    `);
+    expect(out).not.toBeNull();
+    // Both host nodes carry the same enclosing component.
+    expect(out).toContain('<div data-pa-loc=');
+    const comps = out!.match(/data-pa-comp="PriceCard"/g) ?? [];
+    expect(comps.length).toBe(2);
+  });
+
+  it('tags arrow-function components assigned to a PascalCase const', () => {
+    const out = transform('const PriceCard = () => <div>hi</div>;');
+    expect(out).toContain('data-pa-comp="PriceCard"');
+  });
+
+  it('reports the owning component for JSX inside a .map() callback', () => {
+    // The <li> lives in an anonymous arrow callback — the nearest
+    // PascalCase owner is PriceList, which is what every instance shares.
+    const out = transform(`
+      function PriceList({ items }) {
+        return <ul>{items.map((i) => <li>{i}</li>)}</ul>;
+      }
+    `);
+    expect(out).not.toBeNull();
+    expect(out).toMatch(/<li data-pa-loc="[^"]+" data-pa-comp="PriceList"/);
+    expect(out).toMatch(/<ul data-pa-loc="[^"]+" data-pa-comp="PriceList"/);
+  });
+
+  it('uses the nearest component for nested component definitions', () => {
+    const out = transform(`
+      function Outer() {
+        function Inner() { return <span/>; }
+        return <Inner/>;
+      }
+    `);
+    expect(out).not.toBeNull();
+    expect(out).toContain('<span data-pa-loc=');
+    expect(out).toMatch(/<span [^>]*data-pa-comp="Inner"/);
+    expect(out).toMatch(/<Inner [^>]*data-pa-comp="Outer"/);
+  });
+
+  it('tags class-component JSX with the class name', () => {
+    const out = transform(`
+      class PriceCard extends Component {
+        render() { return <div/>; }
+      }
+    `);
+    expect(out).not.toBeNull();
+    expect(out).toContain('data-pa-comp="PriceCard"');
+  });
+
+  it('omits data-pa-comp outside any PascalCase component', () => {
+    // Top-level JSX in a module — no enclosing component.
+    const out = transform('const x = <div/>;');
+    expect(out).not.toBeNull();
+    expect(out).toContain('data-pa-loc=');
+    expect(out).not.toContain('data-pa-comp=');
+  });
+
+  it('omits data-pa-comp for JSX in a lowercase helper', () => {
+    const out = transform(`
+      function renderRow() { return <tr/>; }
+    `);
+    expect(out).not.toBeNull();
+    expect(out).not.toContain('data-pa-comp=');
+  });
+
+  it('stays idempotent with the component attribute present', () => {
+    const once = transform('function PriceCard() { return <div/>; }');
+    expect(once).not.toBeNull();
+    expect(once).toContain('data-pa-comp="PriceCard"');
+    // Re-running finds the element already tagged → no mutation → null.
+    expect(transform(once!)).toBeNull();
+  });
+});

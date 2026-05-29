@@ -86,7 +86,19 @@ export interface PaLoc {
   col: number;
 }
 
-export function findLoc(start: Element): PaLoc | null {
+/**
+ * Like `findLoc`, but also returns the element the `data-pa-loc` was
+ * found on plus the raw attribute string. Call sites that need to reason
+ * about the *resolved* element (instance counting, fingerprinting) want
+ * this; `findLoc` stays as the thin value-only wrapper most callers use.
+ */
+export interface LocHit {
+  el: Element;
+  raw: string;
+  loc: PaLoc;
+}
+
+export function findLocEl(start: Element): LocHit | null {
   let cur: Element | null = start;
   while (cur && cur.nodeType === 1) {
     const raw = cur.getAttribute?.('data-pa-loc');
@@ -97,13 +109,99 @@ export function findLoc(start: Element): PaLoc | null {
         const line = Number(parts[parts.length - 2]);
         const file = parts.slice(0, parts.length - 2).join(':');
         if (Number.isFinite(line) && Number.isFinite(col) && file) {
-          return { file, line, col };
+          return { el: cur, raw, loc: { file, line, col } };
         }
       }
     }
     cur = cur.parentElement;
   }
   return null;
+}
+
+export function findLoc(start: Element): PaLoc | null {
+  return findLocEl(start)?.loc ?? null;
+}
+
+/**
+ * Nearest enclosing component name, read from the `data-pa-comp`
+ * attribute the Babel plugin stamps alongside `data-pa-loc`. Walks up
+ * the same way `findLoc` does so the result lines up with the resolved
+ * source location. Null in uninstrumented apps or on elements outside
+ * any PascalCase component.
+ */
+export function componentOf(start: Element): string | null {
+  let cur: Element | null = start;
+  while (cur && cur.nodeType === 1) {
+    const comp = cur.getAttribute?.('data-pa-comp');
+    if (comp?.trim()) return comp.trim();
+    cur = cur.parentElement;
+  }
+  return null;
+}
+
+/**
+ * The chain of distinct enclosing components from the outermost down to
+ * (and including) the one wrapping `start`, e.g. `["App", "PriceList",
+ * "PriceCard"]`. A single component spans many nested host nodes that
+ * all carry the same `data-pa-comp`, so consecutive duplicates are
+ * collapsed — the array tracks *component boundaries*, not DOM depth.
+ * Capped at `max` entries (keeping the innermost) so a deep tree can't
+ * bloat the payload. Empty when nothing is instrumented.
+ */
+export function componentPath(start: Element, max = 8): string[] {
+  const inner: string[] = [];
+  let cur: Element | null = start;
+  let last: string | null = null;
+  while (cur && cur.nodeType === 1) {
+    const comp = cur.getAttribute?.('data-pa-comp')?.trim();
+    if (comp && comp !== last) {
+      inner.push(comp);
+      last = comp;
+    }
+    cur = cur.parentElement;
+  }
+  // `inner` is innermost→outermost; reverse to outer→inner for reading.
+  inner.reverse();
+  return inner.length > max ? inner.slice(inner.length - max) : inner;
+}
+
+/**
+ * Position of `el` among every live element that shares its exact
+ * `data-pa-loc` value, in document order. `total > 1` means the same JSX
+ * literal is rendered more than once (the `.map()` case) and the bare
+ * `file:line` is ambiguous; `index` says which one the user clicked.
+ * `index` is 0-based; -1 if `el` isn't itself tagged.
+ */
+export function locInstanceInfo(el: Element, raw: string): { index: number; total: number } {
+  const all = document.querySelectorAll('[data-pa-loc]');
+  let total = 0;
+  let index = -1;
+  for (let i = 0; i < all.length; i++) {
+    const node = all[i];
+    if (node?.getAttribute('data-pa-loc') === raw) {
+      if (node === el) index = total;
+      total++;
+    }
+  }
+  return { index, total };
+}
+
+/**
+ * A compact, human-readable fingerprint of an element's distinguishing
+ * content — used to tell the agent *which* `.map()` item was clicked
+ * when the `file:line` is shared across instances. Combines the tag, a
+ * trimmed text snippet, and the identity-ish attributes that usually
+ * differ row-to-row (id, test ids, links, images, labels).
+ */
+export function elementFingerprint(el: Element, maxText = 60): string {
+  const parts: string[] = [el.tagName.toLowerCase()];
+  const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+  if (text) parts.push(`"${truncate(text, maxText)}"`);
+  for (const attr of ['id', 'data-testid', 'name', 'href', 'src', 'alt', 'title', 'aria-label']) {
+    const v = el.getAttribute(attr)?.trim();
+    if (v) parts.push(`${attr}=${truncate(v, 40)}`);
+  }
+  return parts.join(' ');
 }
 
 /**

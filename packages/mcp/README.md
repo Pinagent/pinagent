@@ -57,7 +57,7 @@ user re-opens a landed conversation.
 
 ## Channel mode (push events into a running Claude Code session)
 
-The server also declares the `claude/channel` capability ([research preview](https://code.claude.com/docs/en/channels)). When Claude Code is launched with the channel flag, the server watches `.pinagent/feedback/` and pushes a `notifications/claude/channel` event for each new comment so the agent reacts in your existing session instead of being polled.
+The server also declares the `claude/channel` capability ([research preview](https://code.claude.com/docs/en/channels), requires Claude Code **v2.1.80 or later**). When Claude Code is launched with the channel flag, the server polls the local SQLite store and pushes a `notifications/claude/channel` event for each new comment so the agent reacts in your existing session instead of being polled.
 
 Launch the session with both the project-scoped MCP config *and* the channel development flag:
 
@@ -75,3 +75,5 @@ The `server:pinagent` argument matches the key in your `.mcp.json`. Events arriv
 ```
 
 If you don't pass the flag, channel notifications are silently dropped and the pull-mode tools above continue to work normally.
+
+**Only comments left *after* the session starts are pushed.** The watcher seeds itself with the IDs already in the store at boot and pushes events for items that arrive afterwards, so a backlog of comments queued *before* you launched the session won't trigger channel events. Reach those with the pull-mode tools (`list_pending_feedback` / `get_feedback`).

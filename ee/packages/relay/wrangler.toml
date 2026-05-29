@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Elastic-2.0
+# Cloudflare Workers config for the Pinagent hosted relay.
+#
+# Deploy:  pnpm --filter @pinagent/ee-relay deploy
+# Local:   pnpm --filter @pinagent/ee-relay dev:worker
+name = "pinagent-relay"
+main = "src/worker.ts"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+# One Durable Object class — `RelaySession` holds the live sockets for a
+# single tenant session and routes between them.
+[[durable_objects.bindings]]
+name = "RELAY"
+class_name = "RelaySession"
+
+# SQLite-backed Durable Objects (required for new classes; also the only
+# tier that supports the free plan).
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RelaySession"]

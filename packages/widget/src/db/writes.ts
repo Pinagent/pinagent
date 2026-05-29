@@ -17,6 +17,14 @@ export interface AnchorInput {
   clickY: number;
   viewportW: number;
   viewportH: number;
+  /** Enclosing component name (`data-pa-comp`); null when uninstrumented. */
+  component?: string | null;
+  /** Outer→inner chain of distinct enclosing component names. */
+  componentPath?: string[] | null;
+  /** Loop-instance disambiguation; null unless the loc was ambiguous. */
+  instanceIndex?: number | null;
+  instanceTotal?: number | null;
+  instanceFingerprint?: string | null;
   /**
    * Secondary elements picked via Cmd/Ctrl-click before the committing
    * click. Empty/undefined for the single-pick case.
@@ -31,6 +39,7 @@ export interface AdditionalAnchor {
   selector: string;
   clickX: number;
   clickY: number;
+  component?: string | null;
 }
 
 /**

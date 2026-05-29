@@ -160,160 +160,14 @@ async function main() {
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_LIST }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (req) => {
-    const name = req.params.name;
-    const args = (req.params.arguments ?? {}) as Record<string, unknown>;
-
-    try {
-      switch (name) {
-        case 'list_pending_feedback': {
-          const input = ListInput.parse(args);
-          const items = (await storage.list()).filter((r) => r.status === 'pending');
-          const filtered = items.filter((r) => {
-            if (input.since && r.createdAt < input.since) return false;
-            if (input.file && !(r.file ?? '').includes(input.file)) return false;
-            return true;
-          });
-          const shaped = filtered.map((r) => ({
-            id: r.id,
-            comment_preview: r.comment.slice(0, 120),
-            file: r.file,
-            line: r.line,
-            url: r.url,
-            created_at: r.createdAt,
-          }));
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({ items: shaped }, null, 2),
-              },
-            ],
-          };
-        }
-
-        case 'get_feedback': {
-          const input = GetInput.parse(args);
-          const rec = await storage.read(input.id);
-          if (!rec) return errorResult(`feedback ${input.id} not found`);
-          const pretty = formatFeedback(rec);
-          const png = await storage.readScreenshot(rec);
-          const content: Array<
-            { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
-          > = [{ type: 'text', text: pretty }];
-          if (png) {
-            content.push({
-              type: 'image',
-              data: png.toString('base64'),
-              mimeType: 'image/png',
-            });
-          }
-          return { content };
-        }
-
-        case 'resolve_feedback': {
-          const input = ResolveInput.parse(args);
-          const rec = await storage.read(input.id);
-          if (!rec) return errorResult(`feedback ${input.id} not found`);
-
-          const next = { ...rec };
-          next.status = input.status;
-          if (input.note !== undefined) next.note = input.note;
-          if (input.commit_sha !== undefined) next.commitSha = input.commit_sha;
-          if (input.status === 'pending') {
-            next.resolvedAt = null;
-          } else if (!next.resolvedAt) {
-            next.resolvedAt = new Date().toISOString();
-          }
-          // Inline-mode runs have no worktree to Land/Discard, so the
-          // dock would otherwise leave them stuck in `readyToLand`. Treat
-          // the agent's own resolution as the terminal event in that
-          // case. Real worktrees (`active`) keep their state — the user
-          // still drives Land/Discard from the dock.
-          if (next.worktreeState === 'none') {
-            if (input.status === 'fixed') next.worktreeState = 'landed';
-            else if (input.status === 'wontfix') next.worktreeState = 'discarded';
-          }
-          await storage.write(next);
-          // Drop a row in the audit log so the dock's History → Activity
-          // feed shows the agent's resolution. Best-effort: any failure
-          // here is swallowed by the helper itself.
-          await storage.recordAuditEvent({
-            conversationId: next.id,
-            actor: 'agent',
-            action: 'conversation_resolved_by_agent',
-            payload: {
-              status: next.status,
-              previousStatus: rec.status,
-              ...(next.worktreeState !== rec.worktreeState
-                ? { worktreeState: next.worktreeState, previousWorktreeState: rec.worktreeState }
-                : {}),
-              ...(input.note !== undefined ? { note: input.note } : {}),
-              ...(input.commit_sha !== undefined ? { commitSha: input.commit_sha } : {}),
-            },
-          });
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({ ok: true, id: next.id, status: next.status }, null, 2),
-              },
-            ],
-          };
-        }
-
-        case 'get_source_context': {
-          const input = SourceInput.parse(args);
-          if (input.file.includes('..')) return errorResult('path traversal not allowed');
-          const abs = isAbsolute(input.file) ? input.file : resolve(root, input.file);
-          if (!isInsideRoot(root, abs)) return errorResult('path outside project root');
-          let text: string;
-          try {
-            text = await readFile(abs, 'utf8');
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            return errorResult(`cannot read ${input.file}: ${msg}`);
-          }
-          const lines = text.split(/\r?\n/);
-          const radius = input.radius ?? 20;
-          const start = Math.max(1, input.line - radius);
-          const end = Math.min(lines.length, input.line + radius);
-          const pad = String(end).length;
-          const window: string[] = [];
-          for (let i = start; i <= end; i++) {
-            const marker = i === input.line ? '>' : ' ';
-            const lineText = lines[i - 1] ?? '';
-            window.push(`${marker} ${String(i).padStart(pad, ' ')} | ${lineText}`);
-          }
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `${input.file} (lines ${start}-${end}, target ${input.line}):\n\n${window.join('\n')}`,
-              },
-            ],
-          };
-        }
-
-        case 'get_conversation_transcript': {
-          const input = TranscriptInput.parse(args);
-          const rec = await storage.read(input.id);
-          if (!rec) return errorResult(`conversation ${input.id} not found`);
-          const events = await storage.listMessages(input.id);
-          const format = input.format ?? 'text';
-          const text =
-            format === 'json' ? JSON.stringify(events, null, 2) : renderTranscript(events);
-          return { content: [{ type: 'text', text }] };
-        }
-
-        default:
-          return errorResult(`unknown tool: ${name}`);
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return errorResult(msg);
-    }
-  });
+  server.setRequestHandler(CallToolRequestSchema, async (req) =>
+    callTool(
+      storage,
+      root,
+      req.params.name,
+      (req.params.arguments ?? {}) as Record<string, unknown>,
+    ),
+  );
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -326,6 +180,170 @@ async function main() {
     // eslint-disable-next-line no-console
     console.error(`[pinagent-mcp:channel] ${msg}`);
   });
+}
+
+/**
+ * Dispatch a single MCP tool call against the given storage + project root.
+ * Extracted from the request handler so the tool logic — especially the
+ * `get_source_context` path-traversal guards — is unit-testable without
+ * standing up a stdio transport. Returns the same content/`isError` shape
+ * the MCP SDK expects; never throws (all errors funnel through
+ * `errorResult`).
+ */
+export async function callTool(
+  storage: Storage,
+  root: string,
+  name: string,
+  args: Record<string, unknown>,
+) {
+  try {
+    switch (name) {
+      case 'list_pending_feedback': {
+        const input = ListInput.parse(args);
+        const items = (await storage.list()).filter((r) => r.status === 'pending');
+        const filtered = items.filter((r) => {
+          if (input.since && r.createdAt < input.since) return false;
+          if (input.file && !(r.file ?? '').includes(input.file)) return false;
+          return true;
+        });
+        const shaped = filtered.map((r) => ({
+          id: r.id,
+          comment_preview: r.comment.slice(0, 120),
+          file: r.file,
+          line: r.line,
+          url: r.url,
+          created_at: r.createdAt,
+        }));
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ items: shaped }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_feedback': {
+        const input = GetInput.parse(args);
+        const rec = await storage.read(input.id);
+        if (!rec) return errorResult(`feedback ${input.id} not found`);
+        const pretty = formatFeedback(rec);
+        const png = await storage.readScreenshot(rec);
+        const content: Array<
+          { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
+        > = [{ type: 'text', text: pretty }];
+        if (png) {
+          content.push({
+            type: 'image',
+            data: png.toString('base64'),
+            mimeType: 'image/png',
+          });
+        }
+        return { content };
+      }
+
+      case 'resolve_feedback': {
+        const input = ResolveInput.parse(args);
+        const rec = await storage.read(input.id);
+        if (!rec) return errorResult(`feedback ${input.id} not found`);
+
+        const next = { ...rec };
+        next.status = input.status;
+        if (input.note !== undefined) next.note = input.note;
+        if (input.commit_sha !== undefined) next.commitSha = input.commit_sha;
+        if (input.status === 'pending') {
+          next.resolvedAt = null;
+        } else if (!next.resolvedAt) {
+          next.resolvedAt = new Date().toISOString();
+        }
+        // Inline-mode runs have no worktree to Land/Discard, so the
+        // dock would otherwise leave them stuck in `readyToLand`. Treat
+        // the agent's own resolution as the terminal event in that
+        // case. Real worktrees (`active`) keep their state — the user
+        // still drives Land/Discard from the dock.
+        if (next.worktreeState === 'none') {
+          if (input.status === 'fixed') next.worktreeState = 'landed';
+          else if (input.status === 'wontfix') next.worktreeState = 'discarded';
+        }
+        await storage.write(next);
+        // Drop a row in the audit log so the dock's History → Activity
+        // feed shows the agent's resolution. Best-effort: any failure
+        // here is swallowed by the helper itself.
+        await storage.recordAuditEvent({
+          conversationId: next.id,
+          actor: 'agent',
+          action: 'conversation_resolved_by_agent',
+          payload: {
+            status: next.status,
+            previousStatus: rec.status,
+            ...(next.worktreeState !== rec.worktreeState
+              ? { worktreeState: next.worktreeState, previousWorktreeState: rec.worktreeState }
+              : {}),
+            ...(input.note !== undefined ? { note: input.note } : {}),
+            ...(input.commit_sha !== undefined ? { commitSha: input.commit_sha } : {}),
+          },
+        });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ ok: true, id: next.id, status: next.status }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_source_context': {
+        const input = SourceInput.parse(args);
+        if (input.file.includes('..')) return errorResult('path traversal not allowed');
+        const abs = isAbsolute(input.file) ? input.file : resolve(root, input.file);
+        if (!isInsideRoot(root, abs)) return errorResult('path outside project root');
+        let text: string;
+        try {
+          text = await readFile(abs, 'utf8');
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          return errorResult(`cannot read ${input.file}: ${msg}`);
+        }
+        const lines = text.split(/\r?\n/);
+        const radius = input.radius ?? 20;
+        const start = Math.max(1, input.line - radius);
+        const end = Math.min(lines.length, input.line + radius);
+        const pad = String(end).length;
+        const window: string[] = [];
+        for (let i = start; i <= end; i++) {
+          const marker = i === input.line ? '>' : ' ';
+          const lineText = lines[i - 1] ?? '';
+          window.push(`${marker} ${String(i).padStart(pad, ' ')} | ${lineText}`);
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `${input.file} (lines ${start}-${end}, target ${input.line}):\n\n${window.join('\n')}`,
+            },
+          ],
+        };
+      }
+
+      case 'get_conversation_transcript': {
+        const input = TranscriptInput.parse(args);
+        const rec = await storage.read(input.id);
+        if (!rec) return errorResult(`conversation ${input.id} not found`);
+        const events = await storage.listMessages(input.id);
+        const format = input.format ?? 'text';
+        const text = format === 'json' ? JSON.stringify(events, null, 2) : renderTranscript(events);
+        return { content: [{ type: 'text', text }] };
+      }
+
+      default:
+        return errorResult(`unknown tool: ${name}`);
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return errorResult(msg);
+  }
 }
 
 function errorResult(message: string) {
@@ -346,19 +364,35 @@ function formatFeedback(r: {
   viewport: { w: number; h: number };
   status: string;
   createdAt: string;
+  component?: string | null;
+  componentPath?: string[] | null;
+  instanceIndex?: number | null;
+  instanceTotal?: number | null;
+  instanceFingerprint?: string | null;
 }): string {
   const loc = r.file ? `${r.file}:${r.line ?? '?'}${r.col != null ? `:${r.col}` : ''}` : r.selector;
-  return [
+  const lines = [
     `id: ${r.id}`,
     `status: ${r.status}`,
     `created: ${r.createdAt}`,
     `url: ${r.url}`,
     `viewport: ${r.viewport.w}×${r.viewport.h}`,
     `target: ${loc}`,
-    '',
-    'comment:',
-    r.comment,
-  ].join('\n');
+  ];
+  if (r.component) lines.push(`component: <${r.component}>`);
+  if (r.componentPath && r.componentPath.length > 1) {
+    lines.push(`component path: ${r.componentPath.join(' › ')}`);
+  }
+  // Loop-instance disambiguation: the file:line is shared across N
+  // rendered instances; point the agent at the one the user clicked.
+  if (r.instanceTotal && r.instanceTotal > 1) {
+    lines.push(
+      `instance: clicked #${(r.instanceIndex ?? 0) + 1} of ${r.instanceTotal} sharing this location`,
+    );
+    if (r.instanceFingerprint) lines.push(`instance content: ${r.instanceFingerprint}`);
+  }
+  lines.push('', 'comment:', r.comment);
+  return lines.join('\n');
 }
 
 // Auto-start when invoked as a script (bin entry). Skipped when imported as
