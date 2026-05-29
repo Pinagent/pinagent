@@ -16,7 +16,8 @@
       "!**/next-env.d.ts",
       "!**/pnpm-lock.yaml",
       "!**/signatures",
-      "!**/*.vue"
+      "!**/*.vue",
+      "!**/*.svelte"
     ]
   },
   "assist": { "actions": { "source": { "organizeImports": "on" } } },
