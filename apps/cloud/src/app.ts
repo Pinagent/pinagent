@@ -1,25 +1,33 @@
 // SPDX-License-Identifier: Elastic-2.0
+import {
+  type ConfigServiceDeps,
+  handleCostControlConfig,
+  handleSubscriptionConfig,
+} from './config-service';
 import { handleSsoCallback, handleSsoStart, type LoginServiceDeps } from './login-service';
 import { handleAudit, handleMembers, handleUsage, type ReadServiceDeps } from './read-service';
 import { handleSessionRequest, type SessionServiceDeps } from './session-service';
 
 /**
- * The cloud control-plane HTTP surface, composed from the session, login, and
- * read services. Framework-agnostic (`{ fetch }`), so `worker.ts` (or a Node
- * server) just builds the deps and forwards requests here.
+ * The cloud control-plane HTTP surface, composed from the session, login,
+ * read, and config services. Framework-agnostic (`{ fetch }`), so `worker.ts`
+ * (or a Node server) just builds the deps and forwards requests here.
  *
- *   GET  /sso/start            → begin IdP login
- *   GET  /sso/callback         → complete login, set session cookie
- *   POST /sessions             → exchange the session for a relay token
- *   GET  /usage                → usage summary (admin read)
- *   GET  /audit                → audit events (admin read)
- *   GET  /members              → organization members (admin read)
- *   GET  /healthz              → liveness
+ *   GET      /sso/start        → begin IdP login
+ *   GET      /sso/callback     → complete login, set session cookie
+ *   POST     /sessions         → exchange the session for a relay token
+ *   GET      /usage            → usage summary (admin read)
+ *   GET      /audit            → audit events (admin read)
+ *   GET      /members          → organization members (admin read)
+ *   GET/PUT  /subscriptions    → read/set the org's plan (admin config)
+ *   GET/PUT  /cost-controls    → read/set the org's cost cap (admin config)
+ *   GET      /healthz          → liveness
  */
 export interface CloudAppDeps {
   session: SessionServiceDeps;
   login: LoginServiceDeps;
   read: ReadServiceDeps;
+  config: ConfigServiceDeps;
 }
 
 export function createCloudApp(deps: CloudAppDeps): { fetch(request: Request): Promise<Response> } {
@@ -39,6 +47,10 @@ export function createCloudApp(deps: CloudAppDeps): { fetch(request: Request): P
           return handleAudit(request, deps.read);
         case '/members':
           return handleMembers(request, deps.read);
+        case '/subscriptions':
+          return handleSubscriptionConfig(request, deps.config);
+        case '/cost-controls':
+          return handleCostControlConfig(request, deps.config);
         case '/healthz':
           return Promise.resolve(new Response('ok', { status: 200 }));
         default:

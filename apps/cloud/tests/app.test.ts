@@ -7,8 +7,11 @@ import {
   type SsoProvider,
   verifySessionToken,
 } from '@pinagent/ee-auth';
-import { createInMemoryMeterSink } from '@pinagent/ee-billing';
-import { createInMemoryAuditSink } from '@pinagent/ee-team-features';
+import { createInMemoryMeterSink, createInMemorySubscriptionStore } from '@pinagent/ee-billing';
+import {
+  createInMemoryAuditSink,
+  createInMemoryCostControlStore,
+} from '@pinagent/ee-team-features';
 import { describe, expect, it } from 'vitest';
 import { createCloudApp } from '../src/app';
 import { createBearerAuthenticator } from '../src/authenticators';
@@ -83,6 +86,12 @@ function makeApp() {
       defaultReturnTo: '/',
     },
     read: { store, authenticate, audit, meter },
+    config: {
+      store,
+      authenticate,
+      subscriptions: createInMemorySubscriptionStore(),
+      costControls: createInMemoryCostControlStore(),
+    },
   });
 }
 
