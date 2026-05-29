@@ -1,13 +1,8 @@
 // SPDX-License-Identifier: Elastic-2.0
-import { MembershipRequiredError } from './errors';
-import {
-  isActiveMember,
-  type MembershipStore,
-  type OrganizationId,
-  type UserId,
-} from './membership';
+import { authorizeOrgMember } from './authz';
+import type { MembershipStore, OrganizationId, UserId } from './membership';
 import type { Principal } from './principal';
-import { assertCan, type Permission } from './rbac';
+import type { Permission } from './rbac';
 import { signSessionToken } from './session-token';
 
 /**
@@ -64,23 +59,15 @@ export interface IssuedRelaySession {
 export async function issueRelaySessionToken(
   opts: IssueRelaySessionOptions,
 ): Promise<IssuedRelaySession> {
-  const membership = await opts.store.getMembership(opts.organizationId, opts.userId);
-  if (!membership || !isActiveMember(membership)) {
-    throw new MembershipRequiredError(opts.organizationId, opts.userId);
-  }
-
-  const principal: Principal = {
-    userId: opts.userId,
-    organizationId: opts.organizationId,
-    role: membership.role,
-  };
-
-  if (opts.requirePermission) {
-    assertCan(principal.role, opts.requirePermission);
-  }
+  const principal = await authorizeOrgMember(
+    opts.store,
+    opts.userId,
+    opts.organizationId,
+    opts.requirePermission,
+  );
 
   const token = await signSessionToken(
-    { tenantId: opts.organizationId, sessionId: opts.sessionId, role: membership.role },
+    { tenantId: opts.organizationId, sessionId: opts.sessionId, role: principal.role },
     opts.secret,
     { ttlSeconds: opts.ttlSeconds, nowSeconds: opts.nowSeconds },
   );
