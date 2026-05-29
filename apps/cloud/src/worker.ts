@@ -3,6 +3,7 @@ import { createOidcProvider, type SsoConnection } from '@pinagent/ee-auth';
 import { createCloudApp } from './app';
 import { createBearerAuthenticator } from './authenticators';
 import { type CloudConfig, loadCloudConfig } from './config';
+import { createPgActiveSessionStore } from './db/active-session-store';
 import { createPgAuditSink } from './db/audit-sink';
 import { createPgBranchRoutingStore } from './db/branch-routing-store';
 import { createNeonDb } from './db/client';
@@ -43,6 +44,7 @@ async function buildApp(config: CloudConfig) {
   const costControls = createPgCostControlStore(db);
   const users = createPgUserStore(db);
   const branchRouting = createPgBranchRoutingStore(db);
+  const activeSessions = createPgActiveSessionStore(db);
 
   // Connections are resolved from a store. Seed the env-configured one so a
   // single-connection deploy works with no DB rows; additional org IdPs are
@@ -109,6 +111,6 @@ async function buildApp(config: CloudConfig) {
     },
     read: { store, authenticate, audit, meter },
     config: { store, authenticate, subscriptions, costControls, branchRouting },
-    internal: { audit, meter, relayInternalSecret: config.relayInternalSecret },
+    internal: { audit, meter, activeSessions, relayInternalSecret: config.relayInternalSecret },
   });
 }

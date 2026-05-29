@@ -144,6 +144,24 @@ export const subscriptions = billingSchema.table('subscriptions', {
   currentPeriodStart: text('current_period_start').notNull(),
 });
 
+/**
+ * `relay` schema — live relay state the control plane derives from lifecycle
+ * events. `active_sessions` is which agent-runner *device* sessions are
+ * currently connected, per org; queried to target a control-plane → device
+ * push. Maintained from `device.connected` / `device.disconnected` ingest.
+ */
+export const relaySchema = pgSchema('relay');
+
+export const activeSessions = relaySchema.table(
+  'active_sessions',
+  {
+    organizationId: text('organization_id').notNull(),
+    sessionId: text('session_id').notNull(),
+    connectedAt: text('connected_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.sessionId] })],
+);
+
 export const schema = {
   organizations,
   organizationMemberships,
@@ -155,4 +173,5 @@ export const schema = {
   branchRouting,
   usageEvents,
   subscriptions,
+  activeSessions,
 };
