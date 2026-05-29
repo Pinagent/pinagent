@@ -19,7 +19,11 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['packages/*/tests/**/*.test.{ts,tsx}', 'apps/*/tests/**/*.test.{ts,tsx}'],
+    include: [
+      'packages/*/tests/**/*.test.{ts,tsx}',
+      'ee/packages/*/tests/**/*.test.{ts,tsx}',
+      'apps/*/tests/**/*.test.{ts,tsx}',
+    ],
     exclude: ['**/node_modules/**', '**/dist/**', '**/.next/**'],
     isolate: true,
     // better-sqlite3 is a native module — Vite's resolver can't

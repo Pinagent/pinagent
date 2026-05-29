@@ -22,4 +22,7 @@ We do not accept external pull requests against this directory. See
 | `@pinagent/ee-team-features` | Audit log, branch routing, cost controls. |
 | `@pinagent/ee-infra` | Cloud-specific orchestration (deploy, observability glue). |
 
-All are stubs at this point — see `packages/<name>/src/index.ts`.
+`@pinagent/ee-auth` has its first phase in place — a public type surface and a
+working RBAC engine, with persistence and SSO boundaries scaffolded as
+interfaces. See [`packages/auth/README.md`](./packages/auth/README.md). The
+remaining packages are stubs at this point — see `packages/<name>/src/index.ts`.
