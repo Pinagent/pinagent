@@ -11,12 +11,14 @@ export { PACKAGE_NAME as TEAM_FEATURES_PACKAGE } from '@pinagent/ee-team-feature
 export { type CloudAppDeps, createCloudApp } from './app';
 export { createBearerAuthenticator } from './authenticators';
 export { type CloudConfig, loadCloudConfig, type OidcConnectionConfig } from './config';
+export { createPgAuditSink } from './db/audit-sink';
+export { createNeonDb } from './db/client';
 export {
   createNeonMembershipStore,
   createPgMembershipStore,
   type MembershipDb,
 } from './db/membership-store';
-export { organizationMemberships, organizations, schema } from './db/schema';
+export { auditEvents, organizationMemberships, organizations, schema } from './db/schema';
 export { handleSsoCallback, handleSsoStart, type LoginServiceDeps } from './login-service';
 export {
   type AuthenticatedUser,
