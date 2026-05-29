@@ -13,11 +13,12 @@
  *   - 80%–<100%  → warn   (yellow-ish; "you're close")
  *   - >=100%     → over   (red; the next turn will be refused)
  *
- * Sub-cent amounts are rendered at 4-decimal precision so a string of
- * cheap turns still surfaces a non-zero badge; >=$0.01 trims to two
- * decimals. Caller already gates the chip on `cost > 0` so we never
- * render `$0`.
+ * The USD number→string formatting is shared with the in-page widget
+ * tray via `formatCompactUsd` (@pinagent/shared) so the two surfaces
+ * can't drift; this module adds the cap-relative tone on top.
  */
+import { formatCompactUsd } from '@pinagent/shared';
+
 export type CostBadgeTone = 'normal' | 'warn' | 'over';
 
 export interface CostBadge {
@@ -30,14 +31,11 @@ const WARN_THRESHOLD = 0.8;
 // 754) still trips the warn threshold instead of staying "normal".
 const RATIO_EPSILON = 1e-9;
 
-function formatUsd(usd: number): string {
-  if (usd < 0.01) return `$${usd.toFixed(4)}`;
-  return `$${usd.toFixed(2)}`;
-}
-
 export function formatCostBadge(cost: number, cap?: number | null): CostBadge {
   const haveCap = typeof cap === 'number' && Number.isFinite(cap) && cap > 0;
-  const label = haveCap ? `${formatUsd(cost)} / ${formatUsd(cap as number)}` : formatUsd(cost);
+  const label = haveCap
+    ? `${formatCompactUsd(cost)} / ${formatCompactUsd(cap as number)}`
+    : formatCompactUsd(cost);
   let tone: CostBadgeTone = 'normal';
   if (haveCap) {
     const ratio = cost / (cap as number);
