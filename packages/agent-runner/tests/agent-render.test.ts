@@ -181,6 +181,41 @@ describe('renderResultFooter', () => {
     expect(out).toContain('retry exhausted');
   });
 
+  it('relabels notional cost as API-equivalent for an OAuth run', () => {
+    const out = renderResultFooter(
+      {
+        type: 'result',
+        subtype: 'success',
+        num_turns: 1,
+        usage: { input_tokens: 100, output_tokens: 50 },
+        total_cost_usd: 0.0123,
+        duration_ms: 1000,
+      } as never,
+      'oauth',
+    );
+    expect(out).toContain('≈$0.0123');
+    expect(out).toContain('API-equivalent');
+    expect(out).toContain('subscription');
+    // Never the bare "Cost: $0.0123" that reads as a real charge.
+    expect(out).not.toContain('**Cost:** $0.0123');
+  });
+
+  it('shows a plain dollar cost for a non-oauth source', () => {
+    const out = renderResultFooter(
+      {
+        type: 'result',
+        subtype: 'success',
+        num_turns: 1,
+        usage: { input_tokens: 100, output_tokens: 50 },
+        total_cost_usd: 0.0123,
+        duration_ms: 1000,
+      } as never,
+      'user',
+    );
+    expect(out).toContain('**Cost:** $0.0123');
+    expect(out).not.toContain('API-equivalent');
+  });
+
   it('appends cache token counts when present', () => {
     const out = renderResultFooter({
       type: 'result',

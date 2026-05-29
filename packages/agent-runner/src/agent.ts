@@ -494,6 +494,10 @@ async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<v
   // its own consumeStream), matching the per-run `numTurns` the SDK
   // reports on the terminal `result` message.
   let turn = 0;
+  // Captured from the run's `system/init` message so the result footer can
+  // relabel notional (subscription) cost. Stays null until init arrives,
+  // which always precedes the result.
+  let apiKeySource: string | null = null;
   const bus = getOrCreateBus(opts.feedbackId);
 
   try {
@@ -520,6 +524,7 @@ async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<v
       }
 
       if (message.type === 'system' && message.subtype === 'init') {
+        apiKeySource = message.apiKeySource ?? null;
         await appendLog(opts.logPath, renderInitFooter(message));
         continue;
       }
@@ -530,7 +535,7 @@ async function consumeStream(opts: RunQueryOpts, sdkOptions: Options): Promise<v
         if (opts.isInitial) {
           await appendResolution(opts.projectRoot, opts.feedbackId, opts.logPath, message);
         } else {
-          await appendLog(opts.logPath, `\n${renderResultFooter(message)}\n`);
+          await appendLog(opts.logPath, `\n${renderResultFooter(message, apiKeySource)}\n`);
         }
         // If the agent flipped this feedback out of `pending` via the
         // MCP `resolve_feedback` tool, fan that out to the widget so
@@ -1299,7 +1304,7 @@ async function appendResolution(
   lines.push(`**Finished:** ${finishedAt}  `);
 
   if (result) {
-    lines.push(renderResultFooter(result));
+    lines.push(renderResultFooter(result, updated?.apiKeySource ?? null));
   } else {
     lines.push('> Stream ended without a `result` message.');
   }

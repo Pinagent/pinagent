@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { isNotionalCost } from '@pinagent/shared';
 
 /**
  * Render a single SDK message as a markdown fragment to append to the log.
@@ -39,7 +40,10 @@ export function renderInitFooter(
   return `${lines.join('\n')}\n`;
 }
 
-export function renderResultFooter(result: Extract<SDKMessage, { type: 'result' }>): string {
+export function renderResultFooter(
+  result: Extract<SDKMessage, { type: 'result' }>,
+  apiKeySource?: string | null,
+): string {
   const lines: string[] = [];
   if (result.subtype === 'success') {
     lines.push(
@@ -63,7 +67,13 @@ export function renderResultFooter(result: Extract<SDKMessage, { type: 'result' 
         : ''
     }`,
   );
-  lines.push(`**Cost:** $${result.total_cost_usd.toFixed(4)}`);
+  // Notional (OAuth/subscription) cost is billed against the quota, not a
+  // card — say so rather than printing a bare `$` that reads as a charge.
+  lines.push(
+    isNotionalCost(apiKeySource)
+      ? `**Cost:** ≈$${result.total_cost_usd.toFixed(4)} API-equivalent (subscription — not billed)`
+      : `**Cost:** $${result.total_cost_usd.toFixed(4)}`,
+  );
   lines.push(`**Duration:** ${(result.duration_ms / 1000).toFixed(1)}s`);
   return lines.join('  \n');
 }
