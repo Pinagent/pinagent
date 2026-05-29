@@ -116,9 +116,12 @@ describe('listBranches', () => {
   it('detects a worktree that is behind the base branch', async () => {
     const storage = new storageMod.Storage(ROOT);
     await makeWorktree(storage, 'stale worktree');
-    // Advance main after the worktree branched off it.
+    // Advance main after the worktree branched off it. Assert the commit
+    // actually landed — a no-op `commit -am` would leave main unmoved and
+    // surface as a confusing `clean` instead of a clear failure here.
     await writeFile(join(ROOT, 'README.md'), 'hello v2\n', 'utf8');
-    await git(ROOT, ['commit', '-am', 'advance main']);
+    const advance = await git(ROOT, ['commit', '-am', 'advance main']);
+    expect(advance.code).toBe(0);
 
     const rows = await branches.listBranches(ROOT);
     expect(rows[0]?.state).toBe('behind-base');

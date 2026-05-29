@@ -62,7 +62,7 @@ export async function listBranches(projectRoot: string): Promise<BranchRecord[]>
       if (!rec.worktreePath || !rec.branch) return null;
       if (!existsSync(rec.worktreePath)) return null;
       const [state, diskMb] = await Promise.all([
-        computeBranchState(rec.worktreePath, baseRef),
+        computeBranchState(projectRoot, rec.worktreePath, rec.branch, baseRef),
         computeDiskMb(rec.worktreePath),
       ]);
       return {
@@ -100,11 +100,15 @@ async function resolveBaseRef(projectRoot: string): Promise<string> {
 }
 
 async function computeBranchState(
+  projectRoot: string,
   worktreePath: string,
+  branch: string,
   baseRef: string,
 ): Promise<BranchRecord['state']> {
   // Uncommitted edits override everything else — the user usually wants
-  // to know about local dirt before stale-vs-base relationships.
+  // to know about local dirt before stale-vs-base relationships. This is
+  // the one check that *must* run inside the worktree, since it inspects
+  // that working tree's state.
   const status = await runGitCapture(worktreePath, ['status', '--porcelain']);
   if (status.code === 0 && status.stdout.trim().length > 0) return 'uncommitted';
 
@@ -112,10 +116,19 @@ async function computeBranchState(
   // user's main branch advanced after the worktree was made. We don't
   // surface "ahead of base" because that's the expected state (the
   // agent's commits are the whole point of the worktree).
-  const behindCount = await runGitCapture(worktreePath, [
+  //
+  // Run the comparison from the *project root*, not inside the worktree:
+  // `<branch>..<baseRef>` are both refs/SHAs in the shared object store,
+  // and ref resolution in the main checkout is reliable — whereas the
+  // same `rev-list` from within a linked worktree has proven
+  // environment-sensitive under load, exiting non-zero and silently
+  // masking a behind-base worktree as `clean` (the same hazard
+  // `resolveBaseRef` calls out). The branch ref tracks the worktree's
+  // HEAD for every pinagent worktree (created with `worktree add -b`).
+  const behindCount = await runGitCapture(projectRoot, [
     'rev-list',
     '--count',
-    `HEAD..${baseRef}`,
+    `${branch}..${baseRef}`,
   ]);
   if (behindCount.code === 0 && Number(behindCount.stdout.trim()) > 0) return 'behind-base';
 
