@@ -31,6 +31,11 @@ export const ICON_GRIP =
   '<circle cx="2" cy="7" r="1.3"/><circle cx="6" cy="7" r="1.3"/>' +
   '<circle cx="2" cy="12" r="1.3"/><circle cx="6" cy="12" r="1.3"/></svg>';
 
+/** Minimize glyph for the tray handle — collapses the tray back to the pin. */
+export const ICON_MINIMIZE =
+  '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">' +
+  '<path d="M3 7h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+
 export const COMPOSER_H = 320;
 export const STREAM_H = 340;
 // Minimized "mini progress card" height — tall enough for the status

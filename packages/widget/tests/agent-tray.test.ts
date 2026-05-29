@@ -5,11 +5,16 @@ import {
   createAgentTray,
   type RawFeedback,
   selectUnresolvedAgents,
+  shouldAutoExpand,
   type TrayAgent,
 } from '../src/agent-tray';
 
 function rec(partial: Partial<RawFeedback> & Pick<RawFeedback, 'id'>): RawFeedback {
   return { status: 'pending', worktreeState: 'none', ...partial };
+}
+
+function agent(id: string): TrayAgent {
+  return { id, title: id, selector: null, status: 'working', messageCount: 0, costUsd: 0 };
 }
 
 describe('selectUnresolvedAgents', () => {
@@ -87,6 +92,29 @@ describe('selectUnresolvedAgents', () => {
     ]);
     expect(withMeta).toMatchObject({ messageCount: 5, costUsd: 0.34 });
     expect(withoutMeta).toMatchObject({ messageCount: 0, costUsd: 0 });
+  });
+});
+
+describe('shouldAutoExpand', () => {
+  it('re-expands when a newly-appeared agent shows up', () => {
+    const prev = new Set(['a']);
+    expect(shouldAutoExpand(prev, [agent('a'), agent('b')])).toBe(true);
+  });
+
+  it('re-expands when the list empties', () => {
+    expect(shouldAutoExpand(new Set(['a', 'b']), [])).toBe(true);
+  });
+
+  it('stays minimized when agents only shrink or restatus (no new id)', () => {
+    const prev = new Set(['a', 'b']);
+    // 'b' finished and dropped off — nothing new, keep the user's minimize.
+    expect(shouldAutoExpand(prev, [agent('a')])).toBe(false);
+    // Same set, just re-rendered — keep minimized.
+    expect(shouldAutoExpand(prev, [agent('a'), agent('b')])).toBe(false);
+  });
+
+  it('re-expands on the very first render (no prior ids)', () => {
+    expect(shouldAutoExpand(new Set(), [agent('a')])).toBe(true);
   });
 });
 
