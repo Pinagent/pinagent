@@ -367,6 +367,11 @@ export const COMPOSER_STYLES = `
     flex-direction: column;
     gap: 6px;
   }
+  /* Loading gap: between submit and the first streamed event the log has
+     no children. Collapse it (rather than show an empty bordered box) so
+     the card hugs the header/footer until content lands. The iframe height
+     is shrunk to match by Composer.refitStream() in widget.ts. */
+  .log:empty { display: none; }
   .msg { white-space: pre-wrap; word-break: break-word; color: ${BRAND_INK}; }
   .user-msg {
     white-space: pre-wrap;
