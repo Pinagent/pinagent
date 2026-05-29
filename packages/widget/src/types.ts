@@ -159,6 +159,14 @@ export interface Composer {
    */
   anchorLost: boolean;
   /**
+   * Set when the user pressed an anchor-lost dot that couldn't re-anchor
+   * and no dock is mounted: we fall back to re-showing the composer card
+   * inline so the conversation stays reachable. While true the dot is
+   * suppressed and the iframe card is shown even though `anchorLost` is
+   * still set. Reset whenever the target re-anchors.
+   */
+  reviewingLost: boolean;
+  /**
    * User-applied positional offset relative to the auto-anchored
    * position. Updated by dragging the handle; applied on top of the
    * target-anchored coords so the widget keeps following the target

@@ -159,6 +159,36 @@ export const DOC_STYLES = `
 }
 @keyframes pa-bubble-spin { to { transform: rotate(360deg); } }
 
+/* Archive control on the anchor-lost dot. Small circular button at the
+   dot's upper-right corner; only shown when the orphaned dot is visible
+   (toggled via [hidden] in reposition()). Sits one z-index above the
+   bubble so it stays clickable on top of it. */
+.pa-anchor-lost-dismiss {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #e8dfb0;
+  background: ${BRAND_CREAM};
+  color: ${BRAND_INK};
+  box-shadow: 0 2px 6px rgba(32, 27, 33, 0.2);
+  cursor: pointer;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  font-family: ${FONT_SANS};
+}
+.pa-anchor-lost-dismiss:hover {
+  background: ${STATUS.error.bg};
+  border-color: ${STATUS.error.border};
+  color: ${STATUS.error.fg};
+}
+.pa-anchor-lost-dismiss[hidden] { display: none; }
+
 .pa-drag-handle {
   position: absolute;
   width: 16px;

@@ -3,6 +3,7 @@ import { createAgentTray, type RawFeedback, type TrayAgent } from './agent-tray'
 import { BRAND_CREAM } from './brand';
 import { ENDPOINT, ICON_GRIP, STATUS_LABEL, trayRowMeta } from './constants';
 import type { WidgetContext } from './context';
+import { openConversationInDock } from './dock-bridge';
 import { buildPinIcon } from './pin-icon';
 
 /**
@@ -176,13 +177,7 @@ export function createFabTray(ctx: WidgetContext): {
   // composer's "open in dock" button posts — see the dock's
   // useOpenConversationBridge.
   function openInDock(feedbackId: string) {
-    const iframe = document.getElementById('__pinagent-dock');
-    if (iframe instanceof HTMLIFrameElement && iframe.contentWindow) {
-      iframe.contentWindow.postMessage(
-        { source: 'pinagent-host', type: 'open-conversation', feedbackId },
-        '*',
-      );
-    }
+    openConversationInDock(feedbackId);
   }
 
   // Clear = archive. Remove the row optimistically; the PATCH emits a

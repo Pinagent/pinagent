@@ -4,6 +4,7 @@ import { wireComposerIframe } from './composer-iframe';
 import {
   BUBBLE_SIZE,
   COMPOSER_H,
+  ENDPOINT,
   IFRAME_W,
   MAX_TA_H,
   MIN_TA_H,
@@ -14,6 +15,7 @@ import type { Click, PickExtra, WidgetContext } from './context';
 import { getBrowserDb } from './db/client';
 import type { PendingRow } from './db/reads';
 import { deleteConversation } from './db/writes';
+import { openConversationInDock } from './dock-bridge';
 import { pickNextActive } from './keyboard';
 import { quickActionsFor } from './quick-actions';
 import {
@@ -211,6 +213,19 @@ export function createComposerController(ctx: WidgetContext): {
     bubble.innerHTML = '<div class="pa-bubble-spinner"></div>';
     document.body.appendChild(bubble);
 
+    // Dismiss/archive control — only shown alongside the anchor-lost dot.
+    // The orphaned dot is otherwise a dead end (its target is gone), so
+    // this gives the user an explicit way to archive the pin and clear it
+    // off the page. Lives in document.body next to the bubble so it tracks
+    // the same page coords through scroll/layout.
+    const dismissBtn = document.createElement('button');
+    dismissBtn.className = 'pa-anchor-lost-dismiss';
+    dismissBtn.type = 'button';
+    dismissBtn.textContent = '✕';
+    dismissBtn.title = 'Archive — remove this pin';
+    dismissBtn.hidden = true;
+    document.body.appendChild(dismissBtn);
+
     // Drag grip — small visible handle inside the top-right corner of
     // the iframe header. Lives in document.body (not inside the iframe)
     // so we can track mousemove/mouseup on the parent document during a
@@ -295,16 +310,18 @@ export function createComposerController(ctx: WidgetContext): {
         if (tryReanchor(composer)) {
           if (composer.anchorLost) {
             composer.anchorLost = false;
+            composer.reviewingLost = false;
             bubble.classList.remove('anchor-lost');
             bubble.removeAttribute('title');
           }
         } else if (!composer.anchorLost) {
           composer.anchorLost = true;
           bubble.classList.add('anchor-lost');
-          bubble.title = 'Anchor lost — element removed in last update. Click to retry.';
+          bubble.title = 'Anchor lost — element removed. Click to open the conversation.';
         }
       } else if (composer.anchorLost) {
         composer.anchorLost = false;
+        composer.reviewingLost = false;
         bubble.classList.remove('anchor-lost');
         bubble.removeAttribute('title');
       }
@@ -320,7 +337,7 @@ export function createComposerController(ctx: WidgetContext): {
       // When minimized post-submit we keep the iframe visible as the
       // mini progress card (MINI_H); only the dashed anchor-lost dot
       // falls back to hiding it. Expanded uses the full height.
-      const showDot = composer.anchorLost && !!composer.feedbackId;
+      const showDot = composer.anchorLost && !!composer.feedbackId && !composer.reviewingLost;
       const composerH = currentIframeH();
       const spaceBelow = window.innerHeight - anchorViewportY;
       const placeBelow = spaceBelow >= composerH + 16 || anchorViewportY < composerH + 16;
@@ -339,8 +356,16 @@ export function createComposerController(ctx: WidgetContext): {
 
       // Bubble: top-left of the iframe (loading-state indicator that
       // shows where the widget is/was).
-      bubble.style.top = `${iframeTop - BUBBLE_SIZE / 2}px`;
-      bubble.style.left = `${iframeLeft - BUBBLE_SIZE / 2}px`;
+      const bubbleTop = iframeTop - BUBBLE_SIZE / 2;
+      const bubbleLeft = iframeLeft - BUBBLE_SIZE / 2;
+      bubble.style.top = `${bubbleTop}px`;
+      bubble.style.left = `${bubbleLeft}px`;
+
+      // Dismiss button: nestled at the bubble's upper-right corner so it
+      // reads as an "x to remove" affordance on the orphaned dot.
+      const DISMISS_SIZE = 16;
+      dismissBtn.style.top = `${bubbleTop - DISMISS_SIZE / 2}px`;
+      dismissBtn.style.left = `${bubbleLeft + BUBBLE_SIZE - DISMISS_SIZE / 2}px`;
 
       // Drag handle: nestled inside the iframe's top-right header
       // corner — 12px in from the iframe's right and top edges, lining
@@ -381,6 +406,7 @@ export function createComposerController(ctx: WidgetContext): {
       // iframe is visible.
       iframe.hidden = showDot;
       bubble.hidden = !showDot;
+      dismissBtn.hidden = !showDot;
       pointer.style.display = showDot ? 'none' : '';
     }
 
@@ -407,6 +433,7 @@ export function createComposerController(ctx: WidgetContext): {
       componentPath: compPath,
       instance,
       anchorLost: false,
+      reviewingLost: false,
       userOffsetX: 0,
       userOffsetY: 0,
       turn: 0,
@@ -430,6 +457,7 @@ export function createComposerController(ctx: WidgetContext): {
         clearExtraFlashes();
         iframe.remove();
         bubble.remove();
+        dismissBtn.remove();
         dragHandle.remove();
         pointer.remove();
         ctx.composers.delete(composer);
@@ -534,20 +562,52 @@ export function createComposerController(ctx: WidgetContext): {
     bubble.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      // When the anchor is lost, prioritise re-trying the lookup over
-      // expanding the composer. If the user genuinely deleted the
-      // target, repeated clicks will keep failing — Minimize-then-X
-      // through the open composer is still the dismissal path.
+      // When the anchor is lost, try to re-anchor first — if the element
+      // came back (HMR / re-render), reconnect to it and expand as usual.
       if (composer.anchorLost) {
         if (tryReanchor(composer)) {
           composer.anchorLost = false;
+          composer.reviewingLost = false;
           bubble.classList.remove('anchor-lost');
           bubble.removeAttribute('title');
           reposition();
+          return;
+        }
+        // Re-anchor failed — the element is genuinely gone. Rather than
+        // leaving a dead checkmark dot, route the user to the
+        // conversation: into the dock if it's mounted, otherwise re-show
+        // the composer card inline (positioned at the detached target's
+        // last rect; the user can drag it). The dismiss button on the dot
+        // remains the archive path.
+        if (composer.feedbackId) {
+          if (ctx.dockEnabled) {
+            openConversationInDock(composer.feedbackId);
+            ctx.openDock?.();
+          } else {
+            composer.reviewingLost = true;
+            composer.expanded = true;
+            reposition();
+          }
         }
         return;
       }
       swapTo(composer);
+    });
+
+    // Archive the orphaned pin and remove it from the page. Fire-and-forget
+    // PATCH (same archive endpoint the tray's Clear uses); close() handles
+    // the local teardown regardless of the request outcome.
+    dismissBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (composer.feedbackId) {
+        void fetch(`${ENDPOINT}/${composer.feedbackId}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ archived: true }),
+        }).catch(() => ctx.toast('Couldn’t archive', 'error'));
+      }
+      composer.close();
     });
 
     // Auto-grow: the iframe's textarea posts its desired scrollHeight
