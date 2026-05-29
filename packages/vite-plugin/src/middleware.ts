@@ -78,7 +78,7 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
         dock && req.method === 'GET' && /^\/__pinagent\/dock(?:\/(.*?))?(?:\?.*)?$/.exec(url);
       if (dockMatch) {
         const file = dockMatch[1] && dockMatch[1].length > 0 ? dockMatch[1] : 'embedded.html';
-        return serveDockFile(res, file);
+        return serveDockFile(res, file, wsPort);
       }
 
       // GET /__pinagent/widget.js — IIFE bundle + a prelude that hands the
@@ -496,6 +496,28 @@ function buildWidgetBundle(wsPort: number | null, dock: boolean): string {
 }
 
 /**
+ * Inject the WS-URL config into the dock's `embedded.html` <head>, the
+ * same way `buildWidgetBundle` hands it to the widget. The dock iframe
+ * runs in its own window, served as a static file, so without this it
+ * never sees `window.__pinagentConfig` and `resolveWsUrl()` falls back to
+ * the hardcoded default port — which connects to whatever (possibly
+ * stale) dev-server holds 53636, not necessarily *this* project's server.
+ * On fallback (boundPort 53637, …) that meant the widget reached the
+ * right server while the dock silently talked to the stranger. Injecting
+ * the actually-bound port closes that gap. Mirrors `injectDockConfig` in
+ * `packages/next-plugin/src/route.ts`.
+ */
+function injectDockConfig(html: string, wsPort: number | null): string {
+  const config = { wsUrl: wsPort ? `ws://127.0.0.1:${wsPort}/__pinagent/ws` : null };
+  const tag = `<script>;(function(){try{window.__pinagentConfig=${JSON.stringify(config)};}catch(e){}})();</script>`;
+  // Run before the dock module bundle. Prepend inside <head> when present;
+  // otherwise fall back to prepending the whole document.
+  return /<head[^>]*>/i.test(html)
+    ? html.replace(/<head[^>]*>/i, (m) => `${m}${tag}`)
+    : `${tag}${html}`;
+}
+
+/**
  * Whitelist of sqlite-wasm files we expose. Mirrors next-plugin/route.ts.
  */
 const SQLITE_WASM_FILES: Record<string, string> = {
@@ -581,7 +603,11 @@ const DOCK_MIME_BY_EXT: Record<string, string> = {
   '.map': 'application/json; charset=utf-8',
 };
 
-async function serveDockFile(res: ServerResponse, requested: string): Promise<void> {
+async function serveDockFile(
+  res: ServerResponse,
+  requested: string,
+  wsPort: number | null,
+): Promise<void> {
   const distDir = dockDistDir();
   if (!distDir) {
     // The dock package isn't installed alongside the plugin. This
@@ -615,6 +641,12 @@ async function serveDockFile(res: ServerResponse, requested: string): Promise<vo
       'Cache-Control',
       ext === '.woff2' || ext === '.woff' ? 'public, max-age=86400' : 'no-store',
     );
+    // The dock's HTML entry is the one place we can hand the iframe its
+    // WS port (the JS/CSS assets are origin-agnostic). Inject it here.
+    if (ext === '.html') {
+      res.end(injectDockConfig(bytes.toString('utf8'), wsPort));
+      return;
+    }
     res.end(bytes);
   } catch {
     res.statusCode = 404;
