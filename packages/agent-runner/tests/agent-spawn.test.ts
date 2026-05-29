@@ -506,16 +506,18 @@ describe('runFollowUpTurn', () => {
       } as never,
     ]);
 
-    // Wait for the SECOND result.
+    // Wait for the SECOND result. A fresh subscriber replays the
+    // conversation from the start (the bus polls `messages` from id 0),
+    // so it sees the first run's persisted result before the follow-up's.
+    // Resolve only once both have arrived, guaranteeing the follow-up
+    // `query()` has actually been invoked before we assert on its params.
     let resultsSeen = 0;
     const secondDone = new Promise<void>((resolve) => {
       bus.getOrCreateBus(id).subscribe({
         onEvent(e) {
           if (e.type === 'result') {
             resultsSeen += 1;
-            // First result already fired during firstDone; this one
-            // is the follow-up turn's.
-            resolve();
+            if (resultsSeen >= 2) resolve();
           }
         },
         onClose() {},
@@ -609,13 +611,15 @@ describe('runFollowUpTurn', () => {
       } as never,
     ]);
 
+    // As above: a fresh subscriber replays the initial run's result, so
+    // wait for the second (the follow-up's) before asserting on params.
     let resultsSeen = 0;
     const followUpDone = new Promise<void>((resolve) => {
       bus.getOrCreateBus(id).subscribe({
         onEvent(e) {
           if (e.type === 'result') {
             resultsSeen += 1;
-            resolve();
+            if (resultsSeen >= 2) resolve();
           }
         },
         onClose() {},

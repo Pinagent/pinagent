@@ -82,6 +82,18 @@ export {
   type ComposeResult,
   composePullRequest,
 } from './pr-composer';
+export {
+  type AgentPermissionMode,
+  type AgentProvider,
+  type AgentRunRequest,
+  ClaudeCodeProvider,
+  CliAgentProvider,
+  createProvider,
+  type ProviderId,
+  type ProviderRunItem,
+  resolveProvider,
+  resolveProviderId,
+} from './providers';
 export { listPullRequests, type PullRequestRecord } from './pull-requests';
 export {
   type PresentableConnections,
