@@ -9,8 +9,9 @@ const MAX_LINES = 1000;
 
 const EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.css']);
 
-// Files that predate the cap. Split them and remove from this list — do not add new entries.
-const ALLOWLIST = new Set(['packages/widget/src/widget.ts', 'packages/agent-runner/src/agent.ts']);
+// Files exempt from the cap. Empty — every file that predated the cap has
+// since been split under 1000 lines. Keep it that way: split, don't add.
+const ALLOWLIST = new Set([]);
 
 function isGenerated(path) {
   return path.includes('__generated__') || path.includes('/dist/') || path.endsWith('.d.ts');
