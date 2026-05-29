@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import { isNotionalCost, isUntrackedCost, type WorktreeWireState } from '@pinagent/shared';
 import { getBrowserDb } from './db/client';
-import { markConversationResolved, recordEvent, recordUserMessage } from './db/writes';
+import {
+  deleteConversationMessages,
+  markConversationResolved,
+  recordEvent,
+  recordUserMessage,
+} from './db/writes';
 import type { AgentEvent, AgentState, Composer, LifecycleEls, ReplayMessage } from './types';
 import type { WidgetWsClient } from './ws-client';
 
@@ -46,6 +51,22 @@ export function attachStreamHandler(
   // (server couldn't run `git status`, or the worktree is gone) — the
   // label omits the count rather than showing a misleading "0 changes".
   let worktreeChanges: number | null = null;
+
+  // Browser-cache writes (recordEvent, and the reconnect delete) run
+  // through one serial chain so a reconnect's "wipe this conversation's
+  // messages" can't race the replay's re-inserts: the delete is enqueued
+  // before the replayed events, so it always lands first and the replay
+  // rebuilds exactly one copy.
+  let dbWriteChain: Promise<unknown> = Promise.resolve();
+  function queueDbWrite(run: () => Promise<unknown>): void {
+    dbWriteChain = dbWriteChain
+      .catch(() => {})
+      .then(run)
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[pinagent:db] cache write failed:', err);
+      });
+  }
 
   function setStopVisible(visible: boolean) {
     stopBtn.hidden = !visible;
@@ -592,12 +613,27 @@ export function attachStreamHandler(
       // to avoid one cache row per turn.
       const db = getBrowserDb();
       if (db && event.type !== 'progress') {
-        void recordEvent(db, feedbackId, composer.turn, event).catch((err) =>
-          // eslint-disable-next-line no-console
-          console.warn('[pinagent:db] recordEvent failed:', err),
-        );
+        // Capture the turn now — the write is serialised and may run
+        // after composer.turn advances.
+        const turn = composer.turn;
+        queueDbWrite(() => recordEvent(db, feedbackId, turn, event));
       }
       processEvent(event);
+    },
+    onReset() {
+      // Reconnect: the server is about to replay the full transcript.
+      // Clear the rendered log + render accumulators and wipe the cached
+      // messages so the replay rebuilds exactly one copy in both the DOM
+      // and the browser mirror. The delete rides the same write chain as
+      // recordEvent, so it lands before the replayed re-inserts.
+      log.replaceChildren();
+      activeTextBlock = null;
+      lastToolChip = null;
+      lastToolLabel = null;
+      pendingAskId = null;
+      pendingAskFormRoot = null;
+      const db = getBrowserDb();
+      if (db) queueDbWrite(() => deleteConversationMessages(db, feedbackId));
     },
     onDone() {
       turnRunning = false;
