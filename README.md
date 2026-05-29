@@ -2,7 +2,7 @@
 
 Click a UI element in your dev server, leave a comment, and your coding agent picks it up — with `file:line` and a screenshot — over MCP.
 
-Pinagent is a localhost-only Vite or Next.js plugin. It tags every JSX element with its source location, drops a small 💬 widget into the page, and persists each captured comment to a local SQLite database under `.pinagent/`. An MCP server surfaces the queue inside your existing Claude Code session, so the next thing you say can be "fix the pending feedback."
+Pinagent is a localhost-only dev plugin for Vite, Next.js, and Nuxt. It tags every element with its source location — JSX for React, `<template>` markup for Vue SFCs — drops a small 💬 widget into the page, and persists each captured comment to a local SQLite database under `.pinagent/`. An MCP server surfaces the queue inside your existing Claude Code session, so the next thing you say can be "fix the pending feedback."
 
 There's also an opt-in **dock** surface (`@pinagent/widget-dock`) — a project-management UI for browsing conversations, reviewing diffs, composing PRs from resolved comments, and managing worktrees. Off by default; flip on with `dock: true` on either plugin.
 
@@ -27,10 +27,11 @@ The full feedback record persists to a local SQLite database at `.pinagent/db.sq
 
 If the dev server returns 500 on `POST /__pinagent/feedback`, the plugin dist is stale — `pnpm build` from the repo root forces a clean rebuild. See [examples/react-vite/README.md](./examples/react-vite/README.md) for more.
 
-The Next.js example works the same way:
+The Next.js and Nuxt examples work the same way:
 
 ```bash
 pnpm --filter next-app-example dev          # :3000
+pnpm --filter nuxt-app-example dev           # :3000 (Nuxt + Vue)
 ```
 
 ## How it works
@@ -47,11 +48,11 @@ pnpm --filter next-app-example dev          # :3000
         └────── data-pa-loc="src/Foo.tsx:42:7" ──── resolves ───┘
 ```
 
-JSX is tagged at dev-build time by `@pinagent/babel-plugin` (Vite) or a webpack/Turbopack loader (Next.js). The widget walks up from the clicked node, finds the nearest `data-pa-loc`, and POSTs `{ comment, file, line, col, selector, url, viewport, screenshot }` to `/__pinagent/feedback`.
+Source is tagged at dev-build time: JSX by `@pinagent/babel-plugin` (Vite) or a webpack/Turbopack loader (Next.js), and Vue SFC `<template>` markup by `@pinagent/vue-plugin` (Vite + Nuxt). The widget walks up from the clicked node, finds the nearest `data-pa-loc`, and POSTs `{ comment, file, line, col, selector, url, viewport, screenshot }` to `/__pinagent/feedback`.
 
 ## Install
 
-> **Using Claude Code? Skip the manual steps.** Run `/pinagent-setup` and it detects Vite vs Next, installs the plugin, wires up the config (and the Next route + `<Pinagent />`), registers the MCP server, and sets the tool permissions for you.
+> **Using Claude Code? Skip the manual steps.** Run `/pinagent-setup` and it detects Vite, Next, or Nuxt, installs the plugin, wires up the config (and the Next route + `<Pinagent />`), registers the MCP server, and sets the tool permissions for you. `pinagent init` does the deterministic parts from the command line.
 >
 > Don't have the skill yet? Add the marketplace once, then install:
 >
@@ -63,7 +64,7 @@ JSX is tagged at dev-build time by `@pinagent/babel-plugin` (Vite) or a webpack/
 > The manual steps below do the same thing by hand.
 
 ```sh
-pnpm add -D @pinagent/vite-plugin    # or @pinagent/next-plugin
+pnpm add -D @pinagent/vite-plugin    # or @pinagent/next-plugin, or @pinagent/nuxt-plugin
 ```
 
 ### Native build approval (pnpm only)
@@ -131,6 +132,18 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export { GET, POST, PATCH, PUT, DELETE } from '@pinagent/next-plugin/route';
 ```
+
+**Nuxt** (`nuxt.config.ts`)
+
+```ts
+export default defineNuxtConfig({
+  modules: ['@pinagent/nuxt-plugin'],
+});
+```
+
+No layout or route files needed — the module tags `.vue` SFCs, mounts the
+`/__pinagent` middleware, and injects the widget for you. (Plain Vue + Vite apps
+use `@pinagent/vite-plugin` directly — it tags `.vue` SFCs as well as JSX.)
 
 ## Connect your agent
 

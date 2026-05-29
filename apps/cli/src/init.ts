@@ -3,7 +3,7 @@
  * `pinagent init` — scaffold pinagent into a target project.
  *
  * pinagent is always a plugin embedded in the host app's own dev server
- * (Vite or Next), so `init` cannot "just run" — it wires the project up:
+ * (Vite, Next, or Nuxt), so `init` cannot "just run" — it wires the project up:
  *
  *   - appends `.pinagent` to `.gitignore` (the on-disk feedback store
  *     must never be committed),
@@ -27,7 +27,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-export type Runtime = 'vite' | 'next' | 'unknown';
+export type Runtime = 'vite' | 'next' | 'nuxt' | 'unknown';
 export type PackageManager = 'pnpm' | 'yarn' | 'bun' | 'npm';
 
 const VITE_CONFIGS = ['vite.config.ts', 'vite.config.js', 'vite.config.mjs', 'vite.config.mts'];
@@ -38,21 +38,25 @@ const NEXT_CONFIGS = [
   'next.config.mts',
   'next.config.cjs',
 ];
+const NUXT_CONFIGS = ['nuxt.config.ts', 'nuxt.config.js', 'nuxt.config.mjs', 'nuxt.config.mts'];
 
 /** Which supported runtime config files are present in `root`. */
-export function configsPresent(root: string): { vite: boolean; next: boolean } {
+export function configsPresent(root: string): { vite: boolean; next: boolean; nuxt: boolean } {
   const has = (names: string[]) => names.some((n) => existsSync(join(root, n)));
-  return { vite: has(VITE_CONFIGS), next: has(NEXT_CONFIGS) };
+  return { vite: has(VITE_CONFIGS), next: has(NEXT_CONFIGS), nuxt: has(NUXT_CONFIGS) };
 }
 
 /**
- * Detect the host runtime from its config file. Vite and Next are the
- * only supported runtimes (pinagent v1 is React-on-Vite or Next only).
- * If a project somehow has both, Vite wins here — `runInit` separately
- * warns about the ambiguity rather than letting the choice be silent.
+ * Detect the host runtime from its config file. Pinagent supports React on
+ * Vite or Next.js, and Vue on Nuxt. Nuxt is checked first because it runs
+ * Vite under the hood — a Nuxt project's `nuxt.config.*` is the definitive
+ * signal even if a stray `vite.config.*` is also present. If a project has
+ * both vite and next configs, Vite wins here and `runInit` separately warns
+ * about the ambiguity rather than letting the choice be silent.
  */
 export function detectRuntime(root: string): Runtime {
-  const { vite, next } = configsPresent(root);
+  const { vite, next, nuxt } = configsPresent(root);
+  if (nuxt) return 'nuxt';
   if (vite) return 'vite';
   if (next) return 'next';
   return 'unknown';
@@ -88,8 +92,15 @@ export function detectPackageManager(root: string): PackageManager {
   }
 }
 
-export function pluginPackage(runtime: 'vite' | 'next'): string {
-  return runtime === 'vite' ? '@pinagent/vite-plugin' : '@pinagent/next-plugin';
+export function pluginPackage(runtime: 'vite' | 'next' | 'nuxt'): string {
+  switch (runtime) {
+    case 'vite':
+      return '@pinagent/vite-plugin';
+    case 'next':
+      return '@pinagent/next-plugin';
+    case 'nuxt':
+      return '@pinagent/nuxt-plugin';
+  }
 }
 
 export function addDevDepCommand(pm: PackageManager, pkg: string): string {
@@ -257,10 +268,10 @@ export function runInit(args: InitArgs): InitResult {
 
   const runtime = detectRuntime(root);
   if (runtime === 'unknown') {
-    note('pinagent init: no vite.config.* or next.config.* found in');
+    note('pinagent init: no vite.config.*, next.config.*, or nuxt.config.* found in');
     note(`  ${root}`);
     note('');
-    note('pinagent supports React apps on Vite or Next.js (App Router) only.');
+    note('pinagent supports React on Vite or Next.js (App Router), and Vue on Nuxt.');
     note('Run init from your project root, or pass it explicitly:');
     note('  pinagent init --dir /path/to/app');
     return { code: 1, lines };
@@ -270,7 +281,9 @@ export function runInit(args: InitArgs): InitResult {
   const pkg = pluginPackage(runtime);
   const tag = args.dryRun ? '[dry-run] would' : 'wrote';
 
-  note(`pinagent init — detected ${runtime === 'vite' ? 'Vite + React' : 'Next.js'} (${pm})`);
+  const runtimeLabel =
+    runtime === 'vite' ? 'Vite + React' : runtime === 'next' ? 'Next.js' : 'Nuxt';
+  note(`pinagent init — detected ${runtimeLabel} (${pm})`);
   // Both configs present is genuinely ambiguous — surface it rather than
   // letting detectRuntime's silent "Vite wins" tiebreak stand unseen.
   const present = configsPresent(root);
@@ -343,6 +356,16 @@ export function runInit(args: InitArgs): InitResult {
     note("       import pinagent from '@pinagent/vite-plugin';");
     note('       export default defineConfig({');
     note('         plugins: [pinagent(), react()],');
+    note('       });');
+    note('');
+    note('  3. Start your dev server as usual (e.g. `npm run dev`).');
+  } else if (runtime === 'nuxt') {
+    // `pkg` (= @pinagent/nuxt-plugin) is interpolated rather than written as a
+    // literal `'...'` so the undeclared-import linter doesn't read this example
+    // snippet as a real dependency of the CLI.
+    note('  2. Add the module to nuxt.config.* — in the `modules` array:');
+    note('       export default defineNuxtConfig({');
+    note(`         modules: ['${pkg}'],`);
     note('       });');
     note('');
     note('  3. Start your dev server as usual (e.g. `npm run dev`).');

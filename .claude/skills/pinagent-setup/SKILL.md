@@ -1,6 +1,6 @@
 ---
 name: pinagent-setup
-description: Wire Pinagent into a target project so the developer can click (or, on React Native, tap) UI elements, leave comments, and have agents pick them up — either over MCP into the developer's main Claude Code session, or via the Claude Agent SDK as parallel per-comment agents in isolated worktrees. Use when the user asks to "set up pinagent", "install pinagent", "add pinagent to <repo>", or wants the click-to-fix loop in a new app. Detects whether the target is a Vite+React, Next.js, or React Native / Expo (Metro) app and follows the matching runtime guide.
+description: Wire Pinagent into a target project so the developer can click (or, on React Native, tap) UI elements, leave comments, and have agents pick them up — either over MCP into the developer's main Claude Code session, or via the Claude Agent SDK as parallel per-comment agents in isolated worktrees. Use when the user asks to "set up pinagent", "install pinagent", "add pinagent to <repo>", or wants the click-to-fix loop in a new app. Detects whether the target is a Vite+React, Next.js, Nuxt (Vue), or React Native / Expo (Metro) app and follows the matching runtime guide.
 ---
 
 # Pinagent setup
@@ -15,6 +15,7 @@ Before doing anything, identify the target project's runtime — the install ste
 
 ```bash
 # In the target project root:
+ls nuxt.config.* 2>/dev/null && echo "NUXT"   # check FIRST — Nuxt runs Vite under the hood
 ls vite.config.* 2>/dev/null && echo "VITE"
 ls next.config.* 2>/dev/null && echo "NEXT"
 ls metro.config.* app.json 2>/dev/null | head -1 && echo "REACT_NATIVE"  # also: "expo"/"react-native" in package.json deps
@@ -22,10 +23,15 @@ ls metro.config.* app.json 2>/dev/null | head -1 && echo "REACT_NATIVE"  # also:
 
 | If you see       | Follow                |
 | ---------------- | --------------------- |
+| `NUXT`           | [nuxt.md](./nuxt.md)  |
 | `VITE`           | [vite.md](./vite.md)  |
 | `NEXT`           | [next.md](./next.md)  |
 | `REACT_NATIVE` / Expo | [react-native.md](./react-native.md) |
-| both / neither   | Ask the user — pinagent supports React on Vite or Next, and React Native / Expo (Metro). Vue/Svelte/CRA/Remix aren't supported. |
+| both / neither   | Ask the user — pinagent supports React on Vite or Next, Vue on Nuxt, and React Native / Expo (Metro). Plain Vue+Vite works too (use the [vite.md](./vite.md) guide — `@pinagent/vite-plugin` tags `.vue` SFCs as well as JSX). Svelte/CRA/Remix aren't supported. |
+
+> A Nuxt project has a `nuxt.config.*`; check it **before** `vite.config.*`,
+> because Nuxt runs Vite internally and the Nuxt module is the right
+> integration there, not the bare Vite plugin.
 
 > React Native is **tap-to-comment**, not click: no DOM, so no
 > `data-pa-loc` and no `<script>` injection. The widget mounts as a
@@ -48,13 +54,13 @@ agent-runner route → writes a row to <project>/.pinagent/db.sqlite + screensho
 optional channel  → pushes new feedback into a running `claude` session
 ```
 
-The Vite plugin and Next adapter share the widget IIFE and storage layout — they're interchangeable on the consumer side. Only the build/dev integration differs.
+The Vite plugin and Next adapter share the widget IIFE and storage layout — they're interchangeable on the consumer side. Only the build/dev integration differs. The Nuxt module is a thin wrapper that reuses `@pinagent/vite-plugin` (Nuxt's dev bundler is Vite) and injects the widget into the SSR'd HTML via the app head.
 
 The per-element widget above is on by default. There's also an **optional dock surface** — a project-management UI (Conversations, Changes/diffs, Branches, PRs, Connections, History) enabled with `dock: true` on either plugin. It's off by default; see the runtime guides for how to turn it on, and what extra wiring it needs (the full set of route verbs on Next, plus a GitHub token for the PR composer).
 
 ## Where pinagent comes from
 
-The plugins, MCP server, and CLI are published to npm under the `@pinagent/*` scope — `@pinagent/vite-plugin`, `@pinagent/next-plugin`, `@pinagent/react-native`, `@pinagent/mcp`, and `@pinagent/cli` (the `pinagent` command: `init`, `mcp`, `transcript`). Install steps use `pnpm add -D` and `pnpm dlx`; nothing references a local checkout, so the skill works in any project.
+The plugins, MCP server, and CLI are published to npm under the `@pinagent/*` scope — `@pinagent/vite-plugin`, `@pinagent/next-plugin`, `@pinagent/nuxt-plugin`, `@pinagent/react-native`, `@pinagent/mcp`, and `@pinagent/cli` (the `pinagent` command: `init`, `mcp`, `transcript`). Install steps use `pnpm add -D` and `pnpm dlx`; nothing references a local checkout, so the skill works in any project.
 
 ## Common pitfalls (skim before you start)
 
