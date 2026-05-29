@@ -22,6 +22,8 @@ interface RelayAttachment extends Partial<ClientAttachment> {
   side: Side;
   tenantId?: string;
   sessionId?: string;
+  /** Epoch ms the socket connected — used to compute connection duration. */
+  connectedAtMs?: number;
 }
 
 const SIDE_HEADER = 'X-Pinagent-Role';
@@ -61,6 +63,7 @@ export class RelaySession {
     const side: Side = request.headers.get(SIDE_HEADER) === 'device' ? 'device' : 'client';
     const tenantId = request.headers.get(TENANT_HEADER) ?? undefined;
     const sessionId = request.headers.get(SESSION_HEADER) ?? undefined;
+    const connectedAtMs = Date.now();
 
     const pair = new WebSocketPair();
     const client = pair[0];
@@ -70,7 +73,12 @@ export class RelaySession {
     const sock = this.wrap(server);
 
     if (side === 'device') {
-      server.serializeAttachment({ side: 'device', tenantId, sessionId } satisfies RelayAttachment);
+      server.serializeAttachment({
+        side: 'device',
+        tenantId,
+        sessionId,
+        connectedAtMs,
+      } satisfies RelayAttachment);
       this.ctx.acceptWebSocket(server, ['device']);
       hub.attachDevice(sock);
     } else {
@@ -82,12 +90,13 @@ export class RelaySession {
         role,
         tenantId,
         sessionId,
+        connectedAtMs,
       });
       this.ctx.acceptWebSocket(server, ['client']);
       hub.attachClient(sock, role);
     }
 
-    this.report(`${side}.connected`, tenantId, sessionId);
+    this.report(`${side}.connected`, { tenantId, sessionId });
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -103,13 +112,15 @@ export class RelaySession {
     hub.fromClient(sock, raw);
     const snapshot = hub.snapshotClient(sock);
     if (snapshot) {
-      // Preserve tenantId/sessionId — re-serializing only the subscription
-      // snapshot would otherwise drop them, losing the disconnect report.
+      // Preserve tenantId/sessionId/connectedAtMs — re-serializing only the
+      // subscription snapshot would otherwise drop them, losing the disconnect
+      // report and its duration.
       ws.serializeAttachment({
         side: 'client',
         ...snapshot,
         tenantId: att.tenantId,
         sessionId: att.sessionId,
+        connectedAtMs: att.connectedAtMs,
       } satisfies RelayAttachment);
     }
   }
@@ -129,7 +140,15 @@ export class RelaySession {
     if (att.side === 'device') hub.detachDevice(sock);
     else hub.detachClient(sock);
     this.socketFor.delete(ws);
-    this.report(`${att.side}.disconnected`, att.tenantId, att.sessionId);
+    // Duration from the relay's own clock (same DO that stamped connect), so
+    // it's accurate regardless of clock skew between relay and control plane.
+    const durationMs =
+      att.connectedAtMs !== undefined ? Math.max(0, Date.now() - att.connectedAtMs) : undefined;
+    this.report(`${att.side}.disconnected`, {
+      tenantId: att.tenantId,
+      sessionId: att.sessionId,
+      durationMs,
+    });
   }
 
   /**
@@ -137,14 +156,18 @@ export class RelaySession {
    * tenant/session aren't known (e.g. dev-fallback with no forwarded headers);
    * `waitUntil` keeps the DO alive until the best-effort POST settles.
    */
-  private report(type: RelayEventType, tenantId?: string, sessionId?: string): void {
-    if (!tenantId || !sessionId) return;
+  private report(
+    type: RelayEventType,
+    info: { tenantId?: string; sessionId?: string; durationMs?: number },
+  ): void {
+    if (!info.tenantId || !info.sessionId) return;
     this.ctx.waitUntil(
       this.reporter.report({
         type,
-        organizationId: tenantId,
-        sessionId,
+        organizationId: info.tenantId,
+        sessionId: info.sessionId,
         occurredAt: new Date().toISOString(),
+        ...(info.durationMs !== undefined ? { durationMs: info.durationMs } : {}),
       }),
     );
   }

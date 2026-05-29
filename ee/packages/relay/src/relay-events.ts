@@ -23,6 +23,12 @@ export interface RelayLifecycleEvent {
   occurredAt: string;
   /** The member, for client-side events; absent for device events. */
   userId?: string;
+  /**
+   * For `*.disconnected` events: how long the connection was open, in
+   * milliseconds (the relay computes it from its own clock). The control plane
+   * meters this as connection time.
+   */
+  durationMs?: number;
 }
 
 /** Max events accepted in one ingest call — a backstop against abuse. */
@@ -57,12 +63,14 @@ export function parseRelayEventBatch(value: unknown): RelayLifecycleEvent[] | nu
     if (!nonEmptyString(e.sessionId)) return null;
     if (!nonEmptyString(e.occurredAt)) return null;
     if (e.userId !== undefined && typeof e.userId !== 'string') return null;
+    if (e.durationMs !== undefined && !nonNegativeNumber(e.durationMs)) return null;
     parsed.push({
       type: e.type,
       organizationId: e.organizationId,
       sessionId: e.sessionId,
       occurredAt: e.occurredAt,
       ...(typeof e.userId === 'string' ? { userId: e.userId } : {}),
+      ...(typeof e.durationMs === 'number' ? { durationMs: e.durationMs } : {}),
     });
   }
   return parsed;
@@ -70,4 +78,8 @@ export function parseRelayEventBatch(value: unknown): RelayLifecycleEvent[] | nu
 
 function nonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
+}
+
+function nonNegativeNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
