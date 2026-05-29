@@ -11,7 +11,7 @@ echo ".pinagent" >> .gitignore
 # .gitignore lookup walks up.
 ```
 
-Feedback records (JSON + PNG) are user-local and shouldn't be committed. The MCP server (and the Vite/Next route handler) write the `.pinagent/feedback/` and `.pinagent/screenshots/` directories lazily on first submit.
+Feedback records (a local SQLite DB + PNG screenshots) are user-local and shouldn't be committed. The MCP server (and the Vite/Next route handler) create `.pinagent/db.sqlite` and the `.pinagent/screenshots/` directory lazily on first submit.
 
 ## 2. Register the MCP server
 
@@ -19,8 +19,10 @@ Two scopes:
 
 | Scope | When | Command |
 | ----- | ---- | ------- |
-| **Project** | Tied to one repo. Recommended for testing. Writes `.mcp.json` in the project root. | `claude mcp add pinagent -s project -- node /Users/jacksonmalloy/code/pinagent/packages/mcp/dist/index.js` |
-| **User**    | Global — available in any project. | `claude mcp add pinagent -s user -- node /Users/jacksonmalloy/code/pinagent/packages/mcp/dist/index.js` |
+| **Project** | Tied to one repo. Recommended for testing. Writes `.mcp.json` in the project root. | `claude mcp add pinagent -s project -- pnpm dlx @pinagent/mcp` |
+| **User**    | Global — available in any project. | `claude mcp add pinagent -s user -- pnpm dlx @pinagent/mcp` |
+
+`@pinagent/mcp` is published to npm and ships the `pinagent-mcp` server binary; `pnpm dlx` fetches and runs it without a global install. (If `@pinagent/mcp` is already a project dependency, `claude mcp add pinagent pinagent-mcp` runs the installed bin directly.)
 
 In a monorepo, the MCP server's project root resolution (walks up looking for `.pinagent/` then `package.json`) may land at the wrong directory. **Pin it explicitly** by editing `.mcp.json`:
 
@@ -29,8 +31,8 @@ In a monorepo, the MCP server's project root resolution (walks up looking for `.
   "mcpServers": {
     "pinagent": {
       "type": "stdio",
-      "command": "node",
-      "args": ["/Users/jacksonmalloy/code/pinagent/packages/mcp/dist/index.js"],
+      "command": "pnpm",
+      "args": ["dlx", "@pinagent/mcp"],
       "env": {
         "PINAGENT_PROJECT_ROOT": "/absolute/path/to/apps/your-app"
       }
@@ -48,7 +50,7 @@ From the project directory:
 ```bash
 cd /path/to/target/repo
 claude mcp list 2>&1 | grep pinagent
-# expect:  pinagent: node /Users/.../@pinagent/mcp/dist/index.js - ✓ Connected
+# expect:  pinagent: pnpm dlx @pinagent/mcp - ✓ Connected
 ```
 
 If it isn't connected:
@@ -71,21 +73,26 @@ Easiest is the `/permissions` slash command inside a running Claude Code session
       "mcp__pinagent__list_pending_feedback",
       "mcp__pinagent__get_feedback",
       "mcp__pinagent__resolve_feedback",
-      "mcp__pinagent__get_source_context"
+      "mcp__pinagent__get_source_context",
+      "mcp__pinagent__get_conversation_transcript"
     ]
   }
 }
 ```
 
-The developer must apply this themselves — Claude Code's auto mode blocks self-modification of trust settings without explicit authorization. If you're running as an agent doing this setup, prompt the user to authorize this step.
+(All five `mcp__pinagent__*` tools are listed so nothing is denied mid-flow; `mcp__pinagent__*` as a single wildcard works too.)
+
+> **Agent checkpoint.** If you're an agent running this setup, **stop here** — Claude Code's auto mode blocks you from self-modifying trust settings. Ask the developer to apply the JSON above (or run `/permissions`) and confirm before you continue.
 
 ## 5. Pick a feedback-delivery mode
 
 Four options. Match the mode to what kind of feedback flow you want.
 
+> **Default if unspecified.** If you're an agent setting this up and the developer hasn't asked for a specific flow, leave the plugin's default in place (`spawnAgent: 'inline'`) — submitting a comment streams the run straight into the widget, no extra wiring. Only set up channel/worktree/pull mode when the developer asks for it.
+
 ### Channel mode (recommended for live, single-session work)
 
-The MCP server watches `.pinagent/feedback/` and pushes a `notifications/claude/channel` event into the running Claude Code session each time a new comment lands. The agent reacts immediately in the same session — no spawn cost, no context reset.
+The MCP server polls `.pinagent/db.sqlite` and pushes a `notifications/claude/channel` event into the running Claude Code session each time a new comment lands. The agent reacts immediately in the same session — no spawn cost, no context reset.
 
 Launch:
 

@@ -7,14 +7,7 @@ description: Wire Pinagent into a target project so the developer can click UI e
 
 Pinagent is a localhost feedback loop: a build-time plugin tags JSX with `data-pa-loc`, a browser widget lets the developer pick an element and submit a comment + screenshot, and one of several delivery modes hands the comment to an agent — either MCP-into-running-session, or a per-comment Claude Agent SDK run inside an isolated git worktree.
 
-> **Architecture status.** v1 (the shipped base loop) and v2 (the persistent chat-surface-per-widget redesign covered by `pinagent-v2-plan.md`) coexist during the migration. Install steps are stable across both. What's shipped so far:
->
-> - **Phase A (done).** Per-comment agents run the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) in-process from `@pinagent/agent-runner`. Log files contain SDK-rendered transcripts; each run's `sessionId` is persisted on the feedback record. Both `@pinagent/next-plugin` and `@pinagent/vite-plugin` consume the same runtime.
-> - **Phase B (done, WebSocket).** Per-feedback in-memory event bus (`packages/shared/src/event-bus.ts`) fans SDK events to subscribers. A dedicated WebSocket server (`packages/agent-runner/src/ws-server.ts`, default port 53636 — env override `PINAGENT_WS_PORT`) handles all widget ↔ dev bidirectional traffic: event subscriptions, follow-up `user_message`s, `ask_response` replies, and `interrupt`. The widget bundle's prelude inlines the WS URL at serve time.
-> - **Phase E (done, bi-directional).** The widget composer iframe swaps into a streaming pane on Submit and renders text + tool chips + final cost/turns inline. Persistent follow-up input lets you send additional turns over WS (resumes the prior session). `ask_user` events render as inline forms with optional one-click options; submitting POSTs an `ask_response` back over WS and the agent continues.
-> - **Phase F (done).** `ask_user` custom SDK tool (`packages/agent-runner/src/ask-user.ts`) registered on every spawn. Per-process pending-asks map with 10-min TTL. System prompt instructs the agent to prefer asking over guessing.
-> - **V2 default everywhere.** `spawnAgent` defaults to `'inline'` in both `@pinagent/next-plugin` and `@pinagent/vite-plugin` so the streaming-into-widget flow is on out of the box. Worktree mode is opt-in (`spawnAgent: 'worktree'`); `'off'` / `false` disables per-submit spawn entirely.
-> - **Not yet shipped (Phases G/H/I/J).** HMR re-anchoring, Land/Discard worktree lifecycle UX, post-edit verification, per-turn process spawn.
+> **Default behavior.** On Submit, both plugins run the Claude Agent SDK against the project and stream the run — text, tool chips, cost/turns — back into the widget pane over WebSocket. A persistent follow-up input sends additional turns (resuming the same session), and `ask_user` prompts render as inline forms the agent waits on. This is the `spawnAgent: 'inline'` default; `'worktree'` runs each submit in an isolated git worktree, and `'off'` / `false` disables per-submit spawn so you drive the loop from your own MCP session instead.
 
 ## Detect the runtime
 
@@ -41,31 +34,30 @@ build-time plugin → tags JSX with data-pa-loc
                   ↓
 browser widget     → picks element, captures screenshot, POSTs to /__pinagent/feedback
                   ↓
-agent-runner route → writes <project>/.pinagent/feedback/<id>.json + screenshot.png
+agent-runner route → writes a row to <project>/.pinagent/db.sqlite + screenshots/<id>.png
                   ↓
-@pinagent/mcp     → reads .pinagent/, exposes 4 tools to the agent
+@pinagent/mcp     → reads the same .pinagent/db.sqlite, exposes 5 tools to the agent
                   ↓
 optional channel  → pushes new feedback into a running `claude` session
 ```
 
 The Vite plugin and Next adapter share the widget IIFE and storage layout — they're interchangeable on the consumer side. Only the build/dev integration differs.
 
-## Where pinagent itself lives
+The per-element widget above is on by default. There's also an **optional dock surface** — a project-management UI (Conversations, Changes/diffs, Branches, PRs, Connections, History) enabled with `dock: true` on either plugin. It's off by default; see the runtime guides for how to turn it on, and what extra wiring it needs (the full set of route verbs on Next, plus a GitHub token for the PR composer).
 
-The pinagent packages are at `/Users/jacksonmalloy/code/pinagent/` (not on npm yet). All install steps reference local tarballs or absolute paths to that directory.
+## Where pinagent comes from
 
-If pinagent moves, every consumer's `.mcp.json` (absolute path to `@pinagent/mcp/dist/index.js`) and `package.json` (file: tarball path) needs updating.
+The plugins and MCP server are published to npm under the `@pinagent/*` scope — `@pinagent/vite-plugin`, `@pinagent/next-plugin`, and `@pinagent/mcp`. Install steps use `pnpm add -D` and `pnpm dlx`; nothing references a local checkout, so the skill works in any project.
 
 ## Common pitfalls (skim before you start)
 
-- **Don't put `.pinagent/` in version control.** Always add it to `.gitignore` of the target repo (monorepo root, not just the app). This includes `.pinagent/feedback/`, `.pinagent/screenshots/`, `.pinagent/logs/`, AND `.pinagent/worktrees/` (for worktree mode).
+- **Don't put `.pinagent/` in version control.** Always add it to `.gitignore` of the target repo (monorepo root, not just the app). This covers `.pinagent/db.sqlite` (+ `-wal`/`-shm`), `.pinagent/screenshots/`, `.pinagent/logs/`, AND `.pinagent/worktrees/` (for worktree mode).
 - **Project root matters in monorepos.** Storage lives at `<wherever Next/Vite runs from>/.pinagent/`. The MCP server must point at that same directory via `PINAGENT_PROJECT_ROOT`.
-- **Hard-refresh the browser** after rebuilding the widget — the IIFE is cached. (Chrome DevTools → Network tab → "Disable cache" while DevTools is open helps during development.)
-- **Bump the version when re-packing.** `pnpm pack` uses the version in `package.json`; if you re-pack without bumping, pnpm caches by filename and consumer installs won't pick up your changes. Bump even for tiny fixes.
+- **Hard-refresh the browser** after upgrading the plugin — the widget IIFE is cached. (Chrome DevTools → Network tab → "Disable cache" while DevTools is open helps during development.)
 - **Auto mode blocks MCP tools by default.** The agent will say "tools were denied" unless the project's `.claude/settings.local.json` allow-lists `mcp__pinagent__*`. Use the `/permissions` slash command inside Claude Code to set this up.
 - **Auth for SDK-backed spawn modes: OAuth (subscription) by default, env key only if you want to bill the API account.** The SDK bundles the Claude Code binary and respects the same auth as the CLI. If the developer is logged in (`claude login`, or via the Claude desktop app), spawn modes use that OAuth session — billed against the subscription. If `ANTHROPIC_API_KEY` is exported, the binary prefers it and bills the API account instead. Bedrock/Vertex/Foundry work too via `CLAUDE_CODE_USE_BEDROCK` / `_VERTEX` / `_FOUNDRY` env vars. Channel mode is unaffected (it pushes into the developer's existing `claude` session).
 - **The MCP server must be running in a session for channel mode.** Launch with `--dangerously-load-development-channels server:pinagent`. Otherwise it's pull-mode (the user asks "what feedback is pending?") or SDK-spawn mode (each submit runs a per-feedback SDK agent in the background).
-- **SDK agents die with the dev server.** SDK-spawned agents run in-process. Restarting the dev server mid-fix kills any in-flight agent — the log file will end mid-stream. The feedback record stays `pending` so the next agent run picks it up. (This will become a non-issue once Phase J lands per-turn process spawn from the v2 plan.)
+- **SDK agents die with the dev server.** SDK-spawned agents run in-process. Restarting the dev server mid-fix kills any in-flight agent — the log file will end mid-stream. The feedback record stays `pending` so the next agent run picks it up.
 - **The composer is rendered in an iframe**, not just shadow DOM. This is intentional — iframes have their own focus context so modal focus traps (Radix Dialog, react-focus-lock, etc.) can't reach in. If you're debugging the composer in DevTools, drill into the iframe element.
 
 ## Environment variables (handy reference)
@@ -79,5 +71,6 @@ If pinagent moves, every consumer's `.mcp.json` (absolute path to `@pinagent/mcp
 | `PINAGENT_WS_PORT` | Port the dev-side WebSocket server binds (Next only). Widget connects to this port. | `53636` |
 | `PINAGENT_EDITOR` | Editor command for the "click file:line:col to open" feature | Route handler `/open` endpoint |
 | `EDITOR` / `VISUAL` | Fallback for `PINAGENT_EDITOR` (standard *nix conventions) | Route handler `/open` endpoint |
+| `GITHUB_TOKEN` / `PINAGENT_GITHUB_TOKEN` | Token used by the dock's PR composer to open PRs (only needed with `dock: true`). `GITHUB_TOKEN` is tried first. | Agent-runner PR composer |
 
 Set these in `.mcp.json`'s `env` block (for the MCP server) or in your shell where you run `pnpm dev` (for the route handler / spawner). The plugin's `pinagent(config, { spawnAgent: ... })` option sets `PINAGENT_SPAWN_AGENT` for you.

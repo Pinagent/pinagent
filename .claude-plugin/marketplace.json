@@ -1,0 +1,18 @@
+{
+  "name": "pinagent",
+  "owner": {
+    "name": "Pinagent",
+    "url": "https://github.com/Pinagent/pinagent"
+  },
+  "plugins": [
+    {
+      "name": "pinagent-setup",
+      "source": {
+        "source": "github",
+        "repo": "Pinagent/pinagent"
+      },
+      "description": "Wire Pinagent into a Vite or Next.js project: detect the runtime, install the plugin, register the MCP server, and set tool permissions so a Claude agent can act on click-to-comment feedback.",
+      "license": "Apache-2.0"
+    }
+  ]
+}

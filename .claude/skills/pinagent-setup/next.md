@@ -2,31 +2,27 @@
 
 Target: any Next 14+ App Router project. Verified on Next 16 + React 19 + Turbopack. Pages Router is not officially supported in v1.
 
-## 1. Build & pack the adapter
-
-From the pinagent repo:
-
-```bash
-cd /Users/jacksonmalloy/code/pinagent
-pnpm --filter @pinagent/widget build
-pnpm --filter @pinagent/next-plugin build
-cd packages/next
-pnpm pack
-# produces pinagent-next-<version>.tgz
-```
-
-If you've packed before and the contents change, **bump the version in `packages/next-plugin/package.json` first** — pnpm caches by tarball filename and otherwise won't re-extract. Same goes for editing the consumer's `package.json` to point at the new version.
-
-## 2. Install in the target
+## 1. Install the adapter
 
 ```bash
 cd /path/to/target/repo
-pnpm add -D /Users/jacksonmalloy/code/pinagent/packages/next-plugin/pinagent-next-<version>.tgz
+pnpm add -D @pinagent/next-plugin
 ```
 
 Use `--ignore-scripts` if the consumer's monorepo postinstall hook (sherif, lint, etc.) fails and rolls back the install. Pinagent's own behavior doesn't depend on the consumer's postinstall.
 
-## 3. Wrap `next.config.{js,ts}`
+### Native build approval (pnpm only)
+
+pnpm 10+ blocks postinstall build scripts by default. The agent runner uses `better-sqlite3` server-side, which needs its native `.node` binding compiled — otherwise comment submission returns a 500 (`Could not locate the bindings file`). Approve it once:
+
+```bash
+pnpm approve-builds   # interactive; select better-sqlite3
+pnpm install          # re-run so the postinstall fires
+```
+
+Or non-interactively, add `{ "pnpm": { "onlyBuiltDependencies": ["better-sqlite3"] } }` to the target's `package.json`, then `pnpm install`. (npm and yarn build native binaries by default, so this only matters on pnpm.)
+
+## 2. Wrap `next.config.{js,ts}`
 
 ```js
 import pinagent from '@pinagent/next-plugin/config';
@@ -37,7 +33,7 @@ const coreConfig = {
 
 // pinagent(config, options?) takes an optional second arg:
 const wrapped = pinagent(coreConfig, {
-  spawnAgent: false,   // 'worktree' | 'inline' | false — see "Configuration" below
+  spawnAgent: 'inline',   // 'inline' (default) | 'worktree' | false — see "Configuration" below
 });
 
 // If wrapping with Sentry or others, put pinagent() on the INSIDE:
@@ -54,7 +50,7 @@ What `pinagent(config, options?)` does:
 - Merges with existing `rewrites()` (function or array form). Won't clobber.
 - Sets `PINAGENT_SPAWN_AGENT` env var so the route handler knows whether to spawn an agent per submit. See "Configuration" below.
 
-## 4. Mount `<Pinagent />` in the root layout
+## 3. Mount `<Pinagent />` in the root layout
 
 ```tsx
 // app/layout.tsx
@@ -76,7 +72,7 @@ export default function RootLayout({ children }) {
 
 In production builds the component returns `null` unconditionally.
 
-## 5. Create the route handler
+## 4. Create the route handler
 
 Create the file **exactly** as below — don't be tempted to one-line the re-export:
 
@@ -84,8 +80,10 @@ Create the file **exactly** as below — don't be tempted to one-line the re-exp
 // app/pinagent/[[...slug]]/route.ts
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-export { GET, POST, PATCH } from '@pinagent/next-plugin/route';
+export { GET, POST, PATCH, PUT, DELETE } from '@pinagent/next-plugin/route';
 ```
+
+Re-export **all five verbs**. GET/POST/PATCH cover the core feedback loop; PUT and DELETE back the dock's connection and branch management. Leaving them out makes those dock actions 404 — harmless if you never enable the dock, but cheap to include now.
 
 Why `dynamic` and `runtime` are inline: Next 16 statically parses route-segment config at build time and refuses to follow re-exports for those fields. If you write `export { dynamic, runtime } from '@pinagent/next-plugin/route'` you'll get:
 
@@ -95,7 +93,7 @@ Next.js can't recognize the exported `dynamic` field in route. It mustn't be ree
 
 Why the folder is `pinagent/` not `__pinagent/`: same `_` private-folder rule. The `pinagent(config)` wrapper's rewrite forwards the public URL `/__pinagent/*` (which the widget POSTs to) onto this `/pinagent/*` route.
 
-## 6. Common: gitignore + MCP
+## 5. Common: gitignore + MCP
 
 Continue with [mcp.md](./mcp.md) for MCP server setup and `.gitignore`.
 
@@ -112,7 +110,7 @@ Then open the browser and confirm:
 1. 💬 button bottom-right
 2. Inspect any element → DOM has `data-pa-loc="src/Foo.tsx:42:7"`
 3. No hydration warnings in DevTools console
-4. Submit a comment → file lands at `<project root>/.pinagent/feedback/`
+4. Submit a comment → a row lands in `<project root>/.pinagent/db.sqlite` and the screenshot at `.pinagent/screenshots/<id>.png`
 
 ## Widget architecture (so you don't get confused debugging)
 
@@ -125,7 +123,7 @@ If you ever need to inspect the composer in DevTools, drill into the iframe elem
 ## Known gotchas
 
 - **Turbopack first compile is slow.** Expect 30-60s the first time the loader runs — Turbopack recompiles every `.tsx` to add `data-pa-loc`. HMR is fast after that.
-- **`color-scheme: dark` on the host page** styles form controls inside the widget with dark browser defaults. The widget IIFE counters this with explicit `color-scheme: light` and explicit backgrounds — no action needed, but if you see a dark textarea, the installed IIFE is stale (bump version and reinstall).
+- **`color-scheme: dark` on the host page** styles form controls inside the widget with dark browser defaults. The widget IIFE counters this with explicit `color-scheme: light` and explicit backgrounds — no action needed, but if you see a dark textarea, the installed IIFE is stale (upgrade `@pinagent/next-plugin` and hard-refresh).
 - **CSP `connect-src` blocking the widget's image inlining.** The widget uses `html-to-image.toBlob()` + `createImageBitmap()` + `canvas.toBlob()` — no `fetch()` calls. It also skips cross-origin `<img>` elements before they're inlined (CSP would block those fetches). Cross-origin images appear as blank slots in the captured screenshot. To get them captured, either (a) add the CDN to `connect-src`, or (b) proxy them through a same-origin Next rewrite (like you might do for analytics).
 - **Custom middleware (`proxy.ts` in Next 16, `middleware.ts` before that).** `/__pinagent/*` runs through every middleware just like other routes. If your middleware rejects unknown paths, add an exclusion. Most setups passthrough by default and don't need changes.
 - **Sherif / monorepo postinstall.** `pnpm add` may roll back due to unrelated workspace lint failures. Use `--ignore-scripts` to skip the postinstall hook on installs of pinagent-only.
@@ -156,6 +154,22 @@ pinagent(coreConfig, {
   spawnAgent: 'inline',
 });
 ```
+
+### Dock surface (optional)
+
+The per-element widget ships by default. The **dock** is a second, opt-in surface — a project-management UI (Conversations, Changes with inline diffs, Branches, PRs, Connections, History) mounted from a bottom-left FAB. Enable it with `dock: true`:
+
+```js
+pinagent(coreConfig, { dock: true });   // combine with spawnAgent if you want both
+```
+
+When using the dock:
+
+- The route handler must re-export **all five verbs** (`GET, POST, PATCH, PUT, DELETE`) — PUT/DELETE back the Connections and Branches panels (see step 4).
+- The PR composer needs a GitHub token: set `GITHUB_TOKEN` or `PINAGENT_GITHUB_TOKEN` (tried in that order).
+- Optionally install `@pinagent/vscode-extension` — it lets the dock open a Claude Code terminal with a conversation piped in.
+
+Full dock docs (routes, shortcuts, deep links) live in `@pinagent/widget-dock`'s README.
 
 ### Environment variables
 

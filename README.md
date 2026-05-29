@@ -51,6 +51,17 @@ JSX is tagged at dev-build time by `@pinagent/babel-plugin` (Vite) or a webpack/
 
 ## Install
 
+> **Using Claude Code? Skip the manual steps.** Run `/pinagent-setup` and it detects Vite vs Next, installs the plugin, wires up the config (and the Next route + `<Pinagent />`), registers the MCP server, and sets the tool permissions for you.
+>
+> Don't have the skill yet? Add the marketplace once, then install:
+>
+> ```bash
+> /plugin marketplace add Pinagent/pinagent
+> /plugin install pinagent-setup@pinagent
+> ```
+>
+> The manual steps below do the same thing by hand.
+
 ```sh
 pnpm add -D @pinagent/vite-plugin    # or @pinagent/next-plugin
 ```
@@ -123,13 +134,13 @@ export { GET, POST, PATCH } from '@pinagent/next-plugin/route';
 
 ## Connect your agent
 
-Register the MCP server with Claude Code. The easiest path uses `@pinagent/cli` so you don't need a global install:
+Register the MCP server with Claude Code. The easiest path uses `pnpm dlx` so you don't need a global install:
 
 ```bash
-claude mcp add pinagent -- pnpm dlx @pinagent/cli mcp
+claude mcp add pinagent -- pnpm dlx @pinagent/mcp
 ```
 
-If `@pinagent/mcp` is already installed (e.g. as a project dep), the older direct-bin form also works:
+If `@pinagent/mcp` is already installed (e.g. as a project dep), the direct-bin form also works:
 
 ```bash
 claude mcp add pinagent pinagent-mcp
@@ -145,6 +156,7 @@ That's it. In your next Claude Code session, ask it to "address pending Pinagent
 | `get_feedback` | Returns one item, with the screenshot as an inline image. |
 | `resolve_feedback` | Marks `fixed` / `wontfix` / `deferred`; optional note + commit sha. |
 | `get_source_context` | Reads a window of source around a given `file:line`. |
+| `get_conversation_transcript` | Returns the full agent transcript for one feedback id (every captured event), as text or JSON. |
 
 ## What gets captured
 
