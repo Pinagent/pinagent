@@ -7,6 +7,8 @@ import {
   type SsoProvider,
   verifySessionToken,
 } from '@pinagent/ee-auth';
+import { createInMemoryMeterSink } from '@pinagent/ee-billing';
+import { createInMemoryAuditSink } from '@pinagent/ee-team-features';
 import { describe, expect, it } from 'vitest';
 import { createCloudApp } from '../src/app';
 import { createBearerAuthenticator } from '../src/authenticators';
@@ -62,10 +64,13 @@ const provider: SsoProvider = {
 };
 
 function makeApp() {
+  const authenticate = createBearerAuthenticator(USER_TOKEN_SECRET, { cookieName: COOKIE });
+  const audit = createInMemoryAuditSink();
+  const meter = createInMemoryMeterSink();
   return createCloudApp({
     session: {
       store,
-      authenticate: createBearerAuthenticator(USER_TOKEN_SECRET, { cookieName: COOKIE }),
+      authenticate,
       secret: RELAY_SECRET,
       relayUrl: 'wss://relay.test',
     },
@@ -77,6 +82,7 @@ function makeApp() {
       cookieName: COOKIE,
       defaultReturnTo: '/',
     },
+    read: { store, authenticate, audit, meter },
   });
 }
 

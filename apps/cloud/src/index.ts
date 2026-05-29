@@ -30,6 +30,12 @@ export {
 export { createPgSubscriptionStore } from './db/subscription-store';
 export { handleSsoCallback, handleSsoStart, type LoginServiceDeps } from './login-service';
 export {
+  handleAudit,
+  handleMembers,
+  handleUsage,
+  type ReadServiceDeps,
+} from './read-service';
+export {
   type AuthenticatedUser,
   type Authenticator,
   createCloudFetch,
