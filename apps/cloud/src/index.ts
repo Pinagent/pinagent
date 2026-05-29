@@ -18,7 +18,14 @@ export {
   createPgMembershipStore,
   type MembershipDb,
 } from './db/membership-store';
-export { auditEvents, organizationMemberships, organizations, schema } from './db/schema';
+export { createPgMeterSink } from './db/meter-sink';
+export {
+  auditEvents,
+  organizationMemberships,
+  organizations,
+  schema,
+  usageEvents,
+} from './db/schema';
 export { handleSsoCallback, handleSsoStart, type LoginServiceDeps } from './login-service';
 export {
   type AuthenticatedUser,

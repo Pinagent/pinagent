@@ -15,6 +15,13 @@
       "when": 1780065947475,
       "tag": "0001_flowery_wildside",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780067158269,
+      "tag": "0002_tired_callisto",
+      "breakpoints": true
     }
   ]
 }

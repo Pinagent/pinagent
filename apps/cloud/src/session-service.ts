@@ -7,6 +7,7 @@ import {
   type Permission,
   type UserId,
 } from '@pinagent/ee-auth';
+import { type MeterSink, USAGE_KINDS } from '@pinagent/ee-billing';
 import { AUDIT_ACTIONS, type AuditSink } from '@pinagent/ee-team-features';
 import { isoFromSeconds } from './clock';
 
@@ -59,6 +60,8 @@ export interface SessionServiceDeps {
   requirePermission?: Permission;
   /** Optional audit sink — records session grants and denials when present. */
   audit?: AuditSink;
+  /** Optional usage meter — records a billable relay-session unit on success. */
+  meter?: MeterSink;
   /** Override the issued-at clock (epoch seconds) — for tests. */
   nowSeconds?: number;
 }
@@ -105,13 +108,21 @@ export async function handleSessionRequest(
       requirePermission: deps.requirePermission ?? DEFAULT_REQUIRED_PERMISSION,
       nowSeconds: deps.nowSeconds,
     });
+    const occurredAt = isoFromSeconds(deps.nowSeconds);
     await deps.audit?.record({
-      occurredAt: isoFromSeconds(deps.nowSeconds),
+      occurredAt,
       organizationId: body.organizationId,
       actorUserId: user.userId,
       action: AUDIT_ACTIONS.sessionIssued,
       targetId: body.sessionId,
       metadata: { role: principal.role },
+    });
+    await deps.meter?.record({
+      occurredAt,
+      organizationId: body.organizationId,
+      kind: USAGE_KINDS.relaySession,
+      quantity: 1,
+      metadata: { sessionId: body.sessionId, role: principal.role },
     });
     return json({ token, sessionId: body.sessionId, relayUrl: deps.relayUrl }, 200);
   } catch (err) {

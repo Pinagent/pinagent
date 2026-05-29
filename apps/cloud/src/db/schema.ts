@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Elastic-2.0
-import { jsonb, pgSchema, primaryKey, text } from 'drizzle-orm/pg-core';
+import { integer, jsonb, pgSchema, primaryKey, text } from 'drizzle-orm/pg-core';
 
 /**
  * Postgres schema backing `@pinagent/ee-auth`'s `MembershipStore`.
@@ -56,4 +56,20 @@ export const auditEvents = teamSchema.table('audit_events', {
   metadata: jsonb('metadata').$type<Record<string, unknown>>(),
 });
 
-export const schema = { organizations, organizationMemberships, auditEvents };
+/**
+ * `billing` schema — usage metering (`@pinagent/ee-billing`'s `MeterSink`).
+ * Append-only usage events, summed per org for plan/quota and Stripe reporting.
+ */
+export const billingSchema = pgSchema('billing');
+
+export const usageEvents = billingSchema.table('usage_events', {
+  /** App-generated UUID (no DB extension needed). */
+  id: text('id').primaryKey(),
+  occurredAt: text('occurred_at').notNull(),
+  organizationId: text('organization_id').notNull(),
+  kind: text('kind').notNull(),
+  quantity: integer('quantity').notNull(),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+});
+
+export const schema = { organizations, organizationMemberships, auditEvents, usageEvents };
