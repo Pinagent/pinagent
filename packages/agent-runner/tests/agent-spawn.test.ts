@@ -346,6 +346,15 @@ describe('spawnAgent', () => {
     const errorEvent = events.find((e) => e.type === 'error');
     expect(errorEvent).toBeDefined();
     expect((errorEvent as { message: string }).message).toMatch(/SDK exploded/);
+
+    // The provider also synthesizes a terminal `result` so the widget leaves
+    // the running state even though the SDK never delivered its own result.
+    const result = events.find((e) => e.type === 'result') as
+      | Extract<import('@pinagent/shared').AgentEvent, { type: 'result' }>
+      | undefined;
+    expect(result).toBeDefined();
+    expect(result?.subtype).toBe('error');
+    expect(result?.errors?.[0]).toMatch(/SDK exploded/);
   });
 
   it('mode=false is a no-op (no query call, no log file)', async () => {
@@ -506,16 +515,18 @@ describe('runFollowUpTurn', () => {
       } as never,
     ]);
 
-    // Wait for the SECOND result.
+    // Wait for the SECOND result. A fresh subscriber replays the
+    // conversation from the start (the bus polls `messages` from id 0),
+    // so it sees the first run's persisted result before the follow-up's.
+    // Resolve only once both have arrived, guaranteeing the follow-up
+    // `query()` has actually been invoked before we assert on its params.
     let resultsSeen = 0;
     const secondDone = new Promise<void>((resolve) => {
       bus.getOrCreateBus(id).subscribe({
         onEvent(e) {
           if (e.type === 'result') {
             resultsSeen += 1;
-            // First result already fired during firstDone; this one
-            // is the follow-up turn's.
-            resolve();
+            if (resultsSeen >= 2) resolve();
           }
         },
         onClose() {},
@@ -609,13 +620,15 @@ describe('runFollowUpTurn', () => {
       } as never,
     ]);
 
+    // As above: a fresh subscriber replays the initial run's result, so
+    // wait for the second (the follow-up's) before asserting on params.
     let resultsSeen = 0;
     const followUpDone = new Promise<void>((resolve) => {
       bus.getOrCreateBus(id).subscribe({
         onEvent(e) {
           if (e.type === 'result') {
             resultsSeen += 1;
-            resolve();
+            if (resultsSeen >= 2) resolve();
           }
         },
         onClose() {},
@@ -653,5 +666,28 @@ describe('interruptRun', () => {
     const interrupted = await agent.interruptRun(id);
     expect(interrupted).toBe(true);
     await expect(aborted).resolves.toBeUndefined();
+  });
+
+  it('emits a terminal aborted result (not a raw error) when interrupted', async () => {
+    const { id, storage } = await makeFeedback();
+    const rec = await storage.read(id);
+
+    scriptHangingQuery();
+    void agent.spawnAgent({ projectRoot: PROJECT_ROOT, feedback: rec!, mode: 'inline' });
+    await collectUntil(id, (e) => e.type === 'init');
+
+    // Subscribe for the terminal event before aborting so we don't miss it.
+    const resultP = collectUntil(id, (e) => e.type === 'result');
+    await agent.interruptRun(id);
+    const events = await resultP;
+
+    const result = events.find((e) => e.type === 'result') as Extract<
+      import('@pinagent/shared').AgentEvent,
+      { type: 'result' }
+    >;
+    expect(result.subtype).toBe('aborted');
+    // Abort is a clean stop, not an error — no error event, no errors[].
+    expect(result.errors).toBeUndefined();
+    expect(events.some((e) => e.type === 'error')).toBe(false);
   });
 });

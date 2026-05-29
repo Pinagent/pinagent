@@ -72,6 +72,38 @@ describe('Storage', () => {
     expect(read?.additionalAnchors).toEqual(extras);
   });
 
+  it('defaults component/instance fields to null for single-pick input', async () => {
+    const s = new Storage(root);
+    const id = nanoid(10);
+    const created = await s.create(id, makeInput());
+    expect(created.component).toBeNull();
+    expect(created.componentPath).toBeNull();
+    expect(created.instanceIndex).toBeNull();
+    expect(created.instanceTotal).toBeNull();
+    expect(created.instanceFingerprint).toBeNull();
+  });
+
+  it('round-trips enclosing-component + loop-instance context', async () => {
+    const s = new Storage(root);
+    const id = nanoid(10);
+    const created = await s.create(
+      id,
+      makeInput({
+        component: 'PriceCard',
+        componentPath: ['App', 'PriceList', 'PriceCard'],
+        instance: { index: 2, total: 5, fingerprint: 'li "Premium" data-testid=card' },
+      }),
+    );
+    expect(created.component).toBe('PriceCard');
+    expect(created.componentPath).toEqual(['App', 'PriceList', 'PriceCard']);
+    expect(created.instanceIndex).toBe(2);
+    expect(created.instanceTotal).toBe(5);
+    expect(created.instanceFingerprint).toBe('li "Premium" data-testid=card');
+
+    const read = await s.read(id);
+    expect(read).toEqual(created);
+  });
+
   it('create writes the screenshot under .pinagent/screenshots/<id>.png', async () => {
     const s = new Storage(root);
     const id = nanoid(10);

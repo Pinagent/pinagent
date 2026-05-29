@@ -1,9 +1,16 @@
 {
   "name": "@pinagent/cli",
   "version": "0.0.2",
-  "private": true,
-  "description": "Pinagent CLI: thin wrapper around the OSS packages. `pinagent dev`, `pinagent mcp`, `pinagent init`.",
+  "description": "Pinagent CLI: thin wrapper around the OSS packages. `pinagent init`, `pinagent mcp`, `pinagent transcript`.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pinagent/pinagent.git",
+    "directory": "apps/cli"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "bin": {
     "pinagent": "./dist/index.js"
@@ -18,15 +25,16 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "tsdown"
   },
   "dependencies": {
     "@pinagent/mcp": "workspace:*",
-    "@pinagent/shared": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@pinagent/agent-runner": "workspace:*",
+    "@pinagent/shared": "workspace:*",
     "@pinagent/vite-plugin": "workspace:*",
     "@types/node": "^22.10.1",
     "nanoid": "^5.0.9",

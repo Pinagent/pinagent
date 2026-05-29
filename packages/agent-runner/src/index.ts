@@ -82,7 +82,27 @@ export {
   type ComposeResult,
   composePullRequest,
 } from './pr-composer';
+export {
+  type AgentPermissionMode,
+  type AgentProvider,
+  type AgentRunRequest,
+  ClaudeCodeProvider,
+  CliAgentProvider,
+  createProvider,
+  type ProviderId,
+  type ProviderRunItem,
+  resolveProvider,
+  resolveProviderId,
+} from './providers';
 export { listPullRequests, type PullRequestRecord } from './pull-requests';
+export {
+  buildDeviceUrl,
+  maybeStartRelayClient,
+  nextBackoff,
+  type RelayClientHandle,
+  type RelayClientOptions,
+  startRelayClient,
+} from './relay-client';
 export {
   type PresentableConnections,
   type SecretsFile,

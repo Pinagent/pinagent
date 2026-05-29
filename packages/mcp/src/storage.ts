@@ -56,6 +56,18 @@ export interface FeedbackRecord {
    * surfaces them — the MCP agent prompt doesn't yet enumerate them.
    */
   additionalAnchors: AdditionalAnchor[] | null;
+  /** Enclosing component name (`data-pa-comp`) of the target. */
+  component: string | null;
+  /** Outer→inner chain of distinct enclosing component names. */
+  componentPath: string[] | null;
+  /**
+   * Loop-instance disambiguation — which of N elements sharing the
+   * target's `data-pa-loc` was clicked, and a fingerprint to recognise
+   * it. All null unless the loc was rendered more than once.
+   */
+  instanceIndex: number | null;
+  instanceTotal: number | null;
+  instanceFingerprint: string | null;
   screenshot: string;
   status: Status;
   worktreeState: WorktreeState;
@@ -309,6 +321,11 @@ function rowToRecord(row: {
     viewport: { w: a?.viewportW ?? 0, h: a?.viewportH ?? 0 },
     userAgent: a?.userAgent ?? '',
     additionalAnchors: a?.additionalAnchors ?? null,
+    component: a?.component ?? null,
+    componentPath: a?.componentPath ?? null,
+    instanceIndex: a?.instanceIndex ?? null,
+    instanceTotal: a?.instanceTotal ?? null,
+    instanceFingerprint: a?.instanceFingerprint ?? null,
     screenshot: join('screenshots', `${c.id}.png`),
     status: c.status,
     worktreeState: c.worktreeState,

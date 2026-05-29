@@ -54,7 +54,7 @@ The per-element widget above is on by default. There's also an **optional dock s
 
 ## Where pinagent comes from
 
-The plugins and MCP server are published to npm under the `@pinagent/*` scope — `@pinagent/vite-plugin`, `@pinagent/next-plugin`, `@pinagent/react-native`, and `@pinagent/mcp`. Install steps use `pnpm add -D` and `pnpm dlx`; nothing references a local checkout, so the skill works in any project.
+The plugins, MCP server, and CLI are published to npm under the `@pinagent/*` scope — `@pinagent/vite-plugin`, `@pinagent/next-plugin`, `@pinagent/react-native`, `@pinagent/mcp`, and `@pinagent/cli` (the `pinagent` command: `init`, `mcp`, `transcript`). Install steps use `pnpm add -D` and `pnpm dlx`; nothing references a local checkout, so the skill works in any project.
 
 ## Common pitfalls (skim before you start)
 

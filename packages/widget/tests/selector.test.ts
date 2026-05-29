@@ -3,9 +3,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   breadcrumbTags,
+  componentOf,
+  componentPath,
   describeElementLabel,
+  elementFingerprint,
   findLoc,
+  findLocEl,
   findReanchorTarget,
+  locInstanceInfo,
   shortSelector,
 } from '../src/selector';
 
@@ -230,5 +235,101 @@ describe('findReanchorTarget', () => {
       '<button data-pa-loc="B.tsx:2:2" id="second">B</button>';
     const found = findReanchorTarget('B.tsx:2:2', 'body > button');
     expect((found as HTMLElement | null)?.id).toBe('second');
+  });
+});
+
+describe('findLocEl', () => {
+  it('returns the element carrying data-pa-loc plus parsed loc + raw', () => {
+    document.body.innerHTML = '<div data-pa-loc="src/App.tsx:42:7"><span>hi</span></div>';
+    const span = document.querySelector('span') as Element;
+    const hit = findLocEl(span);
+    expect(hit?.el.tagName).toBe('DIV');
+    expect(hit?.raw).toBe('src/App.tsx:42:7');
+    expect(hit?.loc).toEqual({ file: 'src/App.tsx', line: 42, col: 7 });
+  });
+
+  it('returns null when no ancestor is tagged', () => {
+    document.body.innerHTML = '<div><span>hi</span></div>';
+    expect(findLocEl(document.querySelector('span') as Element)).toBeNull();
+    // findLoc stays consistent with findLocEl.
+    expect(findLoc(document.querySelector('span') as Element)).toBeNull();
+  });
+});
+
+describe('componentOf', () => {
+  it('reads the nearest data-pa-comp walking up', () => {
+    document.body.innerHTML =
+      '<div data-pa-comp="App"><section data-pa-comp="PriceCard"><button>Buy</button></section></div>';
+    const btn = document.querySelector('button') as Element;
+    expect(componentOf(btn)).toBe('PriceCard');
+  });
+
+  it('returns null when nothing is instrumented', () => {
+    document.body.innerHTML = '<div><button>Buy</button></div>';
+    expect(componentOf(document.querySelector('button') as Element)).toBeNull();
+  });
+});
+
+describe('componentPath', () => {
+  it('returns the outer→inner chain of distinct components', () => {
+    document.body.innerHTML =
+      '<div data-pa-comp="App"><div data-pa-comp="App"><ul data-pa-comp="PriceList">' +
+      '<li data-pa-comp="PriceCard"><button>Buy</button></li></ul></div></div>';
+    const btn = document.querySelector('button') as Element;
+    // Consecutive duplicate "App" collapses to one boundary.
+    expect(componentPath(btn)).toEqual(['App', 'PriceList', 'PriceCard']);
+  });
+
+  it('keeps only the innermost entries when over the cap', () => {
+    document.body.innerHTML =
+      '<a data-pa-comp="A"><b data-pa-comp="B"><c data-pa-comp="C"><d data-pa-comp="D">x</d></c></b></a>';
+    const d = document.querySelector('d') as Element;
+    expect(componentPath(d, 2)).toEqual(['C', 'D']);
+  });
+
+  it('returns an empty array when uninstrumented', () => {
+    document.body.innerHTML = '<div><span>x</span></div>';
+    expect(componentPath(document.querySelector('span') as Element)).toEqual([]);
+  });
+});
+
+describe('locInstanceInfo', () => {
+  it('counts elements sharing a data-pa-loc and finds the clicked index', () => {
+    document.body.innerHTML =
+      '<ul>' +
+      '<li data-pa-loc="src/List.tsx:5:9">a</li>' +
+      '<li data-pa-loc="src/List.tsx:5:9">b</li>' +
+      '<li data-pa-loc="src/List.tsx:5:9">c</li>' +
+      '</ul>';
+    const items = document.querySelectorAll('li');
+    expect(locInstanceInfo(items[1]!, 'src/List.tsx:5:9')).toEqual({ index: 1, total: 3 });
+    expect(locInstanceInfo(items[2]!, 'src/List.tsx:5:9')).toEqual({ index: 2, total: 3 });
+  });
+
+  it('reports total 1 for a unique location', () => {
+    document.body.innerHTML = '<div data-pa-loc="src/App.tsx:1:1">x</div>';
+    const el = document.querySelector('div') as Element;
+    expect(locInstanceInfo(el, 'src/App.tsx:1:1')).toEqual({ index: 0, total: 1 });
+  });
+});
+
+describe('elementFingerprint', () => {
+  it('combines tag, text snippet, and identity-ish attributes', () => {
+    document.body.innerHTML = '<a id="row-3" href="/p/3" data-testid="card">Premium plan</a>';
+    const a = document.querySelector('a') as Element;
+    const fp = elementFingerprint(a);
+    expect(fp).toContain('a');
+    expect(fp).toContain('"Premium plan"');
+    expect(fp).toContain('id=row-3');
+    expect(fp).toContain('href=/p/3');
+    expect(fp).toContain('data-testid=card');
+  });
+
+  it('truncates long text', () => {
+    document.body.innerHTML = `<p>${'x'.repeat(200)}</p>`;
+    const p = document.querySelector('p') as Element;
+    const fp = elementFingerprint(p, 20);
+    expect(fp.length).toBeLessThan(60);
+    expect(fp).toContain('…');
   });
 });

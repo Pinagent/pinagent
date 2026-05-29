@@ -77,6 +77,16 @@ export const COMPOSER_STYLES = `
     white-space: nowrap;
     min-width: 0;
   }
+  /* Enclosing component name (data-pa-comp), e.g. "in <PriceCard>". Muted
+     mono so it reads as source metadata next to the element label. */
+  .el-comp {
+    font-family: ${FONT_MONO};
+    font-size: 11px;
+    color: ${BRAND_INK};
+    opacity: 0.6;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
   /* "+N more" badge for Cmd/Ctrl-click extras. Same shape as el-pill
      but gold so it stands out as "additional selections". Cursor: help
      so the hover-to-preview affordance reads. */
@@ -522,6 +532,30 @@ export const COMPOSER_STYLES = `
   }
   #pa-follow-input { font-size: 12px; min-height: 0; }
   #pa-follow-send { white-space: nowrap; }
+
+  /* Enclosing-component / loop-instance context line (from #166), under
+     the stream header. sc-comp mirrors the header-block's component
+     chip, so it's hidden when expanded (the block already shows it) and
+     only earns its keep in the mini card. sc-instance shows in both
+     states — the loop instance isn't surfaced anywhere else. */
+  .stream-context {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-family: ${FONT_MONO};
+    font-size: 11px;
+    color: ${BRAND_INK};
+    opacity: 0.6;
+  }
+  .stream-context[hidden] { display: none; }
+  .stream-context > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body:not(.mini) .sc-comp { display: none; }
+  /* Hide the whole line when expanded if the only thing it could show
+     (the component) is hidden — i.e. there's no loop instance. */
+  body:not(.mini) .stream-context:not(:has(.sc-instance)) { display: none; }
+  /* Dot separator between the two spans, only when both render (mini). */
+  body.mini .sc-comp + .sc-instance::before { content: '·'; margin-right: 6px; opacity: 0.6; }
 
   /* --- Mini progress card --------------------------------------- */
   /* The minimized-while-running state. Same stream pane, condensed:

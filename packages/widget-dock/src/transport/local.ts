@@ -161,6 +161,12 @@ const FeedbackRecordSchema = z
     // the dock relabels it via `isNotionalCost`. Null when no run is
     // recorded; default keeps older servers (no field) parsing cleanly.
     apiKeySource: z.string().nullable().default(null),
+    // Enclosing-component / loop-instance context (from #166). All
+    // nullable with defaults so a dock built against an older server
+    // (or an uninstrumented app) parses cleanly.
+    component: z.string().nullable().default(null),
+    instanceIndex: z.number().int().nullable().default(null),
+    instanceTotal: z.number().int().nullable().default(null),
     createdAt: z.string(),
     updatedAt: z.string(),
   })
@@ -251,6 +257,9 @@ function toConversation(rec: FeedbackRecord): Conversation {
       loc: locString(rec.file, rec.line, rec.col),
       selector: rec.selector,
       snippet: '',
+      component: rec.component,
+      instanceIndex: rec.instanceIndex,
+      instanceTotal: rec.instanceTotal,
     },
     branch: rec.branch ?? '',
     archived: rec.archived,
