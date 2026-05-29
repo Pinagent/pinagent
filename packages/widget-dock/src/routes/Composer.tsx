@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import type { Change } from '../fixtures';
+import { useGitBranches } from '../hooks/useGitBranches';
 import { useSettings } from '../hooks/useSettings';
 import {
   type CreatePullRequestInput,
@@ -85,6 +86,12 @@ export function Composer({ selected, onCancel, onSuccess }: ComposerProps) {
   const defaultBaseBranch = settingsQuery.data?.baseBranch ?? 'main';
   const [baseOverride, setBaseOverride] = useState<string | null>(null);
   const baseBranch = baseOverride ?? defaultBaseBranch;
+
+  // Suggest the repo's real branches in the base-branch field. Stays a
+  // free-text input (you can target a branch git doesn't know yet); the
+  // datalist just turns the common case into a pick.
+  const gitBranchesQuery = useGitBranches();
+  const branchOptions = gitBranchesQuery.data ?? [];
 
   const [order, setOrder] = useState<Change[]>(selected);
   const [branchName, setBranchName] = useState(() => suggestBranchName(selected));
@@ -169,8 +176,16 @@ export function Composer({ selected, onCancel, onSuccess }: ComposerProps) {
             value={baseBranch}
             onChange={(e) => setBaseOverride(e.target.value)}
             spellCheck={false}
+            list="pa-base-branches"
             className="h-8 max-w-[260px] font-mono text-xs"
           />
+          {branchOptions.length > 0 && (
+            <datalist id="pa-base-branches">
+              {branchOptions.map((b) => (
+                <option key={b} value={b} />
+              ))}
+            </datalist>
+          )}
         </Field>
 
         <Field label="Title">

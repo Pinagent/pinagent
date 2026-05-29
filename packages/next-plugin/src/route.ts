@@ -21,6 +21,7 @@ import {
   listAuditEvents,
   listBranches,
   listChanges,
+  listGitBranches,
   listPullRequests,
   openInEditor,
   PatchSchema,
@@ -168,6 +169,13 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
   if (slug.length === 1 && slug[0] === 'changes') {
     const changes = await listChanges(storage.root);
     return json(200, changes);
+  }
+
+  // /__pinagent/git-branches — the repo's real git branches, base-branch
+  // candidates for the composer's dropdown. Mirror of the vite handler.
+  if (slug.length === 1 && slug[0] === 'git-branches') {
+    const branches = await listGitBranches(storage.root);
+    return json(200, branches);
   }
 
   // /__pinagent/prs — read mirror of PRs the compose flow has opened.

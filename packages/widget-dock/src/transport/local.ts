@@ -402,6 +402,10 @@ export class LocalTransport implements DockTransport {
     );
   }
 
+  async listGitBranches(): Promise<string[]> {
+    return this.jsonGetValidated('/__pinagent/git-branches', z.array(z.string()));
+  }
+
   async listPullRequests(): Promise<PullRequest[]> {
     const wire = await this.jsonGetValidated('/__pinagent/prs', z.array(PullRequestWireSchema));
     return wire.map(toPullRequest);
