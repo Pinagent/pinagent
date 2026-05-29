@@ -6,23 +6,23 @@
   "license": "Elastic-2.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev": "next dev --port 3031",
+    "build": "next build",
+    "start": "next start --port 3031",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@pinagent/ee-auth": "workspace:*",
     "@pinagent/ee-billing": "workspace:*",
     "@pinagent/ee-team-features": "workspace:*",
+    "next": "^16.0.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
   "devDependencies": {
+    "@types/node": "^22.10.1",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.2",
-    "typescript": "^6.0.3",
-    "vite": "^8.0.14"
+    "typescript": "^6.0.3"
   }
 }
