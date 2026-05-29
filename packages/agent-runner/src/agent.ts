@@ -10,7 +10,7 @@ import {
   type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import { activeRuns as activeRunsTable } from '@pinagent/db';
-import type { AgentEvent } from '@pinagent/shared';
+import { type AgentEvent, isNotionalCost } from '@pinagent/shared';
 import { eq } from 'drizzle-orm';
 import {
   renderInitFooter,
@@ -367,23 +367,44 @@ async function checkCostCaps(
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   const settings = await new SettingsStore(projectRoot).read();
   const storage = new Storage(projectRoot);
+  // On a `claude login` (OAuth) subscription the SDK reports notional
+  // cost — billed against the subscription quota, never charged. The cap
+  // still gates work (a proxy for "how much agent runtime to allow"), but
+  // the breach message must not claim money was "spent". Mirrors the
+  // dock's `isNotionalCost` relabeling.
+  const notional = isNotionalCost(await storage.readApiKeySource(feedbackId));
   const conversationCost = await storage.computeConversationCost(feedbackId);
   if (conversationCost >= settings.perConversationCapUsd) {
+    const spent = formatCapSpend(conversationCost, settings.perConversationCapUsd, notional);
     return {
       ok: false,
-      reason: `per-conversation cost cap reached: $${conversationCost.toFixed(2)} of $${settings.perConversationCapUsd.toFixed(2)} spent. Raise the cap in Settings or resolve this conversation.`,
+      reason: `per-conversation cost cap reached: ${spent}. Raise the cap in Settings or resolve this conversation.`,
     };
   }
   if (settings.monthlyBudgetUsd !== null) {
     const monthlySpend = await storage.computeMonthlySpend(new Date());
     if (monthlySpend >= settings.monthlyBudgetUsd) {
+      const spent = formatCapSpend(monthlySpend, settings.monthlyBudgetUsd, notional);
       return {
         ok: false,
-        reason: `monthly budget reached: $${monthlySpend.toFixed(2)} of $${settings.monthlyBudgetUsd.toFixed(2)} spent this month. Raise the budget in Settings.`,
+        reason: `monthly budget reached: ${spent} this month. Raise the budget in Settings.`,
       };
     }
   }
   return { ok: true };
+}
+
+/**
+ * Format the `<used> of <cap>` fragment of a cap-breach message. For
+ * notional (subscription) runs the amount is API-equivalent and was never
+ * billed, so we say so rather than "spent".
+ */
+function formatCapSpend(used: number, cap: number, notional: boolean): string {
+  const usedUsd = `$${used.toFixed(2)}`;
+  const capUsd = `$${cap.toFixed(2)}`;
+  return notional
+    ? `≈${usedUsd} of ${capUsd} API-equivalent (subscription — not billed)`
+    : `${usedUsd} of ${capUsd} spent`;
 }
 
 async function runQuery(opts: RunQueryOpts): Promise<void> {
