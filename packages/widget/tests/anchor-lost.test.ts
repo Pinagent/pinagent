@@ -7,6 +7,18 @@ import { openConversationInDock } from '../src/dock-bridge';
 import type { Composer } from '../src/types';
 import type { WidgetWsClient } from '../src/ws-client';
 
+// `tryReanchor` resolves against the shared happy-dom document, so in the full
+// test suite a stray node (or rAF timing) can let it find a match and reset
+// `anchorLost` — which would send the bubble click down the normal `swapTo`
+// path instead of the orphaned-dot path under test. Force it to fail so the
+// dot behavior is exercised deterministically; every other selector export
+// stays real via the `...actual` spread (composer.ts also uses
+// `findReanchorTarget`).
+vi.mock('../src/selector', async (importActual) => {
+  const actual = await importActual<typeof import('../src/selector')>();
+  return { ...actual, tryReanchor: () => false };
+});
+
 /**
  * Stub WS client — every method is a no-op spy. The composer only reaches
  * for `unsubscribe` (in close()) and the subscribe surface (only after the
