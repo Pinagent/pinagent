@@ -44,6 +44,7 @@ import type {
   ListAuditEventsQuery,
   PresentableConnections,
   PruneStaleResult,
+  ServeBranchResult,
 } from './types';
 import {
   type ConnectionStatus,
@@ -209,6 +210,20 @@ const BulkPruneResultSchema = z
         })
         .loose(),
     ),
+  })
+  .loose();
+
+/**
+ * Wire shape for the success body of `POST /__pinagent/branches/:id/serve`.
+ * Mirrors the `ok` branch of the server-side ServeBranchResult — failures
+ * come back as a 422 whose `error` the caller surfaces, so the schema only
+ * needs the success fields.
+ */
+const ServeBranchResultSchema = z
+  .object({
+    url: z.string(),
+    port: z.number(),
+    reused: z.boolean(),
   })
   .loose();
 
@@ -578,6 +593,14 @@ export class LocalTransport implements DockTransport {
     // 422 returns the structured PruneResult shape; surface its `error`.
     const body = (await response.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? `${response.status} ${response.statusText}`);
+  }
+
+  async serveBranch(feedbackId: string): Promise<ServeBranchResult> {
+    return this.jsonWriteValidated(
+      'POST',
+      `/__pinagent/branches/${encodeURIComponent(feedbackId)}/serve`,
+      ServeBranchResultSchema,
+    );
   }
 
   async pruneStaleBranches(): Promise<PruneStaleResult> {

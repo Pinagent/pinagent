@@ -255,6 +255,15 @@ export interface DockTransport {
   pruneBranch(feedbackId: string): Promise<void>;
 
   /**
+   * Stand up (or reuse) an on-demand dev server rooted at this worktree
+   * and return its loadable URL, so the Branches view's "Open app" action
+   * can open the worktree's running app in a browser tab. Worktree mode
+   * only; rejects with the server's message when no command can be
+   * resolved or the server fails to start.
+   */
+  serveBranch(feedbackId: string): Promise<ServeBranchResult>;
+
+  /**
    * Bulk-prune every worktree older than the project's configured
    * `worktreeRetentionDays`. Returns the per-row outcome so the UI can
    * report "pruned 5, 1 failed".
@@ -336,6 +345,13 @@ export interface PruneStaleResult {
 export interface BulkPruneResult {
   pruned: string[];
   failed: { feedbackId: string; error: string }[];
+}
+
+export interface ServeBranchResult {
+  url: string;
+  port: number;
+  /** True when an already-running server for this worktree was reused. */
+  reused: boolean;
 }
 
 export interface BulkReopenResult {

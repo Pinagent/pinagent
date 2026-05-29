@@ -53,6 +53,23 @@ export interface PinagentOptions {
    * page underneath stays interactive everywhere else.
    */
   dock?: boolean;
+  /**
+   * Command used to launch an on-demand dev server for a worktree when
+   * the dock's "Open app" action is clicked (worktree mode only).
+   *
+   * By default the command is inferred from the worktree's `package.json`
+   * (detects the package manager from the lockfile and the framework from
+   * dependencies, then runs the `dev`/`start` script with the right port
+   * flag). Set this to override that inference for non-standard setups.
+   *
+   * A `{port}` placeholder is substituted with the port pinagent picked
+   * for the worktree's server; if omitted, ` --port <port>` is appended.
+   * Example: `'pnpm dev --port {port}'`.
+   *
+   * Communicated to the middleware via the `PINAGENT_WORKTREE_SERVE_COMMAND`
+   * env var so `agent-runner` stays framework-agnostic.
+   */
+  worktreeServeCommand?: string;
 }
 
 const SCRIPT_TAG = '<script type="module" src="/__pinagent/widget.js"></script>';
@@ -177,6 +194,12 @@ export default function pinagent(options: PinagentOptions = {}): Plugin {
   process.env.PINAGENT_SPAWN_AGENT = effective;
   if (effective !== 'off' && !process.env.PINAGENT_WS_PORT) {
     process.env.PINAGENT_WS_PORT = String(DEFAULT_WS_PORT);
+  }
+  // Propagate the worktree-serve override (if any) to the middleware,
+  // which reads it via `serveBranch` → `serveWorktree`. Mirrors the
+  // env-var hand-off used for spawn mode + WS port above.
+  if (options.worktreeServeCommand) {
+    process.env.PINAGENT_WORKTREE_SERVE_COMMAND = options.worktreeServeCommand;
   }
 
   return {

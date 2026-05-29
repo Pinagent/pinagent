@@ -42,6 +42,18 @@ export interface PinagentOptions {
    * page mounts the iframe.
    */
   dock?: boolean;
+  /**
+   * Command used to launch an on-demand dev server for a worktree when
+   * the dock's "Open app" action is clicked (worktree mode only).
+   *
+   * By default the command is inferred from the worktree's `package.json`.
+   * Set this to override the inference for non-standard setups. A `{port}`
+   * placeholder is substituted with pinagent's chosen port; if omitted,
+   * ` --port <port>` is appended. Example: `'pnpm dev --port {port}'`.
+   *
+   * Communicated to the route handler via PINAGENT_WORKTREE_SERVE_COMMAND.
+   */
+  worktreeServeCommand?: string;
 }
 
 const loaderPath = (() => {
@@ -134,6 +146,13 @@ export default function pinagent(
   // co-located in the same process.
   if (effective !== 'off' && !process.env.PINAGENT_WS_PORT) {
     process.env.PINAGENT_WS_PORT = '53636';
+  }
+
+  // Propagate the worktree-serve override (if any) to the route handler,
+  // which reads it via `serveBranch` → `serveWorktree`. Mirrors the
+  // spawn-mode / WS-port env-var hand-off above.
+  if (options.worktreeServeCommand) {
+    process.env.PINAGENT_WORKTREE_SERVE_COMMAND = options.worktreeServeCommand;
   }
 
   // Propagate the dock flag to the client bundle via NEXT_PUBLIC_*. Next

@@ -55,6 +55,7 @@ export type {
   ListAuditEventsQuery,
   PresentableConnections,
   PruneStaleResult,
+  ServeBranchResult,
 } from './types';
 export type {
   ConnectionStatus,
