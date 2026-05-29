@@ -29,6 +29,7 @@ import {
   pruneBranch,
   pruneBranches,
   pruneStaleBranches,
+  refreshPullRequests,
   reopenConversations,
   resolvePermissionModeOverride,
   SecretsStore,
@@ -266,6 +267,14 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       // path; doesn't reach out to GitHub.
       if (req.method === 'GET' && url === '/__pinagent/prs') {
         const prs = await listPullRequests(storage.root);
+        return json(res, 200, prs);
+      }
+
+      // POST /__pinagent/prs/refresh — reconcile each recorded PR's state
+      // against GitHub (open→merged/closed/draft) and return the updated
+      // list. No-op when no token / non-GitHub remote is configured.
+      if (req.method === 'POST' && url === '/__pinagent/prs/refresh') {
+        const prs = await refreshPullRequests(storage.root);
         return json(res, 200, prs);
       }
 

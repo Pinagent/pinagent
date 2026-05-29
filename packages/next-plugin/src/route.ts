@@ -28,6 +28,7 @@ import {
   pruneBranch,
   pruneBranches,
   pruneStaleBranches,
+  refreshPullRequests,
   reopenConversations,
   resolveAgentMode,
   resolvePermissionModeOverride,
@@ -362,6 +363,14 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
     const storage = getStorage();
     const result = await composePullRequest(storage.root, parsed.data);
     return json(result.ok ? 200 : 422, result);
+  }
+
+  // /__pinagent/prs/refresh — reconcile recorded PR state against GitHub.
+  // Mirror of the vite-plugin POST handler.
+  if (slug.length === 2 && slug[0] === 'prs' && slug[1] === 'refresh') {
+    const storage = getStorage();
+    const prs = await refreshPullRequests(storage.root);
+    return json(200, prs);
   }
 
   // /__pinagent/feedback/bulk-update — multi-row archive flip. Mirror

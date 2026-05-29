@@ -25,8 +25,8 @@ import { z } from 'zod';
 import { recordAuditEvent } from './audit-log';
 import { resolveOriginRemote } from './git-remote';
 import { runGitCapture } from './git-utils';
+import { resolveGithubToken } from './github-auth';
 import { recordPullRequest } from './pull-requests';
-import { SecretsStore } from './secrets-store';
 import { Storage } from './storage';
 
 export const ComposeOptsSchema = z.object({
@@ -281,8 +281,7 @@ export async function composePullRequest(
   // Token precedence: dock-stored secret (set via Connections route) →
   // GITHUB_TOKEN env → PINAGENT_GITHUB_TOKEN env. The Connections path
   // is the new Phase 5 route; env vars stay for CI / scripting.
-  const stored = await new SecretsStore(projectRoot).getGithubToken();
-  const token = stored ?? process.env.GITHUB_TOKEN ?? process.env.PINAGENT_GITHUB_TOKEN;
+  const token = await resolveGithubToken(projectRoot);
   const remote = await resolveOriginRemote(projectRoot);
   const manualCompareUrl = remote
     ? `https://github.com/${remote.owner}/${remote.repo}/compare/${encodeURIComponent(

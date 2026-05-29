@@ -96,7 +96,11 @@ export {
   resolveProvider,
   resolveProviderId,
 } from './providers';
-export { listPullRequests, type PullRequestRecord } from './pull-requests';
+export {
+  listPullRequests,
+  type PullRequestRecord,
+  refreshPullRequests,
+} from './pull-requests';
 export {
   buildDeviceUrl,
   maybeStartRelayClient,

@@ -102,3 +102,74 @@ describe('recordPullRequest + listPullRequests', () => {
     expect(rows.map((r) => r.title)).toEqual(['newer', 'older']);
   });
 });
+
+describe('mapGithubPrState', () => {
+  it('maps merged PRs to "merged" (merged wins over closed state)', () => {
+    expect(pr.mapGithubPrState({ state: 'closed', merged: true })).toBe('merged');
+    expect(pr.mapGithubPrState({ state: 'open', merged: true, draft: true })).toBe('merged');
+  });
+
+  it('maps closed-but-unmerged PRs to "closed"', () => {
+    expect(pr.mapGithubPrState({ state: 'closed', merged: false })).toBe('closed');
+  });
+
+  it('maps open draft PRs to "draft"', () => {
+    expect(pr.mapGithubPrState({ state: 'open', merged: false, draft: true })).toBe('draft');
+  });
+
+  it('maps open non-draft PRs to "open"', () => {
+    expect(pr.mapGithubPrState({ state: 'open', merged: false, draft: false })).toBe('open');
+    // GitHub may omit the flags entirely on some payloads.
+    expect(pr.mapGithubPrState({ state: 'open' })).toBe('open');
+  });
+});
+
+describe('updatePullRequestState', () => {
+  it('updates state + updatedAt for the matching PR number', async () => {
+    const root = await freshRoot();
+    await pr.recordPullRequest(root, {
+      number: 7,
+      url: 'https://github.com/acme/widgets/pull/7',
+      branch: 'pinagent/batch-7',
+      baseBranch: 'main',
+      title: 'Seven',
+      body: '',
+      conversationIds: ['cv_x'],
+    });
+
+    const ghUpdatedAt = '2026-05-29T12:00:00.000Z';
+    await pr.updatePullRequestState(root, 7, 'merged', ghUpdatedAt);
+
+    const [row] = await pr.listPullRequests(root);
+    expect(row?.state).toBe('merged');
+    expect(row?.updatedAt).toBe(ghUpdatedAt);
+  });
+
+  it('leaves other PRs untouched', async () => {
+    const root = await freshRoot();
+    await pr.recordPullRequest(root, {
+      number: 1,
+      url: 'u1',
+      branch: 'b1',
+      baseBranch: 'main',
+      title: 'one',
+      body: '',
+      conversationIds: [],
+    });
+    await pr.recordPullRequest(root, {
+      number: 2,
+      url: 'u2',
+      branch: 'b2',
+      baseBranch: 'main',
+      title: 'two',
+      body: '',
+      conversationIds: [],
+    });
+
+    await pr.updatePullRequestState(root, 2, 'closed');
+
+    const rows = await pr.listPullRequests(root);
+    expect(rows.find((r) => r.number === 1)?.state).toBe('open');
+    expect(rows.find((r) => r.number === 2)?.state).toBe('closed');
+  });
+});

@@ -121,6 +121,14 @@ export interface DockTransport {
    */
   listPullRequests(): Promise<PullRequest[]>;
 
+  /**
+   * Reconcile each recorded PR's state against GitHub and return the
+   * refreshed list. Unlike {@link listPullRequests}, this does reach out
+   * to the GitHub API (one call per PR); a no-op when no token /
+   * non-GitHub remote is configured.
+   */
+  refreshPullRequests(): Promise<PullRequest[]>;
+
   // ---------- Live subscriptions ----------
 
   /**

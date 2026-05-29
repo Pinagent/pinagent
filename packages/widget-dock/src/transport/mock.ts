@@ -213,6 +213,12 @@ export class MockTransport implements DockTransport {
     return FIXTURE_PRS.slice().sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
   }
 
+  async refreshPullRequests(): Promise<PullRequest[]> {
+    // No GitHub to reconcile against in fixtures mode — return the same
+    // list so the dock's Refresh button stays exercisable.
+    return this.listPullRequests();
+  }
+
   async getConversation(id: string): Promise<ConversationDetail | null> {
     await sleep(SIMULATED_LATENCY_MS);
     const c = FIXTURE_CONVERSATIONS.find((c) => c.id === id);
