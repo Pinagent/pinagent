@@ -26,6 +26,7 @@ import {
 } from '@tanstack/react-router';
 import { lazy } from 'react';
 import { ROUTE_PATHS } from './route-paths';
+import { validateComposeSearch } from './routes/compose-search';
 import { validateConversationsSearch } from './routes/conversations-search';
 import { Overview } from './routes/Overview';
 import { DockShell } from './shell/DockShell';
@@ -42,6 +43,9 @@ const Conversations = lazy(() =>
 const Changes = lazy(() => import('./routes/Changes').then((m) => ({ default: m.Changes })));
 const Branches = lazy(() => import('./routes/Branches').then((m) => ({ default: m.Branches })));
 const PRs = lazy(() => import('./routes/PRs').then((m) => ({ default: m.PRs })));
+const NewPullRequest = lazy(() =>
+  import('./routes/NewPullRequest').then((m) => ({ default: m.NewPullRequest })),
+);
 const Connections = lazy(() =>
   import('./routes/Connections').then((m) => ({ default: m.Connections })),
 );
@@ -88,6 +92,19 @@ const prsRoute = createRoute({
   path: ROUTE_PATHS.prs,
   component: PRs,
 });
+const prsNewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ROUTE_PATHS.prsNew,
+  component: NewPullRequest,
+  /**
+   * `?ids=a,b,c` pre-checks those conversations in the picker — set when
+   * entering from the Changes multi-select. Absent → nothing pre-checked
+   * (the cold entry from the PRs tab). Parsing lives in
+   * `routes/compose-search.ts` so it can be unit-tested without the
+   * router tree.
+   */
+  validateSearch: validateComposeSearch,
+});
 const connectionsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: ROUTE_PATHS.connections,
@@ -110,6 +127,7 @@ const routeTree = rootRoute.addChildren([
   changesRoute,
   branchesRoute,
   prsRoute,
+  prsNewRoute,
   connectionsRoute,
   settingsRoute,
   historyRoute,

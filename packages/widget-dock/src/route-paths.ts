@@ -14,6 +14,7 @@ export const ROUTE_PATHS = {
   changes: '/changes',
   branches: '/branches',
   prs: '/prs',
+  prsNew: '/prs/new',
   connections: '/connections',
   settings: '/settings',
   history: '/history',

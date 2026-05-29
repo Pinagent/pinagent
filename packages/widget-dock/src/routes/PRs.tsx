@@ -10,10 +10,12 @@
 import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
+import { useNavigate } from '@tanstack/react-router';
 import { ExternalLink, GitPullRequest, Plus } from 'lucide-react';
 import { TimestampDot } from '../components/TimestampDot';
 import type { PullRequest } from '../fixtures';
 import { usePullRequests } from '../hooks/usePullRequests';
+import { ROUTE_PATHS } from '../route-paths';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
@@ -36,7 +38,10 @@ const STATE_LABEL: Record<PullRequest['state'], string> = {
 export function PRs() {
   const transport = useTransport();
   const prsQuery = usePullRequests();
+  const navigate = useNavigate();
   const isMock = transport.kind === 'mock';
+
+  const newPr = () => void navigate({ to: ROUTE_PATHS.prsNew });
 
   if (prsQuery.isLoading) return <LoadingState rows={4} />;
 
@@ -66,7 +71,13 @@ export function PRs() {
         description={
           isMock
             ? '(Mock mode — switch off ?fixtures=on for real data.)'
-            : "Once you batch a few resolved conversations into a PR from the Changes view, they'll appear here."
+            : 'Bundle a few resolved conversations into a PR — they’ll appear here once opened.'
+        }
+        action={
+          <Button size="sm" variant="accent" className="h-7 gap-1.5 text-xs" onClick={newPr}>
+            <Plus className="h-3 w-3" />
+            New PR
+          </Button>
         }
       />
     );
@@ -82,13 +93,7 @@ export function PRs() {
           {openCount} open · {prs.length} total
         </span>
         <div className="ml-auto flex items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled
-            className="h-7 gap-1.5 text-xs"
-            title="Use the Changes view's compose button to open a new PR"
-          >
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={newPr}>
             <Plus className="h-3 w-3" />
             New PR
           </Button>
@@ -105,7 +110,7 @@ export function PRs() {
         <p className="text-[11px] text-muted-foreground">
           {isMock
             ? 'Fixtures · switch off ?fixtures=on for live PR data.'
-            : 'Read-only · state may lag GitHub. Use the Changes view to compose new PRs.'}
+            : 'Read-only · state may lag GitHub. Use “New PR” to compose another.'}
         </p>
       </div>
     </div>

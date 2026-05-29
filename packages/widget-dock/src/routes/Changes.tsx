@@ -3,6 +3,7 @@
 import { StatusBadge } from '@pinagent/ui/components/status-badge';
 import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
+import { useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   ChevronDown,
@@ -17,15 +18,15 @@ import { TimestampDot } from '../components/TimestampDot';
 import type { Change } from '../fixtures';
 import { useChangeDiff } from '../hooks/useChangeDiff';
 import { useChanges } from '../hooks/useChanges';
+import { ROUTE_PATHS } from '../route-paths';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
 import { useTransport } from '../transport';
-import { Composer } from './Composer';
 
 export function Changes() {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
-  const [composing, setComposing] = useState(false);
+  const navigate = useNavigate();
   const transport = useTransport();
   const changesQuery = useChanges();
 
@@ -48,33 +49,11 @@ export function Changes() {
 
   const isMock = transport.kind === 'mock';
 
-  // When composing, resolve the selection against the latest changes
-  // list — the user may have dropped one between selecting and clicking
-  // "Create PR" (e.g., it auto-landed). Stale ids just no-op.
-  const selectedChanges = useMemo(() => {
-    if (!composing) return [];
-    const byId = new Map(ready.map((c) => [c.id, c] as const));
-    return [...selected].map((id) => byId.get(id)).filter((c): c is Change => c !== undefined);
-  }, [composing, selected, ready]);
-
-  if (composing && selectedChanges.length > 0) {
-    return (
-      <Composer
-        selected={selectedChanges}
-        onCancel={() => setComposing(false)}
-        onSuccess={() => {
-          // Conversations included in the PR are marked landed server-side
-          // and will fall out of the next changes refetch. Drop them from
-          // the selection so a re-enter doesn't try to compose them again.
-          setSelected((prev) => {
-            const next = new Set(prev);
-            for (const c of selectedChanges) next.delete(c.id);
-            return next;
-          });
-        }}
-      />
-    );
-  }
+  // "Create PR" hands the selection off to the /prs/new composer route
+  // via `?ids=` — that route owns the picker + compose form. Stale ids
+  // (a row that auto-landed before navigation) just don't match there.
+  const compose = () =>
+    void navigate({ to: ROUTE_PATHS.prsNew, search: { ids: [...selected].join(',') } });
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -94,7 +73,7 @@ export function Changes() {
             disabled={selected.size === 0}
             className="h-7 gap-1.5"
             variant={selected.size > 0 ? 'accent' : 'outline'}
-            onClick={() => setComposing(true)}
+            onClick={compose}
           >
             <GitPullRequest className="h-3.5 w-3.5" />
             Create PR

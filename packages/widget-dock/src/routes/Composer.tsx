@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * PR composer view. Rendered in place of the Changes list when the user
- * picks "Create PR" with one or more rows selected. Pre-fills the
- * branch name, PR title, and description from the selection; lets the
- * user reorder the conversations and edit each field; submits to
- * `transport.createPullRequest`.
+ * PR composer form. The compose phase of the `/prs/new` route
+ * (`NewPullRequest`): once the user has picked conversations, this
+ * pre-fills the branch name, PR title, and description from that
+ * selection, lets them reorder the conversations and edit each field,
+ * and submits to `transport.createPullRequest`.
  *
- * Spec calls for `/prs/new` as a real route (entered from Changes
- * multi-select). The dock doesn't have a router yet (deferred to §13);
- * the same in-component sub-view pattern Conversations uses for the
- * detail view applies here.
+ * Presentational + selection-agnostic: it takes the picked `Change[]`
+ * and `onCancel` / `onSuccess` callbacks, so the route owns navigation
+ * (back to the picker, forward to the PRs list).
  */
 
 import { Button } from '@pinagent/ui/components/ui/button';
@@ -34,11 +33,11 @@ import {
 } from '../transport';
 
 export interface ComposerProps {
-  /** The conversations the user multi-selected in the Changes view. */
+  /** The conversations the user picked to bundle into this PR. */
   selected: Change[];
-  /** Return to the Changes list. */
+  /** Return to the picker (back out of the compose phase). */
   onCancel: () => void;
-  /** Called when the PR is successfully created so the parent can clear selection. */
+  /** Called when the PR is successfully created so the parent can navigate on. */
   onSuccess: (result: CreatePullRequestResult) => void;
 }
 
@@ -138,7 +137,7 @@ export function Composer({ selected, onCancel, onSuccess }: ComposerProps) {
           className="h-7 -ml-1.5 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to changes
+          Back
         </Button>
         <h2 className="ml-2 text-sm font-semibold tracking-tight">New pull request</h2>
         <span className="text-[11px] text-muted-foreground">
@@ -329,7 +328,7 @@ function ComposerSuccess({
           className="h-7 -ml-1.5 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to changes
+          Back
         </Button>
       </div>
 
