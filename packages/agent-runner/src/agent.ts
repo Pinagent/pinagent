@@ -97,6 +97,11 @@ async function recordActiveRun(projectRoot: string, feedbackId: string): Promise
         target: activeRunsTable.conversationId,
         set: { startedAt: new Date() },
       });
+    // The run is now in flight; nudge project subscribers so the widget's
+    // running-agents tray re-fetches and surfaces this conversation as
+    // `working` (an inline-mode run is otherwise indistinguishable from an
+    // idle `(pending, none)` row — see `deriveDockStatus`'s isRunning axis).
+    emitProjectChange({ type: 'conversations_changed' });
   } catch {
     // FK violation or transient DB error — the run itself is still
     // tracked in-process via `activeRuns`; cross-context visibility
@@ -108,6 +113,9 @@ async function clearActiveRun(projectRoot: string, feedbackId: string): Promise<
   try {
     const db = getDb(projectRoot);
     await db.delete(activeRunsTable).where(eq(activeRunsTable.conversationId, feedbackId));
+    // Run finished — re-fetch so the tray drops the row back to its
+    // persisted status (or out of the tray entirely for inline runs).
+    emitProjectChange({ type: 'conversations_changed' });
   } catch {
     // Same rationale as recordActiveRun.
   }

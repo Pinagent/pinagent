@@ -83,9 +83,19 @@ export async function listBranches(projectRoot: string): Promise<BranchRecord[]>
 }
 
 async function resolveBaseRef(projectRoot: string): Promise<string> {
+  // Resolve the base branch to a concrete commit SHA, not its name. The
+  // SHA is then compared against from inside each *linked worktree*
+  // (`computeBranchState`), and a SHA is unambiguous from any worktree
+  // because they share one object store. A branch *name* is not: resolving
+  // `main` via `rev-list HEAD..main` from within a worktree has proven
+  // environment-sensitive on CI — when it exits non-zero the cautious
+  // fall-through reports `clean`, masking a genuinely behind-base worktree.
+  // rev-parse runs here in the project root, where the base branch is
+  // checked out and always resolves.
   const sym = await runGitCapture(projectRoot, ['symbolic-ref', '--short', 'HEAD']);
-  if (sym.code === 0) return sym.stdout.trim();
-  return 'HEAD';
+  const baseName = sym.code === 0 ? sym.stdout.trim() : 'HEAD';
+  const sha = await runGitCapture(projectRoot, ['rev-parse', baseName]);
+  return sha.code === 0 ? sha.stdout.trim() : baseName;
 }
 
 async function computeBranchState(

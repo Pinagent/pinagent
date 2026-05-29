@@ -167,6 +167,10 @@ const FeedbackRecordSchema = z
     component: z.string().nullable().default(null),
     instanceIndex: z.number().int().nullable().default(null),
     instanceTotal: z.number().int().nullable().default(null),
+    // Whether an SDK turn is in flight (an `active_runs` row exists).
+    // Folds into the derived status as `working` so a live inline run
+    // shows as active. Default false keeps older servers parsing cleanly.
+    isRunning: z.boolean().default(false),
     createdAt: z.string(),
     updatedAt: z.string(),
   })
@@ -251,7 +255,7 @@ function toConversation(rec: FeedbackRecord): Conversation {
     shortId: shortId(rec.id),
     // User-supplied title wins over the comment-derived one.
     title: rec.title ?? commentToTitle(rec.comment),
-    status: deriveDockStatus(rec.status, rec.worktreeState),
+    status: deriveDockStatus(rec.status, rec.worktreeState, rec.isRunning),
     page: rec.url,
     anchor: {
       loc: locString(rec.file, rec.line, rec.col),

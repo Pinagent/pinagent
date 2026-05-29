@@ -9,6 +9,8 @@
  *
  * Mapping rules (in order of precedence):
  *
+ *   isRunning == true                  → working   (overrides all below)
+ *
  *   worktreeState         status       → dock status
  *   --------------------  -----------  -----------------------
  *   landed                *            landed
@@ -26,6 +28,15 @@
  *     the agent committed directly; treating it as readyToLand keeps the
  *     dock honest about what's left to act on.
  *
+ *   `isRunning` (an SDK turn is in flight — tracked by the `active_runs`
+ *   table) takes top precedence. An inline-mode agent runs with
+ *   (status=pending, worktreeState=none), which otherwise maps to the
+ *   terminal `pending` and never surfaces — so without this axis the
+ *   widget's running-agents tray couldn't show a live inline run. A
+ *   follow-up turn on an already-`fixed`/`deferred` row is likewise
+ *   "working" while live. Defaults to false so callers that don't track
+ *   run state (older servers, the two-axis storage shape) are unchanged.
+ *
  *   `error` and `anchorLost` are out of band — the server doesn't track
  *   them, only the widget does (client-side), so they don't appear here.
  *
@@ -41,7 +52,9 @@ export type ServerWorktreeState = 'none' | 'active' | 'landed' | 'discarded';
 export function deriveDockStatus(
   status: ServerStatus,
   worktreeState: ServerWorktreeState,
+  isRunning = false,
 ): StatusKey {
+  if (isRunning) return 'working';
   if (worktreeState === 'landed') return 'landed';
   if (worktreeState === 'discarded') return 'discarded';
   if (status === 'wontfix') return 'discarded';

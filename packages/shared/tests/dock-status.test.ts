@@ -31,6 +31,22 @@ describe('deriveDockStatus', () => {
   it('maps a fresh pending conversation with no worktree to pending', () => {
     expect(deriveDockStatus('pending', 'none')).toBe('pending');
   });
+
+  it('maps a running inline-mode row (pending, none) to working', () => {
+    // The case the running-agents tray cares about: without isRunning this
+    // is the terminal `pending` and would never surface.
+    expect(deriveDockStatus('pending', 'none', true)).toBe('working');
+  });
+
+  it('lets isRunning override an otherwise-resolved status (live follow-up)', () => {
+    expect(deriveDockStatus('fixed', 'none', true)).toBe('working');
+    expect(deriveDockStatus('deferred', 'active', true)).toBe('working');
+  });
+
+  it('defaults isRunning to false (unchanged two-axis behavior)', () => {
+    expect(deriveDockStatus('pending', 'none')).toBe('pending');
+    expect(deriveDockStatus('pending', 'none', false)).toBe('pending');
+  });
 });
 
 describe('isUnresolvedStatus', () => {
