@@ -10,6 +10,13 @@ export {
   DEFAULT_AUDIT_LIMIT,
 } from './audit';
 export {
+  type BranchRoutingPolicy,
+  type BranchRoutingStore,
+  createInMemoryBranchRoutingStore,
+  isBranchAllowed,
+  matchBranchPattern,
+} from './branch-routing';
+export {
   type CostControl,
   type CostControlEnforcement,
   type CostControlStore,
