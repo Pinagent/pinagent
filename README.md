@@ -198,6 +198,19 @@ pinagent(nextConfig, { spawnAgent: 'inline' }) // Next.js — same option, same 
 
 See `packages/agent-runner` for the full surface.
 
+### Opening a worktree's app
+
+In `'worktree'` mode each agent's work lives on its own branch in `.pinagent/worktrees/<id>`, but nothing serves it — so by default you review changes as diffs in the dock. The dock's **Branches** panel adds an **Open app** action that stands up an on-demand dev server rooted at that worktree (on its own free port) and opens it in a new browser tab, so you can interact with the running app.
+
+The launch command is inferred from the worktree's `package.json` (package manager from the lockfile, framework from dependencies). Override it for non-standard setups with `worktreeServeCommand` — a `{port}` placeholder is substituted with the port pinagent picked (if omitted, ` --port <port>` is appended):
+
+```ts
+pinagent({ spawnAgent: 'worktree', dock: true, worktreeServeCommand: 'pnpm dev --port {port}' })             // Vite
+pinagent(nextConfig, { spawnAgent: 'worktree', dock: true, worktreeServeCommand: 'pnpm dev --port {port}' }) // Next.js
+```
+
+> The worktree must have its dependencies resolvable to boot — `git worktree add` shares the repo's tracked files but not `node_modules`. If "Open app" reports the dev server didn't start, check `.pinagent/logs/<id>-serve.log`.
+
 ## Dock surface (optional)
 
 The per-element widget is shipped by both plugins automatically. The **dock** is a second surface — a project-management UI that complements the widget — and is off by default. Opt in with `dock: true`:
