@@ -15,6 +15,39 @@ A global install also works (`pnpm add -g @pinagent/cli`, `npm i -g @pinagent/cl
 
 ## Subcommands
 
+### `pinagent init`
+
+Scaffold pinagent into the current project. Detects whether the project is a Vite + React or Next.js (App Router) app from its config file, then performs the deterministic, idempotent wiring:
+
+- appends `.pinagent` to `.gitignore` (the local feedback store must never be committed);
+- registers the MCP server in `.mcp.json` (`npx -y @pinagent/cli mcp`), merging into any existing config without clobbering other servers;
+- for Next.js, creates `app/pinagent/[[...slug]]/route.ts` (or under `src/app/`).
+
+It then prints the remaining steps that are too risky to automate against hand-authored files — installing the plugin dependency, adding the plugin to `vite.config`/`next.config`, and (Next) mounting `<Pinagent />` in `app/layout.tsx`.
+
+```bash
+pinagent init                 # scaffold the current directory
+pinagent init --dir ./web     # scaffold a specific project root
+pinagent init --dry-run       # print the plan without writing files
+```
+
+Re-running `init` on an already-wired project is a no-op. There is intentionally **no `pinagent dev`**: pinagent has no standalone server — it runs as a plugin inside your app's own dev server, so once wired in you just run your normal `dev` command.
+
+Options:
+
+| Flag             | Default             | Effect                                          |
+| ---------------- | ------------------- | ----------------------------------------------- |
+| `--dir <path>`   | current directory   | Project root to scaffold.                       |
+| `--dry-run`, `-n`| off                 | Print the plan without writing any files.       |
+
+Exit codes:
+
+| Code | Meaning                                              |
+| ---- | ---------------------------------------------------- |
+| `0`  | Scaffolded (or already wired).                       |
+| `1`  | No `vite.config.*` / `next.config.*` found — unsupported project. |
+| `2`  | Bad usage (unknown flag, missing `--dir` value).     |
+
 ### `pinagent mcp`
 
 Start the [Model Context Protocol](https://modelcontextprotocol.io) server over stdio. Configure your coding agent (Claude Code, Cursor, etc.) to spawn this process so it can pull pending feedback, screenshots, and source context out of a running Pinagent dev session.

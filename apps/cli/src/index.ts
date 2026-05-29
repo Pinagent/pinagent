@@ -3,28 +3,47 @@
 // `pinagent` CLI entry point.
 //
 // Subcommands:
+//   pinagent init          Scaffold pinagent into the current project
+//                          (gitignore, .mcp.json, Next route handler) and
+//                          print the remaining manual wiring steps.
 //   pinagent mcp           Start the stdio MCP server. Resolves the project
 //                          root from PINAGENT_PROJECT_ROOT or the current
 //                          working directory.
 //   pinagent transcript    Fetch + print the persisted agent transcript
 //                          for one conversation from a running dev-server.
 //
-// Future subcommands (`dev`, `init`) intentionally not implemented yet.
+// There is intentionally no `pinagent dev`: pinagent has no standalone
+// server. It runs as a plugin inside the host app's own dev server
+// (`vite` / `next dev`), so the way to "start pinagent" is to wire the
+// plugin in (see `pinagent init`) and run your existing dev command.
 
 import { startMcpServer } from '@pinagent/mcp';
+import { parseInitArgs, runInit } from './init';
 import {
   fetchTranscript,
   parseTranscriptArgs,
   renderTranscript,
   TranscriptHttpError,
 } from './transcript';
+import { readVersion } from './version';
 
 const HELP = `pinagent — agent-driven UI feedback loop
 
 Usage:
-  pinagent <subcommand>
+  pinagent <subcommand> [options]
 
 Subcommands:
+  init               Scaffold pinagent into the current project: ignore
+                     the .pinagent store, register the MCP server in
+                     .mcp.json, create the Next route handler (Next only),
+                     and print the remaining manual wiring steps. Detects
+                     Vite vs Next automatically. Idempotent.
+
+                     Options:
+                       --dir <path>   Project root to scaffold. Defaults
+                                      to the current directory.
+                       --dry-run, -n  Print the plan without writing files.
+
   mcp                Start the stdio MCP server. Configure your coding
                      agent (Claude Code, etc.) to spawn this command so it
                      can read pending feedback, screenshots, and source
@@ -43,6 +62,7 @@ Subcommands:
 
 Options:
   -h, --help         Show this help.
+  -v, --version      Print the CLI version.
 
 Environment:
   PINAGENT_PROJECT_ROOT  Override the project root the MCP server reads
@@ -53,9 +73,25 @@ Environment:
 async function main(): Promise<void> {
   const [, , subcommand, ...rest] = process.argv;
 
+  if (subcommand === '-v' || subcommand === '--version' || subcommand === 'version') {
+    process.stdout.write(`${readVersion()}\n`);
+    process.exit(0);
+  }
+
   if (!subcommand || subcommand === '-h' || subcommand === '--help' || subcommand === 'help') {
     process.stdout.write(HELP);
     process.exit(subcommand ? 0 : 1);
+  }
+
+  if (subcommand === 'init') {
+    const parsed = parseInitArgs(rest);
+    if ('error' in parsed) {
+      process.stderr.write(`pinagent init: ${parsed.error}\n\n${HELP}`);
+      process.exit(2);
+    }
+    const result = runInit(parsed);
+    process.stdout.write(`${result.lines.join('\n')}\n`);
+    process.exit(result.code);
   }
 
   if (subcommand === 'mcp') {
@@ -98,7 +134,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  // eslint-disable-next-line no-console
   console.error('pinagent: fatal:', err);
   process.exit(1);
 });
