@@ -80,8 +80,10 @@ Create the file **exactly** as below — don't be tempted to one-line the re-exp
 // app/pinagent/[[...slug]]/route.ts
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-export { GET, POST, PATCH } from '@pinagent/next-plugin/route';
+export { GET, POST, PATCH, PUT, DELETE } from '@pinagent/next-plugin/route';
 ```
+
+Re-export **all five verbs**. GET/POST/PATCH cover the core feedback loop; PUT and DELETE back the dock's connection and branch management. Leaving them out makes those dock actions 404 — harmless if you never enable the dock, but cheap to include now.
 
 Why `dynamic` and `runtime` are inline: Next 16 statically parses route-segment config at build time and refuses to follow re-exports for those fields. If you write `export { dynamic, runtime } from '@pinagent/next-plugin/route'` you'll get:
 
@@ -152,6 +154,22 @@ pinagent(coreConfig, {
   spawnAgent: 'inline',
 });
 ```
+
+### Dock surface (optional)
+
+The per-element widget ships by default. The **dock** is a second, opt-in surface — a project-management UI (Conversations, Changes with inline diffs, Branches, PRs, Connections, History) mounted from a bottom-left FAB. Enable it with `dock: true`:
+
+```js
+pinagent(coreConfig, { dock: true });   // combine with spawnAgent if you want both
+```
+
+When using the dock:
+
+- The route handler must re-export **all five verbs** (`GET, POST, PATCH, PUT, DELETE`) — PUT/DELETE back the Connections and Branches panels (see step 4).
+- The PR composer needs a GitHub token: set `GITHUB_TOKEN` or `PINAGENT_GITHUB_TOKEN` (tried in that order).
+- Optionally install `@pinagent/vscode-extension` — it lets the dock open a Claude Code terminal with a conversation piped in.
+
+Full dock docs (routes, shortcuts, deep links) live in `@pinagent/widget-dock`'s README.
 
 ### Environment variables
 

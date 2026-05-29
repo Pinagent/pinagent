@@ -156,6 +156,7 @@ That's it. In your next Claude Code session, ask it to "address pending Pinagent
 | `get_feedback` | Returns one item, with the screenshot as an inline image. |
 | `resolve_feedback` | Marks `fixed` / `wontfix` / `deferred`; optional note + commit sha. |
 | `get_source_context` | Reads a window of source around a given `file:line`. |
+| `get_conversation_transcript` | Returns the full agent transcript for one feedback id (every captured event), as text or JSON. |
 
 ## What gets captured
 

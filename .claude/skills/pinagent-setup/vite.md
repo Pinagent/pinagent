@@ -81,6 +81,12 @@ pinagent({
   //   'off'/false — no per-submit spawn. Use with channel mode or the
   //                 `@pinagent/mcp` server to drive the loop from your own agent.
   spawnAgent: 'inline',
+
+  // Optional: mount the project-management dock surface alongside the widget.
+  // Default false. The dock adds Conversations, Changes/diffs, Branches, PRs,
+  // Connections, and History panels. Its PR composer reads GITHUB_TOKEN /
+  // PINAGENT_GITHUB_TOKEN. Full docs: @pinagent/widget-dock README.
+  dock: false,
 });
 ```
 

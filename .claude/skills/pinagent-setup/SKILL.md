@@ -36,12 +36,14 @@ browser widget     → picks element, captures screenshot, POSTs to /__pinagent/
                   ↓
 agent-runner route → writes a row to <project>/.pinagent/db.sqlite + screenshots/<id>.png
                   ↓
-@pinagent/mcp     → reads the same .pinagent/db.sqlite, exposes 4 tools to the agent
+@pinagent/mcp     → reads the same .pinagent/db.sqlite, exposes 5 tools to the agent
                   ↓
 optional channel  → pushes new feedback into a running `claude` session
 ```
 
 The Vite plugin and Next adapter share the widget IIFE and storage layout — they're interchangeable on the consumer side. Only the build/dev integration differs.
+
+The per-element widget above is on by default. There's also an **optional dock surface** — a project-management UI (Conversations, Changes/diffs, Branches, PRs, Connections, History) enabled with `dock: true` on either plugin. It's off by default; see the runtime guides for how to turn it on, and what extra wiring it needs (the full set of route verbs on Next, plus a GitHub token for the PR composer).
 
 ## Where pinagent comes from
 
@@ -69,5 +71,6 @@ The plugins and MCP server are published to npm under the `@pinagent/*` scope �
 | `PINAGENT_WS_PORT` | Port the dev-side WebSocket server binds (Next only). Widget connects to this port. | `53636` |
 | `PINAGENT_EDITOR` | Editor command for the "click file:line:col to open" feature | Route handler `/open` endpoint |
 | `EDITOR` / `VISUAL` | Fallback for `PINAGENT_EDITOR` (standard *nix conventions) | Route handler `/open` endpoint |
+| `GITHUB_TOKEN` / `PINAGENT_GITHUB_TOKEN` | Token used by the dock's PR composer to open PRs (only needed with `dock: true`). `GITHUB_TOKEN` is tried first. | Agent-runner PR composer |
 
 Set these in `.mcp.json`'s `env` block (for the MCP server) or in your shell where you run `pnpm dev` (for the route handler / spawner). The plugin's `pinagent(config, { spawnAgent: ... })` option sets `PINAGENT_SPAWN_AGENT` for you.

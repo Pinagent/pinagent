@@ -73,17 +73,22 @@ Easiest is the `/permissions` slash command inside a running Claude Code session
       "mcp__pinagent__list_pending_feedback",
       "mcp__pinagent__get_feedback",
       "mcp__pinagent__resolve_feedback",
-      "mcp__pinagent__get_source_context"
+      "mcp__pinagent__get_source_context",
+      "mcp__pinagent__get_conversation_transcript"
     ]
   }
 }
 ```
 
-The developer must apply this themselves — Claude Code's auto mode blocks self-modification of trust settings without explicit authorization. If you're running as an agent doing this setup, prompt the user to authorize this step.
+(All five `mcp__pinagent__*` tools are listed so nothing is denied mid-flow; `mcp__pinagent__*` as a single wildcard works too.)
+
+> **Agent checkpoint.** If you're an agent running this setup, **stop here** — Claude Code's auto mode blocks you from self-modifying trust settings. Ask the developer to apply the JSON above (or run `/permissions`) and confirm before you continue.
 
 ## 5. Pick a feedback-delivery mode
 
 Four options. Match the mode to what kind of feedback flow you want.
+
+> **Default if unspecified.** If you're an agent setting this up and the developer hasn't asked for a specific flow, leave the plugin's default in place (`spawnAgent: 'inline'`) — submitting a comment streams the run straight into the widget, no extra wiring. Only set up channel/worktree/pull mode when the developer asks for it.
 
 ### Channel mode (recommended for live, single-session work)
 
