@@ -44,3 +44,11 @@ export class MembershipRequiredError extends AuthError {
     super(`user "${userId}" is not an active member of organization "${organizationId}"`);
   }
 }
+
+/**
+ * Thrown when an SSO login handshake fails — bad token exchange, an
+ * ID token that fails signature/issuer/audience/expiry/nonce validation, or a
+ * malformed IdP response. The message is intentionally generic at the boundary
+ * so failure details aren't leaked to the end user.
+ */
+export class SsoError extends AuthError {}
