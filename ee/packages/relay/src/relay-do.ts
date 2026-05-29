@@ -1,0 +1,138 @@
+// SPDX-License-Identifier: Elastic-2.0
+import { type ClientAttachment, RelayHub, type RelaySocket } from './relay-hub';
+import type { Env } from './worker';
+
+type Role = 'device' | 'client';
+
+interface RelayAttachment extends Partial<ClientAttachment> {
+  role: Role;
+}
+
+/**
+ * `RelaySession` — one Durable Object instance per tenant session. Holds
+ * the live WebSockets (device + clients) and delegates all routing to a
+ * `RelayHub`.
+ *
+ * Uses the WebSocket Hibernation API (`acceptWebSocket`) so an idle
+ * session costs nothing while connections stay open. Because hibernation
+ * discards in-memory state, the hub is lazily rebuilt from the surviving
+ * sockets (`getWebSockets()`) and their serialized attachments via
+ * `getHub()`, and each client's subscription set is persisted back onto
+ * its socket attachment on every mutation.
+ */
+export class RelaySession {
+  private readonly ctx: DurableObjectState;
+  private hub: RelayHub | null = null;
+  /** Stable RelaySocket wrapper per live WebSocket (hub keys by identity). */
+  private readonly socketFor = new Map<WebSocket, RelaySocket>();
+
+  constructor(ctx: DurableObjectState, _env: Env) {
+    this.ctx = ctx;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    if (request.headers.get('Upgrade') !== 'websocket') {
+      return new Response('expected websocket upgrade', { status: 426 });
+    }
+    const role: Role = request.headers.get('X-Pinagent-Role') === 'device' ? 'device' : 'client';
+
+    const pair = new WebSocketPair();
+    const client = pair[0];
+    const server = pair[1];
+
+    const hub = this.getHub();
+    const sock = this.wrap(server);
+
+    if (role === 'device') {
+      server.serializeAttachment({ role: 'device' } satisfies RelayAttachment);
+      this.ctx.acceptWebSocket(server, ['device']);
+      hub.attachDevice(sock);
+    } else {
+      server.serializeAttachment({ role: 'client', feedbackIds: [], project: false });
+      this.ctx.acceptWebSocket(server, ['client']);
+      hub.attachClient(sock);
+    }
+
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): void {
+    const raw = typeof message === 'string' ? message : new TextDecoder().decode(message);
+    const hub = this.getHub();
+    const sock = this.wrap(ws);
+    if (this.readAttachment(ws).role === 'device') {
+      hub.fromDevice(raw);
+      return;
+    }
+    hub.fromClient(sock, raw);
+    const snapshot = hub.snapshotClient(sock);
+    if (snapshot) {
+      ws.serializeAttachment({ role: 'client', ...snapshot } satisfies RelayAttachment);
+    }
+  }
+
+  webSocketClose(ws: WebSocket): void {
+    this.detach(ws);
+  }
+
+  webSocketError(ws: WebSocket): void {
+    this.detach(ws);
+  }
+
+  private detach(ws: WebSocket): void {
+    const hub = this.getHub();
+    const sock = this.wrap(ws);
+    if (this.readAttachment(ws).role === 'device') hub.detachDevice(sock);
+    else hub.detachClient(sock);
+    this.socketFor.delete(ws);
+  }
+
+  /** Rebuild the hub from surviving sockets on first use after a wake. */
+  private getHub(): RelayHub {
+    if (this.hub) return this.hub;
+    const hub = new RelayHub();
+    for (const ws of this.ctx.getWebSockets()) {
+      const att = this.readAttachment(ws);
+      const sock = this.wrap(ws);
+      if (att.role === 'device') {
+        hub.restoreDevice(sock);
+      } else {
+        hub.restoreClient(sock, {
+          feedbackIds: att.feedbackIds ?? [],
+          project: att.project ?? false,
+        });
+      }
+    }
+    this.hub = hub;
+    return hub;
+  }
+
+  private wrap(ws: WebSocket): RelaySocket {
+    let sock = this.socketFor.get(ws);
+    if (!sock) {
+      sock = {
+        send: (data) => {
+          try {
+            ws.send(data);
+          } catch {
+            // Socket already closing/closed — drop. Cleanup runs via
+            // webSocketClose / webSocketError.
+          }
+        },
+        close: (code, reason) => {
+          try {
+            ws.close(code, reason);
+          } catch {
+            // Already closed.
+          }
+        },
+      };
+      this.socketFor.set(ws, sock);
+    }
+    return sock;
+  }
+
+  private readAttachment(ws: WebSocket): RelayAttachment {
+    return (ws.deserializeAttachment() as RelayAttachment | null) ?? { role: 'client' };
+  }
+}

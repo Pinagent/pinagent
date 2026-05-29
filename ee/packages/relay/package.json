@@ -21,10 +21,17 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
+    "dev:worker": "wrangler dev",
+    "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@pinagent/shared": "workspace:*"
+  },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250510.0",
     "tsdown": "^0.22.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "wrangler": "^4.14.0"
   }
 }
