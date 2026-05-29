@@ -57,6 +57,13 @@
       "when": 1780076320443,
       "tag": "0007_fluffy_vargas",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780076781263,
+      "tag": "0008_burly_corsair",
+      "breakpoints": true
     }
   ]
 }

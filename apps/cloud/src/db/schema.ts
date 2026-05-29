@@ -69,6 +69,22 @@ export const ssoConnections = authSchema.table('sso_connections', {
 });
 
 /**
+ * Per-connection OIDC client credentials — backs `@pinagent/ee-auth`'s
+ * `OidcCredentialStore`. Separate from `sso_connections` so the metadata store
+ * stays secret-free and the public `SsoConnection` shape never carries a
+ * secret. The `client_secret` is stored encrypted at rest (AES-256-GCM via
+ * `sso-crypto.ts`): `secret_ciphertext` + `secret_iv` are base64url; the
+ * plaintext is only recovered at the moment of the IdP handshake.
+ */
+export const ssoConnectionCredentials = authSchema.table('sso_connection_credentials', {
+  connectionId: text('connection_id').primaryKey(),
+  clientId: text('client_id').notNull(),
+  redirectUri: text('redirect_uri').notNull(),
+  secretCiphertext: text('secret_ciphertext').notNull(),
+  secretIv: text('secret_iv').notNull(),
+});
+
+/**
  * `team` schema — governance/team features. The append-only audit log
  * (`@pinagent/ee-team-features`'s `AuditSink`). Per the per-domain-schema
  * convention, team-features tables live here rather than in `auth`.
@@ -133,6 +149,7 @@ export const schema = {
   organizationMemberships,
   users,
   ssoConnections,
+  ssoConnectionCredentials,
   auditEvents,
   costControls,
   branchRouting,

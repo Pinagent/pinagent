@@ -42,6 +42,10 @@ export {
   type OidcClientConfig,
   type OidcProviderConfig,
 } from './oidc';
+export {
+  createInMemoryOidcCredentialStore,
+  type OidcCredentialStore,
+} from './oidc-credentials';
 export { type Principal, principalCan } from './principal';
 export {
   assertCan,
@@ -78,6 +82,7 @@ export {
   type SsoProvider,
   unimplementedSsoProvider,
 } from './sso';
+export { openSecret, type SealedSecret, sealSecret } from './sso-crypto';
 export {
   type CodecFailure,
   nowSeconds,
