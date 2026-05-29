@@ -37,6 +37,8 @@ export default defineNuxtConfig({
   pinagent: {
     // 'inline' (default) | 'worktree' | 'off'
     spawnAgent: 'inline',
+    // mount the project-management dock surface too (default: false)
+    dock: true,
   },
 });
 ```
@@ -48,25 +50,22 @@ session over `@pinagent/mcp`.
 
 ## Options
 
-| Option       | Type                                | Default    | Notes                                                                 |
-| ------------ | ----------------------------------- | ---------- | --------------------------------------------------------------------- |
-| `spawnAgent` | `'inline' \| 'worktree' \| 'off'`   | `'inline'` | Forwarded to `@pinagent/vite-plugin`. `'off'` records only (no spawn).|
+| Option       | Type                              | Default    | Notes                                                                  |
+| ------------ | --------------------------------- | ---------- | ---------------------------------------------------------------------- |
+| `spawnAgent` | `'inline' \| 'worktree' \| 'off'` | `'inline'` | Forwarded to `@pinagent/vite-plugin`. `'off'` records only (no spawn). |
+| `dock`       | `boolean`                         | `false`    | Mount the project-management dock surface alongside the widget.        |
 
 ## How it fits
 
 ```
 nuxt dev → Vite (addVitePlugin: @pinagent/vite-plugin)
   ├─ transform  .vue / .tsx → data-pa-loc + data-pa-comp
-  ├─ /__pinagent/* middleware (feedback, widget.js, screenshots, …)
+  ├─ /__pinagent/* middleware (feedback, widget.js, dock assets, screenshots, …)
   └─ WebSocket server (agent event stream)
-app head → <script src="/__pinagent/widget.js"> (injected by this module)
+app head (injected by this module, dev-only, body-close):
+  ├─ <script src="/__pinagent/widget.js">
+  └─ dock iframe loader + host bridge   ← only when dock: true
 ```
 
-The widget, middleware, agent runtime, SQLite store, and MCP server are all
-framework-agnostic and shared with the Vite and Next.js integrations.
-
-## Not yet supported
-
-- The opt-in **dock** surface (`dock: true` in the Vite/Next plugins). The dock
-  assets are served by the reused middleware, but the iframe injection for
-  Nuxt's SSR'd HTML isn't wired yet — tracked as a follow-up.
+The widget, dock, middleware, agent runtime, SQLite store, and MCP server are
+all framework-agnostic and shared with the Vite and Next.js integrations.

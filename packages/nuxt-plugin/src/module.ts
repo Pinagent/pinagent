@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import { addVitePlugin, defineNuxtModule } from '@nuxt/kit';
-import pinagent, { type PinagentOptions } from '@pinagent/vite-plugin';
+import pinagent, {
+  DOCK_HOST_BRIDGE_SCRIPT,
+  DOCK_IFRAME_SCRIPT,
+  type PinagentOptions,
+} from '@pinagent/vite-plugin';
 
 /**
  * `@pinagent/nuxt-plugin` — bring Pinagent's click→agent loop to Nuxt.
@@ -12,9 +16,10 @@ import pinagent, { type PinagentOptions } from '@pinagent/vite-plugin';
  * vite-plugin's own module graph, so there's one Storage / drizzle identity and
  * its asset reads resolve from its own install.
  *
- * The module fills the one gap Vite reuse leaves: `transformIndexHtml` doesn't
- * run for Nuxt's server-rendered HTML, so we inject the widget loader via the
- * app head instead.
+ * The module fills the gap Vite reuse leaves: `transformIndexHtml` (how
+ * vite-plugin injects its client scripts) doesn't run for Nuxt's server-rendered
+ * HTML, so we inject the widget loader — and, with `dock: true`, the dock iframe
+ * + host bridge — via the app head instead.
  *
  * Everything is gated on `nuxt.options.dev` — production builds are untouched,
  * matching Pinagent's dev-only invariant.
@@ -29,6 +34,14 @@ export interface ModuleOptions {
    * Forwarded verbatim to `@pinagent/vite-plugin`.
    */
   spawnAgent?: PinagentOptions['spawnAgent'];
+  /**
+   * Mount the project-management dock surface alongside the per-element widget.
+   * Default: `false`. When enabled, the reused middleware serves the dock's
+   * static assets from `/__pinagent/dock/*` and this module injects the dock
+   * iframe + host-side keyboard/pointer bridge into the app head (the SSR
+   * analogue of vite-plugin's `transformIndexHtml` injection).
+   */
+  dock?: boolean;
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -50,22 +63,34 @@ export default defineNuxtModule<ModuleOptions>({
     // both the client and SSR builds so the server-rendered HTML carries the
     // same `data-pa-loc` attributes the client does (no hydration mismatch);
     // tagging is idempotent, so the double pass is a no-op on the second run.
+    const dock = options.dock === true;
     addVitePlugin(
       pinagent({
         root: nuxt.options.rootDir,
         ...(options.spawnAgent !== undefined ? { spawnAgent: options.spawnAgent } : {}),
+        ...(dock ? { dock: true } : {}),
       }),
     );
 
-    // Inject the widget loader. Vite's `transformIndexHtml` (how vite-plugin
-    // injects it for SPAs) never fires for Nuxt's SSR'd document, so we add the
-    // script to the app head at body-close. The bundle is served by the
-    // reused `/__pinagent/widget.js` middleware with the right WS config.
+    // Inject the dev-only scripts. Vite's `transformIndexHtml` (how vite-plugin
+    // injects these for SPAs) never fires for Nuxt's SSR'd document, so we add
+    // them to the app head at body-close instead. The bundles/assets are served
+    // by the reused `/__pinagent/*` middleware with the right WS config.
     nuxt.options.app.head.script = nuxt.options.app.head.script ?? [];
     nuxt.options.app.head.script.push({
       src: '/__pinagent/widget.js',
       type: 'module',
       tagPosition: 'bodyClose',
     });
+
+    // With the dock enabled, also inject the iframe loader + host bridge. These
+    // are inline scripts (reused verbatim from @pinagent/vite-plugin so the
+    // subtle pointer-events/keyboard logic stays single-sourced).
+    if (dock) {
+      nuxt.options.app.head.script.push(
+        { innerHTML: DOCK_IFRAME_SCRIPT, tagPosition: 'bodyClose' },
+        { innerHTML: DOCK_HOST_BRIDGE_SCRIPT, tagPosition: 'bodyClose' },
+      );
+    }
   },
 });
