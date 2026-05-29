@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { isHopKey, pickNextActive } from '../src/widget';
+import { isHopKey, pickNextActive } from '../src/keyboard';
 
 describe('isHopKey', () => {
   it('matches Shift+N exactly', () => {

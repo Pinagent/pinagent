@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { computeUnionCropRect } from '../src/widget';
+import { computeUnionCropRect } from '../src/crop';
 
 // Helper — drop a div at (left, top) with given size into the body and
 // stub its `getBoundingClientRect` so happy-dom (which doesn't run
