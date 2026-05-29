@@ -14,7 +14,15 @@
 import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
-import { AlertTriangle, ExternalLink, GitBranch, MessageSquare, Trash2 } from 'lucide-react';
+import { useNavigate } from '@tanstack/react-router';
+import {
+  AlertTriangle,
+  AppWindow,
+  ExternalLink,
+  GitBranch,
+  MessageSquare,
+  Trash2,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TimestampDot } from '../components/TimestampDot';
 import type { Branch } from '../fixtures/types';
@@ -24,6 +32,7 @@ import {
   usePruneBranch,
   usePruneStaleBranches,
   useServeBranch,
+  useWorktreeServers,
 } from '../hooks/useBranches';
 import { useSettings } from '../hooks/useSettings';
 import { EmptyState } from '../shell/states/EmptyState';
@@ -52,9 +61,19 @@ function isStale(lastActivity: string, now: number, retentionDays: number): bool
 export function Branches() {
   const transport = useTransport();
   const branchesQuery = useBranches();
+  const serversQuery = useWorktreeServers();
   const settingsQuery = useSettings();
+  const navigate = useNavigate();
   const pruneStaleMutation = usePruneStaleBranches();
   const bulkPruneMutation = useBulkPruneBranches();
+
+  // Conversation ids that currently have a running dev server — drives
+  // the per-row running indicator. Built once per render from the
+  // (polled + event-invalidated) server list.
+  const runningServers = useMemo(
+    () => new Set((serversQuery.data ?? []).map((s) => s.feedbackId)),
+    [serversQuery.data],
+  );
   const [staleResult, setStaleResult] = useState<PruneStaleResult | null>(null);
   const [bulkResult, setBulkResult] = useState<BulkPruneResult | null>(null);
   // Selection set keyed on conversationId. Drops ids that disappear
@@ -259,6 +278,10 @@ export function Branches() {
               selected={cid !== null && selected.has(cid)}
               onSelectChange={cid !== null ? (next) => toggleSelected(cid, next) : null}
               bulkPending={bulkPruneMutation.isPending}
+              serverRunning={cid !== null && runningServers.has(cid)}
+              onOpenInDock={
+                cid !== null ? () => navigate({ to: '/preview', search: { id: cid } }) : null
+              }
             />
           );
         })}
@@ -409,6 +432,8 @@ function BranchRow({
   selected,
   onSelectChange,
   bulkPending,
+  serverRunning,
+  onOpenInDock,
 }: {
   branch: Branch;
   stale: boolean;
@@ -417,6 +442,10 @@ function BranchRow({
   /** Null for inline-mode rows (no conversation to prune by id). */
   onSelectChange: ((selected: boolean) => void) | null;
   bulkPending: boolean;
+  /** Whether this worktree currently has a running dev server. */
+  serverRunning: boolean;
+  /** Navigate to the Preview view for this worktree. Null for inline rows. */
+  onOpenInDock: (() => void) | null;
 }) {
   const pruneMutation = usePruneBranch();
   const serveMutation = useServeBranch();
@@ -489,6 +518,15 @@ function BranchRow({
             <span className="italic">No conversation linked</span>
           )}
           {branch.diskMb !== null && <span className="tabular-nums">{branch.diskMb} MB</span>}
+          {serverRunning && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] text-status-landed-fg"
+              title="Dev server running"
+            >
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-status-landed-fg" />
+              running
+            </span>
+          )}
           {stale && (
             <Badge variant="outline" className="text-[10px]">
               stale
@@ -506,6 +544,18 @@ function BranchRow({
           )}
         </div>
       </div>
+      {onOpenInDock && (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={isMock || !branch.conversationId}
+          onClick={onOpenInDock}
+          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+          title="Preview this worktree's app inside the dock"
+        >
+          <AppWindow className="h-3 w-3" />
+        </Button>
+      )}
       <Button
         size="sm"
         variant="ghost"

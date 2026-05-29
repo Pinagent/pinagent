@@ -48,6 +48,14 @@ describe('createProjectEventListener', () => {
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['auditLog'] });
   });
 
+  it('invalidates only the worktree-server list on worktree_servers_changed', () => {
+    const queryClient = makeFakeQueryClient();
+    const listen = createProjectEventListener(queryClient);
+    listen({ type: 'worktree_servers_changed' });
+    const calls = queryClient.invalidateQueries.mock.calls.map((args) => args[0].queryKey);
+    expect(calls).toEqual([['worktreeServers']]);
+  });
+
   it('invalidates exactly the documented set (no more, no less)', () => {
     // Belt-and-suspenders: catches both accidental drops AND accidental
     // additions, so the documented "what does conversations_changed

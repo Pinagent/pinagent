@@ -163,6 +163,11 @@ export class MockTransport implements DockTransport {
     return [...this.worktreeServers.values()];
   }
 
+  async stopWorktreeServer(feedbackId: string): Promise<void> {
+    await sleep(SIMULATED_LATENCY_MS);
+    this.worktreeServers.delete(feedbackId);
+  }
+
   async pruneStaleBranches(): Promise<PruneStaleResult> {
     await sleep(SIMULATED_LATENCY_MS * 2);
     const retentionDays = this.settings.worktreeRetentionDays;

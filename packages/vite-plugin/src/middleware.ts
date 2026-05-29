@@ -41,6 +41,7 @@ import {
   searchHistory,
   serveBranch,
   spawnAgent,
+  stopWorktreeServer,
   validateAnthropicKey,
   validateGithubToken,
 } from '@pinagent/agent-runner';
@@ -233,6 +234,18 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       // have a live app to point the preview iframe at.
       if (req.method === 'GET' && url === '/__pinagent/worktree-servers') {
         return json(res, 200, listWorktreeServers());
+      }
+
+      // DELETE /__pinagent/worktree-servers/:id — stop one worktree's dev
+      // server (frees the port; keeps the worktree). The switcher's
+      // "stop" action. Idempotent: stopping an absent server is a no-op.
+      const stopServerMatch =
+        req.method === 'DELETE' && /^\/__pinagent\/worktree-servers\/([^/]+)$/.exec(url);
+      if (stopServerMatch) {
+        const id = stopServerMatch[1] ?? '';
+        if (!ID_RE.test(id)) return badRequest(res, 'invalid id');
+        stopWorktreeServer(id);
+        return json(res, 200, { ok: true });
       }
 
       // POST /__pinagent/branches/prune-stale — bulk-prune every

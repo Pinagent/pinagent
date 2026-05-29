@@ -41,6 +41,7 @@ import {
   serveBranch,
   spawnAgent,
   startWsServer,
+  stopWorktreeServer,
   validateAnthropicKey,
   validateGithubToken,
 } from '@pinagent/agent-runner';
@@ -527,6 +528,15 @@ export async function DELETE(_req: Request, ctx: RouteCtx): Promise<Response> {
     if (!ID_RE.test(id)) return json(400, { error: 'invalid id' });
     const result = await pruneBranch(storage.root, id);
     return json(result.ok ? 200 : 422, result);
+  }
+
+  // /__pinagent/worktree-servers/:id — stop one worktree's dev server
+  // (frees the port; keeps the worktree). Mirror of the vite handler.
+  if (slug.length === 2 && slug[0] === 'worktree-servers') {
+    const id = slug[1] ?? '';
+    if (!ID_RE.test(id)) return json(400, { error: 'invalid id' });
+    stopWorktreeServer(id);
+    return json(200, { ok: true });
   }
 
   if (slug.length !== 2 || slug[0] !== 'connections') {

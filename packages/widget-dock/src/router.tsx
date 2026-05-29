@@ -29,6 +29,7 @@ import { ROUTE_PATHS } from './route-paths';
 import { validateComposeSearch } from './routes/compose-search';
 import { validateConversationsSearch } from './routes/conversations-search';
 import { Overview } from './routes/Overview';
+import { validatePreviewSearch } from './routes/preview-search';
 import { DockShell } from './shell/DockShell';
 
 // Eager: Overview is the default landing route — splitting it would
@@ -94,6 +95,12 @@ const previewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: ROUTE_PATHS.preview,
   component: WorktreePreview,
+  /**
+   * `?id=<conversation-id>` selects which worktree to preview — set by the
+   * Branches "Open in dock" action and updated as the user switches, so
+   * the active selection is deep-linkable and survives in-dock nav.
+   */
+  validateSearch: validatePreviewSearch,
 });
 const prsRoute = createRoute({
   getParentRoute: () => rootRoute,

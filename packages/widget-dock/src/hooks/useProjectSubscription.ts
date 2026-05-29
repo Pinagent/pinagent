@@ -59,6 +59,10 @@ export function createProjectEventListener(
       for (const queryKey of CONVERSATIONS_CHANGED_KEYS) {
         void queryClient.invalidateQueries({ queryKey });
       }
+    } else if (event.type === 'worktree_servers_changed') {
+      // A worktree dev server started, exited, or was stopped — refresh
+      // the switcher's running-server list (Preview view + Branches dots).
+      void queryClient.invalidateQueries({ queryKey: ['worktreeServers'] });
     }
   };
 }
