@@ -10,17 +10,23 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "drizzle:gen": "drizzle-kit generate",
+    "drizzle:check": "drizzle-kit check"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^0.10.0",
     "@pinagent/ee-auth": "workspace:*",
     "@pinagent/ee-billing": "workspace:*",
     "@pinagent/ee-infra": "workspace:*",
     "@pinagent/ee-relay": "workspace:*",
-    "@pinagent/ee-team-features": "workspace:*"
+    "@pinagent/ee-team-features": "workspace:*",
+    "drizzle-orm": "^0.38.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.2.0",
     "@types/node": "^22.10.1",
+    "drizzle-kit": "^0.31.10",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3"
   }
