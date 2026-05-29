@@ -4,6 +4,7 @@ import {
   type SsoConnectionStore,
   type SsoProvider,
   signUserToken,
+  type UserStore,
 } from '@pinagent/ee-auth';
 import { AUDIT_ACTIONS, type AuditSink } from '@pinagent/ee-team-features';
 import { isoFromSeconds } from './clock';
@@ -43,6 +44,12 @@ export interface LoginServiceDeps {
   cookieName: string;
   /** Fallback post-login redirect when the request gives no `returnTo`. */
   defaultReturnTo: string;
+  /**
+   * Optional user store — when present, the callback just-in-time provisions
+   * (creates/refreshes) the user behind the IdP profile before minting the
+   * token. Omit to skip provisioning (the token still carries the subject).
+   */
+  users?: UserStore;
   /** Optional audit sink — records successful logins when present. */
   audit?: AuditSink;
   /** Override the clock (epoch seconds) — for tests. */
@@ -114,9 +121,14 @@ export async function handleSsoCallback(
       payload: code,
       state: stateParam,
     });
-    // TODO: map the IdP subject to an internal user (JIT provisioning); for now
-    // the subject *is* the user id, which is what memberships are keyed on.
-    userToken = await signUserToken(profile.subject, deps.userTokenSecret, {
+    // Just-in-time provision the user behind this profile. `User.id` is the IdP
+    // subject for now, so the token + memberships keep keying on the same id;
+    // the record simply captures email/displayName/lastLogin. Skipped when no
+    // store is wired.
+    const user = await deps.users?.provisionFromProfile(profile, {
+      now: isoFromSeconds(deps.nowSeconds),
+    });
+    userToken = await signUserToken(user?.id ?? profile.subject, deps.userTokenSecret, {
       ttlSeconds: deps.userTokenTtlSeconds,
       nowSeconds: deps.nowSeconds,
     });

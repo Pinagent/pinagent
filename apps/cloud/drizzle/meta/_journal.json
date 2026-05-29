@@ -43,6 +43,13 @@
       "when": 1780073689309,
       "tag": "0005_panoramic_mulholland_black",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780075231011,
+      "tag": "0006_outstanding_mandarin",
+      "breakpoints": true
     }
   ]
 }

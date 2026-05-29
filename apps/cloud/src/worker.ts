@@ -10,6 +10,7 @@ import { createPgMembershipStore } from './db/membership-store';
 import { createPgMeterSink } from './db/meter-sink';
 import { createPgSsoConnectionStore } from './db/sso-connection-store';
 import { createPgSubscriptionStore } from './db/subscription-store';
+import { createPgUserStore } from './db/user-store';
 
 /**
  * Cloudflare Worker entry / composition root for the Pinagent cloud control
@@ -37,6 +38,7 @@ async function buildApp(config: CloudConfig) {
   const meter = createPgMeterSink(db);
   const subscriptions = createPgSubscriptionStore(db);
   const costControls = createPgCostControlStore(db);
+  const users = createPgUserStore(db);
 
   // Connections are resolved from a store now. Seed the env-configured one so
   // a single-connection deploy works with no DB rows; additional org IdPs can
@@ -92,6 +94,7 @@ async function buildApp(config: CloudConfig) {
       userTokenTtlSeconds: config.userTokenTtlSeconds,
       cookieName: config.sessionCookieName,
       defaultReturnTo: config.loginReturnTo,
+      users,
       audit,
     },
     read: { store, authenticate, audit, meter },

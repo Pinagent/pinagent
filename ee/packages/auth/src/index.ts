@@ -86,6 +86,13 @@ export {
   verifyClaims,
 } from './token-codec';
 export {
+  createInMemoryUserStore,
+  type ProvisionOptions,
+  type User,
+  type UserStore,
+  userFromProfile,
+} from './user';
+export {
   type SignUserTokenOptions,
   signUserToken,
   type UserClaims,
