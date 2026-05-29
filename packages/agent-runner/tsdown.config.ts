@@ -7,7 +7,7 @@ export default defineConfig({
   dts: true,
   target: 'node20',
   platform: 'node',
-  deps: { neverBundle: ['better-sqlite3', '@sqlite.org/sqlite-wasm'] },
+  deps: { neverBundle: ['@sqlite.org/sqlite-wasm'] },
   sourcemap: true,
   clean: true,
   splitting: false,

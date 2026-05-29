@@ -18,9 +18,9 @@
 // Trade-offs:
 //   - Latency: events appear with up to POLL_INTERVAL_MS lag. At
 //     100ms this is invisible for a streaming UI.
-//   - Write cost: every publish is one INSERT (~1ms on better-sqlite3
-//     and node:sqlite). The hot path is the in-memory event bus's
-//     WebSocket fanout, not the bus itself, so this is fine.
+//   - Write cost: every publish is one INSERT (~1ms on node:sqlite).
+//     The hot path is the in-memory event bus's WebSocket fanout, not
+//     the bus itself, so this is fine.
 //   - Persistence: events survive a dev-server restart. A page reload
 //     in the middle of a run shows the transcript-so-far without
 //     needing the agent to still be alive. (The previous in-memory
