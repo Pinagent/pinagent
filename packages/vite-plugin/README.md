@@ -2,7 +2,7 @@
 
 Vite plugin (dev-only) that:
 
-1. Tags every JSX opening element with `data-pa-loc="<relPath>:<line>:<col>"` via a Babel transform.
+1. Tags every element with `data-pa-loc="<relPath>:<line>:<col>"` (and a `data-pa-comp` component name) — JSX opening elements via a Babel transform, and Vue SFC `<template>` markup via `@pinagent/vue-plugin`. The `transform` hook dispatches on extension, so React (`.tsx`/`.jsx`) and Vue (`.vue`) apps both work.
 2. Injects a `<script src="/__pinagent/widget.js">` into served HTML.
 3. Serves middleware under `/__pinagent/*` that writes captured feedback to `.pinagent/feedback/`.
 
@@ -22,6 +22,19 @@ import pinagent from '@pinagent/vite-plugin';
 
 export default defineConfig({
   plugins: [pinagent(), react()],
+});
+```
+
+For a Vue app, put `pinagent()` ahead of `@vitejs/plugin-vue` — it runs with
+`enforce: 'pre'`, so it tags the raw SFC before plugin-vue compiles it:
+
+```ts
+// vite.config.ts
+import vue from '@vitejs/plugin-vue';
+import pinagent from '@pinagent/vite-plugin';
+
+export default defineConfig({
+  plugins: [pinagent(), vue()],
 });
 ```
 

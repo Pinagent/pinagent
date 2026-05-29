@@ -578,6 +578,9 @@ importers:
       '@sqlite.org/sqlite-wasm':
         specifier: ^3.50.0-build1
         version: 3.50.0-build1
+      '@vue/compiler-sfc':
+        specifier: ^3.5.13
+        version: 3.5.35
       drizzle-orm:
         specifier: ^0.38.0
         version: 0.38.4(@cloudflare/workers-types@4.20260529.1)(@electric-sql/pglite@0.2.17)(@neondatabase/serverless@0.10.4)(@types/better-sqlite3@7.6.13)(@types/pg@8.11.6)(@types/react@19.2.15)(better-sqlite3@12.10.0)(react@19.2.6)
@@ -609,6 +612,9 @@ importers:
       '@pinagent/shared':
         specifier: workspace:*
         version: link:../shared
+      '@pinagent/vue-plugin':
+        specifier: workspace:*
+        version: link:../vue-plugin
       '@pinagent/widget':
         specifier: workspace:*
         version: link:../widget
