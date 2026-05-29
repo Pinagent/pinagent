@@ -1,14 +1,30 @@
 // SPDX-License-Identifier: Elastic-2.0
 import type { OrganizationMembership } from '@pinagent/ee-auth';
 import type { Subscription, UsageSummary } from '@pinagent/ee-billing';
-import type { AuditEvent, BranchRoutingPolicy, CostControl } from '@pinagent/ee-team-features';
+import type {
+  AuditEvent,
+  BranchRoutingPolicy,
+  CostControl,
+  CostControlEnforcement,
+} from '@pinagent/ee-team-features';
 
 /**
  * Typed client for the cloud control-plane API (the `apps/cloud` Worker).
  * Browser-side: calls carry the session cookie (`credentials: 'include'`) set
- * by the `/sso` login flow. Read-only for now (the dashboard's first cut);
- * config mutations (PUT) are a follow-up.
+ * by the `/sso` login flow.
  */
+
+/** PUT /cost-controls body (org-id is taken from the query, not the body). */
+export interface CostControlInput {
+  maxRelaySessionsPerPeriod: number | null;
+  enforcement: CostControlEnforcement;
+}
+
+/** PUT /branch-routing body. */
+export interface BranchRoutingInput {
+  defaultBaseBranch: string | null;
+  allowedBranchPatterns: string[];
+}
 
 export class CloudApiError extends Error {
   constructor(
@@ -35,6 +51,8 @@ export interface CloudApiClient {
   getSubscription(organizationId: string): Promise<Subscription | null>;
   getCostControl(organizationId: string): Promise<CostControl | null>;
   getBranchRouting(organizationId: string): Promise<BranchRoutingPolicy | null>;
+  putCostControl(organizationId: string, input: CostControlInput): Promise<CostControl>;
+  putBranchRouting(organizationId: string, input: BranchRoutingInput): Promise<BranchRoutingPolicy>;
 }
 
 export interface CloudApiClientOptions {
@@ -59,6 +77,23 @@ export function createCloudApiClient(options: CloudApiClientOptions = {}): Cloud
     return pick(body);
   }
 
+  async function put<T>(
+    path: string,
+    body: unknown,
+    pick: (body: Record<string, unknown>) => T,
+  ): Promise<T> {
+    const res = await fetchFn(`${base}${path}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 401) throw new UnauthorizedError();
+    if (!res.ok) throw new CloudApiError(res.status, `PUT ${path} failed (${res.status})`);
+    const payload = (await res.json()) as Record<string, unknown>;
+    return pick(payload);
+  }
+
   const orgQuery = (organizationId: string) =>
     `?organizationId=${encodeURIComponent(organizationId)}`;
 
@@ -80,5 +115,9 @@ export function createCloudApiClient(options: CloudApiClientOptions = {}): Cloud
         `/branch-routing${orgQuery(org)}`,
         (b) => (b.branchRouting as BranchRoutingPolicy | null) ?? null,
       ),
+    putCostControl: (org, input) =>
+      put(`/cost-controls${orgQuery(org)}`, input, (b) => b.costControl as CostControl),
+    putBranchRouting: (org, input) =>
+      put(`/branch-routing${orgQuery(org)}`, input, (b) => b.branchRouting as BranchRoutingPolicy),
   };
 }
