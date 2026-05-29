@@ -65,6 +65,29 @@ export const STYLES = `
   box-shadow: 0 0 0 3px ${BRAND_GOLD}, 0 10px 28px rgba(32, 27, 33, 0.32);
 }
 
+/* Keyboard-shortcut chip for opening the dock. Only rendered when the
+   host mounts the dock (resolveDockEnabled). Absolutely positioned inside
+   the fixed FAB so it tracks the FAB through drag + corner-snap. Sits over
+   the top edge, "overlaying it a bit". pointer-events:none so clicks pass
+   through to the FAB (which always opens the picker). */
+.fab-shortcut {
+  position: absolute;
+  bottom: calc(100% - 9px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: ${BRAND_GOLD};
+  color: ${BRAND_INK};
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 6px rgba(32, 27, 33, 0.22);
+  pointer-events: none;
+}
+
 .outline {
   position: fixed;
   pointer-events: none;

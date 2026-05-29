@@ -23,7 +23,6 @@ import type { DockTransport } from '../transport';
 import { useTransport } from '../transport';
 import { DockChrome } from './DockChrome';
 import { useDockEnvironment } from './DockEnvironment';
-import { DockFAB } from './DockFAB';
 import { DockSurface } from './DockSurface';
 import { ExtensionLaunchProvider, ExtensionNudgeBanner } from './ExtensionLaunch';
 import { NavRail, ROUTES } from './NavRail';
@@ -45,16 +44,10 @@ export function DockShell() {
   const subscriptionEnabled = transport.kind === 'local' && !forcedDisconnected;
   const subscription = useProjectSubscription({ enabled: subscriptionEnabled });
 
-  // The FAB count badge tracks anything the user might want to act on:
-  // ready-to-land changes + conversations awaiting their reply. Reads
-  // the same conversations cache the Overview/Conversations views use,
-  // so it stays in sync without an extra fetch.
+  // Drives the disconnected indicator below. Reads the same conversations
+  // cache the Overview/Conversations views use, so it stays in sync
+  // without an extra fetch.
   const conversations = useConversations();
-  const pendingCount = useMemo(() => {
-    const data = conversations.data ?? [];
-    return data.filter((c) => c.status === 'readyToLand' || c.status === 'awaitingClarification')
-      .length;
-  }, [conversations.data]);
 
   // Worktree-flow tabs (Branches, Changes, PRs) only make sense when
   // there's data in them — on MCP-runtime or inline-mode projects they
@@ -115,7 +108,6 @@ export function DockShell() {
 
   const surface = (
     <ExtensionLaunchProvider>
-      <DockFAB open={dock.open} count={pendingCount} onToggle={dock.toggle} />
       <DockSurface open={dock.open} mode={dock.mode} embedded>
         <DockChrome
           mode={dock.mode}
@@ -167,9 +159,7 @@ function HostBackdrop({ transportKind }: { transportKind: DockTransport['kind'] 
             Pinagent dock — dev preview {isMock && '· fixtures'}
           </span>
         </div>
-        <h1 className="mt-4 text-4xl font-semibold tracking-tight">
-          Click the pin to open the dock.
-        </h1>
+        <h1 className="mt-4 text-4xl font-semibold tracking-tight">Press ⌘⇧P to open the dock.</h1>
         <p className="mt-3 max-w-prose text-sm text-muted-foreground leading-relaxed">
           {isMock ? (
             <>

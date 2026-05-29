@@ -1,35 +1,46 @@
 // SPDX-License-Identifier: Apache-2.0
 import { WebSocket } from 'ws';
 
-// The dev-server's WebSocket bridge. Hardcoded to the default port: the
-// browser widget learns the actual (possibly port-walked) port from an
-// injected config prelude, but the extension has no such channel, so we
-// connect to the convention. If the server fell back to 53637+ because
-// 53636 was taken, presence simply won't register — a documented POC
-// limitation, not a correctness bug (the URI-handler half still works).
-const WS_URL = 'ws://127.0.0.1:53636/__pinagent/ws';
+// The dev-server's WebSocket bridge. The browser widget learns the actual
+// (possibly port-walked) port from an injected config prelude, but the
+// extension has no such channel — so it announces presence to the whole
+// fallback range the server might have bound to. When 53636 is taken by a
+// stale dev server from another project, the real server walks to 53637+
+// (see PORT_FALLBACK_RANGE in agent-runner's ws-server.ts); without the
+// sweep the dock connected to that real server would never hear our
+// `extension_hello` and would keep showing "Not installed".
+const WS_HOST = '127.0.0.1';
+const WS_PATH = '/__pinagent/ws';
+const BASE_PORT = 53636;
+// Mirror the server's PORT_FALLBACK_RANGE so we cover every port it could
+// have walked to. Keep these in sync if the server's range changes.
+const PORT_FALLBACK_RANGE = 10;
 
 const RECONNECT_MIN_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
 
 /**
- * Keeps a best-effort WebSocket open to the pinagent dev-server and
- * announces this extension's presence with an `extension_hello`. The
- * dock listens for the resulting `extension_status` broadcast to decide
- * whether to nudge the developer to install the extension — so the whole
- * job of this client is "be connected and say hello", nothing more.
+ * A best-effort presence connection to a single candidate port. Keeps a
+ * WebSocket open to the pinagent dev-server and announces this extension's
+ * presence with an `extension_hello`. The dock listens for the resulting
+ * `extension_status` broadcast to decide whether to nudge the developer to
+ * install the extension — so the whole job is "be connected and say hello".
  *
- * There may be no server listening (the developer hasn't started their
- * app, or it's a non-pinagent project). That's expected: we retry with
- * capped exponential backoff and stay quiet about failures.
+ * Most ports in the swept range will have no listener (the developer hasn't
+ * started their app, it's a non-pinagent project, or the server bound a
+ * different port). That's expected: we retry with capped exponential
+ * backoff and stay quiet about failures.
  */
-export class PresenceClient {
+class PortPresence {
   private socket: WebSocket | null = null;
   private reconnectDelay = RECONNECT_MIN_MS;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
 
-  constructor(private readonly version: string) {}
+  constructor(
+    private readonly url: string,
+    private readonly version: string,
+  ) {}
 
   start(): void {
     this.disposed = false;
@@ -58,7 +69,7 @@ export class PresenceClient {
     if (this.disposed) return;
     let socket: WebSocket;
     try {
-      socket = new WebSocket(WS_URL);
+      socket = new WebSocket(this.url);
     } catch {
       this.scheduleReconnect();
       return;
@@ -97,5 +108,32 @@ export class PresenceClient {
       this.reconnectTimer = null;
       this.connect();
     }, delay);
+  }
+}
+
+/**
+ * Announces this extension's presence to every dev-server that might be
+ * listening in the port fallback range. Holding one connection per port is
+ * cheap (idle reconnect timers, no traffic) and means the extension shows
+ * up as "Installed" regardless of which port the real server walked to, and
+ * even when several pinagent projects are running at once.
+ */
+export class PresenceClient {
+  private readonly ports: PortPresence[];
+
+  constructor(version: string) {
+    this.ports = [];
+    for (let i = 0; i < PORT_FALLBACK_RANGE; i++) {
+      const url = `ws://${WS_HOST}:${BASE_PORT + i}${WS_PATH}`;
+      this.ports.push(new PortPresence(url, version));
+    }
+  }
+
+  start(): void {
+    for (const port of this.ports) port.start();
+  }
+
+  dispose(): void {
+    for (const port of this.ports) port.dispose();
   }
 }

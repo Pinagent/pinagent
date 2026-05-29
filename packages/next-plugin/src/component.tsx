@@ -82,6 +82,9 @@ export function Pinagent({ dock }: PinagentProps = {}): null {
     //   - Cmd/Ctrl + Shift + P toggles the dock from anywhere on the
     //     page (the iframe's own keydown listener only fires while
     //     focus is inside the dock).
+    //   - Escape closes the dock from anywhere on the page (same
+    //     reason); we don't preventDefault so the host's own Escape
+    //     handling still runs.
     //   - Pointer-events passthrough: the dock broadcasts its
     //     interactive rects via postMessage; we toggle the iframe's
     //     `pointer-events` on every mousemove so the FAB is reachable
@@ -98,6 +101,11 @@ export function Pinagent({ dock }: PinagentProps = {}): null {
         const iframe = getIframe();
         if (iframe?.contentWindow) {
           iframe.contentWindow.postMessage({ source: 'pinagent-host', type: 'toggle-dock' }, '*');
+        }
+      } else if (e.key === 'Escape') {
+        const iframe = getIframe();
+        if (iframe?.contentWindow) {
+          iframe.contentWindow.postMessage({ source: 'pinagent-host', type: 'close-dock' }, '*');
         }
       }
     };

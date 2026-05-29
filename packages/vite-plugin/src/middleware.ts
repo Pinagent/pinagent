@@ -85,7 +85,7 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       // widget its dynamic config (WS URL today). Mirrors `buildWidgetBundle`
       // in next-plugin/route.ts.
       if (req.method === 'GET' && url === '/__pinagent/widget.js') {
-        const bundle = buildWidgetBundle(wsPort);
+        const bundle = buildWidgetBundle(wsPort, dock);
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');
@@ -478,11 +478,15 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
 
 /**
  * Build the widget IIFE plus a prelude that hands the widget its config
- * (currently just the WebSocket URL). Mirrors `buildWidgetBundle` in
- * `packages/next-plugin/src/route.ts`.
+ * (WebSocket URL + whether the dock is mounted). The widget uses `dock`
+ * to decide whether to show the "⌘⇧P opens the dock" hint on its FAB.
+ * Mirrors `buildWidgetBundle` in `packages/next-plugin/src/route.ts`.
  */
-function buildWidgetBundle(wsPort: number | null): string {
-  const config = wsPort ? { wsUrl: `ws://127.0.0.1:${wsPort}/__pinagent/ws` } : { wsUrl: null };
+function buildWidgetBundle(wsPort: number | null, dock: boolean): string {
+  const config = {
+    wsUrl: wsPort ? `ws://127.0.0.1:${wsPort}/__pinagent/ws` : null,
+    dock,
+  };
   const prelude = `;(function(){try{window.__pinagentConfig=${JSON.stringify(config)};}catch(e){}})();\n`;
   return prelude + WIDGET_SOURCE;
 }

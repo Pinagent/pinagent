@@ -506,7 +506,10 @@ export async function DELETE(_req: Request, ctx: RouteCtx): Promise<Response> {
 
 /**
  * Build the widget IIFE plus a small prelude that hands the widget the
- * dynamic config it needs at runtime (currently just the WebSocket URL).
+ * dynamic config it needs at runtime (WebSocket URL + whether the dock is
+ * mounted). The widget reads `dock` to decide whether to show the
+ * "⌘⇧P opens the dock" hint on its FAB; the flag mirrors the
+ * `NEXT_PUBLIC_PINAGENT_DOCK` env the `<Pinagent />` component reads.
  *
  * The widget reads `window.__pinagentConfig` on mount. If unset, it falls
  * back to a default port — but that fallback only succeeds when running
@@ -514,9 +517,10 @@ export async function DELETE(_req: Request, ctx: RouteCtx): Promise<Response> {
  */
 function buildWidgetBundle(): string {
   const wsPort = process.env.PINAGENT_WS_PORT;
-  const config = wsPort
-    ? { wsUrl: `ws://${defaultWsHost()}:${wsPort}/__pinagent/ws` }
-    : { wsUrl: null };
+  const config = {
+    wsUrl: wsPort ? `ws://${defaultWsHost()}:${wsPort}/__pinagent/ws` : null,
+    dock: process.env.NEXT_PUBLIC_PINAGENT_DOCK === '1',
+  };
   const prelude = `;(function(){try{window.__pinagentConfig=${JSON.stringify(config)};}catch(e){}})();\n`;
   return prelude + WIDGET_SOURCE;
 }

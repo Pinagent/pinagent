@@ -4,11 +4,11 @@
  * postMessage. The vite-plugin / next-plugin host bridge listens and
  * toggles the iframe's pointer-events between auto and none based on
  * the mouse position — so the host page stays interactive everywhere
- * the dock isn't, but the dock FAB and panel still receive clicks.
+ * the dock isn't, but the dock panel still receives clicks.
  *
- * Tracks every element tagged with `data-pinagent-rect`: the FAB, the
- * dock surface section (in any mode), and the modal backdrop when
- * present. Polls with rAF and only posts when the rect set changes —
+ * Tracks every element tagged with `data-pinagent-rect`: the dock
+ * surface section (in any mode) and the modal backdrop when present.
+ * Polls with rAF and only posts when the rect set changes —
  * drag and slide-in animations converge in one frame. Off-viewport
  * rects (e.g. the panel translated off-screen while closed) are
  * filtered out so the host doesn't keep `pointer-events: auto` over a
