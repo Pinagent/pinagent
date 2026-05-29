@@ -48,6 +48,7 @@ export class ClaudeCodeProvider implements AgentProvider {
 
   async *run(req: AgentRunRequest): AsyncIterable<ProviderRunItem> {
     const sdkOptions = await buildSdkOptions(req);
+    const startedAt = Date.now();
 
     // Captured from the run's `system/init` message so the result footer can
     // relabel notional (subscription) cost. Stays null until init arrives,
@@ -57,43 +58,88 @@ export class ClaudeCodeProvider implements AgentProvider {
     // the widget footer ticks up live, ahead of the authoritative `numTurns`
     // on the terminal `result`.
     let turn = 0;
+    // Whether the SDK delivered its own terminal `result`. If it did, a later
+    // throw is post-completion noise we drop; if it didn't (abort, transport
+    // failure, internal crash), we synthesize one in the catch below.
+    let sawResult = false;
 
-    for await (const message of query({
-      prompt: req.prompt,
-      options: sdkOptions,
-    }) as AsyncIterable<SDKMessage>) {
-      const sessionId =
-        'session_id' in message && typeof message.session_id === 'string'
-          ? message.session_id
-          : undefined;
+    try {
+      for await (const message of query({
+        prompt: req.prompt,
+        options: sdkOptions,
+      }) as AsyncIterable<SDKMessage>) {
+        const sessionId =
+          'session_id' in message && typeof message.session_id === 'string'
+            ? message.session_id
+            : undefined;
 
-      if (message.type === 'system' && message.subtype === 'init') {
-        apiKeySource = message.apiKeySource ?? null;
-        yield {
-          events: toAgentEvents(message),
-          log: renderInitFooter(message),
-          sessionId,
-        };
-        continue;
+        if (message.type === 'system' && message.subtype === 'init') {
+          apiKeySource = message.apiKeySource ?? null;
+          yield {
+            events: toAgentEvents(message),
+            log: renderInitFooter(message),
+            sessionId,
+          };
+          continue;
+        }
+
+        if (message.type === 'result') {
+          sawResult = true;
+          yield {
+            events: toAgentEvents(message),
+            log: renderMessage(message),
+            sessionId,
+            isResult: true,
+            resultFooter: renderResultFooter(message, apiKeySource),
+          };
+          continue;
+        }
+
+        const events = toAgentEvents(message);
+        if (message.type === 'assistant') {
+          turn += 1;
+          events.push({ type: 'progress', turn });
+        }
+        yield { events, log: renderMessage(message), sessionId };
       }
-
-      if (message.type === 'result') {
-        yield {
-          events: toAgentEvents(message),
-          log: renderMessage(message),
-          sessionId,
-          isResult: true,
-          resultFooter: renderResultFooter(message, apiKeySource),
-        };
-        continue;
+    } catch (err) {
+      // The SDK stream threw: the user aborted (clicked Stop), or auth /
+      // transport / internal SDK failure. If the terminal `result` already
+      // went out this is post-completion noise — drop it. Otherwise synthesize
+      // a terminal `result` so the widget always leaves the running state with
+      // a meaningful subtype, mirroring the CLI provider rather than surfacing
+      // a raw AbortError through the orchestrator's generic catch.
+      if (sawResult) return;
+      const aborted = req.abortSignal.aborted;
+      const detail = err instanceof Error ? err.message : String(err);
+      const durationMs = Date.now() - startedAt;
+      const resultEvent: AgentEvent = {
+        type: 'result',
+        subtype: aborted ? 'aborted' : 'error',
+        numTurns: turn,
+        // No authoritative cost on a stream that never reached its `result`.
+        totalCostUsd: 0,
+        durationMs,
+      };
+      const events: AgentEvent[] = [];
+      const seconds = `${(durationMs / 1000).toFixed(1)}s`;
+      let footer: string;
+      if (aborted) {
+        footer = `**Outcome:** \`aborted\`  \n**Duration:** ${seconds}`;
+      } else {
+        resultEvent.errors = [detail];
+        // Keep the human-readable message on the bus too (the widget renders
+        // `error` events inline); the `result` carries the terminal subtype.
+        events.push({ type: 'error', message: detail });
+        footer = `**Outcome:** \`error\`  \n> ${detail}  \n**Duration:** ${seconds}`;
       }
-
-      const events = toAgentEvents(message);
-      if (message.type === 'assistant') {
-        turn += 1;
-        events.push({ type: 'progress', turn });
-      }
-      yield { events, log: renderMessage(message), sessionId };
+      events.push(resultEvent);
+      yield {
+        events,
+        log: `\n> [pinagent] ${aborted ? 'run aborted by user' : `agent stream errored: ${detail}`}\n`,
+        isResult: true,
+        resultFooter: footer,
+      };
     }
   }
 }
