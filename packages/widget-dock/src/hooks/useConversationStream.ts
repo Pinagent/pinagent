@@ -48,9 +48,22 @@ export interface ConversationStream {
    * uses the same init/result toggle convention.
    */
   turnRunning: boolean;
+  /**
+   * Live turn count for the current run, derived from `progress`
+   * events by `deriveLiveTurn`. 0 before the first turn. The
+   * authoritative final count rides the `result` event (`numTurns`);
+   * this just lets the detail view tick a counter up live, mirroring
+   * the per-element widget's footer.
+   */
+  liveTurn: number;
 }
 
-const EMPTY_STREAM: ConversationStream = { items: [], worktree: null, turnRunning: false };
+const EMPTY_STREAM: ConversationStream = {
+  items: [],
+  worktree: null,
+  turnRunning: false,
+  liveTurn: 0,
+};
 
 /**
  * Pure mirror of the per-element widget's `turnRunning` lifecycle: an
@@ -78,6 +91,21 @@ export function deriveTurnRunning(items: StreamItem[]): boolean {
 }
 
 /**
+ * Latest live turn number from the stream. `progress` events carry a
+ * running count that resets each run (a fresh `init` zeroes it). Walking
+ * the full list keeps it correct across multi-turn / replayed streams.
+ */
+export function deriveLiveTurn(items: StreamItem[]): number {
+  let turn = 0;
+  for (const it of items) {
+    if (it.kind !== 'event') continue;
+    if (it.event.type === 'init') turn = 0;
+    else if (it.event.type === 'progress') turn = it.event.turn;
+  }
+  return turn;
+}
+
+/**
  * Pick which set of items the detail view renders. WS items are
  * authoritative the moment any of them arrive — the bus replays the
  * full transcript on first poll, so any prefetched events are about to
@@ -97,7 +125,12 @@ export function mergeStreamView(
   prefetched: StreamItem[],
 ): ConversationStream {
   const items = wsStream.items.length > 0 ? wsStream.items : prefetched;
-  return { ...wsStream, items, turnRunning: deriveTurnRunning(items) };
+  return {
+    ...wsStream,
+    items,
+    turnRunning: deriveTurnRunning(items),
+    liveTurn: deriveLiveTurn(items),
+  };
 }
 
 export function useConversationStream(id: string | null): ConversationStream {

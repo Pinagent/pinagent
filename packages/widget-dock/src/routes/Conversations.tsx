@@ -911,6 +911,11 @@ function ConversationDetailView({ id, onBack }: { id: string; onBack: () => void
               : lifecycleLabel(stream.worktree)}
           </span>
           <div className="flex items-center gap-1.5">
+            {canStop && stream.liveTurn > 0 && (
+              <span className="text-[11px] text-muted-foreground font-mono">
+                {stream.liveTurn} turn{stream.liveTurn === 1 ? '' : 's'}
+              </span>
+            )}
             {canStop && (
               <Button
                 size="sm"
