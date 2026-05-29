@@ -137,10 +137,19 @@ export interface FeedbackRecord {
    * summed from the `total_cost_usd` field on each `result` event in
    * the `messages` table. Drives the dock's running-cost badge and the
    * per-conversation cap enforcement in `agent.ts`. 0 when no turn has
-   * finished yet (or for oauth/subscription-quota runs where the SDK
-   * reports notional cost as 0).
+   * finished yet. For oauth/subscription runs the SDK still reports a
+   * cost here, but it is notional (API-equivalent, billed against the
+   * Claude subscription quota) — see `apiKeySource` and `isNotionalCost`.
    */
   totalCostUsd: number;
+  /**
+   * Where the SDK that ran this conversation got its credentials, copied
+   * from the persisted `init` event. `'oauth'` means a `claude login`
+   * session, so `totalCostUsd` is notional rather than a real charge —
+   * the dock and widget use `isNotionalCost` to relabel it. Null for rows
+   * with no recorded `init` (created but never run, or pre-dating this).
+   */
+  apiKeySource: string | null;
 }
 
 export const PatchSchema = z.object({
@@ -321,6 +330,8 @@ export class Storage {
       // Freshly created — no transcript yet.
       messageCount: 0,
       totalCostUsd: 0,
+      // No init event recorded until an agent runs against this row.
+      apiKeySource: null,
     };
     // Notify project subscribers (the dock) that the conversation list
     // changed. Best-effort — emit failures shouldn't break the write.
@@ -367,11 +378,24 @@ export class Storage {
       const c = extractResultCost(r.content);
       if (c > 0) costByConvId.set(r.id, (costByConvId.get(r.id) ?? 0) + c);
     }
+    // Same batched-rollup shape as cost: one `init` event per conversation
+    // carries `apiKeySource`. First one wins (resumed turns re-emit it).
+    const initRows = await db
+      .select({ id: messages.conversationId, content: messages.content })
+      .from(messages)
+      .where(eq(messages.role, 'init'));
+    const apiKeySourceByConvId = new Map<string, string>();
+    for (const r of initRows) {
+      if (apiKeySourceByConvId.has(r.id)) continue;
+      const src = extractApiKeySource(r.content);
+      if (src) apiKeySourceByConvId.set(r.id, src);
+    }
     return rows.map((r) =>
       rowToRecord(
         r,
         countByConvId.get(r.conversations.id) ?? 0,
         costByConvId.get(r.conversations.id) ?? 0,
+        apiKeySourceByConvId.get(r.conversations.id) ?? null,
       ),
     );
   }
@@ -395,7 +419,25 @@ export class Storage {
       .from(messages)
       .where(and(eq(messages.conversationId, id), notInArray(messages.role, NON_MESSAGE_ROLES)));
     const totalCostUsd = await this.computeConversationCost(id);
-    return rowToRecord(row, countRows[0]?.n ?? 0, totalCostUsd);
+    const apiKeySource = await this.readApiKeySource(id);
+    return rowToRecord(row, countRows[0]?.n ?? 0, totalCostUsd, apiKeySource);
+  }
+
+  /**
+   * Read `apiKeySource` off the conversation's `init` event. Drives the
+   * dock's notional-cost relabeling (see `isNotionalCost`). Null when no
+   * `init` has been recorded yet (created but never run).
+   */
+  async readApiKeySource(id: string): Promise<string | null> {
+    if (!ID_RE.test(id)) return null;
+    const db = this.db();
+    const rows = await db
+      .select({ content: messages.content })
+      .from(messages)
+      .where(and(eq(messages.conversationId, id), eq(messages.role, 'init')))
+      .orderBy(asc(messages.id))
+      .limit(1);
+    return rows[0] ? extractApiKeySource(rows[0].content) : null;
   }
 
   /**
@@ -545,6 +587,7 @@ function rowToRecord(
   },
   messageCount: number,
   totalCostUsd: number,
+  apiKeySource: string | null,
 ): FeedbackRecord {
   const c = row.conversations;
   const a = row.widget_anchors;
@@ -575,6 +618,7 @@ function rowToRecord(
     resolvedAt: c.resolvedAt ? c.resolvedAt.toISOString() : null,
     messageCount,
     totalCostUsd,
+    apiKeySource,
   };
 }
 
@@ -590,6 +634,20 @@ function extractResultCost(content: unknown): number {
     if (typeof v === 'number' && Number.isFinite(v) && v >= 0) return v;
   }
   return 0;
+}
+
+/**
+ * Pull `apiKeySource` out of a stored `init` event's JSON content. Mirrors
+ * `extractResultCost`'s tolerance: missing/non-string values yield null so
+ * the dock simply falls back to showing the raw cost (the pre-existing
+ * behavior) rather than mis-labeling it.
+ */
+function extractApiKeySource(content: unknown): string | null {
+  if (content && typeof content === 'object' && 'apiKeySource' in content) {
+    const v = (content as { apiKeySource?: unknown }).apiKeySource;
+    if (typeof v === 'string' && v) return v;
+  }
+  return null;
 }
 
 export async function isInGitignore(root: string): Promise<boolean> {

@@ -152,10 +152,15 @@ const FeedbackRecordSchema = z
     // (before this projection landed) still parses cleanly.
     messageCount: z.number().int().nonnegative().default(0),
     // Per-row running cost in USD, summed from each `result` event's
-    // `total_cost_usd`. 0 for runs that haven't finished a turn yet and
-    // for oauth/subscription-quota runs where the SDK reports notional
-    // cost as 0. Default for the same compatibility reason as above.
+    // `total_cost_usd`. 0 for runs that haven't finished a turn yet. For
+    // oauth/subscription runs the value is notional (see `apiKeySource`).
+    // Default for the same compatibility reason as above.
     totalCostUsd: z.number().nonnegative().default(0),
+    // Credential source from the run's `init` event. `'oauth'` => the
+    // cost above is notional (subscription quota, not a real charge), so
+    // the dock relabels it via `isNotionalCost`. Null when no run is
+    // recorded; default keeps older servers (no field) parsing cleanly.
+    apiKeySource: z.string().nullable().default(null),
     createdAt: z.string(),
     updatedAt: z.string(),
   })
@@ -255,6 +260,7 @@ function toConversation(rec: FeedbackRecord): Conversation {
     lastMessage: commentToTitle(rec.comment),
     messageCount: rec.messageCount,
     totalCostUsd: rec.totalCostUsd,
+    apiKeySource: rec.apiKeySource,
   };
 }
 

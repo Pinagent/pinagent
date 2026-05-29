@@ -145,6 +145,19 @@ export type AgentEvent =
       resolvedAt: string | null;
     };
 
+/**
+ * True when a run's reported `total_cost_usd` is notional rather than a
+ * real charge — i.e. the SDK authenticated via a `claude login` session
+ * (`apiKeySource === 'oauth'`) and the cost is billed against the Claude
+ * subscription quota, not the developer's card. Both the in-page widget
+ * footer and the dock's cost badge gate on this so the two surfaces can
+ * never disagree on what counts as a billed run. If the SDK ever reports
+ * a different string for subscription auth, change it here only.
+ */
+export function isNotionalCost(apiKeySource: string | null | undefined): boolean {
+  return apiKeySource === 'oauth';
+}
+
 export interface BusSubscriber {
   onEvent(event: AgentEvent): void;
   onClose(): void;

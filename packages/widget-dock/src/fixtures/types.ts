@@ -46,11 +46,19 @@ export interface Conversation {
    * Running USD cost for this conversation, summed from each SDK
    * `result` event's `total_cost_usd`. Server populates this in
    * `Storage.list`; fixtures supply representative values for the
-   * design demo. 0 when no turn has completed yet (or for runs
-   * billed against an OAuth subscription where the SDK reports
-   * notional cost as 0).
+   * design demo. 0 when no turn has completed yet. For OAuth
+   * subscription runs this is notional (API-equivalent) — use
+   * `isNotionalCost(apiKeySource)` to decide how to label it.
    */
   totalCostUsd: number;
+  /**
+   * Where the SDK that ran this conversation got its credentials,
+   * copied from the persisted `init` event. `'oauth'` means a
+   * `claude login` session, so `totalCostUsd` is notional rather than
+   * a real charge. Undefined/null for rows with no recorded run (and
+   * for docks talking to a server that predates this field).
+   */
+  apiKeySource?: string | null;
 }
 
 /** A pending or landed code change produced by an agent for a conversation. */

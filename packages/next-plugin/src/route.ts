@@ -258,6 +258,7 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
       branch: r.branch,
       messageCount: r.messageCount,
       totalCostUsd: r.totalCostUsd,
+      apiKeySource: r.apiKeySource,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
       resolvedAt: r.resolvedAt,

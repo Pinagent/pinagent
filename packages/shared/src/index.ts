@@ -47,7 +47,12 @@ export {
   type ServerStatus,
   type ServerWorktreeState,
 } from './dock-status';
-export { type AgentEvent, AgentEventSchema, type BusSubscriber } from './event-bus';
+export {
+  type AgentEvent,
+  AgentEventSchema,
+  type BusSubscriber,
+  isNotionalCost,
+} from './event-bus';
 export { renderTranscript } from './render-transcript';
 export {
   type ClientMessage,
