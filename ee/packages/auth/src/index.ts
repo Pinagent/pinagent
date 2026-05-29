@@ -16,7 +16,12 @@
  */
 export const PACKAGE_NAME = '@pinagent/ee-auth';
 
-export { AccessDeniedError, AuthError, NotImplementedError } from './errors';
+export {
+  AccessDeniedError,
+  AuthError,
+  MembershipRequiredError,
+  NotImplementedError,
+} from './errors';
 export {
   isActiveMember,
   type MembershipStatus,
@@ -40,6 +45,11 @@ export {
   ROLES,
   type Role,
 } from './rbac';
+export {
+  type IssuedRelaySession,
+  type IssueRelaySessionOptions,
+  issueRelaySessionToken,
+} from './session-issuer';
 export {
   type SessionClaims,
   type SignOptions,

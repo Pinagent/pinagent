@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Elastic-2.0
-import { verifySessionToken } from '@pinagent/ee-auth';
+import { type Role, verifySessionToken } from '@pinagent/ee-auth';
 import { RelaySession } from './relay-do';
 
 /**
@@ -16,6 +16,12 @@ export interface Env {
 interface RelayAuth {
   tenantId: string;
   sessionId: string;
+  /**
+   * The member's role, present when a signed token was verified. Carried for
+   * forthcoming per-connection RBAC (e.g. gating `land_request` to writers);
+   * absent in dev-fallback mode where no secret is configured.
+   */
+  role?: Role;
 }
 
 const WS_PATH = '/__pinagent/ws';
@@ -82,7 +88,11 @@ async function verifyToken(request: Request, url: URL, env: Env): Promise<RelayA
   if (env.RELAY_AUTH_SECRET) {
     const result = await verifySessionToken(token, env.RELAY_AUTH_SECRET);
     if (!result.ok) return null;
-    return { tenantId: result.claims.tenantId, sessionId: result.claims.sessionId };
+    return {
+      tenantId: result.claims.tenantId,
+      sessionId: result.claims.sessionId,
+      role: result.claims.role,
+    };
   }
 
   // Dev fallback — NOT for production (no secret configured).

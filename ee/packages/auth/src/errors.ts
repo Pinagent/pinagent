@@ -29,3 +29,18 @@ export class AccessDeniedError extends AuthError {
     super(`role "${role}" is missing required permission "${permission}"`);
   }
 }
+
+/**
+ * Thrown when relay-session-token issuance is denied because the user has no
+ * active membership in the target organization. `organizationId` / `userId`
+ * are typed as plain strings to keep this module free of a cycle through
+ * `membership.ts` (which imports from here).
+ */
+export class MembershipRequiredError extends AuthError {
+  constructor(
+    readonly organizationId: string,
+    readonly userId: string,
+  ) {
+    super(`user "${userId}" is not an active member of organization "${organizationId}"`);
+  }
+}

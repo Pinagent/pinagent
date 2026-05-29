@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Elastic-2.0
+import { isRole, type Role } from './rbac';
 
 /**
  * Signed session tokens for the cloud relay.
@@ -21,10 +22,16 @@
  */
 
 export interface SessionClaims {
-  /** Billing/RBAC tenant the session belongs to. */
+  /** Billing/RBAC tenant the session belongs to (an organization id). */
   tenantId: string;
   /** Relay session id — namespaces the Durable Object. */
   sessionId: string;
+  /**
+   * The member's role within the tenant, carried in the token so the relay
+   * can apply RBAC per connection without a round-trip to the membership
+   * store. Issued by {@link issueRelaySessionToken}.
+   */
+  role: Role;
   /** Issued-at, epoch seconds. */
   iat: number;
   /** Expiry, epoch seconds. */
@@ -44,9 +51,14 @@ export type VerifyResult =
 
 const DEFAULT_TTL_SECONDS = 3_600;
 
-/** Mint a signed token for `{ tenantId, sessionId }`. */
+/**
+ * Mint a signed token for `{ tenantId, sessionId, role }`. Prefer
+ * {@link issueRelaySessionToken}, which derives these from a verified
+ * organization membership; call this directly only when the claims are
+ * already trusted.
+ */
 export async function signSessionToken(
-  input: { tenantId: string; sessionId: string },
+  input: { tenantId: string; sessionId: string; role: Role },
   secret: string,
   opts: SignOptions = {},
 ): Promise<string> {
@@ -54,6 +66,7 @@ export async function signSessionToken(
   const claims: SessionClaims = {
     tenantId: input.tenantId,
     sessionId: input.sessionId,
+    role: input.role,
     iat: now,
     exp: now + (opts.ttlSeconds ?? DEFAULT_TTL_SECONDS),
   };
@@ -110,6 +123,7 @@ function isSessionClaims(value: unknown): value is SessionClaims {
   return (
     typeof c.tenantId === 'string' &&
     typeof c.sessionId === 'string' &&
+    isRole(c.role) &&
     typeof c.iat === 'number' &&
     typeof c.exp === 'number'
   );
