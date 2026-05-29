@@ -15,7 +15,8 @@
       "!**/drizzle",
       "!**/next-env.d.ts",
       "!**/pnpm-lock.yaml",
-      "!**/signatures"
+      "!**/signatures",
+      "!**/*.vue"
     ]
   },
   "assist": { "actions": { "source": { "organizeImports": "on" } } },
