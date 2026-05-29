@@ -30,7 +30,15 @@ export class WidgetWsClient {
    */
   private hasConnectedBefore = false;
 
-  constructor(private readonly url: string) {}
+  /**
+   * `url` is null when the dev-server told us it has no agent WS
+   * (`__pinagentConfig.wsUrl: null`). In that case the client stays
+   * inert — it never opens a socket — rather than guessing the default
+   * port and connecting to a different project's dev-server that happens
+   * to hold it. Feedback capture (HTTP POST) still works; only live
+   * streaming is unavailable, which is correct when no agent runs here.
+   */
+  constructor(private readonly url: string | null) {}
 
   subscribe(feedbackId: string, handler: FeedbackHandler): void {
     this.handlers.set(feedbackId, handler);
@@ -101,6 +109,9 @@ export class WidgetWsClient {
   }
 
   private ensureConnected(): void {
+    // No WS endpoint advertised for this project — stay inert rather than
+    // connecting to whatever holds the default port.
+    if (this.url === null) return;
     if (this.socket && this.socket.readyState <= WebSocket.OPEN) return;
     this.explicitlyClosed = false;
     if (this.reconnectTimer) {
