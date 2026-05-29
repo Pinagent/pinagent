@@ -38,9 +38,6 @@ importers:
       '@pinagent/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
-      '@pinagent/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -48,6 +45,9 @@ importers:
       '@pinagent/agent-runner':
         specifier: workspace:*
         version: link:../../packages/agent-runner
+      '@pinagent/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@pinagent/vite-plugin':
         specifier: workspace:*
         version: link:../../packages/vite-plugin
@@ -367,12 +367,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.4
         version: 1.29.0(zod@4.4.3)
-      '@pinagent/db':
-        specifier: workspace:*
-        version: link:../db
-      '@pinagent/shared':
-        specifier: workspace:*
-        version: link:../shared
       drizzle-orm:
         specifier: ^0.38.0
         version: 0.38.4(@cloudflare/workers-types@4.20260529.1)(@types/better-sqlite3@7.6.13)(@types/react@19.2.15)(better-sqlite3@12.10.0)(react@19.2.6)
@@ -380,6 +374,12 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@pinagent/db':
+        specifier: workspace:*
+        version: link:../db
+      '@pinagent/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@types/node':
         specifier: ^22.10.1
         version: 22.19.19
