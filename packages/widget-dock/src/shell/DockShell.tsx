@@ -30,6 +30,7 @@ import { filterNavRoutes } from './nav-route-filter';
 import { RouteFallback } from './RouteFallback';
 import { useDockMode } from './useDockMode';
 import { useKeyboardShortcuts } from './useKeyboardShortcuts';
+import { useOpenConversationBridge } from './useOpenConversationBridge';
 
 export function DockShell() {
   const { embedded, forcedDisconnected } = useDockEnvironment();
@@ -76,6 +77,10 @@ export function DockShell() {
     isOpen: dock.open,
     embedded,
   });
+
+  // The widget's running-agents tray posts `open-dock-conversation` when
+  // the user clicks "Open" on an agent row — open the dock to that detail.
+  useOpenConversationBridge(() => dock.setOpen(true));
 
   const expandedNav = dock.mode !== 'panel';
   const context = transport.kind === 'mock' ? 'fixtures' : 'pinagent-demo';

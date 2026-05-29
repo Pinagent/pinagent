@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { WorktreeWireState } from '@pinagent/shared';
-import { BRAND_GOLD, FONT_SANS, STATUS } from '@pinagent/ui/tokens';
+import { BRAND_GOLD, FONT_SANS, STATUS, type StatusKey } from '@pinagent/ui/tokens';
+import { createAgentTray, type RawFeedback, type TrayAgent } from './agent-tray';
 import { BRAND_CREAM, BRAND_INK, BRAND_VIEWBOX, PICKER_CURSOR_DATA_URL, PIN_PATH } from './brand';
 import { COMPOSER_STYLES } from './composer-styles';
 import { flushBrowserDb, getBrowserDb, initBrowserDb } from './db/client';
@@ -27,6 +28,20 @@ import { STYLES } from './styles';
 const ENDPOINT = '/__pinagent/feedback';
 const RECONNECT_MIN_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
+
+/** Human labels for the unresolved statuses the agents tray surfaces. */
+const STATUS_LABEL: Partial<Record<StatusKey, string>> = {
+  working: 'Working',
+  readyToLand: 'Ready to land',
+  awaitingClarification: 'Needs your input',
+};
+
+/** Two-column dot grip for the tray's drag handle (mirrors the composer's). */
+const ICON_GRIP =
+  '<svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true">' +
+  '<circle cx="2" cy="2" r="1.3"/><circle cx="6" cy="2" r="1.3"/>' +
+  '<circle cx="2" cy="7" r="1.3"/><circle cx="6" cy="7" r="1.3"/>' +
+  '<circle cx="2" cy="12" r="1.3"/><circle cx="6" cy="12" r="1.3"/></svg>';
 
 const COMPOSER_H = 320;
 const STREAM_H = 340;
@@ -118,7 +133,7 @@ interface WorktreeStateMessage {
 }
 
 interface ServerMessage {
-  type: 'event' | 'done' | 'error' | 'pong' | 'worktree_state';
+  type: 'event' | 'done' | 'error' | 'pong' | 'worktree_state' | 'project_event';
   feedbackId?: string;
   event?: AgentEvent;
   message?: string;
@@ -381,6 +396,13 @@ const DOC_STYLES = `
 class WidgetWsClient {
   private socket: WebSocket | null = null;
   private readonly handlers = new Map<string, FeedbackHandler>();
+  /**
+   * Project-wide listeners (the running-agents tray). Distinct from
+   * per-feedback `handlers`: a socket with only project listeners and no
+   * per-feedback handlers must still stay open, so the close/idle gates
+   * below check both sets.
+   */
+  private readonly projectListeners = new Set<() => void>();
   private readonly queue: string[] = [];
   private reconnectDelay = RECONNECT_MIN_MS;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -397,7 +419,33 @@ class WidgetWsClient {
   unsubscribe(feedbackId: string): void {
     this.handlers.delete(feedbackId);
     this.send({ type: 'unsubscribe', feedbackId });
-    if (this.handlers.size === 0) this.closeIdle();
+    this.closeIfIdle();
+  }
+
+  /**
+   * Subscribe to project-wide change events (`conversations_changed`).
+   * Returns an unsubscribe fn. Used by the running-agents tray to refetch
+   * the conversation list when anything in the project changes.
+   */
+  subscribeProject(listener: () => void): () => void {
+    const first = this.projectListeners.size === 0;
+    this.projectListeners.add(listener);
+    this.ensureConnected();
+    if (first) this.send({ type: 'subscribe_project' });
+    return () => this.unsubscribeProject(listener);
+  }
+
+  private unsubscribeProject(listener: () => void): void {
+    if (!this.projectListeners.delete(listener)) return;
+    if (this.projectListeners.size === 0) {
+      this.send({ type: 'unsubscribe_project' });
+      this.closeIfIdle();
+    }
+  }
+
+  /** Close the socket only when nothing — per-feedback or project — needs it. */
+  private closeIfIdle(): void {
+    if (this.handlers.size === 0 && this.projectListeners.size === 0) this.closeIdle();
   }
 
   sendUserMessage(feedbackId: string, content: string): void {
@@ -448,6 +496,10 @@ class WidgetWsClient {
       for (const id of this.handlers.keys()) {
         this.socket?.send(JSON.stringify({ type: 'subscribe', feedbackId: id }));
       }
+      // Restore the project subscription across reconnects.
+      if (this.projectListeners.size > 0) {
+        this.socket?.send(JSON.stringify({ type: 'subscribe_project' }));
+      }
       while (this.queue.length > 0) {
         const item = this.queue.shift();
         if (item) this.socket?.send(item);
@@ -455,7 +507,8 @@ class WidgetWsClient {
     });
     this.socket.addEventListener('message', (msg) => this.onMessage(msg));
     this.socket.addEventListener('close', () => {
-      if (this.explicitlyClosed || this.handlers.size === 0) return;
+      if (this.explicitlyClosed) return;
+      if (this.handlers.size === 0 && this.projectListeners.size === 0) return;
       this.scheduleReconnect();
     });
     this.socket.addEventListener('error', () => {
@@ -534,6 +587,12 @@ class WidgetWsClient {
         }
         return;
       }
+      case 'project_event': {
+        // `conversations_changed` is the only variant today; fire all
+        // project listeners regardless so the tray refetches.
+        for (const listener of this.projectListeners) listener();
+        return;
+      }
       case 'pong':
         return;
     }
@@ -600,13 +659,20 @@ export function mount(): void {
   style.textContent = STYLES;
   root.appendChild(style);
 
-  const fab = document.createElement('button');
+  // The FAB doubles as the running-agents tray (see applyFabPresentation),
+  // so it's a <div role="button"> rather than a <button>: a <button> can't
+  // legally contain the tray's per-agent action buttons. Keyboard
+  // activation for the collapsed pin mode is wired explicitly below.
+  const fab = document.createElement('div');
   fab.className = 'fab';
-  fab.type = 'button';
+  fab.setAttribute('role', 'button');
+  fab.setAttribute('tabindex', '0');
+  fab.setAttribute('aria-label', 'Pinagent — pick an element');
   fab.title = 'Pinagent — pick an element';
   fab.style.pointerEvents = 'auto';
   fab.appendChild(buildPinIcon(26, BRAND_CREAM));
   root.appendChild(fab);
+  const dockEnabled = resolveDockEnabled();
 
   const outline = document.createElement('div');
   outline.className = 'outline';
@@ -635,6 +701,8 @@ export function mount(): void {
 
   function enterPicking() {
     state.mode = 'picking';
+    // Collapse the tray (if showing) back to the pin — picking owns the FAB.
+    applyFabPresentation();
     fab.classList.add('active');
     document.documentElement.classList.add('pa-picking');
 
@@ -682,6 +750,8 @@ export function mount(): void {
       cancelAnimationFrame(pendingPicksRaf);
       pendingPicksRaf = null;
     }
+    // Restore the tray if agents are still running.
+    applyFabPresentation();
   }
 
   function onMove(e: MouseEvent) {
@@ -1748,6 +1818,11 @@ export function mount(): void {
   const FAB_PADDING = 20;
   type Corner = 'tl' | 'tr' | 'bl' | 'br';
   let suppressNextFabClick = false;
+  // Last corner the FAB/tray snapped to. Re-applied after a pin↔tray swap
+  // (their sizes differ) so the surface stays anchored to the same corner.
+  let currentCorner: Corner = 'br';
+  // The agents currently shown in the tray (empty → collapsed pin).
+  let trayAgents: TrayAgent[] = [];
 
   function snapFabToCorner(corner: Corner) {
     const isTop = corner === 'tl' || corner === 'tr';
@@ -1771,6 +1846,12 @@ export function mount(): void {
     if (e.button !== 0) return;
     // Picking mode owns the FAB click (toggle off). Don't intercept.
     if (state.mode === 'picking') return;
+    // In tray mode, only the handle drags — mousedowns on rows or their
+    // action buttons must fall through to those buttons' own listeners.
+    if (fab.classList.contains('tray')) {
+      const t = e.target as Element | null;
+      if (!t?.closest('.pa-tray-handle') || t.closest('button')) return;
+    }
 
     const startX = e.clientX;
     const startY = e.clientY;
@@ -1803,7 +1884,8 @@ export function mount(): void {
       if (!dragging) return;
       fab.classList.remove('dragging');
       const r = fab.getBoundingClientRect();
-      snapFabToCorner(nearestCorner(r.left + r.width / 2, r.top + r.height / 2));
+      currentCorner = nearestCorner(r.left + r.width / 2, r.top + r.height / 2);
+      snapFabToCorner(currentCorner);
       // Suppress the click event that fires after this mouseup so the
       // drag doesn't accidentally toggle picker mode.
       suppressNextFabClick = true;
@@ -1818,12 +1900,26 @@ export function mount(): void {
       suppressNextFabClick = false;
       return;
     }
+    // In tray mode the rows + the header's pick button own their clicks;
+    // a click on the panel background does nothing.
+    if (fab.classList.contains('tray')) return;
+    if (state.mode === 'picking') exitPicking();
+    else if (state.mode === 'idle') enterPicking();
+  });
+
+  // Keyboard activation for the collapsed pin (role="button"). Disabled in
+  // tray mode, where the inner buttons are individually focusable.
+  fab.addEventListener('keydown', (e) => {
+    if (fab.classList.contains('tray')) return;
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
     if (state.mode === 'picking') exitPicking();
     else if (state.mode === 'idle') enterPicking();
   });
 
   if (hotkeyChar) {
-    fab.title = `Pinagent — press ${hotkeyChar.toUpperCase()} or click to pick · Shift+N to hop between active widgets`;
+    // The pin's title (incl. this hotkey + the dock shortcut) is composed
+    // in renderPinContent, which runs via applyFabPresentation below.
     document.addEventListener(
       'keydown',
       (e) => {
@@ -1850,20 +1946,188 @@ export function mount(): void {
     });
   }
 
-  // When the host also mounts the dock, the FAB is the only floating
-  // surface (the dock dropped its own bottom-left FAB). Clicking the FAB
-  // always opens the picker, so teach the dock's keyboard shortcut with a
-  // small chip overlapping the FAB. Decorative + pointer-events:none, so a
-  // click on it falls through to the FAB → opens the picker as expected.
-  if (resolveDockEnabled()) {
-    const dockShortcut = IS_MAC ? '⌘⇧P' : 'Ctrl⇧P';
-    const chip = document.createElement('span');
-    chip.className = 'fab-shortcut';
-    chip.textContent = dockShortcut;
-    chip.setAttribute('aria-hidden', 'true');
-    fab.appendChild(chip);
-    fab.title = `${fab.title} · ${dockShortcut} opens the dock`;
+  // ---- Running-agents tray ---------------------------------------------
+  // When unresolved agents exist the FAB expands into a draggable tray
+  // listing each one with Open / Stop / Clear. With none (or while actively
+  // picking) it collapses back to the pin. The controller in agent-tray.ts
+  // owns data + coalescing; this half owns the DOM and the per-row actions.
+
+  // Collapsed pin: the pick icon plus (when the dock is mounted) a small
+  // chip teaching the ⌘⇧P dock shortcut. Decorative + pointer-events:none,
+  // so a click on the chip falls through to the FAB → opens the picker.
+  function renderPinContent() {
+    fab.replaceChildren();
+    fab.appendChild(buildPinIcon(26, BRAND_CREAM));
+    let title = hotkeyChar
+      ? `Pinagent — press ${hotkeyChar.toUpperCase()} or click to pick · Shift+N to hop between active widgets`
+      : 'Pinagent — pick an element';
+    if (dockEnabled) {
+      const dockShortcut = IS_MAC ? '⌘⇧P' : 'Ctrl⇧P';
+      const chip = document.createElement('span');
+      chip.className = 'fab-shortcut';
+      chip.textContent = dockShortcut;
+      chip.setAttribute('aria-hidden', 'true');
+      fab.appendChild(chip);
+      title = `${title} · ${dockShortcut} opens the dock`;
+    }
+    fab.title = title;
   }
+
+  // Tell the dock (a sibling iframe the host bridge mounted) to open and
+  // navigate to this conversation. Mirrors the host→dock toggle-dock frame.
+  function openInDock(feedbackId: string) {
+    const iframe = document.getElementById('__pinagent-dock');
+    if (iframe instanceof HTMLIFrameElement && iframe.contentWindow) {
+      iframe.contentWindow.postMessage(
+        { source: 'pinagent-host', type: 'open-dock-conversation', feedbackId },
+        '*',
+      );
+    }
+  }
+
+  // Clear = archive. Remove the row optimistically; the PATCH emits a
+  // conversations_changed event that refreshes the tray and reconciles.
+  function clearAgent(feedbackId: string) {
+    tray.removeOptimistic(feedbackId);
+    void fetch(`${ENDPOINT}/${feedbackId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ archived: true }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`archive ${res.status}`);
+      })
+      .catch(() => {
+        toast('Couldn’t clear agent', 'error');
+        void tray.refresh();
+      });
+  }
+
+  function makeRowBtn(
+    label: string,
+    danger: boolean,
+    onClick: (ev: MouseEvent, btn: HTMLButtonElement) => void,
+  ): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = danger ? 'pa-tray-btn danger' : 'pa-tray-btn';
+    btn.textContent = label;
+    btn.addEventListener('click', (ev) => onClick(ev, btn));
+    return btn;
+  }
+
+  function buildAgentRow(agent: TrayAgent): HTMLLIElement {
+    const row = document.createElement('li');
+    row.className = 'pa-tray-row';
+
+    const dot = document.createElement('span');
+    dot.className = 'pa-status-dot';
+    dot.setAttribute('data-status', agent.status);
+    dot.title = STATUS_LABEL[agent.status] ?? agent.status;
+
+    const title = document.createElement('span');
+    title.className = 'pa-tray-rowtitle';
+    title.textContent = agent.title;
+    title.title = agent.selector ? `${agent.title}\n${agent.selector}` : agent.title;
+
+    const actions = document.createElement('span');
+    actions.className = 'pa-tray-actions';
+    // Open needs the dock iframe; hide it when no dock is mounted.
+    if (dockEnabled) {
+      actions.appendChild(
+        makeRowBtn('Open', false, (ev) => {
+          ev.stopPropagation();
+          openInDock(agent.id);
+        }),
+      );
+    }
+    actions.appendChild(
+      makeRowBtn('Stop', false, (ev, btn) => {
+        ev.stopPropagation();
+        wsClient.sendInterrupt(agent.id);
+        btn.disabled = true;
+        btn.textContent = '…';
+      }),
+    );
+    actions.appendChild(
+      makeRowBtn('Clear', true, (ev, btn) => {
+        ev.stopPropagation();
+        btn.disabled = true;
+        clearAgent(agent.id);
+      }),
+    );
+
+    row.append(dot, title, actions);
+    return row;
+  }
+
+  function renderTrayContent(agents: TrayAgent[]) {
+    fab.replaceChildren();
+    fab.title = '';
+
+    const handle = document.createElement('div');
+    handle.className = 'pa-tray-handle';
+    const grip = document.createElement('span');
+    grip.className = 'pa-tray-grip';
+    grip.innerHTML = ICON_GRIP;
+    grip.setAttribute('aria-hidden', 'true');
+    const heading = document.createElement('span');
+    heading.className = 'pa-tray-title';
+    heading.textContent = `Agents · ${agents.length}`;
+    // The tray replaces the pin, so keep a way to start a new pick.
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'pa-tray-pick';
+    pick.title = 'Pick an element';
+    pick.setAttribute('aria-label', 'Pick an element');
+    pick.appendChild(buildPinIcon(15, BRAND_CREAM));
+    pick.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      if (state.mode === 'picking') exitPicking();
+      else enterPicking();
+    });
+    handle.append(grip, heading, pick);
+    fab.appendChild(handle);
+
+    const list = document.createElement('ul');
+    list.className = 'pa-tray-list';
+    for (const agent of agents) list.appendChild(buildAgentRow(agent));
+    fab.appendChild(list);
+  }
+
+  function applyFabPresentation() {
+    const showTray = state.mode !== 'picking' && trayAgents.length > 0;
+    fab.classList.toggle('tray', showTray);
+    if (showTray) {
+      renderTrayContent(trayAgents);
+      fab.removeAttribute('tabindex');
+      fab.setAttribute('role', 'region');
+      fab.setAttribute('aria-label', `Running agents (${trayAgents.length})`);
+    } else {
+      renderPinContent();
+      fab.setAttribute('tabindex', '0');
+      fab.setAttribute('role', 'button');
+      fab.setAttribute('aria-label', 'Pinagent — pick an element');
+    }
+    // Pin and panel have very different sizes; re-anchor to the same corner
+    // so the swap doesn't push the surface off-screen near an edge.
+    snapFabToCorner(currentCorner);
+  }
+
+  const tray = createAgentTray({
+    fetchFeedback: () =>
+      fetch(ENDPOINT, { headers: { accept: 'application/json' } })
+        .then((r) => (r.ok ? r.json() : []))
+        .then((d) => (Array.isArray(d) ? (d as RawFeedback[]) : [])),
+    subscribeProject: (cb) => wsClient.subscribeProject(cb),
+    render: (agents) => {
+      trayAgents = agents;
+      applyFabPresentation();
+    },
+  });
+  // Compose the initial pin (title + chip) and kick off the fetch/subscribe.
+  applyFabPresentation();
+  tray.start();
 
   document.addEventListener(
     'keydown',

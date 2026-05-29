@@ -88,6 +88,123 @@ export const STYLES = `
   pointer-events: none;
 }
 
+/* ---- Running-agents tray ------------------------------------------------
+   The same fixed element as the FAB (so drag + corner-snap are reused),
+   re-skinned from a 48px circle into a panel when agents are running.
+   .fab keeps the fixed positioning, shadow, and z-index; these rules
+   override shape + layout. */
+.fab.tray {
+  width: 300px;
+  height: auto;
+  max-height: 60vh;
+  border-radius: 14px;
+  padding: 0;
+  cursor: default;
+  align-items: stretch;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: 13px;
+}
+/* No hover-scale in tray mode — it's a panel, not a button. */
+.fab.tray:hover {
+  transform: none;
+  box-shadow: 0 14px 32px rgba(32, 27, 33, 0.34);
+}
+
+.pa-tray-handle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px 9px 12px;
+  cursor: grab;
+  user-select: none;
+  border-bottom: 1px solid rgba(252, 249, 232, 0.12);
+}
+.fab.tray.dragging .pa-tray-handle { cursor: grabbing; }
+.pa-tray-grip { display: inline-flex; color: rgba(252, 249, 232, 0.5); flex-shrink: 0; }
+.pa-tray-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pa-tray-pick {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(252, 249, 232, 0.12);
+  color: ${BRAND_CREAM};
+  cursor: pointer;
+}
+.pa-tray-pick:hover { background: rgba(252, 249, 232, 0.22); }
+
+.pa-tray-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pa-tray-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+}
+.pa-tray-row:hover { background: rgba(252, 249, 232, 0.06); }
+.pa-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: ${STATUS.pending.fg};
+}
+.pa-status-dot[data-status="working"] {
+  background: ${STATUS.working.fg};
+  animation: pa-tray-pulse 1.4s ease-in-out infinite;
+}
+.pa-status-dot[data-status="readyToLand"] { background: ${STATUS.readyToLand.fg}; }
+.pa-status-dot[data-status="awaitingClarification"] { background: ${STATUS.awaitingClarification.fg}; }
+@keyframes pa-tray-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.pa-tray-rowtitle {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pa-tray-actions { display: inline-flex; gap: 4px; flex-shrink: 0; }
+.pa-tray-btn {
+  border: 0;
+  background: rgba(252, 249, 232, 0.12);
+  color: ${BRAND_CREAM};
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.pa-tray-btn:hover { background: rgba(252, 249, 232, 0.24); }
+.pa-tray-btn:disabled { opacity: 0.5; cursor: default; }
+.pa-tray-btn.danger:hover { background: ${STATUS.error.fg}; color: ${BRAND_CREAM}; }
+
 .outline {
   position: fixed;
   pointer-events: none;
@@ -205,5 +322,6 @@ export const STYLES = `
     transition: none !important;
   }
   .fab:hover { transform: none; }
+  .pa-status-dot[data-status="working"] { animation: none; }
 }
 `;

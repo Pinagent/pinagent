@@ -41,6 +41,12 @@ export {
   type HostToDock,
   HostToDockSchema,
 } from './dock-postmessage';
+export {
+  deriveDockStatus,
+  isUnresolvedStatus,
+  type ServerStatus,
+  type ServerWorktreeState,
+} from './dock-status';
 export { type AgentEvent, AgentEventSchema, type BusSubscriber } from './event-bus';
 export { renderTranscript } from './render-transcript';
 export {
