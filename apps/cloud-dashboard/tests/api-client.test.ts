@@ -109,3 +109,69 @@ describe('createCloudApiClient', () => {
     await expect(client.getUsage('o')).rejects.toBeInstanceOf(CloudApiError);
   });
 });
+
+describe('createCloudApiClient PUT methods', () => {
+  it('PUTs cost controls as JSON and unwraps the saved record', async () => {
+    const { fetchFn, first } = fakeFetch(() => ({
+      body: {
+        costControl: { organizationId: 'o', maxRelaySessionsPerPeriod: 5000, enforcement: 'block' },
+      },
+    }));
+    const client = createCloudApiClient({ fetch: fetchFn });
+
+    const saved = await client.putCostControl('o', {
+      maxRelaySessionsPerPeriod: 5000,
+      enforcement: 'block',
+    });
+
+    expect(saved).toMatchObject({ maxRelaySessionsPerPeriod: 5000, enforcement: 'block' });
+    const call = first();
+    expect(call.url).toBe('/cost-controls?organizationId=o');
+    expect(call.init?.method).toBe('PUT');
+    expect(call.init?.credentials).toBe('include');
+    expect((call.init?.headers as Record<string, string>)['content-type']).toBe('application/json');
+    expect(JSON.parse(String(call.init?.body))).toEqual({
+      maxRelaySessionsPerPeriod: 5000,
+      enforcement: 'block',
+    });
+  });
+
+  it('PUTs branch routing as JSON and unwraps the saved record', async () => {
+    const { fetchFn, first } = fakeFetch(() => ({
+      body: {
+        branchRouting: {
+          organizationId: 'o',
+          defaultBaseBranch: 'main',
+          allowedBranchPatterns: ['feat/*'],
+        },
+      },
+    }));
+    const client = createCloudApiClient({ fetch: fetchFn });
+
+    const saved = await client.putBranchRouting('o', {
+      defaultBaseBranch: 'main',
+      allowedBranchPatterns: ['feat/*'],
+    });
+
+    expect(saved).toMatchObject({ defaultBaseBranch: 'main', allowedBranchPatterns: ['feat/*'] });
+    const call = first();
+    expect(call.url).toBe('/branch-routing?organizationId=o');
+    expect(call.init?.method).toBe('PUT');
+    expect(JSON.parse(String(call.init?.body))).toEqual({
+      defaultBaseBranch: 'main',
+      allowedBranchPatterns: ['feat/*'],
+    });
+  });
+
+  it('maps PUT failures to the typed errors', async () => {
+    const unauth = createCloudApiClient({ fetch: fakeFetch(() => ({ status: 401 })).fetchFn });
+    await expect(
+      unauth.putCostControl('o', { maxRelaySessionsPerPeriod: null, enforcement: 'warn' }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+
+    const forbidden = createCloudApiClient({ fetch: fakeFetch(() => ({ status: 403 })).fetchFn });
+    await expect(
+      forbidden.putBranchRouting('o', { defaultBaseBranch: null, allowedBranchPatterns: [] }),
+    ).rejects.toMatchObject({ name: 'CloudApiError', status: 403 });
+  });
+});

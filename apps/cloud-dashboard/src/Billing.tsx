@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: Elastic-2.0
+
 import { planById, quotaFor, type Subscription, USAGE_KINDS } from '@pinagent/ee-billing';
 import type { CostControl } from '@pinagent/ee-team-features';
+import { useState } from 'react';
 import type { CloudApiClient } from './api-client';
 import { UnauthorizedError } from './api-client';
+import { CostControlForm } from './CostControlForm';
 import { SignIn } from './SignIn';
 import { useAsync } from './use-async';
 
@@ -81,13 +84,16 @@ export function Billing({
   client: CloudApiClient;
   organizationId: string;
 }) {
+  const [reloadKey, setReloadKey] = useState(0);
+  const [editing, setEditing] = useState(false);
+
   const state = useAsync<BillingData>(async () => {
     const [subscription, costControl] = await Promise.all([
       client.getSubscription(organizationId),
       client.getCostControl(organizationId),
     ]);
     return { subscription, costControl };
-  }, [client, organizationId]);
+  }, [client, organizationId, reloadKey]);
 
   if (state.status === 'loading') return <p className="loading">Loading…</p>;
   if (state.status === 'error') {
@@ -98,7 +104,33 @@ export function Billing({
       </p>
     );
   }
+
+  if (editing) {
+    return (
+      <section className="panel">
+        <h2>Billing</h2>
+        <h3>Edit cost controls</h3>
+        <CostControlForm
+          initial={state.value.costControl}
+          onSubmit={async (input) => {
+            await client.putCostControl(organizationId, input);
+            setEditing(false);
+            setReloadKey((k) => k + 1);
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      </section>
+    );
+  }
+
   return (
-    <BillingView subscription={state.value.subscription} costControl={state.value.costControl} />
+    <>
+      <BillingView subscription={state.value.subscription} costControl={state.value.costControl} />
+      <div className="panel-actions">
+        <button type="button" onClick={() => setEditing(true)}>
+          Edit cost controls
+        </button>
+      </div>
+    </>
   );
 }
