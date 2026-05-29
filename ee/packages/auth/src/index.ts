@@ -21,7 +21,10 @@ export {
   AuthError,
   MembershipRequiredError,
   NotImplementedError,
+  SsoError,
 } from './errors';
+export type { IdTokenClaims, IdTokenExpectations, JwkKey, Jwks } from './jwt';
+export { verifyIdToken } from './jwt';
 export {
   isActiveMember,
   type MembershipStatus,
@@ -32,6 +35,12 @@ export {
   type UserId,
   unimplementedMembershipStore,
 } from './membership';
+export {
+  createOidcProvider,
+  deriveOidcNonce,
+  type OidcClientConfig,
+  type OidcProviderConfig,
+} from './oidc';
 export { type Principal, principalCan } from './principal';
 export {
   assertCan,

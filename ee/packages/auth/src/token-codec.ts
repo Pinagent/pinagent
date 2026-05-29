@@ -93,7 +93,8 @@ function encodeUtf8(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s) as Uint8Array<ArrayBuffer>;
 }
 
-function decodeUtf8(bytes: Uint8Array): string {
+/** UTF-8 decode. Exported for JWT payload parsing in `jwt.ts`. */
+export function decodeUtf8(bytes: Uint8Array): string {
   return new TextDecoder().decode(bytes);
 }
 
@@ -107,7 +108,8 @@ function bytesToBase64Url(bytes: Uint8Array): string {
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function base64UrlToBytes(s: string): Uint8Array<ArrayBuffer> {
+/** base64url → bytes. Exported for JWT header/payload/signature parsing. */
+export function base64UrlToBytes(s: string): Uint8Array<ArrayBuffer> {
   const b64 = s
     .replace(/-/g, '+')
     .replace(/_/g, '/')
