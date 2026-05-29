@@ -391,6 +391,7 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
           branch: r.branch,
           messageCount: r.messageCount,
           totalCostUsd: r.totalCostUsd,
+          apiKeySource: r.apiKeySource,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
           resolvedAt: r.resolvedAt,
