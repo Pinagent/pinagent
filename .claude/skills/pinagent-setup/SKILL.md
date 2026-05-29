@@ -16,6 +16,7 @@ Before doing anything, identify the target project's runtime — the install ste
 ```bash
 # In the target project root:
 ls nuxt.config.* 2>/dev/null && echo "NUXT"   # check FIRST — Nuxt runs Vite under the hood
+grep -q '@sveltejs/kit' package.json 2>/dev/null && echo "SVELTEKIT"  # also runs Vite; check before VITE
 ls vite.config.* 2>/dev/null && echo "VITE"
 ls next.config.* 2>/dev/null && echo "NEXT"
 ls metro.config.* app.json 2>/dev/null | head -1 && echo "REACT_NATIVE"  # also: "expo"/"react-native" in package.json deps
@@ -24,14 +25,18 @@ ls metro.config.* app.json 2>/dev/null | head -1 && echo "REACT_NATIVE"  # also:
 | If you see       | Follow                |
 | ---------------- | --------------------- |
 | `NUXT`           | [nuxt.md](./nuxt.md)  |
+| `SVELTEKIT`      | [sveltekit.md](./sveltekit.md) |
 | `VITE`           | [vite.md](./vite.md)  |
 | `NEXT`           | [next.md](./next.md)  |
 | `REACT_NATIVE` / Expo | [react-native.md](./react-native.md) |
-| both / neither   | Ask the user — pinagent supports React on Vite or Next, Vue on Nuxt, and React Native / Expo (Metro). Plain Vue+Vite works too (use the [vite.md](./vite.md) guide — `@pinagent/vite-plugin` tags `.vue` SFCs as well as JSX). Svelte/CRA/Remix aren't supported. |
+| both / neither   | Ask the user — pinagent supports React on Vite or Next, Vue on Nuxt, and React Native / Expo (Metro). Plain Vue+Vite **and** Svelte+Vite work too (use the [vite.md](./vite.md) guide — `@pinagent/vite-plugin` tags `.vue` SFCs and `.svelte` components as well as JSX). CRA/Remix aren't supported. |
 
-> A Nuxt project has a `nuxt.config.*`; check it **before** `vite.config.*`,
-> because Nuxt runs Vite internally and the Nuxt module is the right
-> integration there, not the bare Vite plugin.
+> Both Nuxt and SvelteKit run Vite internally, so check them **before**
+> `vite.config.*`. Nuxt's marker is `nuxt.config.*` (use the Nuxt module);
+> SvelteKit's is the `@sveltejs/kit` dependency (use the Vite plugin + a small
+> SvelteKit hook — see sveltekit.md). A plain Svelte + Vite app (no
+> `@sveltejs/kit`) is just the [vite.md](./vite.md) path — it's an SPA with an
+> `index.html`, so the widget auto-injects with no hook needed.
 
 > React Native is **tap-to-comment**, not click: no DOM, so no
 > `data-pa-loc` and no `<script>` injection. The widget mounts as a

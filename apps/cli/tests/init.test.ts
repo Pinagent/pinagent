@@ -128,6 +128,8 @@ describe('command helpers', () => {
     expect(pluginPackage('vite')).toBe('@pinagent/vite-plugin');
     expect(pluginPackage('next')).toBe('@pinagent/next-plugin');
     expect(pluginPackage('nuxt')).toBe('@pinagent/nuxt-plugin');
+    // SvelteKit is Vite-native — no dedicated package.
+    expect(pluginPackage('sveltekit')).toBe('@pinagent/vite-plugin');
   });
 
   it('formats the add command per package manager', () => {
@@ -163,6 +165,17 @@ describe('fs detection + runInit', () => {
     writeFileSync(join(dir, 'vite.config.ts'), '');
     writeFileSync(join(dir, 'nuxt.config.ts'), '');
     expect(detectRuntime(dir)).toBe('nuxt');
+  });
+
+  it('detects sveltekit via the @sveltejs/kit dep, ahead of its own vite.config', () => {
+    writeFileSync(join(dir, 'vite.config.ts'), '');
+    // A bare Svelte + Vite project (no @sveltejs/kit) is just the vite path.
+    expect(detectRuntime(dir)).toBe('vite');
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ devDependencies: { '@sveltejs/kit': '^2.0.0' } }),
+    );
+    expect(detectRuntime(dir)).toBe('sveltekit');
   });
 
   it('reports both configs present (and detectRuntime tiebreaks to vite)', () => {
@@ -234,6 +247,26 @@ describe('fs detection + runInit', () => {
     expect(out).toContain('npm install -D @pinagent/nuxt-plugin');
     expect(out).toContain("modules: ['@pinagent/nuxt-plugin']");
     // Nuxt needs no route handler (the module wires everything).
+    expect(existsSync(join(dir, 'app', 'pinagent'))).toBe(false);
+  });
+
+  it('scaffolds a sveltekit project (vite-plugin + hooks step, no route file)', () => {
+    writeFileSync(join(dir, 'vite.config.ts'), '');
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ devDependencies: { '@sveltejs/kit': '^2.0.0' } }),
+    );
+    const r = runInit({ dir, dryRun: false });
+    expect(r.code).toBe(0);
+    expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toContain('.pinagent');
+    const out = r.lines.join('\n');
+    expect(out).toContain('detected SvelteKit');
+    // SvelteKit is Vite-native — it installs the Vite plugin, not a dedicated one.
+    expect(out).toContain('npm install -D @pinagent/vite-plugin');
+    expect(out).toContain('plugins: [pinagent(), sveltekit()]');
+    expect(out).toContain('src/hooks.server.ts');
+    expect(out).toContain('transformPageChunk');
+    // No Next route handler.
     expect(existsSync(join(dir, 'app', 'pinagent'))).toBe(false);
   });
 
