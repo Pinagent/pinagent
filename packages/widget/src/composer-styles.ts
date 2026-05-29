@@ -576,10 +576,18 @@ export const COMPOSER_STYLES = `
   body.mini .header {
     display: block;
     padding: 0;
+    /* Hold the full line: overflow:hidden gives the horizontal ellipsis,
+       but without an explicit line-height (and with flex-shrink left on)
+       a too-tall card would let flexbox collapse this box and shear the
+       text/spinner vertically. Pin both so the status line never clips. */
+    line-height: 1.4;
+    flex-shrink: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  /* Same guard for the context line — never a shrink victim. */
+  body.mini .stream-context { flex-shrink: 0; }
   /* Keep the running spinner inline with the (now block) header text. */
   body.mini .header.running::before { vertical-align: middle; margin-right: 6px; }
   body.mini .log {

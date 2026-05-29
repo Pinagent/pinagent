@@ -35,9 +35,12 @@ export const COMPOSER_H = 320;
 export const STREAM_H = 340;
 // Minimized "mini progress card" height — tall enough for the status
 // line, the component/loop context line, the last two activity rows,
-// and the turns/cost footer. Reuses IFRAME_W for width so
+// and the turns/cost footer. 150 was a few px short of the natural
+// content height, so flexbox shrank the (overflow:hidden) header and
+// sheared its text; the styles now also pin the header, but the card
+// is sized to hug the content outright. Reuses IFRAME_W for width so
 // reposition()/drag/pointer math is untouched.
-export const MINI_H = 150;
+export const MINI_H = 168;
 export const IFRAME_W = 400;
 export const BUBBLE_SIZE = 36;
 
