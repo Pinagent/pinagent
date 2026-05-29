@@ -35,6 +35,12 @@ export interface CloudConfig {
   oidcNonceSecret: string;
   /** Shared secret the relay presents when reporting lifecycle events. */
   relayInternalSecret: string;
+  /**
+   * base64url AES-256 key (32 bytes) for encrypting additional connections'
+   * OIDC client secrets at rest. Optional — without it only the env-configured
+   * connection can authenticate; stored per-connection credentials need it.
+   */
+  ssoConnectionKek?: string;
   /** The configured OIDC connection. */
   oidc: OidcConnectionConfig;
   /** Where to send the browser after a successful login (default `/`). */
@@ -61,6 +67,7 @@ export function loadCloudConfig(env: Record<string, string | undefined>): CloudC
     ssoStateSecret: required(env, 'SSO_STATE_SECRET'),
     oidcNonceSecret: required(env, 'OIDC_NONCE_SECRET'),
     relayInternalSecret: required(env, 'RELAY_INTERNAL_SECRET'),
+    ssoConnectionKek: env.SSO_CONNECTION_KEK,
     oidc: {
       connectionId: required(env, 'OIDC_CONNECTION_ID'),
       organizationId: required(env, 'OIDC_ORG_ID'),

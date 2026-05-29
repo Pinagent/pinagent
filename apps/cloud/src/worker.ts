@@ -9,9 +9,11 @@ import { createNeonDb } from './db/client';
 import { createPgCostControlStore } from './db/cost-control-store';
 import { createPgMembershipStore } from './db/membership-store';
 import { createPgMeterSink } from './db/meter-sink';
+import { createPgOidcCredentialStore } from './db/oidc-credential-store';
 import { createPgSsoConnectionStore } from './db/sso-connection-store';
 import { createPgSubscriptionStore } from './db/subscription-store';
 import { createPgUserStore } from './db/user-store';
+import { createOidcClientResolver } from './oidc-client';
 
 /**
  * Cloudflare Worker entry / composition root for the Pinagent cloud control
@@ -42,10 +44,10 @@ async function buildApp(config: CloudConfig) {
   const users = createPgUserStore(db);
   const branchRouting = createPgBranchRoutingStore(db);
 
-  // Connections are resolved from a store now. Seed the env-configured one so
-  // a single-connection deploy works with no DB rows; additional org IdPs can
-  // be added as rows (credential provisioning for those is a follow-up — only
-  // the configured connection has client credentials wired into `clientFor`).
+  // Connections are resolved from a store. Seed the env-configured one so a
+  // single-connection deploy works with no DB rows; additional org IdPs are
+  // added as rows, with their (encrypted) client credentials in the credential
+  // store — resolved per connection by `clientFor`.
   const connections = createPgSsoConnectionStore(db);
   const configuredConnection: SsoConnection = {
     id: config.oidc.connectionId,
@@ -57,17 +59,23 @@ async function buildApp(config: CloudConfig) {
   };
   await connections.upsert(configuredConnection);
 
+  // Per-connection credentials are encrypted at rest under the KEK. Without a
+  // KEK only the env-configured connection can authenticate (its creds come
+  // from config, not the store).
+  const credentials = config.ssoConnectionKek
+    ? createPgOidcCredentialStore(db, config.ssoConnectionKek)
+    : null;
+
   const provider = createOidcProvider({
-    clientFor: (connection) => {
-      if (connection.id !== config.oidc.connectionId) {
-        throw new Error(`no OIDC client configured for connection "${connection.id}"`);
-      }
-      return {
+    clientFor: createOidcClientResolver({
+      configuredConnectionId: config.oidc.connectionId,
+      configuredClient: {
         clientId: config.oidc.clientId,
         clientSecret: config.oidc.clientSecret,
         redirectUri: config.oidc.redirectUri,
-      };
-    },
+      },
+      credentials,
+    }),
     nonceSecret: config.oidcNonceSecret,
   });
 
