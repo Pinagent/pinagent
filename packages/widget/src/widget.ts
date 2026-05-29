@@ -268,9 +268,23 @@ interface Composer {
   turn: number;
   agentState: AgentState;
   expanded: boolean;
+  /**
+   * Override height (px) for the loading gap between submit and the first
+   * streamed event, while the stream log is empty. `null` means "use the
+   * normal STREAM_H/MINI_H". The card is shrunk to hug just the header +
+   * footer so there's no empty box; `refitStream()` recomputes it and the
+   * rAF placement loop reads it as the active height.
+   */
+  streamFitH: number | null;
   close(): void;
   expand(): void;
   minimize(): void;
+  /**
+   * Recompute the iframe height: a measured fit when the run is mid-gap
+   * (feedbackId set, stream log still empty), otherwise the normal height.
+   * Called on stream start and on the first appended transcript node.
+   */
+  refitStream(): void;
 }
 
 /**
@@ -1213,11 +1227,7 @@ export function mount(): void {
       // mini progress card (MINI_H); only the dashed anchor-lost dot
       // falls back to hiding it. Expanded uses the full height.
       const showDot = composer.anchorLost && !!composer.feedbackId;
-      const composerH = composer.expanded
-        ? composer.feedbackId
-          ? STREAM_H
-          : currentComposerH
-        : MINI_H;
+      const composerH = currentIframeH();
       const spaceBelow = window.innerHeight - anchorViewportY;
       const placeBelow = spaceBelow >= composerH + 16 || anchorViewportY < composerH + 16;
       const baseTop = placeBelow ? anchorDocY + 12 : anchorDocY - composerH - 12;
@@ -1280,6 +1290,16 @@ export function mount(): void {
       pointer.style.display = showDot ? 'none' : '';
     }
 
+    // Single source of truth for the iframe's height, read by both the
+    // height setters (expand/minimize/refitStream) and the rAF placement
+    // loop (reposition) so the pointer tail and above/below decision track
+    // the real height. `streamFitH` (the loading-gap fit) wins when set.
+    function currentIframeH(): number {
+      if (composer.streamFitH != null) return composer.streamFitH;
+      if (composer.expanded) return composer.feedbackId ? STREAM_H : currentComposerH;
+      return MINI_H;
+    }
+
     const composer: Composer = {
       feedbackId: null,
       target,
@@ -1298,6 +1318,7 @@ export function mount(): void {
       turn: 0,
       agentState: 'pending',
       expanded: true,
+      streamFitH: null,
       close() {
         // User-initiated dismissal — drop from cache so it doesn't
         // come back on the next reload. Markers (status='fixed') would
@@ -1322,9 +1343,11 @@ export function mount(): void {
       },
       expand() {
         composer.expanded = true;
-        iframe.style.height = `${composer.feedbackId ? STREAM_H : currentComposerH}px`;
+        // Chrome first (it toggles `.follow`/`.header-block` visibility),
+        // then refit so a measured loading-gap fit reflects the right
+        // chrome; refitStream applies the height + repositions.
         applyMiniChrome();
-        reposition();
+        composer.refitStream();
       },
       minimize() {
         // Minimized = the mini progress card, NOT a hidden iframe. The
@@ -1333,10 +1356,39 @@ export function mount(): void {
         // cards can coexist (one per anchored agent) — only the *full*
         // expanded composer is tracked by expandedComposer.
         composer.expanded = false;
-        iframe.style.height = `${MINI_H}px`;
         applyMiniChrome();
-        reposition();
+        composer.refitStream();
         if (expandedComposer === composer) expandedComposer = null;
+      },
+      refitStream() {
+        // While the stream log is still empty (the gap between submit and
+        // the first streamed event), shrink the card to hug just the
+        // header + footer instead of leaving a fixed-height empty box.
+        // `.log:empty` collapses the box in CSS; here we match the iframe
+        // height to the natural content height so there's no dead space.
+        const idoc = iframe.contentDocument;
+        const log = idoc?.getElementById('pa-stream-log');
+        const inLoadingGap = !!composer.feedbackId && !!log && !log.firstChild;
+        if (inLoadingGap) {
+          const card = idoc?.querySelector('.card') as HTMLElement | null;
+          // Measure the natural height: the card is forced to fill the
+          // iframe (`height: calc(100% - 2px)`), so read scrollHeight with
+          // height:auto then restore — the same auto-grow trick the
+          // textarea resize uses. `+2` mirrors the card's height calc.
+          if (card) {
+            const saved = card.style.height;
+            card.style.height = 'auto';
+            const natural = card.scrollHeight;
+            card.style.height = saved;
+            composer.streamFitH = natural + 2;
+          } else {
+            composer.streamFitH = null;
+          }
+        } else {
+          composer.streamFitH = null;
+        }
+        iframe.style.height = `${currentIframeH()}px`;
+        reposition();
       },
     };
 
@@ -2365,8 +2417,13 @@ function attachStreamHandler(
   }
 
   function append(node: HTMLElement) {
+    // First real transcript node ends the loading gap: it both reveals the
+    // log (`.log:empty` no longer matches) and restores the iframe to its
+    // normal height. refitStream is a cheap no-op once the log is non-empty.
+    const wasEmpty = !log.firstChild;
     log.appendChild(node);
     log.scrollTop = log.scrollHeight;
+    if (wasEmpty) composer.refitStream();
   }
 
   // Mini-card activity affordance. When minimized the user can't watch
@@ -2716,6 +2773,11 @@ function attachStreamHandler(
       setAgentState('done');
     }
   }
+
+  // Size the card to the loading-gap fit when the log is still empty (a
+  // fresh run with nothing replayed). No-op when replayed content already
+  // fills the log; the first streamed event grows it back via append().
+  composer.refitStream();
 
   /**
    * Render the lifecycle row from the current `worktreeState` +
