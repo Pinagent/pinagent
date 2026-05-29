@@ -36,6 +36,23 @@ const STATUS_LABEL: Partial<Record<StatusKey, string>> = {
   awaitingClarification: 'Needs your input',
 };
 
+/**
+ * Compact USD for the tray row's cost badge. Mirrors the dock's
+ * `formatCostBadge` formatUsd: sub-cent at 4 decimals so a string of cheap
+ * turns still shows non-zero, >=$0.01 trimmed to two. Caller gates on >0.
+ */
+function formatTrayCost(usd: number): string {
+  return usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`;
+}
+
+/** Glanceable per-row meta: "5 msg · $0.34". Empty when nothing to show. */
+function trayRowMeta(messageCount: number, costUsd: number): string {
+  const parts: string[] = [];
+  if (messageCount > 0) parts.push(`${messageCount} msg`);
+  if (costUsd > 0) parts.push(formatTrayCost(costUsd));
+  return parts.join(' · ');
+}
+
 /** Two-column dot grip for the tray's drag handle (mirrors the composer's). */
 const ICON_GRIP =
   '<svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true">' +
@@ -1818,10 +1835,32 @@ export function mount(): void {
   const DRAG_THRESHOLD_PX = 4;
   const FAB_PADDING = 20;
   type Corner = 'tl' | 'tr' | 'bl' | 'br';
+  const CORNERS: readonly Corner[] = ['tl', 'tr', 'bl', 'br'];
+  // Persist the FAB's corner across reloads (the deleted dock FAB did this
+  // too). Best-effort: localStorage can throw in sandboxed iframes / private
+  // mode, and a bad/legacy value falls back to the default corner.
+  const FAB_CORNER_KEY = 'pinagent.fab-corner';
+  function loadCorner(): Corner {
+    try {
+      const v = localStorage.getItem(FAB_CORNER_KEY);
+      if (v && (CORNERS as readonly string[]).includes(v)) return v as Corner;
+    } catch {
+      // localStorage unavailable — use the default.
+    }
+    return 'br';
+  }
+  function saveCorner(corner: Corner): void {
+    try {
+      localStorage.setItem(FAB_CORNER_KEY, corner);
+    } catch {
+      // Non-critical; position just won't persist.
+    }
+  }
   let suppressNextFabClick = false;
   // Last corner the FAB/tray snapped to. Re-applied after a pin↔tray swap
-  // (their sizes differ) so the surface stays anchored to the same corner.
-  let currentCorner: Corner = 'br';
+  // (their sizes differ) so the surface stays anchored to the same corner,
+  // and restored from localStorage so a reload keeps the user's placement.
+  let currentCorner: Corner = loadCorner();
   // The agents currently shown in the tray (empty → collapsed pin).
   let trayAgents: TrayAgent[] = [];
 
@@ -1887,6 +1926,7 @@ export function mount(): void {
       const r = fab.getBoundingClientRect();
       currentCorner = nearestCorner(r.left + r.width / 2, r.top + r.height / 2);
       snapFabToCorner(currentCorner);
+      saveCorner(currentCorner);
       // Suppress the click event that fires after this mouseup so the
       // drag doesn't accidentally toggle picker mode.
       suppressNextFabClick = true;
@@ -2028,10 +2068,22 @@ export function mount(): void {
     dot.setAttribute('data-status', agent.status);
     dot.title = STATUS_LABEL[agent.status] ?? agent.status;
 
+    // Title + meta stacked in a column so the row stays one logical line
+    // while showing the glanceable "N msg · $cost" beneath the title.
+    const main = document.createElement('span');
+    main.className = 'pa-tray-rowmain';
     const title = document.createElement('span');
     title.className = 'pa-tray-rowtitle';
     title.textContent = agent.title;
     title.title = agent.selector ? `${agent.title}\n${agent.selector}` : agent.title;
+    main.appendChild(title);
+    const metaText = trayRowMeta(agent.messageCount, agent.costUsd);
+    if (metaText) {
+      const meta = document.createElement('span');
+      meta.className = 'pa-tray-meta';
+      meta.textContent = metaText;
+      main.appendChild(meta);
+    }
 
     const actions = document.createElement('span');
     actions.className = 'pa-tray-actions';
@@ -2060,7 +2112,7 @@ export function mount(): void {
       }),
     );
 
-    row.append(dot, title, actions);
+    row.append(dot, main, actions);
     return row;
   }
 
