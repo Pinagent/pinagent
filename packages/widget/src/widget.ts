@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { isNotionalCost, type WorktreeWireState } from '@pinagent/shared';
+import { formatCompactUsd, isNotionalCost, type WorktreeWireState } from '@pinagent/shared';
 import { BRAND_GOLD, FONT_SANS, STATUS, type StatusKey } from '@pinagent/ui/tokens';
 import { createAgentTray, type RawFeedback, type TrayAgent } from './agent-tray';
 import { BRAND_CREAM, BRAND_INK, BRAND_VIEWBOX, PICKER_CURSOR_DATA_URL, PIN_PATH } from './brand';
@@ -41,20 +41,13 @@ const STATUS_LABEL: Partial<Record<StatusKey, string>> = {
   awaitingClarification: 'Needs your input',
 };
 
-/**
- * Compact USD for the tray row's cost badge. Mirrors the dock's
- * `formatCostBadge` formatUsd: sub-cent at 4 decimals so a string of cheap
- * turns still shows non-zero, >=$0.01 trimmed to two. Caller gates on >0.
- */
-function formatTrayCost(usd: number): string {
-  return usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`;
-}
-
-/** Glanceable per-row meta: "5 msg · $0.34". Empty when nothing to show. */
+/** Glanceable per-row meta: "5 msg · $0.34". Empty when nothing to show.
+ * Cost formatting is shared with the dock via `formatCompactUsd` so the
+ * tray and the dock's cost chip can't drift. */
 function trayRowMeta(messageCount: number, costUsd: number): string {
   const parts: string[] = [];
   if (messageCount > 0) parts.push(`${messageCount} msg`);
-  if (costUsd > 0) parts.push(formatTrayCost(costUsd));
+  if (costUsd > 0) parts.push(formatCompactUsd(costUsd));
   return parts.join(' · ');
 }
 
