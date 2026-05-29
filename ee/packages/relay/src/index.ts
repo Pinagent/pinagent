@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Elastic-2.0
 export const PACKAGE_NAME = '@pinagent/ee-relay';
 
+export {
+  type ActiveSession,
+  type ActiveSessionRegistry,
+  createInMemoryActiveSessionRegistry,
+} from './active-sessions';
 export { bearer, isAuthorizedInternal, timingSafeEqual } from './internal-auth';
 export {
   isRelayEventType,

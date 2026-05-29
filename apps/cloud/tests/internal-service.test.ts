@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { createInMemoryMeterSink, USAGE_KINDS } from '@pinagent/ee-billing';
+import { createInMemoryActiveSessionRegistry } from '@pinagent/ee-relay';
 import { createInMemoryAuditSink } from '@pinagent/ee-team-features';
 import { describe, expect, it } from 'vitest';
 import { handleRelayEvents } from '../src/internal-service';
@@ -140,5 +141,49 @@ describe('POST /internal/relay/events', () => {
       relayInternalSecret: SECRET,
     });
     expect(res.status).toBe(200); // no meter dep → audit only, no throw
+  });
+
+  it('tracks live device sessions in the registry (connect adds, disconnect removes)', async () => {
+    const activeSessions = createInMemoryActiveSessionRegistry();
+    const events = {
+      events: [
+        {
+          type: 'device.connected',
+          organizationId: 'acme',
+          sessionId: 'dev-1',
+          occurredAt: '2026-05-29T00:00:00Z',
+        },
+        {
+          type: 'device.connected',
+          organizationId: 'acme',
+          sessionId: 'dev-2',
+          occurredAt: '2026-05-29T00:00:05Z',
+        },
+        // a browser session — must NOT land in the device registry
+        {
+          type: 'client.connected',
+          organizationId: 'acme',
+          sessionId: 'browser-1',
+          occurredAt: '2026-05-29T00:00:06Z',
+          userId: 'u1',
+        },
+        {
+          type: 'device.disconnected',
+          organizationId: 'acme',
+          sessionId: 'dev-1',
+          occurredAt: '2026-05-29T00:01:00Z',
+          durationMs: 60_000,
+        },
+      ],
+    };
+    const res = await handleRelayEvents(post(events, `Bearer ${SECRET}`), {
+      audit: createInMemoryAuditSink(),
+      activeSessions,
+      relayInternalSecret: SECRET,
+    });
+    expect(res.status).toBe(200);
+    const live = await activeSessions.listByOrg('acme');
+    expect(live.map((s) => s.sessionId)).toEqual(['dev-2']);
+    expect(live[0]?.connectedAt).toBe('2026-05-29T00:00:05Z');
   });
 });

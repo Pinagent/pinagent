@@ -17,6 +17,7 @@ export {
   handleCostControlConfig,
   handleSubscriptionConfig,
 } from './config-service';
+export { createPgActiveSessionStore } from './db/active-session-store';
 export { createPgAuditSink } from './db/audit-sink';
 export { createPgBranchRoutingStore } from './db/branch-routing-store';
 export { createNeonDb } from './db/client';

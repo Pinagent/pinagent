@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { type MeterSink, USAGE_KINDS } from '@pinagent/ee-billing';
-import { parseRelayEventBatch } from '@pinagent/ee-relay';
+import { type ActiveSessionRegistry, parseRelayEventBatch } from '@pinagent/ee-relay';
 import type { AuditSink } from '@pinagent/ee-team-features';
 
 /**
@@ -19,6 +19,12 @@ export interface InternalServiceDeps {
   audit: AuditSink;
   /** Optional meter — records connection seconds from disconnect durations. */
   meter?: MeterSink;
+  /**
+   * Optional registry of connected device sessions — maintained from
+   * `device.connected` / `device.disconnected` so the control plane can target
+   * a push at an org's live sessions.
+   */
+  activeSessions?: ActiveSessionRegistry;
   /** Shared secret the relay presents as a bearer token. */
   relayInternalSecret: string;
 }
@@ -60,6 +66,19 @@ export async function handleRelayEvents(
         quantity: Math.round(event.durationMs / 1000),
         metadata: { sessionId: event.sessionId, side: event.type.split('.')[0] },
       });
+    }
+    // Track live device sessions so a policy push can be targeted. Only
+    // device events matter — pushes go to the agent-runner, not browsers.
+    if (deps.activeSessions) {
+      if (event.type === 'device.connected') {
+        await deps.activeSessions.recordConnected({
+          organizationId: event.organizationId,
+          sessionId: event.sessionId,
+          connectedAt: event.occurredAt,
+        });
+      } else if (event.type === 'device.disconnected') {
+        await deps.activeSessions.recordDisconnected(event.organizationId, event.sessionId);
+      }
     }
   }
   return json({ recorded: events.length }, 200);
