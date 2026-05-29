@@ -71,6 +71,7 @@ export {
   BulkUpdateBodySchema,
 } from './conversation-patch';
 export { type OpenInEditorResult, openInEditor } from './editor';
+export { listGitBranches, parseGitBranches } from './git-branches';
 export {
   type HistorySearchHit,
   type HistorySearchOpts,

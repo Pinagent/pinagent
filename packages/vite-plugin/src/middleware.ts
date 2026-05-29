@@ -22,6 +22,7 @@ import {
   listAuditEvents,
   listBranches,
   listChanges,
+  listGitBranches,
   listPullRequests,
   openInEditor,
   PatchSchema,
@@ -214,6 +215,14 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       // Drives the dock's Branches view.
       if (req.method === 'GET' && url === '/__pinagent/branches') {
         const branches = await listBranches(storage.root);
+        return json(res, 200, branches);
+      }
+
+      // GET /__pinagent/git-branches — the repo's real git branches
+      // (local heads + origin remotes), base-branch candidates for the
+      // PR composer's dropdown.
+      if (req.method === 'GET' && url === '/__pinagent/git-branches') {
+        const branches = await listGitBranches(storage.root);
         return json(res, 200, branches);
       }
 

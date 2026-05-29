@@ -116,6 +116,14 @@ export interface DockTransport {
   listBranches(): Promise<Branch[]>;
 
   /**
+   * List the repo's real git branches (local heads + origin remotes) —
+   * base-branch candidates for the PR composer's dropdown. Distinct from
+   * {@link listBranches}, which lists pinagent's per-conversation
+   * worktree branches. `[]` when the repo has none / isn't a git repo.
+   */
+  listGitBranches(): Promise<string[]>;
+
+  /**
    * List GitHub PRs the dock's compose flow has opened. Driven by rows
    * the composer wrote on success — no GitHub round-trip on read.
    */

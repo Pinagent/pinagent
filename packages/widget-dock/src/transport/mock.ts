@@ -124,6 +124,13 @@ export class MockTransport implements DockTransport {
       .sort((a, b) => Date.parse(b.lastActivity) - Date.parse(a.lastActivity));
   }
 
+  async listGitBranches(): Promise<string[]> {
+    await sleep(SIMULATED_LATENCY_MS);
+    // A plausible base-branch set so the composer's dropdown is
+    // reviewable in fixtures mode.
+    return ['main', 'develop', 'release/2.0'];
+  }
+
   async pruneBranch(feedbackId: string): Promise<void> {
     await sleep(SIMULATED_LATENCY_MS * 2);
     const before = this.branches.length;
