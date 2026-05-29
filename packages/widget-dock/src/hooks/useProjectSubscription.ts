@@ -37,7 +37,7 @@ export interface UseProjectSubscriptionOptions {
  *                        writes the PR row in the same transition
  *   - `auditLog`       — every lifecycle write also writes an audit row
  */
-const CONVERSATIONS_CHANGED_KEYS: readonly (readonly string[])[] = [
+export const CONVERSATIONS_CHANGED_KEYS: readonly (readonly string[])[] = [
   ['conversations'],
   ['conversation'],
   ['changes'],

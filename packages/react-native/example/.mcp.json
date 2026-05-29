@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "pinagent": {
+      "type": "stdio",
+      "command": "pnpm",
+      "args": ["dlx", "@pinagent/mcp"],
+      "env": {
+        "PINAGENT_PROJECT_ROOT": "."
+      }
+    }
+  }
+}

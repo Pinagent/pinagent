@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "//": "Only the Node middleware is typechecked here. src/native/ imports react-native, whose types aren't installed in this repo; it's typechecked in a consumer app instead. tests/ are typechecked by the root vitest pipeline.",
+  "include": ["src/server"]
+}
