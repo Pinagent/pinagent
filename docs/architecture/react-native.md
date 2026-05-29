@@ -1,10 +1,15 @@
 # Pinagent for React Native (design)
 
-Status: **design + proof-of-concept**. This document maps the existing
-web architecture onto React Native and explains what is reused verbatim,
-what is adapted, and what has to be rebuilt. The companion POC lives in
-[`react-native-poc/`](../../react-native-poc) (kept outside the pnpm
-workspace on purpose — see [Why it's outside the workspace](#why-the-poc-lives-outside-the-workspace)).
+Status: **implemented (server proven) + native client ready to wire**.
+This document maps the existing web architecture onto React Native and
+explains what is reused verbatim, what is adapted, and what has to be
+rebuilt. The implementation lives in
+[`packages/react-native/`](../../packages/react-native): the dev-server
+middleware is built, typechecked, and covered by an integration test; the
+native widget ships as source (see
+[How the package is split](#how-the-package-is-split)). A runnable Expo
+example is in
+[`packages/react-native/example/`](../../packages/react-native/example).
 
 ## TL;DR
 
@@ -99,8 +104,13 @@ module.exports = {
 The adapter is a near-copy of the `POST /__pinagent/feedback` arm of
 `packages/vite-plugin/src/middleware.ts` — parse with
 `FeedbackInputSchema`, reject screenshots > 5 MB, `storage.create(id, input)`,
-then `spawnAgent({ projectRoot, feedback, mode })`. The POC ships this in
-[`react-native-poc/server/metro-middleware.ts`](../../react-native-poc/server/metro-middleware.ts).
+then `spawnAgent({ projectRoot, feedback, mode })`. It's implemented in
+[`src/server/metro-middleware.ts`](../../packages/react-native/src/server/metro-middleware.ts)
+and proven by
+[`tests/metro-middleware.test.ts`](../../packages/react-native/tests/metro-middleware.test.ts),
+which POSTs a feedback payload through the middleware and asserts a
+conversation row lands in `.pinagent/db.sqlite` — the same backend the
+web plugins use.
 
 Two RN-specific wrinkles:
 
@@ -128,9 +138,10 @@ returns the touched fiber + hierarchy; each fiber carries
 `_debugSource = { fileName, lineNumber, columnNumber }` — populated by the
 same `__source` babel transform Metro runs in dev.
 
-So `data-pa-loc` ↔ `_debugSource`. The POC's
-[`src/inspector.ts`](../../react-native-poc/src/inspector.ts) wraps this
-and normalizes the (version-dependent) shape into the `loc` field above.
+So `data-pa-loc` ↔ `_debugSource`.
+[`src/native/inspector.ts`](../../packages/react-native/src/native/inspector.ts)
+wraps this and normalizes the (version-dependent) shape into the `loc`
+field above.
 The project-relative path is derived from `fileName` against
 `projectRoot`, matching what the babel plugin emits on web.
 
@@ -154,7 +165,8 @@ The Vite integration injects a `<script>` tag, which has no RN analog.
 The **Next.js** integration is the right template: a `<Pinagent/>`
 client component mounted once at the app root, gated on `__DEV__`, that
 renders `null` in production. RN consumers add exactly one line to their
-root component. See [`src/Pinagent.tsx`](../../react-native-poc/src/Pinagent.tsx).
+root component. See
+[`src/native/Pinagent.tsx`](../../packages/react-native/src/native/Pinagent.tsx).
 
 ## Deliberate cuts for v1 (and why they're safe)
 
@@ -177,24 +189,44 @@ two native dependencies to verify across iOS / Android / Expo Go /
 dev-client are `getInspectorDataForViewAtPoint` (RN core, dev-only) and
 `react-native-view-shot`.
 
-## Why the POC lives outside the workspace
+## How the package is split
 
-The monorepo sets `strictPeerDependencies: true` and globs
-`packages/*` + `examples/*`. A package declaring `react` /
-`react-native` / `react-native-view-shot` peers would fail every
-`pnpm install` until the RN toolchain is added to the repo. Until there's
-a decision to take on that toolchain, the POC sits in top-level
-`react-native-poc/` so it can't break installs or CI, while still being
-real, reviewable code. Promoting it to `packages/react-native` is a
-later step once RN deps are vendored.
+The monorepo sets `strictPeerDependencies: true`, so a package that
+*required* `react-native` peers (not installed in this repo) would break
+every `pnpm install`. `@pinagent/react-native` sidesteps that by being a
+**hybrid package**:
 
-## Suggested build-out order
+- **`src/server/`** — pure Node (deps: `@pinagent/agent-runner`,
+  `nanoid`). This is what `tsdown` builds to `dist/server.*`, what `tsc`
+  typechecks, and what the integration test exercises. No RN involved.
+- **`src/native/`** — the RN widget. Ships as **TypeScript source**
+  (listed in `files`, exported via the `react-native` / `default`
+  conditions) so the consumer's Metro/Babel pipeline transpiles it. It's
+  excluded from this package's `tsconfig` `include` because `react-native`
+  types aren't installed here; it's typechecked in a consumer app
+  instead.
+- `react` / `react-native` / `react-native-view-shot` are declared as
+  **optional** peer dependencies, so the monorepo install stays green
+  while the README still documents the real requirement.
 
-1. **Metro middleware adapter** (small, reuses everything) — proves a
-   phone-filed comment lands in `.pinagent/db.sqlite` and an agent picks
-   it up via MCP. *(POC includes this.)*
-2. **Picker + screenshot POC** (the new piece) — proves
-   tap → source → screenshot → POST end to end. *(POC includes this.)*
-3. Package as `@pinagent/react-native`, add an Expo example app under
-   `examples/`, and extend `pinagent-setup` with an RN/Expo branch.
-4. Optional: WS streaming + Fast-Refresh re-anchoring + multi-pick.
+The Expo example under `example/` has its **own** `package.json` and is
+**not** a workspace member (the `packages/*` glob only matches direct
+children of `packages/`), so its heavy Expo/RN deps never enter the
+monorepo lockfile.
+
+## Status & remaining work
+
+Done:
+
+1. ✅ **Metro middleware adapter** — implemented and proven by
+   `tests/metro-middleware.test.ts` (feedback POST → `.pinagent/db.sqlite`).
+2. ✅ **Picker + screenshot + composer widget** — `src/native/`.
+3. ✅ **Packaged** as `@pinagent/react-native` with a runnable Expo
+   example and a `pinagent-setup` React Native guide.
+
+Not yet (and not runnable in this repo — needs an RN toolchain +
+simulator):
+
+4. End-to-end run on a device/simulator (the example is ready to
+   `npm install && npx expo start`).
+5. Optional: WS streaming + Fast-Refresh re-anchoring + multi-pick.

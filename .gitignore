@@ -14,6 +14,8 @@ packages/vite-plugin/src/__generated__
 .DS_Store
 *.log
 .turbo
+# V8 compile cache (NODE_COMPILE_CACHE) written under packages during install/run
+**/node-compile-cache
 .next
 *.tsbuildinfo
 coverage

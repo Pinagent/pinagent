@@ -54,11 +54,18 @@ export interface PinagentProps {
 
 type Phase = 'idle' | 'picking' | 'composing' | 'sending' | 'sent';
 
-export function Pinagent({ projectRoot = '', screenName }: PinagentProps): ReactElement | null {
-  // Hard dev-only gate. `__DEV__` is `false` in release bundles, so the
-  // whole widget — and its require()s into RN internals — drops out.
+/**
+ * Hard dev-only gate. `__DEV__` is `false` in release bundles, so the
+ * whole widget — and its require()s into RN internals — drops out. Kept
+ * as a thin wrapper so the hooks live in `PinagentDev`, called
+ * unconditionally (rules-of-hooks).
+ */
+export function Pinagent(props: PinagentProps): ReactElement | null {
   if (!__DEV__) return null;
+  return <PinagentDev {...props} />;
+}
 
+function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElement {
   const { width, height } = useWindowDimensions();
   const rootRef = useRef<View>(null);
   const [phase, setPhase] = useState<Phase>('idle');
@@ -118,7 +125,12 @@ export function Pinagent({ projectRoot = '', screenName }: PinagentProps): React
   return (
     // collapsable={false} keeps this View in the native tree so
     // findNodeHandle resolves a real tag for the Inspector call.
-    <View ref={rootRef} collapsable={false} style={StyleSheet.absoluteFill} pointerEvents="box-none">
+    <View
+      ref={rootRef}
+      collapsable={false}
+      style={StyleSheet.absoluteFill}
+      pointerEvents="box-none"
+    >
       {/* Picking overlay: a transparent full-screen catcher. onPress gives
           us the tap coords; we forward them to the Inspector. */}
       {phase === 'picking' && (
@@ -166,7 +178,7 @@ export function Pinagent({ projectRoot = '', screenName }: PinagentProps): React
             <Text style={styles.composerTitle}>
               {pick?.loc
                 ? `${pick.loc.file}:${pick.loc.line}`
-                : pick?.nameChain.at(-1) ?? 'Unknown component'}
+                : (pick?.nameChain.at(-1) ?? 'Unknown component')}
             </Text>
             {pick?.nameChain.length ? (
               <Text style={styles.breadcrumb} numberOfLines={1}>

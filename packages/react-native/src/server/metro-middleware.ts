@@ -97,7 +97,7 @@ export function pinagentMiddleware(opts: PinagentMiddlewareOpts): PinagentMiddle
     } catch (err) {
       return json(res, 500, { error: err instanceof Error ? err.message : String(err) });
     }
-  }) as PinagentMiddleware;
+  }) as unknown as PinagentMiddleware;
 
   handler.chain = (nextMw: Handler): Handler => {
     return (req, res, next) => {

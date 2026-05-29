@@ -1,0 +1,40 @@
+{
+  "name": "@pinagent/react-native",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "React Native widget for Pinagent — tap a view, leave a comment, an agent fixes it. Native client ships as source for Metro; the dev-server middleware is built for Node.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "react-native": "./src/native/index.ts",
+      "default": "./src/native/index.ts"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js",
+      "require": "./dist/server.cjs"
+    }
+  },
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "files": [
+    "dist",
+    "src/native"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pinagent/agent-runner": "workspace:*",
+    "nanoid": "^5.0.9"
+  },
+  "//peers": "react (>=18), react-native (>=0.74), and react-native-view-shot (>=3) are required by src/native/ but intentionally NOT declared as peerDependencies: doing so drags the full React Native toolchain into this otherwise web-only monorepo's lockfile. The native client ships as source, so the consumer app provides these. See README + docs/architecture/react-native.md. Re-add them before publishing to npm.",
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsdown": "^0.22.0",
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,6 +1,6 @@
 ---
 name: pinagent-setup
-description: Wire Pinagent into a target project so the developer can click UI elements, leave comments, and have agents pick them up — either over MCP into the developer's main Claude Code session, or via the Claude Agent SDK as parallel per-comment agents in isolated worktrees. Use when the user asks to "set up pinagent", "install pinagent", "add pinagent to <repo>", or wants the click-to-fix loop in a new app. Detects whether the target is a Vite+React or Next.js app and follows the matching runtime guide.
+description: Wire Pinagent into a target project so the developer can click (or, on React Native, tap) UI elements, leave comments, and have agents pick them up — either over MCP into the developer's main Claude Code session, or via the Claude Agent SDK as parallel per-comment agents in isolated worktrees. Use when the user asks to "set up pinagent", "install pinagent", "add pinagent to <repo>", or wants the click-to-fix loop in a new app. Detects whether the target is a Vite+React, Next.js, or React Native / Expo (Metro) app and follows the matching runtime guide.
 ---
 
 # Pinagent setup
@@ -17,13 +17,20 @@ Before doing anything, identify the target project's runtime — the install ste
 # In the target project root:
 ls vite.config.* 2>/dev/null && echo "VITE"
 ls next.config.* 2>/dev/null && echo "NEXT"
+ls metro.config.* app.json 2>/dev/null | head -1 && echo "REACT_NATIVE"  # also: "expo"/"react-native" in package.json deps
 ```
 
 | If you see       | Follow                |
 | ---------------- | --------------------- |
 | `VITE`           | [vite.md](./vite.md)  |
 | `NEXT`           | [next.md](./next.md)  |
-| both / neither   | Ask the user — pinagent v1 only supports React on Vite or Next. Vue/Svelte/CRA/Remix aren't supported. |
+| `REACT_NATIVE` / Expo | [react-native.md](./react-native.md) |
+| both / neither   | Ask the user — pinagent supports React on Vite or Next, and React Native / Expo (Metro). Vue/Svelte/CRA/Remix aren't supported. |
+
+> React Native is **tap-to-comment**, not click: no DOM, so no
+> `data-pa-loc` and no `<script>` injection. The widget mounts as a
+> `<Pinagent/>` component and resolves the tapped view to `file:line` via
+> RN's built-in Inspector. The agent backend is identical.
 
 After the runtime-specific install, **every project needs** the MCP server step: [mcp.md](./mcp.md).
 
@@ -47,7 +54,7 @@ The per-element widget above is on by default. There's also an **optional dock s
 
 ## Where pinagent comes from
 
-The plugins and MCP server are published to npm under the `@pinagent/*` scope — `@pinagent/vite-plugin`, `@pinagent/next-plugin`, and `@pinagent/mcp`. Install steps use `pnpm add -D` and `pnpm dlx`; nothing references a local checkout, so the skill works in any project.
+The plugins and MCP server are published to npm under the `@pinagent/*` scope — `@pinagent/vite-plugin`, `@pinagent/next-plugin`, `@pinagent/react-native`, and `@pinagent/mcp`. Install steps use `pnpm add -D` and `pnpm dlx`; nothing references a local checkout, so the skill works in any project.
 
 ## Common pitfalls (skim before you start)
 

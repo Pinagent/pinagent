@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-export { Pinagent } from './Pinagent';
+
 export type { PinagentProps } from './Pinagent';
-export type { FeedbackInput, PickResult } from './types';
+export { Pinagent } from './Pinagent';
 export { devServerBaseUrl, submitFeedback } from './transport';
+export type { FeedbackInput, PickResult } from './types';
