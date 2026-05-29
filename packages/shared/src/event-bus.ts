@@ -58,6 +58,12 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     .loose(),
   z
     .object({
+      type: z.literal('progress'),
+      turn: z.number(),
+    })
+    .loose(),
+  z
+    .object({
       type: z.literal('ask_user'),
       askId: z.string(),
       question: z.string(),
@@ -109,6 +115,17 @@ export type AgentEvent =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; name: string; summary: string }
   | { type: 'tool_result'; ok: boolean }
+  | {
+      /**
+       * Live turn counter, emitted by the agent runner at the start of
+       * each assistant turn during a run. Lets the widget show a turn
+       * count climbing in real time; the authoritative final count
+       * arrives later on the `result` event (`numTurns`), which
+       * overwrites it. Transient — not persisted to the widget cache.
+       */
+      type: 'progress';
+      turn: number;
+    }
   | {
       /**
        * Agent paused on an `ask_user` tool call. The widget renders a form

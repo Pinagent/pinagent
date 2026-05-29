@@ -1614,6 +1614,9 @@ function EventRow({
           Status → <span className="font-semibold text-foreground">{event.status}</span>
         </div>
       );
+    case 'progress':
+      // Transient live-turn signal — no transcript row.
+      return null;
   }
 }
 

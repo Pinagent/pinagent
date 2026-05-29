@@ -117,6 +117,7 @@ interface AgentEvent {
     | 'text'
     | 'tool_use'
     | 'tool_result'
+    | 'progress'
     | 'ask_user'
     | 'error'
     | 'result'
@@ -2184,6 +2185,10 @@ function attachStreamHandler(
   let pendingAskFormRoot: HTMLElement | null = null;
   let apiKeySource: string | null = null;
   let turnRunning = true;
+  // Live turn count from `progress` events, shown in the footer while a
+  // run is in flight. Overwritten by the authoritative `numTurns` on
+  // `result`; reset at the start of each run.
+  let liveTurns = 0;
   let worktreeState: WorktreeWireState = 'none';
   // Last known uncommitted-file count for this worktree, surfaced by the
   // server in the `worktree_state` broadcast. `null` means unknown
@@ -2342,6 +2347,7 @@ function attachStreamHandler(
     append(el('div', 'user-msg', content));
     followInput.value = '';
     turnRunning = true;
+    liveTurns = 0;
     setHeaderRunning(true);
     stopBtn.disabled = false;
     stopBtn.textContent = 'Stop';
@@ -2361,12 +2367,22 @@ function attachStreamHandler(
         apiKeySource = typeof event.apiKeySource === 'string' ? event.apiKeySource : null;
         header.textContent = `Working · ${model}${session ? ` · ${session}` : ''}`;
         turnRunning = true;
+        liveTurns = 0;
         setHeaderRunning(true);
         stopBtn.disabled = false;
         stopBtn.textContent = 'Stop';
         setStopVisible(true);
         setFollowEnabled(false);
         setAgentState('running');
+        break;
+      }
+      case 'progress': {
+        // Live turn count, ticking up as the agent works. The footer is
+        // the same element the final `result` fills in with turns·cost,
+        // so this reads naturally on both the mini card and expanded.
+        const t = typeof event.turn === 'number' ? event.turn : liveTurns;
+        liveTurns = t;
+        if (turnRunning) footer.textContent = `${t} turn${t === 1 ? '' : 's'}`;
         break;
       }
       case 'text': {
@@ -2656,9 +2672,11 @@ function attachStreamHandler(
     onEvent(event) {
       // Persist before rendering so a render error doesn't lose the
       // event from the cache. Best-effort — DB unreachable doesn't
-      // break the live UI.
+      // break the live UI. `progress` is a transient live signal (the
+      // authoritative count is on the persisted `result`), so skip it
+      // to avoid one cache row per turn.
       const db = getBrowserDb();
-      if (db) {
+      if (db && event.type !== 'progress') {
         void recordEvent(db, feedbackId, composer.turn, event).catch((err) =>
           // eslint-disable-next-line no-console
           console.warn('[pinagent:db] recordEvent failed:', err),
