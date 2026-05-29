@@ -25,7 +25,7 @@
  * split `transcript.ts` uses.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 export type Runtime = 'vite' | 'next' | 'unknown';
 export type PackageManager = 'pnpm' | 'yarn' | 'bun' | 'npm';
@@ -39,25 +39,53 @@ const NEXT_CONFIGS = [
   'next.config.cjs',
 ];
 
+/** Which supported runtime config files are present in `root`. */
+export function configsPresent(root: string): { vite: boolean; next: boolean } {
+  const has = (names: string[]) => names.some((n) => existsSync(join(root, n)));
+  return { vite: has(VITE_CONFIGS), next: has(NEXT_CONFIGS) };
+}
+
 /**
  * Detect the host runtime from its config file. Vite and Next are the
  * only supported runtimes (pinagent v1 is React-on-Vite or Next only).
- * If a project somehow has both, Vite wins — but the caller surfaces the
- * ambiguity to the user rather than guessing silently.
+ * If a project somehow has both, Vite wins here — `runInit` separately
+ * warns about the ambiguity rather than letting the choice be silent.
  */
 export function detectRuntime(root: string): Runtime {
-  const has = (names: string[]) => names.some((n) => existsSync(join(root, n)));
-  if (has(VITE_CONFIGS)) return 'vite';
-  if (has(NEXT_CONFIGS)) return 'next';
+  const { vite, next } = configsPresent(root);
+  if (vite) return 'vite';
+  if (next) return 'next';
   return 'unknown';
 }
 
-/** Detect the package manager from the lockfile so we print the right add command. */
+// Lockfile → package manager, in the priority order we resolve a single
+// directory. `package-lock.json` is included so an npm project is matched
+// explicitly (and stops the walk) rather than only via the fallback.
+const LOCKFILES: ReadonlyArray<readonly [file: string, pm: PackageManager]> = [
+  ['bun.lockb', 'bun'],
+  ['bun.lock', 'bun'],
+  ['pnpm-lock.yaml', 'pnpm'],
+  ['yarn.lock', 'yarn'],
+  ['package-lock.json', 'npm'],
+];
+
+/**
+ * Detect the package manager from the nearest lockfile so we print the
+ * right add command. Walks up from `root` to the filesystem root: a
+ * sub-app inside a monorepo usually has no lockfile of its own, so we
+ * pick up the workspace lockfile at the repo root instead of defaulting
+ * to npm. The first lockfile found wins; if none exist anywhere, npm.
+ */
 export function detectPackageManager(root: string): PackageManager {
-  if (existsSync(join(root, 'bun.lockb')) || existsSync(join(root, 'bun.lock'))) return 'bun';
-  if (existsSync(join(root, 'pnpm-lock.yaml'))) return 'pnpm';
-  if (existsSync(join(root, 'yarn.lock'))) return 'yarn';
-  return 'npm';
+  let dir = resolve(root);
+  for (;;) {
+    for (const [file, pm] of LOCKFILES) {
+      if (existsSync(join(dir, file))) return pm;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return 'npm';
+    dir = parent;
+  }
 }
 
 export function pluginPackage(runtime: 'vite' | 'next'): string {
@@ -243,6 +271,15 @@ export function runInit(args: InitArgs): InitResult {
   const tag = args.dryRun ? '[dry-run] would' : 'wrote';
 
   note(`pinagent init — detected ${runtime === 'vite' ? 'Vite + React' : 'Next.js'} (${pm})`);
+  // Both configs present is genuinely ambiguous — surface it rather than
+  // letting detectRuntime's silent "Vite wins" tiebreak stand unseen.
+  const present = configsPresent(root);
+  if (present.vite && present.next) {
+    note('');
+    note('! found both vite.config.* and next.config.* — proceeding as Vite.');
+    note('  If this project is actually Next.js, re-run against the right root:');
+    note('    pinagent init --dir /path/to/next-app');
+  }
   note('');
 
   const writeFile = (relPath: string, content: string) => {

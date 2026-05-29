@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   addDevDepCommand,
+  configsPresent,
   detectPackageManager,
   detectRuntime,
   findAppDir,
@@ -154,10 +155,34 @@ describe('fs detection + runInit', () => {
     expect(detectRuntime(dir)).toBe('next');
   });
 
+  it('reports both configs present (and detectRuntime tiebreaks to vite)', () => {
+    writeFileSync(join(dir, 'vite.config.ts'), '');
+    writeFileSync(join(dir, 'next.config.ts'), '');
+    expect(configsPresent(dir)).toEqual({ vite: true, next: true });
+    expect(detectRuntime(dir)).toBe('vite');
+  });
+
   it('detects the package manager from the lockfile', () => {
     expect(detectPackageManager(dir)).toBe('npm');
     writeFileSync(join(dir, 'pnpm-lock.yaml'), '');
     expect(detectPackageManager(dir)).toBe('pnpm');
+  });
+
+  it('walks up to a workspace lockfile for a sub-app with none of its own', () => {
+    writeFileSync(join(dir, 'pnpm-lock.yaml'), '');
+    const sub = join(dir, 'packages', 'web');
+    mkdirSync(sub, { recursive: true });
+    // The sub-app has no lockfile, so the monorepo root's wins over the
+    // npm default.
+    expect(detectPackageManager(sub)).toBe('pnpm');
+  });
+
+  it('prefers the nearest lockfile when a sub-app has its own', () => {
+    writeFileSync(join(dir, 'pnpm-lock.yaml'), '');
+    const sub = join(dir, 'app');
+    mkdirSync(sub);
+    writeFileSync(join(sub, 'yarn.lock'), '');
+    expect(detectPackageManager(sub)).toBe('yarn');
   });
 
   it('finds app/ and src/app/', () => {
@@ -194,6 +219,14 @@ describe('fs detection + runInit', () => {
     const route = readFileSync(join(dir, 'app', 'pinagent', '[[...slug]]', 'route.ts'), 'utf8');
     expect(route).toContain('@pinagent/next-plugin/route');
     expect(r.lines.join('\n')).toContain('<Pinagent />');
+  });
+
+  it('warns when both vite and next configs are present', () => {
+    writeFileSync(join(dir, 'vite.config.ts'), '');
+    writeFileSync(join(dir, 'next.config.ts'), '');
+    const r = runInit({ dir, dryRun: true });
+    expect(r.code).toBe(0);
+    expect(r.lines.join('\n')).toContain('found both vite.config.* and next.config.*');
   });
 
   it('dry-run writes no files', () => {
