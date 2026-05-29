@@ -7,7 +7,11 @@ import {
   type Permission,
 } from '@pinagent/ee-auth';
 import { planById, type SubscriptionStore } from '@pinagent/ee-billing';
-import type { CostControlEnforcement, CostControlStore } from '@pinagent/ee-team-features';
+import type {
+  BranchRoutingStore,
+  CostControlEnforcement,
+  CostControlStore,
+} from '@pinagent/ee-team-features';
 import type { Authenticator } from './session-service';
 
 /**
@@ -18,6 +22,8 @@ import type { Authenticator } from './session-service';
  *   PUT  /subscriptions   → billing:manage  → set plan + period
  *   GET  /cost-controls   → org:settings    → current cost cap
  *   PUT  /cost-controls   → org:settings    → set cost cap
+ *   GET  /branch-routing  → org:settings    → current branch policy
+ *   PUT  /branch-routing  → org:settings    → set branch policy
  *
  * All org-scoped (`?organizationId=`) and RBAC-gated via `authorizeOrgMember`.
  * Framework-agnostic (Web `Request`/`Response`), fully injected for testing.
@@ -27,6 +33,7 @@ export interface ConfigServiceDeps {
   authenticate: Authenticator;
   subscriptions: SubscriptionStore;
   costControls: CostControlStore;
+  branchRouting: BranchRoutingStore;
 }
 
 /** GET/PUT /subscriptions. */
@@ -85,6 +92,39 @@ export async function handleCostControlConfig(
   return json({ error: 'method not allowed' }, 405);
 }
 
+/** GET/PUT /branch-routing. */
+export async function handleBranchRoutingConfig(
+  request: Request,
+  deps: ConfigServiceDeps,
+): Promise<Response> {
+  if (request.method === 'GET') {
+    const ctx = await authorize(request, deps, 'org:settings');
+    if ('denied' in ctx) return ctx.denied;
+    const branchRouting = await deps.branchRouting.get(ctx.organizationId);
+    return json({ organizationId: ctx.organizationId, branchRouting }, 200);
+  }
+  if (request.method === 'PUT') {
+    const ctx = await authorize(request, deps, 'org:settings');
+    if ('denied' in ctx) return ctx.denied;
+    const body = await readJson(request);
+    if (body === undefined) return json({ error: 'invalid JSON body' }, 400);
+    const parsed = parseBranchRoutingBody(body);
+    if (!parsed) {
+      return json(
+        {
+          error:
+            'defaultBaseBranch (string|null) and allowedBranchPatterns (string[]) are required',
+        },
+        400,
+      );
+    }
+    const branchRouting = { organizationId: ctx.organizationId, ...parsed };
+    await deps.branchRouting.upsert(branchRouting);
+    return json({ organizationId: ctx.organizationId, branchRouting }, 200);
+  }
+  return json({ error: 'method not allowed' }, 405);
+}
+
 type AuthorizeResult = { denied: Response } | { organizationId: string };
 
 async function authorize(
@@ -130,6 +170,17 @@ function parseCostControlBody(
   if (!capOk) return null;
   if (enforcement !== 'block' && enforcement !== 'warn') return null;
   return { maxRelaySessionsPerPeriod: maxRelaySessionsPerPeriod as number | null, enforcement };
+}
+
+function parseBranchRoutingBody(
+  value: unknown,
+): { defaultBaseBranch: string | null; allowedBranchPatterns: string[] } | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { defaultBaseBranch, allowedBranchPatterns } = value as Record<string, unknown>;
+  if (defaultBaseBranch !== null && typeof defaultBaseBranch !== 'string') return null;
+  if (!Array.isArray(allowedBranchPatterns)) return null;
+  if (!allowedBranchPatterns.every((p) => typeof p === 'string' && p.length > 0)) return null;
+  return { defaultBaseBranch, allowedBranchPatterns: allowedBranchPatterns as string[] };
 }
 
 /** Parse a JSON body; `undefined` signals malformed JSON. */

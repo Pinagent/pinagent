@@ -96,6 +96,15 @@ export const costControls = teamSchema.table('cost_controls', {
   enforcement: text('enforcement').notNull(),
 });
 
+/** One row per org: branch-routing policy (`ee-team-features`). */
+export const branchRouting = teamSchema.table('branch_routing', {
+  organizationId: text('organization_id').primaryKey(),
+  /** Default base branch agents should target; null = repo default. */
+  defaultBaseBranch: text('default_base_branch'),
+  /** Glob patterns of branch names worktrees may land on; [] = allow any. */
+  allowedBranchPatterns: jsonb('allowed_branch_patterns').$type<string[]>().notNull(),
+});
+
 /**
  * `billing` schema — usage metering (`@pinagent/ee-billing`'s `MeterSink`).
  * Append-only usage events, summed per org for plan/quota and Stripe reporting.
@@ -126,6 +135,7 @@ export const schema = {
   ssoConnections,
   auditEvents,
   costControls,
+  branchRouting,
   usageEvents,
   subscriptions,
 };

@@ -4,6 +4,7 @@ import { createCloudApp } from './app';
 import { createBearerAuthenticator } from './authenticators';
 import { type CloudConfig, loadCloudConfig } from './config';
 import { createPgAuditSink } from './db/audit-sink';
+import { createPgBranchRoutingStore } from './db/branch-routing-store';
 import { createNeonDb } from './db/client';
 import { createPgCostControlStore } from './db/cost-control-store';
 import { createPgMembershipStore } from './db/membership-store';
@@ -39,6 +40,7 @@ async function buildApp(config: CloudConfig) {
   const subscriptions = createPgSubscriptionStore(db);
   const costControls = createPgCostControlStore(db);
   const users = createPgUserStore(db);
+  const branchRouting = createPgBranchRoutingStore(db);
 
   // Connections are resolved from a store now. Seed the env-configured one so
   // a single-connection deploy works with no DB rows; additional org IdPs can
@@ -98,7 +100,7 @@ async function buildApp(config: CloudConfig) {
       audit,
     },
     read: { store, authenticate, audit, meter },
-    config: { store, authenticate, subscriptions, costControls },
+    config: { store, authenticate, subscriptions, costControls, branchRouting },
     internal: { audit, meter, relayInternalSecret: config.relayInternalSecret },
   });
 }

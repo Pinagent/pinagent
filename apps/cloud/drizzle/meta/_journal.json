@@ -50,6 +50,13 @@
       "when": 1780075231011,
       "tag": "0006_outstanding_mandarin",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1780076320443,
+      "tag": "0007_fluffy_vargas",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,7 @@ import {
 import { createInMemoryMeterSink, createInMemorySubscriptionStore } from '@pinagent/ee-billing';
 import {
   createInMemoryAuditSink,
+  createInMemoryBranchRoutingStore,
   createInMemoryCostControlStore,
 } from '@pinagent/ee-team-features';
 import { describe, expect, it } from 'vitest';
@@ -93,6 +94,7 @@ function makeApp() {
       authenticate,
       subscriptions: createInMemorySubscriptionStore(),
       costControls: createInMemoryCostControlStore(),
+      branchRouting: createInMemoryBranchRoutingStore(),
     },
     internal: { audit, relayInternalSecret: 'internal-secret' },
   });
