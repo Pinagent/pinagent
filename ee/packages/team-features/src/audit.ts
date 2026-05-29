@@ -44,6 +44,10 @@ export const AUDIT_ACTIONS = {
   login: 'sso.login',
   sessionIssued: 'relay.session.issued',
   sessionDenied: 'relay.session.denied',
+  /** A cost control blocked issuance (enforcement: block). */
+  costCapBlocked: 'cost.cap.blocked',
+  /** A cost control was exceeded but issuance was allowed (enforcement: warn). */
+  costCapWarning: 'cost.cap.warning',
 } as const;
 
 export const DEFAULT_AUDIT_LIMIT = 100;

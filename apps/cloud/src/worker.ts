@@ -5,6 +5,7 @@ import { createBearerAuthenticator } from './authenticators';
 import { type CloudConfig, loadCloudConfig } from './config';
 import { createPgAuditSink } from './db/audit-sink';
 import { createNeonDb } from './db/client';
+import { createPgCostControlStore } from './db/cost-control-store';
 import { createPgMembershipStore } from './db/membership-store';
 import { createPgMeterSink } from './db/meter-sink';
 import { createPgSubscriptionStore } from './db/subscription-store';
@@ -34,6 +35,7 @@ async function buildApp(config: CloudConfig) {
   const audit = createPgAuditSink(db);
   const meter = createPgMeterSink(db);
   const subscriptions = createPgSubscriptionStore(db);
+  const costControls = createPgCostControlStore(db);
 
   const connection: SsoConnection = {
     id: config.oidc.connectionId,
@@ -67,6 +69,7 @@ async function buildApp(config: CloudConfig) {
       audit,
       meter,
       subscriptions,
+      costControls,
     },
     login: {
       provider,

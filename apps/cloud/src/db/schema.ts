@@ -56,6 +56,15 @@ export const auditEvents = teamSchema.table('audit_events', {
   metadata: jsonb('metadata').$type<Record<string, unknown>>(),
 });
 
+/** One row per org: an admin-set cost guardrail (`ee-team-features`). */
+export const costControls = teamSchema.table('cost_controls', {
+  organizationId: text('organization_id').primaryKey(),
+  /** Cap on relay sessions per billing period; null = no cap. */
+  maxRelaySessionsPerPeriod: integer('max_relay_sessions_per_period'),
+  /** `block` | `warn`. Text, not an enum, per the repo convention. */
+  enforcement: text('enforcement').notNull(),
+});
+
 /**
  * `billing` schema — usage metering (`@pinagent/ee-billing`'s `MeterSink`).
  * Append-only usage events, summed per org for plan/quota and Stripe reporting.
@@ -83,6 +92,7 @@ export const schema = {
   organizations,
   organizationMemberships,
   auditEvents,
+  costControls,
   usageEvents,
   subscriptions,
 };

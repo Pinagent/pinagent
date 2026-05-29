@@ -9,3 +9,11 @@ export {
   createInMemoryAuditSink,
   DEFAULT_AUDIT_LIMIT,
 } from './audit';
+export {
+  type CostControl,
+  type CostControlEnforcement,
+  type CostControlStore,
+  type CostDecision,
+  createInMemoryCostControlStore,
+  evaluateCostControl,
+} from './cost-controls';

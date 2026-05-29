@@ -13,7 +13,12 @@ import {
   type SubscriptionStore,
   USAGE_KINDS,
 } from '@pinagent/ee-billing';
-import { AUDIT_ACTIONS, type AuditSink } from '@pinagent/ee-team-features';
+import {
+  AUDIT_ACTIONS,
+  type AuditSink,
+  type CostControlStore,
+  evaluateCostControl,
+} from '@pinagent/ee-team-features';
 import { isoFromSeconds } from './clock';
 
 /**
@@ -72,6 +77,12 @@ export interface SessionServiceDeps {
    * issuance is gated on the org's plan quota (over-limit → 402).
    */
   subscriptions?: SubscriptionStore;
+  /**
+   * Optional org-set cost controls. When present with `meter`, issuance over an
+   * org's configured cap is blocked (402) or warned (audited but allowed),
+   * independent of the plan quota.
+   */
+  costControls?: CostControlStore;
   /** Override the issued-at clock (epoch seconds) — for tests. */
   nowSeconds?: number;
 }
@@ -142,6 +153,33 @@ export async function handleSessionRequest(
           },
         });
         return json({ error: 'plan quota exceeded' }, 402);
+      }
+    }
+
+    // Org-set cost control: a self-imposed cap, independent of the plan quota.
+    // `block` rejects over-cap; `warn` allows but records a warning.
+    if (deps.costControls && deps.meter) {
+      const control = await deps.costControls.get(body.organizationId);
+      if (control) {
+        const periodStart = deps.subscriptions
+          ? (await deps.subscriptions.get(body.organizationId))?.currentPeriodStart
+          : undefined;
+        const usage = await deps.meter.summarize({
+          organizationId: body.organizationId,
+          since: periodStart,
+        });
+        const decision = evaluateCostControl(control, usage[USAGE_KINDS.relaySession] ?? 0);
+        if (decision.overCap) {
+          await deps.audit?.record({
+            occurredAt,
+            organizationId: body.organizationId,
+            actorUserId: user.userId,
+            action: decision.allowed ? AUDIT_ACTIONS.costCapWarning : AUDIT_ACTIONS.costCapBlocked,
+            targetId: body.sessionId,
+            metadata: { cap: decision.cap, used: decision.used, enforcement: decision.enforcement },
+          });
+          if (!decision.allowed) return json({ error: 'cost cap reached' }, 402);
+        }
       }
     }
 
