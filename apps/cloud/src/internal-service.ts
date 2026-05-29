@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Elastic-2.0
+import { type MeterSink, USAGE_KINDS } from '@pinagent/ee-billing';
 import { parseRelayEventBatch } from '@pinagent/ee-relay';
 import type { AuditSink } from '@pinagent/ee-team-features';
 
 /**
  * Internal ingest for relay→control-plane lifecycle events — the receiving
  * half of the relay reporting channel. The relay Worker POSTs authenticated
- * batches of connect/disconnect events here; we record them to the audit log.
+ * batches of connect/disconnect events here; we record them to the audit log
+ * and meter connection time from disconnect durations.
  *
  *   POST /internal/relay/events   Authorization: Bearer <RELAY_INTERNAL_SECRET>
  *     body { events: RelayLifecycleEvent[] } → 200 { recorded }
@@ -15,6 +17,8 @@ import type { AuditSink } from '@pinagent/ee-team-features';
  */
 export interface InternalServiceDeps {
   audit: AuditSink;
+  /** Optional meter — records connection seconds from disconnect durations. */
+  meter?: MeterSink;
   /** Shared secret the relay presents as a bearer token. */
   relayInternalSecret: string;
 }
@@ -47,6 +51,16 @@ export async function handleRelayEvents(
       action: `relay.${event.type}`,
       targetId: event.sessionId,
     });
+    // Meter connection time from the relay-reported duration on disconnects.
+    if (deps.meter && event.durationMs !== undefined) {
+      await deps.meter.record({
+        occurredAt: event.occurredAt,
+        organizationId: event.organizationId,
+        kind: USAGE_KINDS.relayConnectionSeconds,
+        quantity: Math.round(event.durationMs / 1000),
+        metadata: { sessionId: event.sessionId, side: event.type.split('.')[0] },
+      });
+    }
   }
   return json({ recorded: events.length }, 200);
 }

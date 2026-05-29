@@ -15,6 +15,8 @@
 export const USAGE_KINDS = {
   /** One relay session granted (a `POST /sessions` success). */
   relaySession: 'relay.session',
+  /** Connection time, in seconds — summed from relay disconnect durations. */
+  relayConnectionSeconds: 'relay.connection.seconds',
 } as const;
 
 export interface UsageEvent {

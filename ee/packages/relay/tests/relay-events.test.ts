@@ -42,4 +42,20 @@ describe('parseRelayEventBatch', () => {
     const events = Array.from({ length: MAX_RELAY_EVENT_BATCH + 1 }, () => valid);
     expect(parseRelayEventBatch({ events })).toBeNull();
   });
+
+  it('round-trips an optional durationMs on disconnect events', () => {
+    const disconnect = {
+      type: 'client.disconnected',
+      organizationId: 'acme',
+      sessionId: 'sess-1',
+      occurredAt: '2026-05-29T00:01:00Z',
+      durationMs: 60_000,
+    };
+    expect(parseRelayEventBatch({ events: [disconnect] })?.[0]).toEqual(disconnect);
+  });
+
+  it('rejects a negative or non-numeric durationMs', () => {
+    expect(parseRelayEventBatch({ events: [{ ...valid, durationMs: -1 }] })).toBeNull();
+    expect(parseRelayEventBatch({ events: [{ ...valid, durationMs: 'soon' }] })).toBeNull();
+  });
 });
