@@ -11,6 +11,11 @@ export { PACKAGE_NAME as TEAM_FEATURES_PACKAGE } from '@pinagent/ee-team-feature
 export { type CloudAppDeps, createCloudApp } from './app';
 export { createBearerAuthenticator } from './authenticators';
 export { type CloudConfig, loadCloudConfig, type OidcConnectionConfig } from './config';
+export {
+  type ConfigServiceDeps,
+  handleCostControlConfig,
+  handleSubscriptionConfig,
+} from './config-service';
 export { createPgAuditSink } from './db/audit-sink';
 export { createNeonDb } from './db/client';
 export { createPgCostControlStore } from './db/cost-control-store';

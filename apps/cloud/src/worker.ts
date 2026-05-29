@@ -82,5 +82,6 @@ async function buildApp(config: CloudConfig) {
       audit,
     },
     read: { store, authenticate, audit, meter },
+    config: { store, authenticate, subscriptions, costControls },
   });
 }

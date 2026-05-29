@@ -1,0 +1,173 @@
+// SPDX-License-Identifier: Elastic-2.0
+import type { MembershipStore, OrganizationMembership, Role } from '@pinagent/ee-auth';
+import { createInMemorySubscriptionStore } from '@pinagent/ee-billing';
+import { createInMemoryCostControlStore } from '@pinagent/ee-team-features';
+import { describe, expect, it } from 'vitest';
+import {
+  type ConfigServiceDeps,
+  handleCostControlConfig,
+  handleSubscriptionConfig,
+} from '../src/config-service';
+
+function member(userId: string, role: Role): OrganizationMembership {
+  return {
+    organizationId: 'acme',
+    userId,
+    role,
+    status: 'active',
+    invitedAt: '2026-01-01T00:00:00Z',
+    joinedAt: '2026-01-02T00:00:00Z',
+  };
+}
+
+function store(): MembershipStore {
+  const members = [member('u-admin', 'admin'), member('u-viewer', 'viewer')];
+  return {
+    async getMembership(org, user) {
+      return org === 'acme' ? (members.find((m) => m.userId === user) ?? null) : null;
+    },
+    async getOrganization() {
+      return null;
+    },
+    async listMembers() {
+      return members;
+    },
+    async upsertMembership() {},
+    async removeMembership() {},
+  };
+}
+
+function deps(asUserId: string | null): ConfigServiceDeps {
+  return {
+    store: store(),
+    authenticate: async () => (asUserId ? { userId: asUserId } : null),
+    subscriptions: createInMemorySubscriptionStore(),
+    costControls: createInMemoryCostControlStore(),
+  };
+}
+
+function req(method: string, path: string, body?: unknown): Request {
+  return new Request(`https://cloud.test${path}`, {
+    method,
+    headers: body !== undefined ? { 'content-type': 'application/json' } : {},
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}
+
+describe('/subscriptions', () => {
+  it('GET returns null before any subscription is set (viewer ok via billing:read)', async () => {
+    const res = await handleSubscriptionConfig(
+      req('GET', '/subscriptions?organizationId=acme'),
+      deps('u-viewer'),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ organizationId: 'acme', subscription: null });
+  });
+
+  it('PUT (admin) sets the plan, then GET reads it back', async () => {
+    const d = deps('u-admin');
+    const put = await handleSubscriptionConfig(
+      req('PUT', '/subscriptions?organizationId=acme', {
+        planId: 'pro',
+        currentPeriodStart: '2026-05-01T00:00:00Z',
+      }),
+      d,
+    );
+    expect(put.status).toBe(200);
+    expect(await d.subscriptions.get('acme')).toMatchObject({ planId: 'pro' });
+  });
+
+  it('PUT is denied for a viewer (needs billing:manage)', async () => {
+    const res = await handleSubscriptionConfig(
+      req('PUT', '/subscriptions?organizationId=acme', {
+        planId: 'pro',
+        currentPeriodStart: '2026-05-01T00:00:00Z',
+      }),
+      deps('u-viewer'),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('PUT 400s on an unknown plan', async () => {
+    const res = await handleSubscriptionConfig(
+      req('PUT', '/subscriptions?organizationId=acme', {
+        planId: 'platinum',
+        currentPeriodStart: '2026-05-01T00:00:00Z',
+      }),
+      deps('u-admin'),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('PUT 400s on a malformed body', async () => {
+    const res = await handleSubscriptionConfig(
+      req('PUT', '/subscriptions?organizationId=acme', { planId: 'pro' }),
+      deps('u-admin'),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('401s unauthenticated, 400s without org', async () => {
+    expect(
+      (await handleSubscriptionConfig(req('GET', '/subscriptions?organizationId=acme'), deps(null)))
+        .status,
+    ).toBe(401);
+    expect(
+      (await handleSubscriptionConfig(req('GET', '/subscriptions'), deps('u-admin'))).status,
+    ).toBe(400);
+  });
+
+  it('405s on an unsupported method', async () => {
+    const res = await handleSubscriptionConfig(
+      req('DELETE', '/subscriptions?organizationId=acme'),
+      deps('u-admin'),
+    );
+    expect(res.status).toBe(405);
+  });
+});
+
+describe('/cost-controls', () => {
+  it('PUT (admin) sets a cap, GET reads it back; viewer is forbidden', async () => {
+    const d = deps('u-admin');
+    const put = await handleCostControlConfig(
+      req('PUT', '/cost-controls?organizationId=acme', {
+        maxRelaySessionsPerPeriod: 500,
+        enforcement: 'block',
+      }),
+      d,
+    );
+    expect(put.status).toBe(200);
+    expect(await d.costControls.get('acme')).toMatchObject({
+      maxRelaySessionsPerPeriod: 500,
+      enforcement: 'block',
+    });
+
+    const viewerGet = await handleCostControlConfig(
+      req('GET', '/cost-controls?organizationId=acme'),
+      deps('u-viewer'),
+    );
+    expect(viewerGet.status).toBe(403); // org:settings required
+  });
+
+  it('PUT accepts a null cap', async () => {
+    const res = await handleCostControlConfig(
+      req('PUT', '/cost-controls?organizationId=acme', {
+        maxRelaySessionsPerPeriod: null,
+        enforcement: 'warn',
+      }),
+      deps('u-admin'),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('PUT 400s on an invalid enforcement mode', async () => {
+    const res = await handleCostControlConfig(
+      req('PUT', '/cost-controls?organizationId=acme', {
+        maxRelaySessionsPerPeriod: 10,
+        enforcement: 'nuke',
+      }),
+      deps('u-admin'),
+    );
+    expect(res.status).toBe(400);
+  });
+});
