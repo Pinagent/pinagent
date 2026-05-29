@@ -1,12 +1,21 @@
 // SPDX-License-Identifier: Elastic-2.0
+import { isRole, type Role } from '@pinagent/ee-auth';
 import { type ClientAttachment, RelayHub, type RelaySocket } from './relay-hub';
 import type { Env } from './worker';
 
-type Role = 'device' | 'client';
+type Side = 'device' | 'client';
 
+/**
+ * Persisted per-socket state. `side` is the connection role (which end of the
+ * relay this socket is); the fields inherited from {@link ClientAttachment}
+ * — including the member's RBAC `role` — describe a client socket.
+ */
 interface RelayAttachment extends Partial<ClientAttachment> {
-  role: Role;
+  side: Side;
 }
+
+const SIDE_HEADER = 'X-Pinagent-Role';
+const MEMBER_ROLE_HEADER = 'X-Pinagent-Member-Role';
 
 /**
  * `RelaySession` — one Durable Object instance per tenant session. Holds
@@ -34,7 +43,7 @@ export class RelaySession {
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('expected websocket upgrade', { status: 426 });
     }
-    const role: Role = request.headers.get('X-Pinagent-Role') === 'device' ? 'device' : 'client';
+    const side: Side = request.headers.get(SIDE_HEADER) === 'device' ? 'device' : 'client';
 
     const pair = new WebSocketPair();
     const client = pair[0];
@@ -43,14 +52,15 @@ export class RelaySession {
     const hub = this.getHub();
     const sock = this.wrap(server);
 
-    if (role === 'device') {
-      server.serializeAttachment({ role: 'device' } satisfies RelayAttachment);
+    if (side === 'device') {
+      server.serializeAttachment({ side: 'device' } satisfies RelayAttachment);
       this.ctx.acceptWebSocket(server, ['device']);
       hub.attachDevice(sock);
     } else {
-      server.serializeAttachment({ role: 'client', feedbackIds: [], project: false });
+      const role = parseRole(request.headers.get(MEMBER_ROLE_HEADER));
+      server.serializeAttachment({ side: 'client', feedbackIds: [], project: false, role });
       this.ctx.acceptWebSocket(server, ['client']);
-      hub.attachClient(sock);
+      hub.attachClient(sock, role);
     }
 
     return new Response(null, { status: 101, webSocket: client });
@@ -60,14 +70,15 @@ export class RelaySession {
     const raw = typeof message === 'string' ? message : new TextDecoder().decode(message);
     const hub = this.getHub();
     const sock = this.wrap(ws);
-    if (this.readAttachment(ws).role === 'device') {
+    const att = this.readAttachment(ws);
+    if (att.side === 'device') {
       hub.fromDevice(raw);
       return;
     }
     hub.fromClient(sock, raw);
     const snapshot = hub.snapshotClient(sock);
     if (snapshot) {
-      ws.serializeAttachment({ role: 'client', ...snapshot } satisfies RelayAttachment);
+      ws.serializeAttachment({ side: 'client', ...snapshot } satisfies RelayAttachment);
     }
   }
 
@@ -82,7 +93,7 @@ export class RelaySession {
   private detach(ws: WebSocket): void {
     const hub = this.getHub();
     const sock = this.wrap(ws);
-    if (this.readAttachment(ws).role === 'device') hub.detachDevice(sock);
+    if (this.readAttachment(ws).side === 'device') hub.detachDevice(sock);
     else hub.detachClient(sock);
     this.socketFor.delete(ws);
   }
@@ -94,12 +105,13 @@ export class RelaySession {
     for (const ws of this.ctx.getWebSockets()) {
       const att = this.readAttachment(ws);
       const sock = this.wrap(ws);
-      if (att.role === 'device') {
+      if (att.side === 'device') {
         hub.restoreDevice(sock);
       } else {
         hub.restoreClient(sock, {
           feedbackIds: att.feedbackIds ?? [],
           project: att.project ?? false,
+          role: att.role,
         });
       }
     }
@@ -133,6 +145,10 @@ export class RelaySession {
   }
 
   private readAttachment(ws: WebSocket): RelayAttachment {
-    return (ws.deserializeAttachment() as RelayAttachment | null) ?? { role: 'client' };
+    return (ws.deserializeAttachment() as RelayAttachment | null) ?? { side: 'client' };
   }
+}
+
+function parseRole(value: string | null): Role | undefined {
+  return isRole(value) ? value : undefined;
 }

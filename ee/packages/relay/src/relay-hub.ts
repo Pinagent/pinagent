@@ -1,10 +1,27 @@
 // SPDX-License-Identifier: Elastic-2.0
+import { can, type Role } from '@pinagent/ee-auth';
 import {
   type ClientMessage,
   ClientMessageSchema,
   type ServerMessage,
   ServerMessageSchema,
 } from '@pinagent/shared';
+
+/**
+ * Client message types that mutate agent/worktree state and therefore
+ * require `conversation:write`. Read/neutral frames (subscribe, ping,
+ * presence) are open to any member. Gating is only applied when the client
+ * was issued a `role` — dev-fallback connections (no auth secret) carry no
+ * role and are unrestricted.
+ */
+const WRITE_ACTIONS: ReadonlySet<ClientMessage['type']> = new Set([
+  'user_message',
+  'ask_response',
+  'interrupt',
+  'land_request',
+  'discard_request',
+  'reopen_request',
+]);
 
 /**
  * Minimal transport abstraction over a single WebSocket. The Cloudflare
@@ -28,12 +45,15 @@ export interface RelayLogger {
 export interface ClientAttachment {
   feedbackIds: string[];
   project: boolean;
+  /** Member's RBAC role; absent in dev-fallback (no-auth) mode. */
+  role?: Role;
 }
 
 interface ClientState {
   socket: RelaySocket;
   feedbackIds: Set<string>;
   project: boolean;
+  role?: Role;
 }
 
 /**
@@ -137,9 +157,9 @@ export class RelayHub {
 
   // ---------- client side ----------
 
-  attachClient(socket: RelaySocket): void {
+  attachClient(socket: RelaySocket, role?: Role): void {
     if (!this.clients.has(socket)) {
-      this.clients.set(socket, { socket, feedbackIds: new Set(), project: false });
+      this.clients.set(socket, { socket, feedbackIds: new Set(), project: false, role });
     }
   }
 
@@ -148,6 +168,9 @@ export class RelayHub {
    * and forwarded to the device only on edges; everything else passes
    * straight through. `ping` is answered locally so liveness holds even
    * when the agent host is offline.
+   *
+   * Write actions are gated on the client's role: a `viewer` can watch a
+   * conversation but can't drive the agent or land/discard a worktree.
    */
   fromClient(socket: RelaySocket, raw: string): void {
     const parsed = ClientMessageSchema.safeParse(safeJson(raw));
@@ -158,6 +181,16 @@ export class RelayHub {
     const state = this.clients.get(socket);
     if (!state) return;
     const msg = parsed.data;
+    if (state.role && WRITE_ACTIONS.has(msg.type) && !can(state.role, 'conversation:write')) {
+      state.socket.send(
+        serialize({
+          type: 'error',
+          ...('feedbackId' in msg ? { feedbackId: msg.feedbackId } : {}),
+          message: `role "${state.role}" cannot perform "${msg.type}"`,
+        }),
+      );
+      return;
+    }
     switch (msg.type) {
       case 'subscribe':
         if (!state.feedbackIds.has(msg.feedbackId)) {
@@ -220,7 +253,12 @@ export class RelayHub {
 
   restoreClient(socket: RelaySocket, attachment: ClientAttachment): void {
     const feedbackIds = new Set(attachment.feedbackIds);
-    this.clients.set(socket, { socket, feedbackIds, project: attachment.project });
+    this.clients.set(socket, {
+      socket,
+      feedbackIds,
+      project: attachment.project,
+      role: attachment.role,
+    });
     for (const id of feedbackIds) this.incFeedback(id);
     if (attachment.project) this.projectRefcount++;
   }
@@ -228,7 +266,9 @@ export class RelayHub {
   /** Snapshot a client's subscriptions for serialization onto its socket. */
   snapshotClient(socket: RelaySocket): ClientAttachment | null {
     const state = this.clients.get(socket);
-    return state ? { feedbackIds: [...state.feedbackIds], project: state.project } : null;
+    return state
+      ? { feedbackIds: [...state.feedbackIds], project: state.project, role: state.role }
+      : null;
   }
 
   // ---------- internals ----------

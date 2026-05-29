@@ -51,14 +51,20 @@ export default {
     const auth = await verifyToken(request, url, env);
     if (!auth) return new Response('unauthorized', { status: 401 });
 
-    const role = url.pathname === DEVICE_PATH ? 'device' : 'client';
+    const side = url.pathname === DEVICE_PATH ? 'device' : 'client';
     const id = env.RELAY.idFromName(auth.sessionId);
     const stub = env.RELAY.get(id);
 
-    // Forward the upgrade to the session's Durable Object, tagging the
-    // role so the DO knows which side of the relay this socket is.
+    // Forward the upgrade to the session's Durable Object, tagging which
+    // side of the relay this socket is and (for clients) the verified
+    // member role so the DO can apply per-connection RBAC. The role comes
+    // from the trusted token, never from a client-supplied header.
     const forwarded = new Request(request, { headers: new Headers(request.headers) });
-    forwarded.headers.set('X-Pinagent-Role', role);
+    forwarded.headers.set('X-Pinagent-Role', side);
+    forwarded.headers.delete('X-Pinagent-Member-Role');
+    if (side === 'client' && auth.role) {
+      forwarded.headers.set('X-Pinagent-Member-Role', auth.role);
+    }
     return stub.fetch(forwarded);
   },
 };
