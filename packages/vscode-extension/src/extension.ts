@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as vscode from 'vscode';
+import { clampPositive, decodePrompt } from './uri-helpers';
 import { PresenceClient } from './ws-presence';
 
 // Best-effort presence connection to the dev-server's WS bridge. Lets
@@ -120,10 +121,6 @@ function resolveAgainstWorkspace(path: string): vscode.Uri | undefined {
   return vscode.Uri.joinPath(folder.uri, path);
 }
 
-function clampPositive(value: number, fallback: number): number {
-  return Number.isFinite(value) && value > 0 ? value : fallback;
-}
-
 function ensureTerminal(): vscode.Terminal {
   // VSCode invalidates the Terminal handle when the tab is closed but
   // doesn't fire any disposal event we can listen to cheaply, so probe
@@ -133,15 +130,4 @@ function ensureTerminal(): vscode.Terminal {
   }
   terminal = vscode.window.createTerminal({ name: 'Pinagent → Claude' });
   return terminal;
-}
-
-function decodePrompt(raw: string | null): string {
-  if (!raw) return '';
-  // The dock encodes prompts with `base64url(utf8(text))` so newlines
-  // and shell metacharacters survive the URL trip without escaping.
-  try {
-    return Buffer.from(raw, 'base64url').toString('utf8');
-  } catch {
-    return '';
-  }
 }

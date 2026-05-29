@@ -31,7 +31,7 @@ const RECONNECT_MAX_MS = 30_000;
  * different port). That's expected: we retry with capped exponential
  * backoff and stay quiet about failures.
  */
-class PortPresence {
+export class PortPresence {
   private socket: WebSocket | null = null;
   private reconnectDelay = RECONNECT_MIN_MS;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
