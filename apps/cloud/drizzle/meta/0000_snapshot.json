@@ -1,12 +1,12 @@
 {
-  "id": "062ff13c-2c36-477d-af2c-fb6ba877327e",
+  "id": "476b42e7-b13a-4055-9a64-0ef7d542f0f8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.organization_memberships": {
+    "auth.organization_memberships": {
       "name": "organization_memberships",
-      "schema": "",
+      "schema": "auth",
       "columns": {
         "organization_id": {
           "name": "organization_id",
@@ -61,9 +61,9 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.organizations": {
+    "auth.organizations": {
       "name": "organizations",
-      "schema": "",
+      "schema": "auth",
       "columns": {
         "id": {
           "name": "id",
@@ -108,7 +108,9 @@
     }
   },
   "enums": {},
-  "schemas": {},
+  "schemas": {
+    "auth": "auth"
+  },
   "sequences": {},
   "roles": {},
   "policies": {},
