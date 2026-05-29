@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { type AgentEvent, isNotionalCost, type ServerStatus } from '@pinagent/shared';
+import {
+  type AgentEvent,
+  isNotionalCost,
+  isUntrackedCost,
+  type ServerStatus,
+} from '@pinagent/shared';
 import { StatusBadge } from '@pinagent/ui/components/status-badge';
 import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Button } from '@pinagent/ui/components/ui/button';
@@ -1679,12 +1684,14 @@ function EventRow({
         </div>
       );
     case 'result': {
-      // OAuth/subscription runs report notional cost — label it as
-      // subscription quota rather than a billed dollar amount, matching
-      // the list/detail CostChip and the in-page widget footer.
-      const costLabel = isNotionalCost(apiKeySource)
-        ? `subscription (≈ $${event.totalCostUsd.toFixed(4)} API-equivalent)`
-        : `$${event.totalCostUsd.toFixed(4)}`;
+      // OAuth/subscription runs report notional cost; BYO-CLI runs don't
+      // report cost at all. Relabel both rather than printing a dollar
+      // amount, matching the list/detail CostChip and the widget footer.
+      const costLabel = isUntrackedCost(apiKeySource)
+        ? 'cost not tracked'
+        : isNotionalCost(apiKeySource)
+          ? `subscription (≈ $${event.totalCostUsd.toFixed(4)} API-equivalent)`
+          : `$${event.totalCostUsd.toFixed(4)}`;
       return (
         <RowFrame speaker="Agent" at={at} tone="meta">
           <p className="text-foreground/70 text-[11px]">

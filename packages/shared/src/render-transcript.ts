@@ -11,7 +11,7 @@
  * Output is terminal-friendly but deliberately ANSI-free. Pipe through
  * `bat` or `less -R` if you want highlights.
  */
-import { type AgentEvent, isNotionalCost } from './event-bus';
+import { type AgentEvent, isNotionalCost, isUntrackedCost } from './event-bus';
 
 /**
  * Render a transcript as plain text. One block per event, ordered by
@@ -56,9 +56,11 @@ function renderEvent(event: AgentEvent, apiKeySource: string | null): string {
     case 'error':
       return `[error] ${event.message}`;
     case 'result': {
-      const cost = isNotionalCost(apiKeySource)
-        ? `≈$${event.totalCostUsd.toFixed(4)} API-equivalent (subscription)`
-        : `$${event.totalCostUsd.toFixed(4)}`;
+      const cost = isUntrackedCost(apiKeySource)
+        ? 'cost not tracked'
+        : isNotionalCost(apiKeySource)
+          ? `≈$${event.totalCostUsd.toFixed(4)} API-equivalent (subscription)`
+          : `$${event.totalCostUsd.toFixed(4)}`;
       const dur = `${(event.durationMs / 1000).toFixed(2)}s`;
       const errs = event.errors?.length ? ` · errors: ${event.errors.join(', ')}` : '';
       return `[result] ${event.subtype} · ${event.numTurns} turn(s) · ${cost} · ${dur}${errs}`;

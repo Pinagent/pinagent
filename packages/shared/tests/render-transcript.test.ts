@@ -46,4 +46,12 @@ describe('renderTranscript', () => {
     expect(out).toContain('$0.0473');
     expect(out).not.toContain('API-equivalent');
   });
+
+  it('labels cost as "not tracked" for a BYO-CLI run, not $0.0000', () => {
+    // The cli provider records totalCostUsd: 0 as a placeholder (the wrapped
+    // CLI doesn't report cost), which must not read as a real "$0.0000".
+    const out = renderTranscript([initWith('cli'), { ...RESULT, totalCostUsd: 0 }]);
+    expect(out).toContain('cost not tracked');
+    expect(out).not.toContain('$0.0000');
+  });
 });
