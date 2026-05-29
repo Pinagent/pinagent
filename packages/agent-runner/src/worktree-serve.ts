@@ -54,6 +54,36 @@ interface ServeEntry {
   child: ChildProcess;
   /** Resolved when the port first accepts a connection. */
   ready: Promise<void>;
+  /** `'starting'` until the port accepts a connection, then `'running'`. */
+  status: 'starting' | 'running';
+}
+
+export interface WorktreeServerInfo {
+  feedbackId: string;
+  port: number;
+  /** Loadable app URL, e.g. `http://localhost:53700`. */
+  url: string;
+  status: 'starting' | 'running';
+}
+
+/**
+ * Snapshot the currently-tracked dev servers — backs the dock's worktree
+ * switcher. Dead children (the exit handler usually evicts them, but a
+ * race is possible) are filtered out so the dock never points an iframe
+ * at a corpse.
+ */
+export function listWorktreeServers(): WorktreeServerInfo[] {
+  const out: WorktreeServerInfo[] = [];
+  for (const [feedbackId, entry] of registry) {
+    if (!isAlive(entry.child)) continue;
+    out.push({
+      feedbackId,
+      port: entry.port,
+      url: `http://localhost:${entry.port}`,
+      status: entry.status,
+    });
+  }
+  return out;
 }
 
 // Pinned to globalThis so Vite/Next HMR module re-evaluation doesn't forget
@@ -209,7 +239,17 @@ export async function serveWorktree(
   child.stderr?.pipe(logStream);
 
   const ready = waitForPort(port, child, logPath);
-  registry.set(feedbackId, { port, child, ready });
+  const entry: ServeEntry = { port, child, ready, status: 'starting' };
+  registry.set(feedbackId, entry);
+  // Flip to 'running' once the port answers so the switcher can show a
+  // live (vs starting) state. Swallow rejection — the catch below + the
+  // exit handler handle the failure path.
+  ready.then(
+    () => {
+      entry.status = 'running';
+    },
+    () => {},
+  );
 
   // If the child dies before we ever marked it ready, drop the entry so a
   // retry re-spawns rather than reusing a corpse.

@@ -56,6 +56,7 @@ export type {
   PresentableConnections,
   PruneStaleResult,
   ServeBranchResult,
+  WorktreeServer,
 } from './types';
 export type {
   ConnectionStatus,

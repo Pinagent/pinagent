@@ -45,6 +45,7 @@ import type {
   PresentableConnections,
   PruneStaleResult,
   ServeBranchResult,
+  WorktreeServer,
 } from './types';
 import {
   type ConnectionStatus,
@@ -239,6 +240,19 @@ const ServeBranchResultSchema = z
     url: z.string(),
     port: z.number(),
     reused: z.boolean(),
+  })
+  .loose();
+
+/**
+ * Wire shape for `GET /__pinagent/worktree-servers`. Mirrors the
+ * server-side WorktreeServerInfo[] in @pinagent/agent-runner.
+ */
+const WorktreeServerSchema = z
+  .object({
+    feedbackId: z.string(),
+    port: z.number(),
+    url: z.string(),
+    status: z.enum(['starting', 'running']),
   })
   .loose();
 
@@ -617,6 +631,10 @@ export class LocalTransport implements DockTransport {
       `/__pinagent/branches/${encodeURIComponent(feedbackId)}/serve`,
       ServeBranchResultSchema,
     );
+  }
+
+  async listWorktreeServers(): Promise<WorktreeServer[]> {
+    return this.jsonGetValidated('/__pinagent/worktree-servers', z.array(WorktreeServerSchema));
   }
 
   async pruneStaleBranches(): Promise<PruneStaleResult> {

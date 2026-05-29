@@ -41,6 +41,7 @@ import type {
   PresentableConnections,
   PruneStaleResult,
   ServeBranchResult,
+  WorktreeServer,
 } from './types';
 import type { ConnectionStatus, ConversationHandlers, ExtensionStatus } from './ws-client';
 
@@ -57,6 +58,10 @@ export class MockTransport implements DockTransport {
   // Mutable per-instance branches list so the prune flows have something
   // observable to remove. Seeded from the fixtures on construction.
   private branches: Branch[] = FIXTURE_BRANCHES.slice();
+
+  // Worktree dev servers "started" via serveBranch, so the switcher's
+  // running-state reflects what the user has launched this session.
+  private worktreeServers: Map<string, WorktreeServer> = new Map();
 
   // Mutable per-instance conversations list so rename / archive flows
   // have something observable to mutate. Resets on reload.
@@ -144,8 +149,18 @@ export class MockTransport implements DockTransport {
     await sleep(SIMULATED_LATENCY_MS * 2);
     const branch = this.branches.find((b) => b.conversationId === feedbackId);
     if (!branch) throw new Error('Branch not found (mock validation)');
-    // Deterministic fake port so the mock UI is stable across renders.
-    return { url: 'http://localhost:53700', port: 53700, reused: false };
+    const existing = this.worktreeServers.get(feedbackId);
+    if (existing) return { url: existing.url, port: existing.port, reused: true };
+    // Deterministic fake port per worktree so the mock UI is stable.
+    const port = 53700 + (this.worktreeServers.size % 50);
+    const url = `http://localhost:${port}`;
+    this.worktreeServers.set(feedbackId, { feedbackId, port, url, status: 'running' });
+    return { url, port, reused: false };
+  }
+
+  async listWorktreeServers(): Promise<WorktreeServer[]> {
+    await sleep(SIMULATED_LATENCY_MS);
+    return [...this.worktreeServers.values()];
   }
 
   async pruneStaleBranches(): Promise<PruneStaleResult> {

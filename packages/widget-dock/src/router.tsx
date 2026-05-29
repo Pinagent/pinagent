@@ -42,6 +42,9 @@ const Conversations = lazy(() =>
 );
 const Changes = lazy(() => import('./routes/Changes').then((m) => ({ default: m.Changes })));
 const Branches = lazy(() => import('./routes/Branches').then((m) => ({ default: m.Branches })));
+const WorktreePreview = lazy(() =>
+  import('./routes/WorktreePreview').then((m) => ({ default: m.WorktreePreview })),
+);
 const PRs = lazy(() => import('./routes/PRs').then((m) => ({ default: m.PRs })));
 const NewPullRequest = lazy(() =>
   import('./routes/NewPullRequest').then((m) => ({ default: m.NewPullRequest })),
@@ -87,6 +90,11 @@ const branchesRoute = createRoute({
   path: ROUTE_PATHS.branches,
   component: Branches,
 });
+const previewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ROUTE_PATHS.preview,
+  component: WorktreePreview,
+});
 const prsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: ROUTE_PATHS.prs,
@@ -126,6 +134,7 @@ const routeTree = rootRoute.addChildren([
   conversationsRoute,
   changesRoute,
   branchesRoute,
+  previewRoute,
   prsRoute,
   prsNewRoute,
   connectionsRoute,

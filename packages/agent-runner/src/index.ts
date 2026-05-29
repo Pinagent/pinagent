@@ -142,9 +142,11 @@ export {
   WorktreeStateSchema,
 } from './storage';
 export {
+  listWorktreeServers,
   resolveServeCommand,
   type ServeResult,
   serveWorktree,
   stopWorktreeServer,
+  type WorktreeServerInfo,
 } from './worktree-serve';
 export { startWsServer } from './ws-server';

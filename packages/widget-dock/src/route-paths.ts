@@ -13,6 +13,7 @@ export const ROUTE_PATHS = {
   conversations: '/conversations',
   changes: '/changes',
   branches: '/branches',
+  preview: '/preview',
   prs: '/prs',
   prsNew: '/prs/new',
   connections: '/connections',
