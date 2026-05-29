@@ -19,3 +19,11 @@ export {
   quotaStatus,
   wouldExceedQuota,
 } from './plans';
+export {
+  checkQuota,
+  createInMemorySubscriptionStore,
+  DEFAULT_PLAN,
+  type QuotaDecision,
+  type Subscription,
+  type SubscriptionStore,
+} from './subscriptions';
