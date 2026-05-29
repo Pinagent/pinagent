@@ -3,6 +3,12 @@
 #
 # Deploy:  pnpm --filter @pinagent/ee-relay deploy
 # Local:   pnpm --filter @pinagent/ee-relay dev:worker
+#
+# Secrets (wrangler secret put): RELAY_AUTH_SECRET, RELAY_INTERNAL_SECRET.
+# Plain var: PINAGENT_CONTROL_PLANE_URL (the cloud app base URL). When the
+# control-plane URL + internal secret are set, the Durable Object reports
+# connect/disconnect lifecycle events to POST {url}/internal/relay/events;
+# unset → reporting is a no-op.
 name = "pinagent-relay"
 main = "src/worker.ts"
 compatibility_date = "2026-05-01"

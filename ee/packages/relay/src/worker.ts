@@ -11,6 +11,10 @@ import { RelaySession } from './relay-do';
 export interface Env {
   RELAY: DurableObjectNamespace;
   RELAY_AUTH_SECRET?: string;
+  /** Control-plane base URL the Durable Object reports lifecycle events to. */
+  PINAGENT_CONTROL_PLANE_URL?: string;
+  /** Shared secret presented to the control plane's relay-events ingest. */
+  RELAY_INTERNAL_SECRET?: string;
 }
 
 interface RelayAuth {
@@ -61,7 +65,13 @@ export default {
     // from the trusted token, never from a client-supplied header.
     const forwarded = new Request(request, { headers: new Headers(request.headers) });
     forwarded.headers.set('X-Pinagent-Role', side);
+    // Strip any client-supplied copies before setting the trusted, token-derived
+    // values (spoof-proof, same as the member-role header).
     forwarded.headers.delete('X-Pinagent-Member-Role');
+    forwarded.headers.delete('X-Pinagent-Tenant');
+    forwarded.headers.delete('X-Pinagent-Session');
+    forwarded.headers.set('X-Pinagent-Tenant', auth.tenantId);
+    forwarded.headers.set('X-Pinagent-Session', auth.sessionId);
     if (side === 'client' && auth.role) {
       forwarded.headers.set('X-Pinagent-Member-Role', auth.role);
     }
