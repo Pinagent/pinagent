@@ -364,19 +364,35 @@ function formatFeedback(r: {
   viewport: { w: number; h: number };
   status: string;
   createdAt: string;
+  component?: string | null;
+  componentPath?: string[] | null;
+  instanceIndex?: number | null;
+  instanceTotal?: number | null;
+  instanceFingerprint?: string | null;
 }): string {
   const loc = r.file ? `${r.file}:${r.line ?? '?'}${r.col != null ? `:${r.col}` : ''}` : r.selector;
-  return [
+  const lines = [
     `id: ${r.id}`,
     `status: ${r.status}`,
     `created: ${r.createdAt}`,
     `url: ${r.url}`,
     `viewport: ${r.viewport.w}×${r.viewport.h}`,
     `target: ${loc}`,
-    '',
-    'comment:',
-    r.comment,
-  ].join('\n');
+  ];
+  if (r.component) lines.push(`component: <${r.component}>`);
+  if (r.componentPath && r.componentPath.length > 1) {
+    lines.push(`component path: ${r.componentPath.join(' › ')}`);
+  }
+  // Loop-instance disambiguation: the file:line is shared across N
+  // rendered instances; point the agent at the one the user clicked.
+  if (r.instanceTotal && r.instanceTotal > 1) {
+    lines.push(
+      `instance: clicked #${(r.instanceIndex ?? 0) + 1} of ${r.instanceTotal} sharing this location`,
+    );
+    if (r.instanceFingerprint) lines.push(`instance content: ${r.instanceFingerprint}`);
+  }
+  lines.push('', 'comment:', r.comment);
+  return lines.join('\n');
 }
 
 // Auto-start when invoked as a script (bin entry). Skipped when imported as
