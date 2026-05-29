@@ -78,4 +78,10 @@ describe('StreamView result-row cost label', () => {
     expect(container.textContent).toContain('$0.0473');
     expect(container.textContent).not.toContain('subscription');
   });
+
+  it('labels cost as "not tracked" for a BYO-CLI run', () => {
+    render(root, 'cli');
+    expect(container.textContent).toContain('cost not tracked');
+    expect(container.textContent).not.toContain('$');
+  });
 });

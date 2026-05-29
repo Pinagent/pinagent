@@ -175,6 +175,18 @@ export function isNotionalCost(apiKeySource: string | null | undefined): boolean
   return apiKeySource === 'oauth';
 }
 
+/**
+ * True when a run's cost is unknown rather than genuinely zero — i.e. a
+ * bring-your-own-model provider (`apiKeySource === 'cli'`) that wraps an
+ * external agentic CLI which doesn't report cost, so we record
+ * `totalCostUsd: 0` as a placeholder. Render surfaces use this to show
+ * "not tracked" instead of a misleading "$0.0000" that reads as "free".
+ * Single source of truth so the widget/dock/transcript stay consistent.
+ */
+export function isUntrackedCost(apiKeySource: string | null | undefined): boolean {
+  return apiKeySource === 'cli';
+}
+
 export interface BusSubscriber {
   onEvent(event: AgentEvent): void;
   onClose(): void;

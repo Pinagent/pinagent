@@ -52,6 +52,7 @@ export {
   AgentEventSchema,
   type BusSubscriber,
   isNotionalCost,
+  isUntrackedCost,
 } from './event-bus';
 export { renderTranscript } from './render-transcript';
 export {
