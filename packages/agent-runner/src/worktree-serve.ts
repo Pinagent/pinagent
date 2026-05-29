@@ -191,7 +191,8 @@ export async function serveWorktree(
   // Log the child's output so a failed start is debuggable instead of silent.
   const logDir = join(projectRoot, '.pinagent', 'logs');
   await mkdir(logDir, { recursive: true });
-  const logStream = createWriteStream(join(logDir, `${feedbackId}-serve.log`), { flags: 'a' });
+  const logPath = join(logDir, `${feedbackId}-serve.log`);
+  const logStream = createWriteStream(logPath, { flags: 'a' });
 
   // detached so we get a process group we can kill as a unit — `pnpm run dev`
   // spawns node which spawns the bundler; killing only the shell would orphan
@@ -207,7 +208,7 @@ export async function serveWorktree(
   child.stdout?.pipe(logStream);
   child.stderr?.pipe(logStream);
 
-  const ready = waitForPort(port, child);
+  const ready = waitForPort(port, child, logPath);
   registry.set(feedbackId, { port, child, ready });
 
   // If the child dies before we ever marked it ready, drop the entry so a
@@ -278,7 +279,7 @@ function isPortFree(port: number): Promise<boolean> {
  * Resolve once `port` accepts a TCP connection (the dev server is up), or
  * reject if the child exits first or the readiness timeout elapses.
  */
-function waitForPort(port: number, child: ChildProcess): Promise<void> {
+function waitForPort(port: number, child: ChildProcess, logPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + READY_TIMEOUT_MS;
     let settled = false;
@@ -290,8 +291,18 @@ function waitForPort(port: number, child: ChildProcess): Promise<void> {
       else resolve();
     };
 
+    // A fast exit is most often a boot crash — and the #1 cause is the
+    // worktree's deps not being installed (`git worktree add` shares the
+    // repo's tracked files but not `node_modules`). Point at the log and
+    // that likely fix.
     child.once('exit', (code) =>
-      finish(new Error(`dev server exited before becoming ready (code ${code ?? 'unknown'})`)),
+      finish(
+        new Error(
+          `dev server exited before becoming ready (code ${code ?? 'unknown'}). ` +
+            `The worktree may be missing dependencies — try installing them there. ` +
+            `See ${logPath} for the dev-server output.`,
+        ),
+      ),
     );
 
     const attempt = (): void => {
@@ -304,7 +315,11 @@ function waitForPort(port: number, child: ChildProcess): Promise<void> {
       socket.once('error', () => {
         socket.destroy();
         if (Date.now() > deadline) {
-          finish(new Error(`dev server didn't start within ${READY_TIMEOUT_MS / 1000}s`));
+          finish(
+            new Error(
+              `dev server didn't start within ${READY_TIMEOUT_MS / 1000}s. See ${logPath} for its output.`,
+            ),
+          );
           return;
         }
         setTimeout(attempt, READY_POLL_MS);
