@@ -235,6 +235,15 @@ export function useConversationStream(id: string | null): ConversationStream {
       // compatibility: the transport still translates incoming `done`
       // messages into this callback if one is ever sent.
       onDone() {},
+      // On a reconnect the server replays the whole transcript from the
+      // start. Drop the accumulated items (and the id counter) so the
+      // replay rebuilds the stream once instead of appending a duplicate
+      // copy. Worktree state is cleared too; the server re-sends it on
+      // subscribe. Prefetched items still cover the reset→replay gap.
+      onReset() {
+        setStream(EMPTY_STREAM);
+        nextIdRef.current = 0;
+      },
     };
     return transport.subscribeConversation(id, handlers);
   }, [id, transport, queryClient]);

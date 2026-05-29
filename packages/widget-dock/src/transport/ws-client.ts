@@ -34,6 +34,16 @@ export interface ConversationHandlers {
   onError(message: string): void;
   /** Agent bus closed (turn / run finished). */
   onDone(): void;
+  /**
+   * Fired right before the client re-subscribes this conversation on a
+   * reconnect. The server replays the full transcript from the start on
+   * every fresh `subscribe`, so an accumulating consumer must drop what
+   * it has and let the replay rebuild it — otherwise every reconnect
+   * duplicates the whole transcript. Not fired on the initial connect
+   * (nothing to reset). Optional: consumers that don't accumulate can
+   * skip it.
+   */
+  onReset?(): void;
 }
 
 export type WorktreeStatePayload = Omit<
@@ -51,6 +61,13 @@ type ExtensionStatusListener = (status: ExtensionStatus) => void;
 export class DockWsClient {
   private socket: WebSocket | null = null;
   private status: ConnectionStatus = 'idle';
+  /**
+   * True once a socket has opened at least once. Lets `onOpen`
+   * distinguish the initial connect from a reconnect so it only resets
+   * per-conversation consumers (which would otherwise duplicate the
+   * replayed transcript) on the latter.
+   */
+  private hasConnectedBefore = false;
   private explicitlyClosed = false;
   private reconnectDelay = RECONNECT_MIN_MS;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -247,6 +264,8 @@ export class DockWsClient {
   }
 
   private onOpen(): void {
+    const isReconnect = this.hasConnectedBefore;
+    this.hasConnectedBefore = true;
     this.reconnectDelay = RECONNECT_MIN_MS;
     this.setStatus('open');
     // Re-establish subscriptions on the fresh socket so the server's
@@ -257,7 +276,12 @@ export class DockWsClient {
     if (this.extensionSubscribed) {
       this.socket?.send(JSON.stringify({ type: 'query_extension' }));
     }
-    for (const id of this.conversationHandlers.keys()) {
+    for (const [id, handlers] of this.conversationHandlers) {
+      // On a reconnect the server replays this conversation's transcript
+      // from the start, so tell the consumer to drop its accumulated copy
+      // first — otherwise the replay duplicates every event. Skipped on
+      // the initial connect (nothing accumulated yet).
+      if (isReconnect) handlers.onReset?.();
       this.socket?.send(JSON.stringify({ type: 'subscribe', feedbackId: id }));
     }
     // Flush queued outbound writes.
