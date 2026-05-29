@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "pinagent-expo-example",
+    "slug": "pinagent-expo-example",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "ios": { "supportsTablet": true },
+    "android": {}
+  }
+}
