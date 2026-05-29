@@ -493,3 +493,35 @@ describe('404 fallthrough', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('GET /dock/embedded.html', () => {
+  // The dock iframe is served as a static file in its own window, so the
+  // handler injects the bound WS port (from PINAGENT_WS_PORT) into its
+  // <head>. Without it the dock falls back to the hardcoded default port
+  // and can connect to a stale dev-server holding 53636.
+  const prevPort = process.env.PINAGENT_WS_PORT;
+  beforeAll(() => {
+    process.env.PINAGENT_WS_PORT = '53637';
+  });
+  afterAll(() => {
+    if (prevPort === undefined) delete process.env.PINAGENT_WS_PORT;
+    else process.env.PINAGENT_WS_PORT = prevPort;
+  });
+
+  it('injects window.__pinagentConfig with the bound WS port into the <head>', async () => {
+    const res = await route.GET(
+      makeRequest('/__pinagent/dock/embedded.html'),
+      ctx(['dock', 'embedded.html']),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/text\/html/);
+    const body = await res.text();
+    expect(body).toContain('__pinagentConfig');
+    expect(body).toContain('ws://127.0.0.1:53637/__pinagent/ws');
+    const headIdx = body.indexOf('<head');
+    const cfgIdx = body.indexOf('__pinagentConfig');
+    const bodyIdx = body.indexOf('<body');
+    expect(cfgIdx).toBeGreaterThan(headIdx);
+    expect(cfgIdx).toBeLessThan(bodyIdx);
+  });
+});

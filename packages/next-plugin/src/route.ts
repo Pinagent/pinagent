@@ -530,6 +530,27 @@ function buildWidgetBundle(): string {
 }
 
 /**
+ * Inject the WS-URL config into the dock's `embedded.html` <head>, the
+ * same way `buildWidgetBundle` hands it to the widget. The dock iframe is
+ * served as a static file in its own window, so without this it never
+ * sees `window.__pinagentConfig` and `resolveWsUrl()` falls back to the
+ * hardcoded default port — which connects to whatever (possibly stale)
+ * dev-server holds 53636, not necessarily this project's server. On
+ * fallback (boundPort 53637, …) that left the dock talking to the
+ * stranger while the widget reached the right server. Reads the
+ * (possibly mutated) bound port from the env, like `buildWidgetBundle`.
+ * Mirrors `injectDockConfig` in `packages/vite-plugin/src/middleware.ts`.
+ */
+function injectDockConfig(html: string): string {
+  const wsPort = process.env.PINAGENT_WS_PORT;
+  const config = { wsUrl: wsPort ? `ws://${defaultWsHost()}:${wsPort}/__pinagent/ws` : null };
+  const tag = `<script>;(function(){try{window.__pinagentConfig=${JSON.stringify(config)};}catch(e){}})();</script>`;
+  return /<head[^>]*>/i.test(html)
+    ? html.replace(/<head[^>]*>/i, (m) => `${m}${tag}`)
+    : `${tag}${html}`;
+}
+
+/**
  * Whitelist of sqlite-wasm files we expose. Locked-down so a path
  * traversal can't read arbitrary files out of node_modules.
  */
@@ -603,7 +624,10 @@ async function serveDockFile(requested: string): Promise<Response> {
   const mime = DOCK_MIME_BY_EXT[ext] ?? 'application/octet-stream';
   try {
     const bytes = await readFile(abs);
-    return new Response(bytes, {
+    // The dock's HTML entry is the one place we can hand the iframe its
+    // WS port (the JS/CSS assets are origin-agnostic). Inject it here.
+    const body = ext === '.html' ? injectDockConfig(bytes.toString('utf8')) : bytes;
+    return new Response(body, {
       status: 200,
       headers: {
         'Content-Type': mime,

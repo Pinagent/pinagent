@@ -442,3 +442,58 @@ describe('GET /__pinagent/feedback/:id/messages', () => {
     });
   });
 });
+
+describe('GET /__pinagent/dock/embedded.html', () => {
+  // Separate server: dock enabled + a real bound port, so we can assert
+  // the iframe entry is handed the actually-bound port (the WS-port
+  // fallback case). Without injection the dock would fall back to the
+  // hardcoded default and connect to whatever holds 53636.
+  let dockServer: Server;
+  let dockBase: string;
+  const WS_PORT = 53637;
+
+  beforeAll(async () => {
+    const storage = new Storage(PROJECT_ROOT);
+    const handler = createMiddleware({ storage, spawnMode: false, wsPort: WS_PORT, dock: true });
+    dockServer = createServer((req, res) => {
+      handler(req, res, () => {
+        res.statusCode = 404;
+        res.end();
+      });
+    });
+    await new Promise<void>((resolve) => dockServer.listen(0, resolve));
+    const addr = dockServer.address() as AddressInfo;
+    dockBase = `http://127.0.0.1:${addr.port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => dockServer.close(() => resolve()));
+  });
+
+  it('injects window.__pinagentConfig with the bound WS port into the <head>', async () => {
+    const res = await fetch(`${dockBase}/__pinagent/dock/embedded.html`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/text\/html/);
+    const body = await res.text();
+    expect(body).toContain('__pinagentConfig');
+    expect(body).toContain(`ws://127.0.0.1:${WS_PORT}/__pinagent/ws`);
+    // The prelude must sit inside <head> so it runs before the dock bundle.
+    const headIdx = body.indexOf('<head');
+    const cfgIdx = body.indexOf('__pinagentConfig');
+    const bodyIdx = body.indexOf('<body');
+    expect(headIdx).toBeGreaterThanOrEqual(0);
+    expect(cfgIdx).toBeGreaterThan(headIdx);
+    expect(cfgIdx).toBeLessThan(bodyIdx);
+  });
+
+  it('serves the dock JS bundle unmodified (no injection on non-HTML)', async () => {
+    // Find the hashed entry the HTML references and confirm it is served
+    // as a normal asset — only the HTML entry carries the config.
+    const html = await (await fetch(`${dockBase}/__pinagent/dock/embedded.html`)).text();
+    const m = /src="\/__pinagent\/dock\/([^"]+\.js)"/.exec(html);
+    expect(m).not.toBeNull();
+    const asset = await fetch(`${dockBase}/__pinagent/dock/${m?.[1]}`);
+    expect(asset.status).toBe(200);
+    expect(asset.headers.get('content-type')).toMatch(/javascript/);
+  });
+});
