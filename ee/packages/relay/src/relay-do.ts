@@ -30,6 +30,8 @@ const SIDE_HEADER = 'X-Pinagent-Role';
 const MEMBER_ROLE_HEADER = 'X-Pinagent-Member-Role';
 const TENANT_HEADER = 'X-Pinagent-Tenant';
 const SESSION_HEADER = 'X-Pinagent-Session';
+/** Set by the Worker on a control-plane push (a non-upgrade POST). */
+const INTERNAL_HEADER = 'X-Pinagent-Internal';
 
 /**
  * `RelaySession` — one Durable Object instance per tenant session. Holds
@@ -57,6 +59,16 @@ export class RelaySession {
   }
 
   async fetch(request: Request): Promise<Response> {
+    // Control-plane push (authenticated at the Worker edge): deliver the
+    // frame to this session's device socket. Not a WebSocket upgrade.
+    if (request.headers.get(INTERNAL_HEADER) === 'push') {
+      const raw = await request.text();
+      const delivered = this.getHub().pushToDevice(raw);
+      return new Response(JSON.stringify({ delivered }), {
+        status: delivered ? 200 : 404,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('expected websocket upgrade', { status: 426 });
     }

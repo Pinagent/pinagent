@@ -122,6 +122,25 @@ export class RelayHub {
   }
 
   /**
+   * Push a control-plane-initiated frame straight to the device, bypassing
+   * the client→device subscription accounting. Used for server-pushed config
+   * (e.g. branch-routing policy) injected via the DO's internal endpoint. The
+   * frame is validated as a `ClientMessage` — the device's inbound direction —
+   * so malformed pushes are dropped rather than forwarded. Returns whether a
+   * device was connected to receive it.
+   */
+  pushToDevice(raw: string): boolean {
+    const parsed = ClientMessageSchema.safeParse(safeJson(raw));
+    if (!parsed.success) {
+      this.log.warn('relay: dropped invalid push frame', { issues: parsed.error.issues });
+      return false;
+    }
+    if (!this.device) return false;
+    this.device.send(JSON.stringify(parsed.data));
+    return true;
+  }
+
+  /**
    * Route a frame from the device to the appropriate client(s). Frames
    * that fail schema validation are dropped (and logged) rather than
    * forwarded — drift in the wire format surfaces as a missing frame, not

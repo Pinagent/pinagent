@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { type Role, verifySessionToken } from '@pinagent/ee-auth';
+import { isAuthorizedInternal } from './internal-auth';
 import { RelaySession } from './relay-do';
 
 /**
@@ -30,6 +31,10 @@ interface RelayAuth {
 
 const WS_PATH = '/__pinagent/ws';
 const DEVICE_PATH = '/__pinagent/device';
+const INTERNAL_PUSH_PATH = '/__pinagent/internal/push';
+
+/** Marks the DO sub-request as a control-plane push rather than a WS upgrade. */
+const INTERNAL_PUSH_HEADER = 'X-Pinagent-Internal';
 
 /**
  * Edge router. Authenticates the connection, then hands the upgrade to
@@ -44,6 +49,11 @@ const DEVICE_PATH = '/__pinagent/device';
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+
+    // Control plane → device push (service-to-service; not a WS upgrade).
+    if (url.pathname === INTERNAL_PUSH_PATH) {
+      return handleInternalPush(request, url, env);
+    }
 
     if (url.pathname !== WS_PATH && url.pathname !== DEVICE_PATH) {
       return new Response('not found', { status: 404 });
@@ -78,6 +88,44 @@ export default {
     return stub.fetch(forwarded);
   },
 };
+
+/**
+ * Control-plane → device push. The cloud POSTs a frame (e.g. a
+ * `set_branch_routing` ClientMessage) for a specific session; we authenticate
+ * with the shared `RELAY_INTERNAL_SECRET` and forward it to that session's
+ * Durable Object, which sends it down the connected device socket.
+ *
+ *   POST /__pinagent/internal/push?session=<sessionId>
+ *     Authorization: Bearer <RELAY_INTERNAL_SECRET>
+ *     body: the raw frame to deliver
+ *   → 200 { delivered: true } | 404 { delivered: false } (no device connected)
+ *
+ * Fails closed when the secret is unset (the endpoint is disabled, not open).
+ */
+async function handleInternalPush(request: Request, url: URL, env: Env): Promise<Response> {
+  if (request.method !== 'POST') {
+    return new Response('method not allowed', { status: 405 });
+  }
+  if (!env.RELAY_INTERNAL_SECRET) {
+    return new Response('internal push disabled', { status: 503 });
+  }
+  if (!isAuthorizedInternal(request.headers.get('Authorization'), env.RELAY_INTERNAL_SECRET)) {
+    return new Response('unauthorized', { status: 401 });
+  }
+  const sessionId = url.searchParams.get('session') ?? '';
+  if (!sessionId) return new Response('missing session', { status: 400 });
+
+  const body = await request.text();
+  const stub = env.RELAY.get(env.RELAY.idFromName(sessionId));
+  // Re-issue as a plain (non-upgrade) POST the DO recognizes via the marker
+  // header; the DO forwards the body to its device socket.
+  const forwarded = new Request('https://relay-do/internal/push', {
+    method: 'POST',
+    headers: { [INTERNAL_PUSH_HEADER]: 'push', 'content-type': 'application/json' },
+    body,
+  });
+  return stub.fetch(forwarded);
+}
 
 /**
  * Verify the connection's bearer token and resolve it to a tenant +

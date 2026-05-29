@@ -321,3 +321,39 @@ describe('RelayHub role-based write gating', () => {
     expect(restored.ofType('error')).toHaveLength(1);
   });
 });
+
+describe('RelayHub.pushToDevice', () => {
+  const policy = JSON.stringify({
+    type: 'set_branch_routing',
+    defaultBaseBranch: 'main',
+    allowedBranchPatterns: ['feat/*'],
+  });
+
+  it('forwards a valid control frame to the connected device and reports delivery', () => {
+    const hub = new RelayHub(silentLog);
+    const device = new FakeSocket();
+    hub.attachDevice(device);
+
+    expect(hub.pushToDevice(policy)).toBe(true);
+    expect(device.ofType('set_branch_routing')).toHaveLength(1);
+    expect(device.ofType('set_branch_routing')[0]).toMatchObject({
+      defaultBaseBranch: 'main',
+      allowedBranchPatterns: ['feat/*'],
+    });
+  });
+
+  it('reports not-delivered when no device is connected', () => {
+    const hub = new RelayHub(silentLog);
+    expect(hub.pushToDevice(policy)).toBe(false);
+  });
+
+  it('drops an invalid frame without forwarding (and reports not-delivered)', () => {
+    const hub = new RelayHub(silentLog);
+    const device = new FakeSocket();
+    hub.attachDevice(device);
+
+    expect(hub.pushToDevice(JSON.stringify({ type: 'not-a-real-message' }))).toBe(false);
+    expect(hub.pushToDevice('}{ not json')).toBe(false);
+    expect(device.sent).toHaveLength(0);
+  });
+});
