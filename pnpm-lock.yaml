@@ -610,9 +610,6 @@ importers:
 
   packages/vue-plugin:
     dependencies:
-      '@vue/compiler-core':
-        specifier: ^3.5.13
-        version: 3.5.35
       '@vue/compiler-sfc':
         specifier: ^3.5.13
         version: 3.5.35
@@ -623,6 +620,9 @@ importers:
       '@vitejs/plugin-vue':
         specifier: ^6.0.0
         version: 6.0.7(vite@8.0.14(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3))(vue@3.5.35(typescript@6.0.3))
+      '@vue/compiler-core':
+        specifier: ^3.5.13
+        version: 3.5.35
       tsdown:
         specifier: ^0.22.0
         version: 0.22.0(tsx@4.22.3)(typescript@6.0.3)

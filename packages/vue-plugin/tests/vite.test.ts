@@ -52,6 +52,14 @@ describe('vitePlugin (end-to-end via Vite SSR)', () => {
     expect(liTags.length).toBe(2);
     // count starts at 0, so the v-else <p> renders — and it's tagged.
     expect(html).toContain('not yet');
-    expect(html).toMatch(/<p data-pa-loc="App\.vue:\d+:\d+">not yet<\/p>/);
+    expect(html).toMatch(/<p data-pa-loc="App\.vue:\d+:\d+"[^>]*>not yet<\/p>/);
+  });
+
+  it('carries the enclosing component name through the pipeline', () => {
+    // Fixture is App.vue → every element gets data-pa-comp="App", so both
+    // <li> loop instances share one component identity.
+    expect(html).toContain('data-pa-comp="App"');
+    const compTags = html.match(/data-pa-comp="App"/g) ?? [];
+    expect(compTags.length).toBeGreaterThanOrEqual(2);
   });
 });

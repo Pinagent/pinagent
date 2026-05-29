@@ -6,9 +6,11 @@
 > an installable integration. See [Where this fits](#where-this-fits) below.
 
 The Vue analogue of [`@pinagent/babel-plugin`](../babel-plugin). It injects a
-`data-pa-loc="file:line:col"` attribute onto every element in a Vue Single-File
-Component `<template>` block at build time. The widget reads this attribute when
-the user picks an element, so each comment anchors to the exact source location.
+`data-pa-loc="file:line:col"` attribute (plus a `data-pa-comp` component name)
+onto every element in a Vue Single-File Component `<template>` block at build
+time. The widget reads these attributes when the user picks an element, so each
+comment anchors to the exact source location and reports the component it lives
+in.
 
 Vue is the interesting case because SFC templates **aren't JSX** — they're Vue's
 own HTML-flavoured template syntax, invisible to Babel. So instead of walking a
@@ -21,11 +23,14 @@ framework-agnostic and needs **zero** changes.
 
 - **`transform.ts`** — `transformVue(code, { relPath })`. Parses the SFC with
   `@vue/compiler-sfc`, walks the `<template>` AST (descending through `v-if`
-  branches and `v-for` bodies), and splices `data-pa-loc` after each element's
-  tag name. Returns the rewritten source, or `null` when there's nothing to tag
-  (no template, no elements, or an unparseable file) — the same "null means
-  skip" contract as the babel plugin, so bundler glue can treat both
-  identically.
+  branches and `v-for` bodies), and splices `data-pa-loc` (and `data-pa-comp`)
+  after each element's tag name. Returns the rewritten source, or `null` when
+  there's nothing to tag (no template, no elements, or an unparseable file) —
+  the same "null means skip" contract as the babel plugin, so bundler glue can
+  treat both identically. In Vue an SFC *is* one component, so the enclosing
+  component name is derived from the filename (`PriceCard.vue` → `PriceCard`)
+  and every element — including every `v-for` instance — carries it, which is
+  what lets downstream loop-instance disambiguation resolve to the right item.
 - **`vite.ts`** (`@pinagent/vue-plugin/vite`) — a minimal Vite plugin,
   `vitePlugin()`, that runs `transformVue` on `.vue` files. It uses
   `enforce: 'pre'` so it tags the **raw** SFC source before `@vitejs/plugin-vue`
@@ -43,14 +48,14 @@ of `@vitejs/plugin-vue`, SSR-renders `tests/fixtures/App.vue`, and asserts the
 rendered DOM carries the attributes. The actual output:
 
 ```html
-<main data-pa-loc="App.vue:9:3" class="demo">
-  <h1 data-pa-loc="App.vue:10:5">Pinagent Vue demo</h1>
-  <button data-pa-loc="App.vue:11:5">Count is 0</button>
-  <ul data-pa-loc="App.vue:12:5">
-    <li data-pa-loc="App.vue:13:7">Apples</li>
-    <li data-pa-loc="App.vue:13:7">Pears</li>
+<main data-pa-loc="App.vue:9:3" data-pa-comp="App" class="demo">
+  <h1 data-pa-loc="App.vue:10:5" data-pa-comp="App">Pinagent Vue demo</h1>
+  <button data-pa-loc="App.vue:11:5" data-pa-comp="App">Count is 0</button>
+  <ul data-pa-loc="App.vue:12:5" data-pa-comp="App">
+    <li data-pa-loc="App.vue:13:7" data-pa-comp="App">Apples</li>
+    <li data-pa-loc="App.vue:13:7" data-pa-comp="App">Pears</li>
   </ul>
-  <p data-pa-loc="App.vue:16:5">not yet</p>
+  <p data-pa-loc="App.vue:16:5" data-pa-comp="App">not yet</p>
 </main>
 ```
 
@@ -66,11 +71,11 @@ as it does for React — so this is all the source mapping a Vue app needs.
 - Elements that already carry `data-pa-loc` — idempotent, safe to re-run.
 - Files that fail to parse — returns `null` rather than crashing the build.
 
-The attribute carries a POSIX-relative `file:line:col`. Vue's SFC compiler
+`data-pa-loc` carries a POSIX-relative `file:line:col`. Vue's SFC compiler
 reports element locations relative to the **whole file** (not the template
 block) and columns are already 1-indexed pointing at the `<`, which matches the
 convention the babel plugin normalises JSX columns to — so the two transforms
-emit identical attribute shapes.
+emit identical attribute shapes (`data-pa-loc` + `data-pa-comp`).
 
 ## Where this fits
 

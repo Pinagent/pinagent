@@ -88,4 +88,15 @@ describe('transformVue', () => {
     const out = transform(sfc(`  <div>hi</div>`));
     expect(out).toContain(`data-pa-loc="${RELPATH}:4:3"`);
   });
+
+  it('tags the enclosing component name (data-pa-comp) from the SFC filename', () => {
+    // src/Foo.vue → Foo. Mirrors the babel plugin's data-pa-comp.
+    const out = transformVue(sfc(`  <div>hi</div>`), { relPath: 'src/cards/PriceCard.vue' });
+    expect(out).toContain('data-pa-comp="PriceCard"');
+  });
+
+  it('gives every v-for instance the same component name (loop disambiguation)', () => {
+    const out = transform(sfc(`  <li v-for="i in items" :key="i">{{ i }}</li>`));
+    expect(out).toContain('data-pa-comp="Foo"');
+  });
 });
