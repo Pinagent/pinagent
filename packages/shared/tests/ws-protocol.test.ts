@@ -128,6 +128,54 @@ describe('ClientMessageSchema', () => {
     });
   });
 
+  describe('set_branch_routing', () => {
+    it('accepts a policy with a base branch and patterns', () => {
+      expect(
+        ClientMessageSchema.safeParse({
+          type: 'set_branch_routing',
+          defaultBaseBranch: 'main',
+          allowedBranchPatterns: ['feat/*', 'fix/*'],
+        }).success,
+      ).toBe(true);
+    });
+
+    it('accepts a null base branch and an empty pattern list', () => {
+      expect(
+        ClientMessageSchema.safeParse({
+          type: 'set_branch_routing',
+          defaultBaseBranch: null,
+          allowedBranchPatterns: [],
+        }).success,
+      ).toBe(true);
+    });
+
+    it('rejects a missing defaultBaseBranch (must be explicit string|null)', () => {
+      expect(
+        ClientMessageSchema.safeParse({
+          type: 'set_branch_routing',
+          allowedBranchPatterns: [],
+        }).success,
+      ).toBe(false);
+    });
+
+    it('rejects an empty-string pattern and too many patterns', () => {
+      expect(
+        ClientMessageSchema.safeParse({
+          type: 'set_branch_routing',
+          defaultBaseBranch: null,
+          allowedBranchPatterns: [''],
+        }).success,
+      ).toBe(false);
+      expect(
+        ClientMessageSchema.safeParse({
+          type: 'set_branch_routing',
+          defaultBaseBranch: null,
+          allowedBranchPatterns: Array.from({ length: 51 }, (_, i) => `p${i}/*`),
+        }).success,
+      ).toBe(false);
+    });
+  });
+
   describe('ping', () => {
     it('accepts a bare ping with no fields', () => {
       expect(ClientMessageSchema.safeParse({ type: 'ping' }).success).toBe(true);
