@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Elastic-2.0
+
 import type { BranchRoutingPolicy } from '@pinagent/ee-team-features';
+import { useState } from 'react';
 import type { CloudApiClient } from './api-client';
 import { UnauthorizedError } from './api-client';
+import { BranchRoutingForm } from './BranchRoutingForm';
 import { SignIn } from './SignIn';
 import { useAsync } from './use-async';
 
@@ -51,10 +54,13 @@ export function Policy({
   client: CloudApiClient;
   organizationId: string;
 }) {
+  const [reloadKey, setReloadKey] = useState(0);
+  const [editing, setEditing] = useState(false);
+
   const state = useAsync<PolicyData>(async () => {
     const branchRouting = await client.getBranchRouting(organizationId);
     return { branchRouting };
-  }, [client, organizationId]);
+  }, [client, organizationId, reloadKey]);
 
   if (state.status === 'loading') return <p className="loading">Loading…</p>;
   if (state.status === 'error') {
@@ -65,5 +71,33 @@ export function Policy({
       </p>
     );
   }
-  return <PolicyView branchRouting={state.value.branchRouting} />;
+
+  if (editing) {
+    return (
+      <section className="panel">
+        <h2>Branch routing</h2>
+        <h3>Edit policy</h3>
+        <BranchRoutingForm
+          initial={state.value.branchRouting}
+          onSubmit={async (input) => {
+            await client.putBranchRouting(organizationId, input);
+            setEditing(false);
+            setReloadKey((k) => k + 1);
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      </section>
+    );
+  }
+
+  return (
+    <>
+      <PolicyView branchRouting={state.value.branchRouting} />
+      <div className="panel-actions">
+        <button type="button" onClick={() => setEditing(true)}>
+          Edit policy
+        </button>
+      </div>
+    </>
+  );
 }
