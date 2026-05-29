@@ -50,7 +50,7 @@ The extra `lint:*` scripts in `package.json` are what CI runs as pre-merge gates
 ### Package map (`packages/*`, all `@pinagent/*`)
 
 - **`vite-plugin` / `next-plugin`** — the two entry points. Both embed the widget IIFE at build time, mount the `/__pinagent` middleware/route, and back `spawnAgent`. `next-plugin` additionally ships `<Pinagent />` (`component.tsx`), a route handler (`route.ts`), and `*-noop` variants gated on `NODE_ENV !== 'production'`.
-- **`db`** — Drizzle schema (`schema.ts`) + a re-export of drizzle operators. Shared by the server (`better-sqlite3`) and the browser cache (`@sqlite.org/sqlite-wasm`). **Server-side SQLite is the source of truth; the browser store is a rebuildable mirror.**
+- **`db`** — Drizzle schema (`schema.ts`) + a re-export of drizzle operators. Shared by the server (Node's built-in `node:sqlite`) and the browser cache (`@sqlite.org/sqlite-wasm`). **Server-side SQLite is the source of truth; the browser store is a rebuildable mirror.**
 - **`agent-runner`** — SDK-driven local runtime. `agent.ts` (spawn / follow-up / worktree merge), `bus.ts` (event bus), `storage.ts` (Storage facade over the DB), `ws-server.ts`, plus dock backends: `pr-composer`, `branches`, `changes`, `pull-requests`, `secrets-store`, `settings-store`, `audit-log`, `ask-user`.
 - **`mcp`** — stdio MCP server + the `pinagent-mcp` bin. Reads the same `.pinagent/db.sqlite`.
 - **`widget`** — per-element browser UI. `private: true`, never published — it's embedded into the plugins (see widget cascade rule).
@@ -79,7 +79,7 @@ The extra `lint:*` scripts in `package.json` are what CI runs as pre-merge gates
 
 - **Widget cascade.** `@pinagent/widget` is embedded into `vite-plugin` and `next-plugin` as an IIFE at build time (each plugin's `scripts/embed-widget.mjs` → `src/__generated__/widget.ts`, also run via `pnpm generate:plugin-widget-embed`, which `pretest` triggers). A widget IIFE change MUST be paired with a changeset bumping **both** consumer plugins, or the new bytes ship to nobody. `pnpm lint:widget-cascade` enforces this.
 - **Stale plugin dist** is the usual cause of a 500 on `POST /__pinagent/feedback` in the examples — `pnpm build` forces a clean rebuild.
-- `better-sqlite3` is a native module: it's in `onlyBuiltDependencies` (pnpm blocks postinstall builds by default), and it's externalized in `vitest.config.ts` so Vite's resolver doesn't try to transform it.
+- **No native SQLite at runtime.** The server uses Node's built-in `node:sqlite` (`DatabaseSync`, stable since 22.13) — see `packages/agent-runner/src/db/client.ts` — so there's no native build step and no `pnpm approve-builds` for the click→comment→agent loop. `better-sqlite3` survives only as a `@pinagent/widget` *test* dependency (an in-memory DB in the test helpers); it's listed in `pnpm-workspace.yaml`'s `onlyBuiltDependencies` (so a plain `pnpm install` builds it) and externalized in `vitest.config.ts` so Vite's resolver doesn't try to transform it.
 
 ### Schema changes
 

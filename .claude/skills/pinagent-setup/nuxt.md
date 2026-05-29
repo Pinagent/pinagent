@@ -16,22 +16,6 @@ pnpm add -D @pinagent/nuxt-plugin
 If the consumer's `postinstall` hook is flaky and rolls back the install, pass
 `--ignore-scripts` — no pinagent behavior depends on those scripts.
 
-### Native build approval (pnpm only)
-
-pnpm 10+ blocks postinstall build scripts by default. The agent runner uses
-`better-sqlite3` server-side, which needs its native `.node` binding compiled —
-otherwise comment submission returns a 500 (`Could not locate the bindings
-file`). Approve it once:
-
-```bash
-pnpm approve-builds   # interactive; select better-sqlite3
-pnpm install          # re-run so the postinstall fires
-```
-
-Or non-interactively, add `{ "pnpm": { "onlyBuiltDependencies":
-["better-sqlite3"] } }` to the target's `package.json`, then `pnpm install`.
-(npm and yarn build native binaries by default, so this only matters on pnpm.)
-
 ## 2. Add to `nuxt.config.ts`
 
 ```ts

@@ -11,17 +11,6 @@ pnpm add -D @pinagent/next-plugin
 
 Use `--ignore-scripts` if the consumer's monorepo postinstall hook (sherif, lint, etc.) fails and rolls back the install. Pinagent's own behavior doesn't depend on the consumer's postinstall.
 
-### Native build approval (pnpm only)
-
-pnpm 10+ blocks postinstall build scripts by default. The agent runner uses `better-sqlite3` server-side, which needs its native `.node` binding compiled — otherwise comment submission returns a 500 (`Could not locate the bindings file`). Approve it once:
-
-```bash
-pnpm approve-builds   # interactive; select better-sqlite3
-pnpm install          # re-run so the postinstall fires
-```
-
-Or non-interactively, add `{ "pnpm": { "onlyBuiltDependencies": ["better-sqlite3"] } }` to the target's `package.json`, then `pnpm install`. (npm and yarn build native binaries by default, so this only matters on pnpm.)
-
 ## 2. Wrap `next.config.{js,ts}`
 
 ```js

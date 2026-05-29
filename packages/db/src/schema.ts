@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Pinagent persistent state. Shared between the dev-side server
- * (`better-sqlite3` via `@pinagent/next-plugin/db/client`) and the browser
- * cache (`@sqlite.org/sqlite-wasm` via `@pinagent/widget/db/client`).
+ * (Node's built-in `node:sqlite` via `@pinagent/agent-runner`'s
+ * `src/db/client.ts`) and the browser cache (`@sqlite.org/sqlite-wasm` via
+ * `@pinagent/widget/db/client`).
  *
  * Server-side is the source of truth: it owns the agent runs, log
  * files, and worktrees. The browser store mirrors only the
