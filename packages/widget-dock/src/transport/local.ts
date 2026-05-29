@@ -77,6 +77,21 @@ const PullRequestWireSchema = z
   })
   .loose();
 
+/** Project the PR wire shape onto the dock's display `PullRequest`. */
+function toPullRequest(w: z.infer<typeof PullRequestWireSchema>): PullRequest {
+  return {
+    id: w.id,
+    number: w.number,
+    title: w.title,
+    state: w.state,
+    branch: w.branch,
+    baseBranch: w.baseBranch,
+    url: w.url,
+    updatedAt: w.updatedAt,
+    conversationIds: w.conversationIds,
+  };
+}
+
 /**
  * Wire shape for `GET /__pinagent/branches`. Mirrors
  * `@pinagent/agent-runner.BranchRecord`. Local because the wire's
@@ -389,19 +404,16 @@ export class LocalTransport implements DockTransport {
 
   async listPullRequests(): Promise<PullRequest[]> {
     const wire = await this.jsonGetValidated('/__pinagent/prs', z.array(PullRequestWireSchema));
-    return wire.map(
-      (w): PullRequest => ({
-        id: w.id,
-        number: w.number,
-        title: w.title,
-        state: w.state,
-        branch: w.branch,
-        baseBranch: w.baseBranch,
-        url: w.url,
-        updatedAt: w.updatedAt,
-        conversationIds: w.conversationIds,
-      }),
+    return wire.map(toPullRequest);
+  }
+
+  async refreshPullRequests(): Promise<PullRequest[]> {
+    const wire = await this.jsonWriteValidated(
+      'POST',
+      '/__pinagent/prs/refresh',
+      z.array(PullRequestWireSchema),
     );
+    return wire.map(toPullRequest);
   }
 
   async getConversation(id: string): Promise<ConversationDetail | null> {

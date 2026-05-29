@@ -11,10 +11,10 @@ import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
 import { useNavigate } from '@tanstack/react-router';
-import { ExternalLink, GitPullRequest, Plus } from 'lucide-react';
+import { ExternalLink, GitPullRequest, Plus, RotateCw } from 'lucide-react';
 import { TimestampDot } from '../components/TimestampDot';
 import type { PullRequest } from '../fixtures';
-import { usePullRequests } from '../hooks/usePullRequests';
+import { usePullRequests, useRefreshPullRequests } from '../hooks/usePullRequests';
 import { ROUTE_PATHS } from '../route-paths';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
@@ -38,6 +38,7 @@ const STATE_LABEL: Record<PullRequest['state'], string> = {
 export function PRs() {
   const transport = useTransport();
   const prsQuery = usePullRequests();
+  const refresh = useRefreshPullRequests();
   const navigate = useNavigate();
   const isMock = transport.kind === 'mock';
 
@@ -93,6 +94,21 @@ export function PRs() {
           {openCount} open · {prs.length} total
         </span>
         <div className="ml-auto flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 gap-1.5 text-xs text-muted-foreground"
+            onClick={() => refresh.mutate()}
+            disabled={refresh.isPending || isMock}
+            title={
+              isMock
+                ? 'Refresh reconciles against GitHub — unavailable in fixtures mode'
+                : 'Reconcile PR state against GitHub'
+            }
+          >
+            <RotateCw className={cn('h-3 w-3', refresh.isPending && 'animate-spin')} />
+            {refresh.isPending ? 'Refreshing…' : 'Refresh'}
+          </Button>
           <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={newPr}>
             <Plus className="h-3 w-3" />
             New PR

@@ -3,14 +3,16 @@
  * `listPullRequests` — read the dock's record of PRs the compose flow
  * has opened, newest activity first.
  *
- * Rows are written by `composePullRequest` on the success path; this
- * function is the read side. We don't reconcile against GitHub here —
- * `state` reflects what the composer knew at insert time ('open'). A
- * future refresh job can update `state` / `updatedAt` from the GitHub
- * API; the dock surfaces stale state as a known tradeoff.
+ * Rows are written by `composePullRequest` on the success path. The read
+ * side doesn't reach out to GitHub; `state` reflects whatever the last
+ * `refreshPullRequests` (or the original insert, 'open') recorded. The
+ * dock's "Refresh" action calls that reconcile path on demand.
  */
-import { desc, pullRequests } from '@pinagent/db';
+import { Octokit } from '@octokit/rest';
+import { desc, eq, pullRequests } from '@pinagent/db';
 import { getDb } from './db/client';
+import { resolveOriginRemote } from './git-remote';
+import { resolveGithubToken } from './github-auth';
 
 export interface PullRequestRecord {
   /** Stable id for React keys — the DB row id as a string. */
@@ -75,4 +77,74 @@ export async function recordPullRequest(
     body: input.body,
     conversationIds: input.conversationIds,
   });
+}
+
+export type PullRequestState = PullRequestRecord['state'];
+
+/**
+ * Collapse GitHub's PR fields into our single `state` enum. GitHub
+ * reports `state` as only 'open' | 'closed' and carries `merged` /
+ * `draft` as separate flags — merged wins over closed, and draft only
+ * applies while still open.
+ */
+export function mapGithubPrState(pr: {
+  state: string;
+  merged?: boolean | null;
+  draft?: boolean | null;
+}): PullRequestState {
+  if (pr.merged) return 'merged';
+  if (pr.state === 'closed') return 'closed';
+  if (pr.draft) return 'draft';
+  return 'open';
+}
+
+/**
+ * Update a recorded PR's `state` (and `updatedAt`, from GitHub's own
+ * timestamp when supplied) by PR number — unique within the repo.
+ */
+export async function updatePullRequestState(
+  projectRoot: string,
+  number: number,
+  state: PullRequestState,
+  updatedAtIso?: string,
+): Promise<void> {
+  const db = getDb(projectRoot);
+  await db
+    .update(pullRequests)
+    .set({ state, updatedAt: updatedAtIso ? new Date(updatedAtIso) : new Date() })
+    .where(eq(pullRequests.number, number));
+}
+
+/**
+ * Reconcile every recorded PR's state against GitHub, then return the
+ * refreshed list. Best-effort: a PR that 404s (deleted) or any per-PR
+ * API error is skipped, leaving its last-known state in place. When no
+ * token / non-GitHub remote is configured, this is a no-op that just
+ * re-reads the local list — the dock's Refresh button stays harmless.
+ */
+export async function refreshPullRequests(projectRoot: string): Promise<PullRequestRecord[]> {
+  const token = await resolveGithubToken(projectRoot);
+  const remote = await resolveOriginRemote(projectRoot);
+  if (token && remote) {
+    const octokit = new Octokit({ auth: token });
+    const current = await listPullRequests(projectRoot);
+    for (const pr of current) {
+      try {
+        const { data } = await octokit.pulls.get({
+          owner: remote.owner,
+          repo: remote.repo,
+          pull_number: pr.number,
+        });
+        await updatePullRequestState(
+          projectRoot,
+          pr.number,
+          mapGithubPrState(data),
+          data.updated_at,
+        );
+      } catch {
+        // Deleted PR, network blip, scope issue — keep the prior state.
+      }
+    }
+  }
+  return listPullRequests(projectRoot);
 }
