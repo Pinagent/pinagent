@@ -7,16 +7,21 @@ import { openConversationInDock } from '../src/dock-bridge';
 import type { Composer } from '../src/types';
 import type { WidgetWsClient } from '../src/ws-client';
 
-// `tryReanchor` resolves against the shared happy-dom document, so in the full
-// test suite a stray node (or rAF timing) can let it find a match and reset
-// `anchorLost` — which would send the bubble click down the normal `swapTo`
-// path instead of the orphaned-dot path under test. Force it to fail so the
-// dot behavior is exercised deterministically; every other selector export
-// stays real via the `...actual` spread (composer.ts also uses
-// `findReanchorTarget`).
+// composer.ts has its own *local* `tryReanchor`; the only re-anchor lever it
+// exposes is `selector.ts::findReanchorTarget`, which it calls with the
+// composer's `dataPaLoc` + CSS `selector`. The orphaned target here is a plain
+// `<button>` whose selector resolves to `body > button` — and the composer
+// itself appends a `<button class="pa-anchor-lost-dismiss">` to `document.body`,
+// so `document.querySelector('body > button')` *matches that dismiss button*.
+// Re-anchor therefore "succeeds" against the composer's own chrome, resetting
+// `anchorLost` and routing the bubble click down the normal `swapTo` path
+// instead of the orphaned-dot path under test. (Cross-file DOM pollution in the
+// full suite is a second way to trip the same match.) Mock the real lever to
+// always miss so the dot behavior is exercised deterministically; every other
+// selector export stays real via the `...actual` spread.
 vi.mock('../src/selector', async (importActual) => {
   const actual = await importActual<typeof import('../src/selector')>();
-  return { ...actual, tryReanchor: () => false };
+  return { ...actual, findReanchorTarget: () => null };
 });
 
 /**
@@ -75,10 +80,14 @@ function mountOrphanedComposer(ctx: WidgetContext, feedbackId = 'fb-123'): Compo
   const composer = Array.from(ctx.composers)[0];
 
   // Give it a conversation id (required for the dot to show) and detach
-  // the target so re-anchor can't possibly succeed.
+  // the target so re-anchor can't possibly succeed. `findReanchorTarget`
+  // is mocked to `null` at the module level, so the bubble click stays on
+  // the orphaned-dot path; we still set the dot state by hand here (the
+  // rAF loop that would normally do it is stubbed out in beforeEach).
   composer.feedbackId = feedbackId;
   target.remove();
   composer.anchorLost = true;
+  composer.reviewingLost = false;
   composer.bubble.classList.add('anchor-lost');
   composer.bubble.hidden = false;
   return composer;
@@ -117,10 +126,19 @@ describe('openConversationInDock', () => {
 describe('anchor-lost dot interactions', () => {
   beforeEach(() => {
     document.body.replaceChildren();
+    // Neutralise the composer's rAF reposition loop. happy-dom's
+    // `requestAnimationFrame` is a macrotask that wouldn't fire inside a
+    // synchronous test, but a leaked fake-timer / rAF stub from another
+    // file in the full suite can drive it — and `reposition()` re-evaluates
+    // the anchor-lost state, which could clobber the hand-driven setup
+    // below. No-op stubs keep the click the only thing that mutates state.
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => {});
   });
 
   afterEach(() => {
     document.body.replaceChildren();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
