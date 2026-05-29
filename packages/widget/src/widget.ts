@@ -72,6 +72,14 @@ interface ComposerMeta {
    * post messages to the parent so it can flash highlight outlines.
    */
   extraCount: number;
+  /**
+   * Per-extra display info (tag / short label / resolved loc) for the
+   * "+N" badge's hover popover, so the user can see *what* the extra
+   * picks were without leaving the composer. Display-only — the wire
+   * payload sent to the server is `Composer.extraAnchors`. Empty in the
+   * single-pick case.
+   */
+  extras: Array<{ tag: string; label: string | null; loc: PaLoc | null }>;
 }
 
 const ICON_CODE = `<svg class="hdr-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`;
@@ -903,17 +911,23 @@ export function mount(): void {
   ): Composer {
     const loc = findLoc(target);
     const selector = shortSelector(target);
-    const extraAnchors: ExtraAnchor[] = extras.map(({ target: t, click: c }) => {
+    // Resolve each extra once, deriving both the wire anchor (sent to
+    // the server on submit) and the display row (the badge popover).
+    const extraData = extras.map(({ target: t, click: c }) => {
       const eloc = findLoc(t);
       return {
-        file: eloc?.file ?? null,
-        line: eloc?.line ?? null,
-        col: eloc?.col ?? null,
-        selector: shortSelector(t),
-        clickX: c.x,
-        clickY: c.y,
+        anchor: {
+          file: eloc?.file ?? null,
+          line: eloc?.line ?? null,
+          col: eloc?.col ?? null,
+          selector: shortSelector(t),
+          clickX: c.x,
+          clickY: c.y,
+        } as ExtraAnchor,
+        display: { tag: t.tagName.toLowerCase(), label: describeElementLabel(t), loc: eloc },
       };
     });
+    const extraAnchors: ExtraAnchor[] = extraData.map((d) => d.anchor);
     const meta: ComposerMeta = {
       tag: target.tagName.toLowerCase(),
       label: describeElementLabel(target),
@@ -921,6 +935,7 @@ export function mount(): void {
       breadcrumbs: breadcrumbTags(target),
       chips: quickActionsFor(target),
       extraCount: extraAnchors.length,
+      extras: extraData.map((d) => d.display),
     };
     const dataPaLoc = loc ? `${loc.file}:${loc.line}:${loc.col}` : null;
 
@@ -1330,17 +1345,43 @@ export function mount(): void {
         discardBtn,
       };
 
-      // "+N more" badge — present only when extras > 0. Hover bounces a
-      // message up to the parent which flashes outlines on the extras
-      // on the underlying page.
+      // "+N more" badge — present only when extras > 0. Hovering it
+      // does two things: bounces a message up to the parent to flash
+      // outlines on the underlying-page extras, and opens an in-composer
+      // popover (`#pa-extras-pop`) listing every selected element. The
+      // popover sits below the header with a small gap, so we hide it on
+      // a short delay — long enough for the pointer to cross the gap and
+      // land on the popover (whose own mouseenter cancels the hide).
       const extrasBadge = idoc.getElementById('pa-extras');
+      const extrasPop = idoc.getElementById('pa-extras-pop');
       if (extrasBadge) {
+        let hideTimer: ReturnType<typeof setTimeout> | null = null;
+        const cancelHide = () => {
+          if (hideTimer) {
+            clearTimeout(hideTimer);
+            hideTimer = null;
+          }
+        };
+        const showPop = () => {
+          cancelHide();
+          extrasPop?.classList.add('open');
+        };
+        const scheduleHide = () => {
+          cancelHide();
+          hideTimer = setTimeout(() => extrasPop?.classList.remove('open'), 140);
+        };
         extrasBadge.addEventListener('mouseenter', () => {
           iwin.parent.postMessage({ type: 'pa-extras-hover' }, '*');
+          showPop();
         });
         extrasBadge.addEventListener('mouseleave', () => {
           iwin.parent.postMessage({ type: 'pa-extras-leave' }, '*');
+          scheduleHide();
         });
+        if (extrasPop) {
+          extrasPop.addEventListener('mouseenter', showPop);
+          extrasPop.addEventListener('mouseleave', scheduleHide);
+        }
       }
 
       if (loc2) {
@@ -1730,6 +1771,21 @@ export function mount(): void {
       if (state.mode === 'picking') exitPicking();
       else enterPicking();
     });
+  }
+
+  // When the host also mounts the dock, the FAB is the only floating
+  // surface (the dock dropped its own bottom-left FAB). Clicking the FAB
+  // always opens the picker, so teach the dock's keyboard shortcut with a
+  // small chip overlapping the FAB. Decorative + pointer-events:none, so a
+  // click on it falls through to the FAB → opens the picker as expected.
+  if (resolveDockEnabled()) {
+    const dockShortcut = IS_MAC ? '⌘⇧P' : 'Ctrl⇧P';
+    const chip = document.createElement('span');
+    chip.className = 'fab-shortcut';
+    chip.textContent = dockShortcut;
+    chip.setAttribute('aria-hidden', 'true');
+    fab.appendChild(chip);
+    fab.title = `${fab.title} · ${dockShortcut} opens the dock`;
   }
 
   document.addEventListener(
@@ -2349,7 +2405,10 @@ function renderHeader(meta: ComposerMeta, esc: (s: string) => string): string {
   // the extras so the user remembers what they picked.
   const extraBadge =
     meta.extraCount > 0
-      ? `<span class="el-extras" id="pa-extras" title="${meta.extraCount} more selected">+${meta.extraCount}</span>`
+      ? `<span class="el-extras-wrap">` +
+        `<span class="el-extras" id="pa-extras" tabindex="0" role="button" aria-label="${meta.extraCount} more elements selected; hover to list them">+${meta.extraCount}</span>` +
+        renderExtrasPopover(meta, esc) +
+        `</span>`
       : '';
   const identity =
     `<div class="hdr-row hdr-identity">` +
@@ -2386,6 +2445,34 @@ function renderHeader(meta: ComposerMeta, esc: (s: string) => string): string {
     `</div>`;
 
   return `<div class="header-block">${identity}${fileRow}${breadcrumb}</div>`;
+}
+
+/**
+ * Hover/focus popover anchored to the "+N" badge. Lists every selected
+ * element — the primary pick (marked) followed by each Cmd/Ctrl-click
+ * extra — so the user can see what's bundled into this comment without
+ * leaving the composer. Shown via CSS `:hover`/`:focus-within` on the
+ * wrapper; the page-outline flash on the underlying elements still
+ * fires from the badge's mouseenter (see `wireComposerIframe`).
+ */
+function renderExtrasPopover(meta: ComposerMeta, esc: (s: string) => string): string {
+  const row = (tag: string, label: string | null, loc: PaLoc | null, primary: boolean): string =>
+    `<div class="ex-row">` +
+    `<div class="ex-head">` +
+    `<span class="ex-pill">&lt;${esc(tag)}&gt;</span>` +
+    (label ? `<span class="ex-label">"${esc(label)}"</span>` : '') +
+    (primary ? `<span class="ex-tag-primary">picked</span>` : '') +
+    `</div>` +
+    (loc ? `<div class="ex-loc">${esc(`${loc.file}:${loc.line}:${loc.col}`)}</div>` : '') +
+    `</div>`;
+  const total = meta.extraCount + 1;
+  return (
+    `<div class="el-extras-pop" id="pa-extras-pop" role="tooltip">` +
+    `<div class="ex-title">${total} elements selected</div>` +
+    row(meta.tag, meta.label, meta.loc, true) +
+    meta.extras.map((e) => row(e.tag, e.label, e.loc, false)).join('') +
+    `</div>`
+  );
 }
 
 function renderQuickActions(chips: ReadonlyArray<QuickAction>, esc: (s: string) => string): string {
@@ -2474,6 +2561,18 @@ function resolveHotkey(): string | null {
   const k = w.__pinagentHotkey;
   if (typeof k === 'string' && k.length === 1) return k.toLowerCase();
   return 'c';
+}
+
+/**
+ * Whether the host page also mounts the dock iframe. Set by the plugin's
+ * widget-bundle prelude (see vite-plugin/middleware.ts +
+ * next-plugin/route.ts). When true the FAB shows a small shortcut chip
+ * teaching ⌘/Ctrl+Shift+P — the only way to open the dock now that it no
+ * longer ships its own FAB.
+ */
+function resolveDockEnabled(): boolean {
+  const cfg = (window as unknown as { __pinagentConfig?: { dock?: boolean } }).__pinagentConfig;
+  return cfg?.dock === true;
 }
 
 function shouldIgnoreHotkey(e: KeyboardEvent): boolean {

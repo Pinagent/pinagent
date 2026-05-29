@@ -65,7 +65,16 @@ export function ListRow({
       {onClick && (
         <button
           type="button"
-          onClick={onClick}
+          onClick={(e) => {
+            // Cmd/Ctrl-click anywhere on the row toggles selection
+            // instead of navigating, so the user can build a
+            // multi-select without aiming for the checkbox.
+            if ((e.metaKey || e.ctrlKey) && onSelectChange) {
+              onSelectChange(!selected);
+              return;
+            }
+            onClick();
+          }}
           aria-pressed={selected}
           aria-label={title}
           className={cn(

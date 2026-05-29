@@ -97,6 +97,13 @@ const DOCK_IFRAME_TAG =
  *    `{ source: 'pinagent-host', type: 'toggle-dock' }` and routes it
  *    to the same toggle the FAB click uses.
  *
+ *  - `Escape` closes the dock from anywhere on the page (same reason:
+ *    the iframe can't see the key unless it's focused). Posts
+ *    `{ source: 'pinagent-host', type: 'close-dock' }`; the dock
+ *    honours it under the same panel-mode rule as its own Escape
+ *    handler. We don't `preventDefault` so the host page's own Escape
+ *    handling (closing its modals, etc.) still runs.
+ *
  *  - Pointer-events passthrough. The dock iframe is full-viewport, so
  *    leaving it permanently `pointer-events: auto` would block host
  *    clicks, and permanently `none` would make the FAB unreachable.
@@ -125,6 +132,8 @@ const DOCK_HOST_BRIDGE_TAG =
   'if((e.metaKey||e.ctrlKey)&&e.shiftKey&&(e.key==="p"||e.key==="P")){' +
   'e.preventDefault();var el=getF();' +
   'if(el&&el.contentWindow){el.contentWindow.postMessage({source:"pinagent-host",type:"toggle-dock"},"*");}' +
+  '}else if(e.key==="Escape"){var ec=getF();' +
+  'if(ec&&ec.contentWindow){ec.contentWindow.postMessage({source:"pinagent-host",type:"close-dock"},"*");}' +
   '}});' +
   '})();</script>';
 const DEFAULT_WS_PORT = 53636;

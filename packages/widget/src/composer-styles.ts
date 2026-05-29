@@ -36,6 +36,7 @@ export const COMPOSER_STYLES = `
 
   /* --- Header block (identity + file + breadcrumb) --------------- */
   .header-block {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -79,6 +80,7 @@ export const COMPOSER_STYLES = `
   /* "+N more" badge for Cmd/Ctrl-click extras. Same shape as el-pill
      but gold so it stands out as "additional selections". Cursor: help
      so the hover-to-preview affordance reads. */
+  .el-extras-wrap { display: inline-flex; flex-shrink: 0; }
   .el-extras {
     display: inline-flex;
     align-items: center;
@@ -90,6 +92,82 @@ export const COMPOSER_STYLES = `
     border-radius: 4px;
     flex-shrink: 0;
     cursor: help;
+  }
+  .el-extras:focus-visible { outline: 2px solid ${BRAND_INK}; outline-offset: 1px; }
+
+  /* Popover listing every selected element. Anchored to the header
+     block's right edge (not the badge) so it always grows leftward and
+     stays inside the 400px iframe regardless of where the badge lands.
+     Shown via '.open' (JS, mouse — with a hide delay so the gap between
+     badge and popover is traversable) or ':focus-within' (keyboard).
+     Capped height with internal scroll for deep multi-picks. */
+  .el-extras-pop {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 10;
+    display: none;
+    min-width: 220px;
+    max-width: 320px;
+    max-height: 232px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #e8dfb0;
+    border-radius: 8px;
+    box-shadow: 0 8px 20px rgba(32, 27, 33, 0.18);
+    padding: 8px 10px;
+    text-align: left;
+  }
+  .el-extras-pop.open,
+  .el-extras-wrap:focus-within .el-extras-pop { display: block; }
+  .ex-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8a7a2e;
+    margin-bottom: 6px;
+  }
+  .ex-row { display: flex; flex-direction: column; gap: 2px; padding: 5px 0; }
+  .ex-row + .ex-row { border-top: 1px solid #f0e9cf; }
+  .ex-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .ex-pill {
+    font-family: ${FONT_MONO};
+    font-size: 10px;
+    font-weight: 600;
+    background: ${BRAND_INK};
+    color: ${BRAND_CREAM};
+    padding: 1px 6px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .ex-label {
+    font-size: 12px;
+    color: ${BRAND_INK};
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .ex-tag-primary {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8a7a2e;
+    background: ${BRAND_GOLD};
+    padding: 1px 5px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+  .ex-loc {
+    font-family: ${FONT_MONO};
+    font-size: 10px;
+    color: #5c5546;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* File row (#pa-meta): code icon + path:line:col + external-link

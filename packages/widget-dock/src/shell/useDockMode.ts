@@ -52,13 +52,30 @@ export function useDockMode(): DockState {
 
   // Close on Escape — but only in panel mode (floating/fullscreen need
   // an explicit close because they may have dirty composer state).
+  //
+  // Escape reaches us two ways: the iframe's own keydown listener fires
+  // while focus is inside the dock, and the host bridge posts a
+  // `close-dock` message when Escape is pressed while focus is on the
+  // host page (the iframe never sees those keys). Mirror of the
+  // `toggle-dock` bridge — see vite-plugin/index.ts.
   useEffect(() => {
     if (!open || mode !== 'panel') return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpenState(false);
     };
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { source?: string; type?: string } | null;
+      if (!data || typeof data !== 'object') return;
+      if (data.source === 'pinagent-host' && data.type === 'close-dock') {
+        setOpenState(false);
+      }
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('message', onMessage);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('message', onMessage);
+    };
   }, [open, mode]);
 
   const toggle = useCallback(() => setOpenState((prev) => !prev), []);

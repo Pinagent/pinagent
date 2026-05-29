@@ -13,7 +13,7 @@ export function App() {
       }}
     >
       <Sidebar />
-      <main style={{ padding: '40px', maxWidth: 720 }}>
+      <main style={{ padding: '40px', maxWidth: 720, margin: '0 auto' }}>
         <h1>Pinagent demo</h1>
         <p>
           Open the <Logo size={16} style={{ verticalAlign: '-3px', borderRadius: 3 }} /> button in
