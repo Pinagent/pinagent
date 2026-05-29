@@ -161,6 +161,9 @@ importers:
 
   ee/packages/relay:
     dependencies:
+      '@pinagent/ee-auth':
+        specifier: workspace:*
+        version: link:../auth
       '@pinagent/shared':
         specifier: workspace:*
         version: link:../../../packages/shared

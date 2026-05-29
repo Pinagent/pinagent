@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Elastic-2.0
+import { verifySessionToken } from '@pinagent/ee-auth';
 import { RelaySession } from './relay-do';
 
 /**
  * Cloudflare Worker bindings. `RELAY` is the Durable Object namespace
- * declared in `wrangler.toml`; `RELAY_AUTH_SECRET` is reserved for the
- * `ee-auth` token-verification seam below.
+ * declared in `wrangler.toml`; `RELAY_AUTH_SECRET` is the HMAC secret
+ * `ee-auth` signs session tokens with — when set, connections must
+ * present a valid signed token.
  */
 export interface Env {
   RELAY: DurableObjectNamespace;
@@ -40,7 +42,7 @@ export default {
       return new Response('expected websocket upgrade', { status: 426 });
     }
 
-    const auth = verifyToken(request, url, env);
+    const auth = await verifyToken(request, url, env);
     if (!auth) return new Response('unauthorized', { status: 401 });
 
     const role = url.pathname === DEVICE_PATH ? 'device' : 'client';
@@ -59,21 +61,33 @@ export default {
  * Verify the connection's bearer token and resolve it to a tenant +
  * session.
  *
- * TODO(ee-auth): replace with real verification — validate a signed
- * session token (SSO / JWT issued by `@pinagent/ee-auth`) using
- * `env.RELAY_AUTH_SECRET`, and derive `tenantId` from its claims rather
- * than trusting the `session` query param. For now this is a placeholder
- * that accepts any non-empty token and namespaces the Durable Object by
- * the caller-supplied session id, so the transport can be exercised
- * end-to-end before auth lands.
+ * When `RELAY_AUTH_SECRET` is set we require a valid `ee-auth` signed
+ * session token: the token's claims are authoritative for both `tenantId`
+ * and `sessionId` (the `?session=` query param is ignored — a client
+ * can't talk its way onto another tenant's Durable Object by changing the
+ * URL).
+ *
+ * When the secret is *unset* we fall back to dev mode: accept any
+ * non-empty token and namespace the DO by the `?session=` query param.
+ * This keeps local end-to-end testing frictionless; production deploys
+ * must set the secret.
  */
-function verifyToken(request: Request, url: URL, _env: Env): RelayAuth | null {
+async function verifyToken(request: Request, url: URL, env: Env): Promise<RelayAuth | null> {
   const token =
     request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ??
     url.searchParams.get('token') ??
     '';
+  if (!token) return null;
+
+  if (env.RELAY_AUTH_SECRET) {
+    const result = await verifySessionToken(token, env.RELAY_AUTH_SECRET);
+    if (!result.ok) return null;
+    return { tenantId: result.claims.tenantId, sessionId: result.claims.sessionId };
+  }
+
+  // Dev fallback — NOT for production (no secret configured).
   const sessionId = url.searchParams.get('session') ?? '';
-  if (!token || !sessionId) return null;
+  if (!sessionId) return null;
   return { tenantId: sessionId, sessionId };
 }
 

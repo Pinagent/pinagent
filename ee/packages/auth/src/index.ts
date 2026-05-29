@@ -9,6 +9,10 @@
  * interfaces with `unimplemented*` placeholders, so the cloud app can wire its
  * dependency graph ahead of the real adapters and fail loudly the moment an
  * unimplemented path is exercised.
+ *
+ * It also ships the concrete relay session-token primitives
+ * (`signSessionToken` / `verifySessionToken`) used at the `@pinagent/ee-relay`
+ * connection boundary.
  */
 export const PACKAGE_NAME = '@pinagent/ee-auth';
 
@@ -36,6 +40,13 @@ export {
   ROLES,
   type Role,
 } from './rbac';
+export {
+  type SessionClaims,
+  type SignOptions,
+  signSessionToken,
+  type VerifyResult,
+  verifySessionToken,
+} from './session-token';
 export {
   isSsoProtocol,
   type SsoCallback,
