@@ -86,6 +86,60 @@ Claude Code config example (`~/.claude/mcp_servers.json` or per-project `.mcp.js
 }
 ```
 
+### `pinagent list`
+
+List the feedback queue from a running pinagent dev-server
+(`GET /__pinagent/feedback`) as an aligned table: id, status,
+`file:line`, and the comment. Archived items are hidden unless `--all`.
+Use it to discover the conversation ids that `transcript` / `resolve`
+take, or to eyeball the queue without opening the dock.
+
+```bash
+pinagent list
+pinagent list --status pending
+pinagent list --file src/Hero.tsx
+pinagent list --json | jq '.[] | select(.status == "pending") | .id'
+```
+
+Options:
+
+| Flag              | Default                                          | Effect                                          |
+| ----------------- | ------------------------------------------------ | ----------------------------------------------- |
+| `--status <s>`    | all                                              | Filter by `pending` / `fixed` / `wontfix` / `deferred`. |
+| `--file <substr>` | all                                              | Filter by file-path substring.                  |
+| `--all`, `-a`     | off                                              | Include archived items.                         |
+| `--server <url>`  | `PINAGENT_SERVER_URL` or `http://localhost:3000` | Base URL of the running dev-server.             |
+| `--json`          | off                                              | Emit the raw row array instead of a table.      |
+
+Exit codes match `transcript`: `0` success, `1` network/unexpected,
+`2` bad usage, `3` not found.
+
+### `pinagent resolve <id> --status <s>`
+
+Mark a feedback item `fixed`, `wontfix`, or `deferred`
+(`PATCH /__pinagent/feedback/:id`) — or re-open it with
+`--status pending`. This drives the queue headlessly (CI, scripts, a
+post-commit hook) without needing an MCP session or the dock.
+
+```bash
+pinagent resolve cv_8a2f --status fixed
+pinagent resolve cv_8a2f --status fixed --note "Adjusted padding" --commit a91f3c5
+pinagent resolve cv_8a2f --status pending   # re-open
+```
+
+Options:
+
+| Flag             | Default                                          | Effect                                              |
+| ---------------- | ------------------------------------------------ | --------------------------------------------------- |
+| `--status <s>`   | **required**                                     | `pending` / `fixed` / `wontfix` / `deferred`.       |
+| `--note <text>`  | none                                             | Resolution note stored on the record.               |
+| `--commit <sha>` | none                                             | Commit sha to record alongside the resolution.      |
+| `--server <url>` | `PINAGENT_SERVER_URL` or `http://localhost:3000` | Base URL of the running dev-server.                 |
+| `--json`         | off                                              | Emit the updated record as JSON.                    |
+
+Exit codes: `0` success, `1` network/unexpected, `2` bad usage (invalid
+id/status, or server `400`), `3` conversation not found (`404`).
+
 ### `pinagent transcript <id>`
 
 Fetch the persisted agent transcript for one conversation from a
@@ -121,7 +175,7 @@ Exit codes:
 | Variable                 | Effect                                                                |
 | ------------------------ | --------------------------------------------------------------------- |
 | `PINAGENT_PROJECT_ROOT`  | Override the project root the MCP server reads from.                  |
-| `PINAGENT_SERVER_URL`    | Default dev-server URL for `pinagent transcript`.                     |
+| `PINAGENT_SERVER_URL`    | Default dev-server URL for the HTTP commands (`list`, `resolve`, `transcript`). |
 
 ## Build
 

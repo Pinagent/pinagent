@@ -9,6 +9,10 @@
 //   pinagent mcp           Start the stdio MCP server. Resolves the project
 //                          root from PINAGENT_PROJECT_ROOT or the current
 //                          working directory.
+//   pinagent list          List the feedback queue from a running
+//                          dev-server (status/file filters, --json).
+//   pinagent resolve       Mark a feedback item fixed/wontfix/deferred
+//                          (or re-open) against a running dev-server.
 //   pinagent transcript    Fetch + print the persisted agent transcript
 //                          for one conversation from a running dev-server.
 //
@@ -18,6 +22,16 @@
 // plugin in (see `pinagent init`) and run your existing dev command.
 
 import { startMcpServer } from '@pinagent/mcp';
+import {
+  fetchFeedbackList,
+  filterFeedback,
+  parseListArgs,
+  parseResolveArgs,
+  patchFeedbackStatus,
+  renderFeedbackList,
+  renderResolveResult,
+} from './feedback';
+import { HttpError } from './http';
 import { parseInitArgs, runInit } from './init';
 import {
   fetchTranscript,
@@ -49,6 +63,31 @@ Subcommands:
                      can read pending feedback, screenshots, and source
                      context from a running Pinagent dev session.
 
+  list               List the feedback queue from a running pinagent
+                     dev-server. Shows id, status, file:line, and the
+                     comment. Archived items are hidden unless --all.
+
+                     Options:
+                       --status <s>    Filter by pending | fixed |
+                                       wontfix | deferred.
+                       --file <substr> Filter by file path substring.
+                       --all, -a       Include archived items.
+                       --server <url>  Base URL of the dev-server.
+                       --json          Emit raw JSON instead of a table.
+
+  resolve <id>       Mark a feedback item fixed, wontfix, or deferred
+                     against a running dev-server (or re-open it with
+                     --status pending). Drives the queue headlessly,
+                     without an MCP session.
+
+                     Options:
+                       --status <s>    Required: pending | fixed |
+                                       wontfix | deferred.
+                       --note <text>   Optional resolution note.
+                       --commit <sha>  Optional commit sha to record.
+                       --server <url>  Base URL of the dev-server.
+                       --json          Emit the updated record as JSON.
+
   transcript <id>    Print the persisted agent transcript for one
                      conversation, fetched over HTTP from a running
                      pinagent dev-server. Useful for export, log review,
@@ -67,8 +106,16 @@ Options:
 Environment:
   PINAGENT_PROJECT_ROOT  Override the project root the MCP server reads
                          from. Defaults to the current working directory.
-  PINAGENT_SERVER_URL    Default dev-server URL for \`pinagent transcript\`.
+  PINAGENT_SERVER_URL    Default dev-server URL for the HTTP commands
+                         (\`list\`, \`resolve\`, \`transcript\`).
 `;
+
+/** Map an HttpError status to the CLI's exit-code convention. */
+function httpExitCode(status: number): number {
+  if (status === 400) return 2; // bad usage
+  if (status === 404) return 3; // not found
+  return 1; // network / unexpected
+}
 
 async function main(): Promise<void> {
   const [, , subcommand, ...rest] = process.argv;
@@ -101,6 +148,52 @@ async function main(): Promise<void> {
     }
     await startMcpServer();
     return;
+  }
+
+  if (subcommand === 'list') {
+    const parsed = parseListArgs(rest);
+    if ('error' in parsed) {
+      process.stderr.write(`pinagent list: ${parsed.error}\n\n${HELP}`);
+      process.exit(2);
+    }
+    try {
+      const rows = filterFeedback(await fetchFeedbackList(parsed.serverUrl), parsed);
+      if (parsed.json) {
+        process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`);
+      } else {
+        process.stdout.write(renderFeedbackList(rows));
+      }
+      return;
+    } catch (err) {
+      if (err instanceof HttpError) {
+        process.stderr.write(`pinagent list: ${err.message}\n`);
+        process.exit(httpExitCode(err.status));
+      }
+      throw err;
+    }
+  }
+
+  if (subcommand === 'resolve') {
+    const parsed = parseResolveArgs(rest);
+    if ('error' in parsed) {
+      process.stderr.write(`pinagent resolve: ${parsed.error}\n\n${HELP}`);
+      process.exit(2);
+    }
+    try {
+      const row = await patchFeedbackStatus(parsed);
+      if (parsed.json) {
+        process.stdout.write(`${JSON.stringify(row, null, 2)}\n`);
+      } else {
+        process.stdout.write(renderResolveResult(row));
+      }
+      return;
+    } catch (err) {
+      if (err instanceof HttpError) {
+        process.stderr.write(`pinagent resolve: ${err.message}\n`);
+        process.exit(httpExitCode(err.status));
+      }
+      throw err;
+    }
   }
 
   if (subcommand === 'transcript') {
