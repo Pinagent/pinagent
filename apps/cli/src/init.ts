@@ -225,7 +225,7 @@ export function renderNextRoute(): string {
     '// SPDX-License-Identifier: Apache-2.0',
     "export const dynamic = 'force-dynamic';",
     "export const runtime = 'nodejs';",
-    `export { GET, POST, PATCH } from '${routeModule}';`,
+    `export * from '${routeModule}';`,
     '',
   ].join('\n');
 }

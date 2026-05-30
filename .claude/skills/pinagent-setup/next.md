@@ -69,10 +69,10 @@ Create the file **exactly** as below — don't be tempted to one-line the re-exp
 // app/pinagent/[[...slug]]/route.ts
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-export { GET, POST, PATCH, PUT, DELETE } from '@pinagent/next-plugin/route';
+export * from '@pinagent/next-plugin/route';
 ```
 
-Re-export **all five verbs**. GET/POST/PATCH cover the core feedback loop; PUT and DELETE back the dock's connection and branch management. Leaving them out makes those dock actions 404 — harmless if you never enable the dock, but cheap to include now.
+`export *` re-exports whatever HTTP verbs the installed `@pinagent/next-plugin` build exposes — `GET/POST/PATCH` cover the core feedback loop, and `PUT/DELETE` (present on builds that ship the dock) back its connection and branch management. The wildcard keeps this file working regardless of which plugin version is installed; a fixed verb list breaks with "Export DELETE doesn't exist in target module" whenever the template and the installed plugin drift.
 
 Why `dynamic` and `runtime` are inline: Next 16 statically parses route-segment config at build time and refuses to follow re-exports for those fields. If you write `export { dynamic, runtime } from '@pinagent/next-plugin/route'` you'll get:
 
@@ -154,7 +154,7 @@ pinagent(coreConfig, { dock: true });   // combine with spawnAgent if you want b
 
 When using the dock:
 
-- The route handler must re-export **all five verbs** (`GET, POST, PATCH, PUT, DELETE`) — PUT/DELETE back the Connections and Branches panels (see step 4).
+- The route handler uses `export *`, so it re-exports whatever HTTP verbs the installed `@pinagent/next-plugin` build provides — `GET, POST, PATCH`, plus `PUT, DELETE` on builds that ship the dock's Connections/Branches panels (see step 4). Using `export *` keeps the route working across plugin versions; keep `dynamic`/`runtime` inline since Next won't follow re-exports for route-segment config.
 - The PR composer needs a GitHub token: set `GITHUB_TOKEN` or `PINAGENT_GITHUB_TOKEN` (tried in that order).
 - Optionally install `@pinagent/vscode-extension` — it lets the dock open a Claude Code terminal with a conversation piped in.
 
