@@ -10,8 +10,11 @@ import { UnauthorizedError } from './api-client';
 import { CostControlForm } from './CostControlForm';
 import { KeyValue, type Row } from './KeyValue';
 import { SignIn } from './SignIn';
+import { SubscriptionForm } from './SubscriptionForm';
 import { LoadError, Loading } from './states';
 import { useAsync } from './use-async';
+
+type EditMode = 'none' | 'subscription' | 'costControl';
 
 export interface BillingData {
   subscription: Subscription | null;
@@ -96,7 +99,7 @@ export function Billing({
   organizationId: string;
 }) {
   const [reloadKey, setReloadKey] = useState(0);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState<EditMode>('none');
 
   const state = useAsync<BillingData>(async () => {
     const [subscription, costControl] = await Promise.all([
@@ -112,7 +115,32 @@ export function Billing({
     return <LoadError label="billing" error={state.error} />;
   }
 
-  if (editing) {
+  const done = () => {
+    setEditing('none');
+    setReloadKey((k) => k + 1);
+  };
+
+  if (editing === 'subscription') {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Edit plan</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <SubscriptionForm
+            initial={state.value.subscription}
+            onSubmit={async (input) => {
+              await client.putSubscription(organizationId, input);
+              done();
+            }}
+            onCancel={() => setEditing('none')}
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (editing === 'costControl') {
     return (
       <Card>
         <CardHeader>
@@ -123,10 +151,9 @@ export function Billing({
             initial={state.value.costControl}
             onSubmit={async (input) => {
               await client.putCostControl(organizationId, input);
-              setEditing(false);
-              setReloadKey((k) => k + 1);
+              done();
             }}
-            onCancel={() => setEditing(false)}
+            onCancel={() => setEditing('none')}
           />
         </CardContent>
       </Card>
@@ -136,8 +163,11 @@ export function Billing({
   return (
     <div className="flex flex-col gap-4">
       <BillingView subscription={state.value.subscription} costControl={state.value.costControl} />
-      <div>
-        <Button variant="outline" onClick={() => setEditing(true)}>
+      <div className="flex gap-2">
+        <Button variant="outline" onClick={() => setEditing('subscription')}>
+          Edit plan
+        </Button>
+        <Button variant="outline" onClick={() => setEditing('costControl')}>
           Edit cost controls
         </Button>
       </div>

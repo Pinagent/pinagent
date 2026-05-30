@@ -1,13 +1,35 @@
 // SPDX-License-Identifier: Elastic-2.0
-import type { BranchRoutingInput, CostControlInput } from './api-client';
+import { planById } from '@pinagent/ee-billing';
+import type { BranchRoutingInput, CostControlInput, SubscriptionInput } from './api-client';
 
 /**
  * Pure form parsing/validation, mirroring the control plane's
- * `parseCostControlBody` / `parseBranchRoutingBody`. Kept separate from the
- * React components so the rules are unit-testable without a DOM.
+ * `parseSubscriptionBody` / `parseCostControlBody` / `parseBranchRoutingBody`.
+ * Kept separate from the React components so the rules are unit-testable
+ * without a DOM.
  */
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
+
+/** Raw subscription form fields. */
+export interface SubscriptionFields {
+  planId: string;
+  /** Billing period start; free text mirroring the stored value. */
+  currentPeriodStart: string;
+}
+
+export function parseSubscriptionForm(fields: SubscriptionFields): ParseResult<SubscriptionInput> {
+  const planId = fields.planId.trim();
+  // Mirror the server: a known plan id is required (it rejects unknown plans).
+  if (!planById(planId)) {
+    return { ok: false, error: `Unknown plan "${planId || '(blank)'}".` };
+  }
+  const currentPeriodStart = fields.currentPeriodStart.trim();
+  if (currentPeriodStart === '') {
+    return { ok: false, error: 'Billing period start is required.' };
+  }
+  return { ok: true, value: { planId, currentPeriodStart } };
+}
 
 /** Raw cost-control form fields (all strings, as they come off inputs). */
 export interface CostControlFields {
