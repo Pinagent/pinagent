@@ -2,8 +2,12 @@
 'use client';
 
 import type { BranchRoutingPolicy } from '@pinagent/ee-team-features';
+import { Button } from '@pinagent/ui/components/ui/button';
+import { Input } from '@pinagent/ui/components/ui/input';
+import { Textarea } from '@pinagent/ui/components/ui/textarea';
 import { type FormEvent, useState } from 'react';
 import type { BranchRoutingInput } from './api-client';
+import { Field, FormError } from './form-controls';
 import { parseBranchRoutingForm, patternsToText } from './forms';
 
 /**
@@ -42,37 +46,31 @@ export function BranchRoutingForm({
   }
 
   return (
-    <form className="form" onSubmit={handleSubmit}>
-      <label className="field">
-        <span>Default base branch</span>
-        <input
+    <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+      <Field label="Default base branch">
+        <Input
           type="text"
           placeholder="Repo default"
           value={defaultBaseBranch}
           onChange={(e) => setDefaultBaseBranch(e.target.value)}
         />
-      </label>
-      <label className="field">
-        <span>Allowed branch patterns (one per line; blank = any)</span>
-        <textarea
+      </Field>
+      <Field label="Allowed branch patterns (one per line; blank = any)">
+        <Textarea
           rows={4}
           placeholder={'feat/*\nfix/*'}
           value={patterns}
           onChange={(e) => setPatterns(e.target.value)}
         />
-      </label>
-      {error ? (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      ) : null}
-      <div className="form-actions">
-        <button type="submit" disabled={saving}>
+      </Field>
+      <FormError error={error} />
+      <div className="flex gap-2">
+        <Button type="submit" disabled={saving}>
           {saving ? 'Saving…' : 'Save'}
-        </button>
-        <button type="button" className="secondary" onClick={onCancel} disabled={saving}>
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   );

@@ -2,8 +2,11 @@
 'use client';
 
 import type { CostControl } from '@pinagent/ee-team-features';
+import { Button } from '@pinagent/ui/components/ui/button';
+import { Input } from '@pinagent/ui/components/ui/input';
 import { type FormEvent, useState } from 'react';
 import type { CostControlInput } from './api-client';
+import { Field, FormError, selectClassName } from './form-controls';
 import { parseCostControlForm } from './forms';
 
 /**
@@ -45,10 +48,9 @@ export function CostControlForm({
   }
 
   return (
-    <form className="form" onSubmit={handleSubmit}>
-      <label className="field">
-        <span>Max relay sessions / period</span>
-        <input
+    <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+      <Field label="Max relay sessions / period">
+        <Input
           type="number"
           min="0"
           step="1"
@@ -56,26 +58,25 @@ export function CostControlForm({
           value={cap}
           onChange={(e) => setCap(e.target.value)}
         />
-      </label>
-      <label className="field">
-        <span>Enforcement</span>
-        <select value={enforcement} onChange={(e) => setEnforcement(e.target.value)}>
+      </Field>
+      <Field label="Enforcement">
+        <select
+          className={selectClassName}
+          value={enforcement}
+          onChange={(e) => setEnforcement(e.target.value)}
+        >
           <option value="block">Block over cap</option>
           <option value="warn">Warn only</option>
         </select>
-      </label>
-      {error ? (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      ) : null}
-      <div className="form-actions">
-        <button type="submit" disabled={saving}>
+      </Field>
+      <FormError error={error} />
+      <div className="flex gap-2">
+        <Button type="submit" disabled={saving}>
           {saving ? 'Saving…' : 'Save'}
-        </button>
-        <button type="button" className="secondary" onClick={onCancel} disabled={saving}>
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   );

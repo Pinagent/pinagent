@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Elastic-2.0
+import { cn } from '@pinagent/ui/lib/utils';
 
 export type NavTab = 'overview' | 'billing' | 'policy' | 'audit';
 
@@ -16,17 +17,25 @@ function hrefFor(path: string, org?: string): string {
 
 export function Nav({ org, active }: { org?: string; active: NavTab }) {
   return (
-    <nav className="nav">
-      {TABS.map((tab) => (
-        <a
-          key={tab.id}
-          className={tab.id === active ? 'nav-link nav-link-active' : 'nav-link'}
-          aria-current={tab.id === active ? 'page' : undefined}
-          href={hrefFor(tab.path, org)}
-        >
-          {tab.label}
-        </a>
-      ))}
+    <nav className="flex gap-1 border-b border-border">
+      {TABS.map((tab) => {
+        const isActive = tab.id === active;
+        return (
+          <a
+            key={tab.id}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+              isActive
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+            aria-current={isActive ? 'page' : undefined}
+            href={hrefFor(tab.path, org)}
+          >
+            {tab.label}
+          </a>
+        );
+      })}
     </nav>
   );
 }

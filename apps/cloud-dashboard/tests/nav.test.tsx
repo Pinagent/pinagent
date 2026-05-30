@@ -12,12 +12,11 @@ describe('Nav', () => {
     expect(html).toContain('href="/audit?org=org%2F1"');
   });
 
-  it('marks only the active tab with the active class + aria-current', () => {
+  it('marks only the active tab with aria-current', () => {
     const html = renderToStaticMarkup(Nav({ org: 'o', active: 'billing' }));
-    // exactly one active link, and it's the billing tab
-    expect(html.match(/nav-link-active/g)).toHaveLength(1);
-    expect(html).toMatch(/nav-link-active"[^>]*href="\/billing\?org=o"/);
-    expect(html).toContain('aria-current="page"');
+    // exactly one current link, and it's the billing tab
+    expect(html.match(/aria-current="page"/g)).toHaveLength(1);
+    expect(html).toMatch(/aria-current="page" href="\/billing\?org=o"/);
   });
 
   it('omits the query string when no org is selected', () => {
