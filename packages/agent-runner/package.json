@@ -28,7 +28,7 @@
     "@octokit/rest": "^21.1.1",
     "@pinagent/db": "workspace:*",
     "@pinagent/shared": "workspace:*",
-    "drizzle-orm": "^0.38.0",
+    "drizzle-orm": "^0.45.2",
     "nanoid": "^5.0.9",
     "ws": "^8.21.0",
     "zod": "^4.4.3"

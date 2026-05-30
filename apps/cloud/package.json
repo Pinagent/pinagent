@@ -23,7 +23,7 @@
     "@pinagent/ee-infra": "workspace:*",
     "@pinagent/ee-relay": "workspace:*",
     "@pinagent/ee-team-features": "workspace:*",
-    "drizzle-orm": "^0.38.0"
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.2.0",

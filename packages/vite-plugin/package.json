@@ -44,7 +44,7 @@
     "@pinagent/widget-dock": "workspace:*",
     "@sqlite.org/sqlite-wasm": "^3.50.0-build1",
     "@vue/compiler-sfc": "^3.5.13",
-    "drizzle-orm": "^0.38.0",
+    "drizzle-orm": "^0.45.2",
     "nanoid": "^5.0.9",
     "svelte": "^5.0.0",
     "ws": "^8.21.0",
