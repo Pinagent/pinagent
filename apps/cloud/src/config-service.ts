@@ -7,11 +7,13 @@ import {
   type Permission,
 } from '@pinagent/ee-auth';
 import { planById, type SubscriptionStore } from '@pinagent/ee-billing';
+import type { ActiveSessionRegistry } from '@pinagent/ee-relay';
 import type {
   BranchRoutingStore,
   CostControlEnforcement,
   CostControlStore,
 } from '@pinagent/ee-team-features';
+import type { RelayPushClient } from './relay-client';
 import type { Authenticator } from './session-service';
 
 /**
@@ -34,6 +36,15 @@ export interface ConfigServiceDeps {
   subscriptions: SubscriptionStore;
   costControls: CostControlStore;
   branchRouting: BranchRoutingStore;
+  /**
+   * Optional live-propagation pair. When both are present, a branch-routing
+   * change is pushed to the org's currently-connected device sessions so it
+   * takes effect without waiting for a reconnect. Best-effort: a failed push
+   * never fails the PUT (the policy is already persisted, and a reconnecting
+   * device re-reads it).
+   */
+  activeSessions?: ActiveSessionRegistry;
+  relay?: RelayPushClient;
 }
 
 /** GET/PUT /subscriptions. */
@@ -120,9 +131,40 @@ export async function handleBranchRoutingConfig(
     }
     const branchRouting = { organizationId: ctx.organizationId, ...parsed };
     await deps.branchRouting.upsert(branchRouting);
+    await propagateBranchRouting(deps, ctx.organizationId, parsed);
     return json({ organizationId: ctx.organizationId, branchRouting }, 200);
   }
   return json({ error: 'method not allowed' }, 405);
+}
+
+/**
+ * Best-effort live propagation of a branch-routing change to the org's
+ * connected device sessions. Sends a `set_branch_routing` frame (the
+ * agent-runner's inbound ClientMessage) to each currently-connected session.
+ * Swallows all failures — the policy is already persisted, so a disconnected
+ * machine picks it up on its next connect; this only accelerates the common
+ * "device is connected right now" case. No-op unless both the registry and a
+ * relay client are wired (they aren't in unit tests that don't need push).
+ */
+async function propagateBranchRouting(
+  deps: ConfigServiceDeps,
+  organizationId: string,
+  policy: { defaultBaseBranch: string | null; allowedBranchPatterns: string[] },
+): Promise<void> {
+  const { activeSessions, relay } = deps;
+  if (!activeSessions || !relay) return;
+  const frame = {
+    type: 'set_branch_routing',
+    defaultBaseBranch: policy.defaultBaseBranch,
+    allowedBranchPatterns: policy.allowedBranchPatterns,
+  };
+  try {
+    const sessions = await activeSessions.listByOrg(organizationId);
+    await Promise.all(sessions.map((s) => relay.pushToSession(s.sessionId, frame)));
+  } catch {
+    // Listing failed — non-fatal; the PUT already succeeded. (Per-session push
+    // failures are already swallowed inside the client.)
+  }
 }
 
 type AuthorizeResult = { denied: Response } | { organizationId: string };

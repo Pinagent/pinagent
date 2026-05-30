@@ -15,6 +15,7 @@ import { createPgSsoConnectionStore } from './db/sso-connection-store';
 import { createPgSubscriptionStore } from './db/subscription-store';
 import { createPgUserStore } from './db/user-store';
 import { createOidcClientResolver } from './oidc-client';
+import { createRelayClient } from './relay-client';
 
 /**
  * Cloudflare Worker entry / composition root for the Pinagent cloud control
@@ -45,6 +46,12 @@ async function buildApp(config: CloudConfig) {
   const users = createPgUserStore(db);
   const branchRouting = createPgBranchRoutingStore(db);
   const activeSessions = createPgActiveSessionStore(db);
+  // Control-plane → device push, reusing the relay's internal secret. Lets a
+  // branch-routing PUT reach the org's live sessions (see config-service).
+  const relay = createRelayClient({
+    baseUrl: config.relayPublicUrl,
+    secret: config.relayInternalSecret,
+  });
 
   // Connections are resolved from a store. Seed the env-configured one so a
   // single-connection deploy works with no DB rows; additional org IdPs are
@@ -110,7 +117,15 @@ async function buildApp(config: CloudConfig) {
       audit,
     },
     read: { store, authenticate, audit, meter },
-    config: { store, authenticate, subscriptions, costControls, branchRouting },
+    config: {
+      store,
+      authenticate,
+      subscriptions,
+      costControls,
+      branchRouting,
+      activeSessions,
+      relay,
+    },
     internal: { audit, meter, activeSessions, relayInternalSecret: config.relayInternalSecret },
   });
 }
