@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Elastic-2.0
 import type { MembershipStore, OrganizationMembership, Role } from '@pinagent/ee-auth';
 import { createInMemorySubscriptionStore } from '@pinagent/ee-billing';
+import { type ActiveSession, createInMemoryActiveSessionRegistry } from '@pinagent/ee-relay';
 import {
   createInMemoryBranchRoutingStore,
   createInMemoryCostControlStore,
@@ -12,6 +13,7 @@ import {
   handleCostControlConfig,
   handleSubscriptionConfig,
 } from '../src/config-service';
+import type { RelayPushClient } from '../src/relay-client';
 
 function member(userId: string, role: Role): OrganizationMembership {
   return {
@@ -217,5 +219,97 @@ describe('/branch-routing', () => {
       deps('u-admin'),
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe('/branch-routing live propagation', () => {
+  type Push = { sessionId: string; frame: unknown };
+
+  function recordingRelay(result = true): { relay: RelayPushClient; pushes: Push[] } {
+    const pushes: Push[] = [];
+    return {
+      pushes,
+      relay: {
+        async pushToSession(sessionId, frame) {
+          pushes.push({ sessionId, frame });
+          return result;
+        },
+      },
+    };
+  }
+
+  function session(organizationId: string, sessionId: string): ActiveSession {
+    return { organizationId, sessionId, connectedAt: '2026-05-01T00:00:00Z' };
+  }
+
+  function put(d: ConfigServiceDeps) {
+    return handleBranchRoutingConfig(
+      req('PUT', '/branch-routing?organizationId=acme', {
+        defaultBaseBranch: 'develop',
+        allowedBranchPatterns: ['feat/*'],
+      }),
+      d,
+    );
+  }
+
+  it('pushes a set_branch_routing frame to each connected session of the org', async () => {
+    const { relay, pushes } = recordingRelay();
+    const activeSessions = createInMemoryActiveSessionRegistry([
+      session('acme', 's-1'),
+      session('acme', 's-2'),
+      session('other', 's-x'), // a different org — must not receive the push
+    ]);
+    const res = await put({ ...deps('u-admin'), activeSessions, relay });
+
+    expect(res.status).toBe(200);
+    expect(pushes.map((p) => p.sessionId).sort()).toEqual(['s-1', 's-2']);
+    expect(pushes[0]?.frame).toEqual({
+      type: 'set_branch_routing',
+      defaultBaseBranch: 'develop',
+      allowedBranchPatterns: ['feat/*'],
+    });
+  });
+
+  it('GET does not push', async () => {
+    const { relay, pushes } = recordingRelay();
+    const activeSessions = createInMemoryActiveSessionRegistry([session('acme', 's-1')]);
+    await handleBranchRoutingConfig(req('GET', '/branch-routing?organizationId=acme'), {
+      ...deps('u-admin'),
+      activeSessions,
+      relay,
+    });
+    expect(pushes).toHaveLength(0);
+  });
+
+  it('still 200s when there are no connected sessions', async () => {
+    const { relay, pushes } = recordingRelay();
+    const activeSessions = createInMemoryActiveSessionRegistry();
+    const res = await put({ ...deps('u-admin'), activeSessions, relay });
+    expect(res.status).toBe(200);
+    expect(pushes).toHaveLength(0);
+  });
+
+  it('is best-effort: a failed push does not fail the PUT', async () => {
+    const { relay } = recordingRelay(false);
+    const activeSessions = createInMemoryActiveSessionRegistry([session('acme', 's-1')]);
+    const res = await put({ ...deps('u-admin'), activeSessions, relay });
+    expect(res.status).toBe(200);
+  });
+
+  it('is best-effort: a throwing registry does not fail the PUT', async () => {
+    const { relay } = recordingRelay();
+    const activeSessions = createInMemoryActiveSessionRegistry();
+    activeSessions.listByOrg = async () => {
+      throw new Error('db down');
+    };
+    const res = await put({ ...deps('u-admin'), activeSessions, relay });
+    expect(res.status).toBe(200);
+  });
+
+  it('does not push when the relay client is not wired', async () => {
+    const activeSessions = createInMemoryActiveSessionRegistry([session('acme', 's-1')]);
+    // Only activeSessions, no relay — the half-wired case is a no-op, not a crash.
+    const res = await put({ ...deps('u-admin'), activeSessions });
+    expect(res.status).toBe(200);
   });
 });
