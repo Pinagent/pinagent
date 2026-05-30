@@ -52,6 +52,8 @@ function deps(
     userTokenSecret: USER_TOKEN_SECRET,
     cookieName: 'pa_session',
     defaultReturnTo: '/home',
+    // Fixed generator so the minted synthetic id is deterministic in assertions.
+    users: createInMemoryUserStore([], { generateId: () => 'usr_bob' }),
   };
 }
 
@@ -151,7 +153,8 @@ describe('GET /sso/callback', () => {
     expect(token).toBeTruthy();
     const verified = await verifyUserToken(token as string, USER_TOKEN_SECRET);
     expect(verified.ok).toBe(true);
-    if (verified.ok) expect(verified.claims.userId).toBe('idp-user-9');
+    // The token carries the minted synthetic id, not the IdP subject.
+    if (verified.ok) expect(verified.claims.userId).toBe('usr_bob');
 
     const setCookie = res.headers.get('set-cookie') ?? '';
     expect(setCookie).toMatch(/HttpOnly/);

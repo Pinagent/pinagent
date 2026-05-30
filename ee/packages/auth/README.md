@@ -19,6 +19,7 @@ graph before the real adapters land — each placeholder throws
 | --------------- | ----------------------------------------------------------------------- |
 | `rbac.ts`       | `ROLES`, `PERMISSIONS`, `can`, `assertCan`, `permissionsForRole`, `compareRoles`, `isRole`, `isPermission` |
 | `membership.ts` | `Organization`, `OrganizationMembership`, `MembershipStatus`, `MembershipStore`, `isActiveMember`, `unimplementedMembershipStore` |
+| `user.ts`       | `User`, `SsoIdentity`, `UserStore`, `userFromProfile`, `defaultUserId`, `createInMemoryUserStore` |
 | `sso.ts`        | `SsoProtocol`, `SsoConnection`, `SsoProfile`, `SsoCallback`, `SsoProvider`, `isSsoProtocol`, `unimplementedSsoProvider` |
 | `principal.ts`  | `Principal`, `principalCan`                                             |
 | `errors.ts`     | `AuthError`, `NotImplementedError`, `AccessDeniedError`                 |
@@ -45,7 +46,22 @@ can('member', 'member:invite'); // false (admin-only)
 assertCan(principal.role, 'org:delete'); // throws AccessDeniedError unless owner
 ```
 
+## Identity model
+
+A `User` has an **opaque synthetic `id`** (`usr_<uuid>`), minted once on first
+login — it is deliberately *not* the IdP subject. The mapping from an external
+IdP identity to the internal user is an `SsoIdentity { connectionId, subject,
+userId }`, keyed on `(connectionId, subject)`. `UserStore.provisionFromProfile`
+owns this resolution: it returns the existing user for a known identity, or
+mints a synthetic id and records the mapping on first login.
+
+Everything downstream — the user token's `userId`, `organization_membership`
+rows, and audit `actorUserId` — keys on the synthetic id, so a tenant can
+change IdP or rotate a subject without orphaning memberships. The Postgres
+adapter persists the mapping in the `auth.sso_identities` table (one user may
+hold several identities across connections).
+
 ## Next steps
 
-- Back `MembershipStore` with the relay's Postgres adapter.
-- Implement `SsoProvider` for SAML and OIDC, mapping IdP group claims to roles.
+- Implement `SsoProvider` for SAML (OIDC is wired in `apps/cloud`), mapping IdP
+  group claims to roles.

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Elastic-2.0
 import {
   createInMemorySsoConnectionStore,
+  createInMemoryUserStore,
   type MembershipStore,
   type OrganizationMembership,
   type SsoConnection,
@@ -40,9 +41,13 @@ const profile: SsoProfile = {
   groups: [],
 };
 
+// The login flow provisions the user under a synthetic id (see `users` below);
+// the membership is keyed on that id, NOT the IdP subject.
+const SYNTHETIC_USER_ID = 'usr_bob';
+
 const membership: OrganizationMembership = {
   organizationId: 'acme',
-  userId: 'idp-user-9', // matches profile.subject — the user mapping
+  userId: SYNTHETIC_USER_ID,
   role: 'member',
   status: 'active',
   invitedAt: '2026-01-01T00:00:00Z',
@@ -51,7 +56,7 @@ const membership: OrganizationMembership = {
 
 const store: MembershipStore = {
   async getMembership(org, user) {
-    return org === 'acme' && user === 'idp-user-9' ? membership : null;
+    return org === 'acme' && user === SYNTHETIC_USER_ID ? membership : null;
   },
   async getOrganization() {
     return null;
@@ -90,6 +95,9 @@ function makeApp() {
       userTokenSecret: USER_TOKEN_SECRET,
       cookieName: COOKIE,
       defaultReturnTo: '/',
+      // Provisions the profile under a fixed synthetic id, which the membership
+      // above is keyed on — so the login → /sessions handshake resolves.
+      users: createInMemoryUserStore([], { generateId: () => SYNTHETIC_USER_ID }),
     },
     read: { store, authenticate, audit, meter },
     config: {
