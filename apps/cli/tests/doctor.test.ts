@@ -88,10 +88,7 @@ describe('checkPluginInstalled', () => {
 
 describe('checkConfigWired', () => {
   it('passes when the config references pinagent', () => {
-    write(
-      'next.config.js',
-      `import pinagent from '${NP}/config';\nexport default pinagent({});`,
-    );
+    write('next.config.js', `import pinagent from '${NP}/config';\nexport default pinagent({});`);
     expect(checkConfigWired(dir, 'next').status).toBe('ok');
   });
   it('fails when the config does not reference pinagent', () => {

@@ -189,8 +189,7 @@ export function checkPinagentMount(root: string): Check {
   return {
     status: 'fail',
     label: `<Pinagent /> not mounted in ${appDir}/${layout}`,
-    detail:
-      `Add import { Pinagent } from '${NP}' and render <Pinagent /> as the last child of <body>.`,
+    detail: `Add import { Pinagent } from '${NP}' and render <Pinagent /> as the last child of <body>.`,
   };
 }
 
