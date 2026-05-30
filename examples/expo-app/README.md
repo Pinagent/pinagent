@@ -52,7 +52,14 @@ agent in-process. To drive the loop only from your own Claude Code session inste
 |---|---|
 | `'inline'` (default) | Each submit runs a Claude Agent SDK query in `projectRoot`. |
 | `false` | No auto-spawn; pull the queue from your own Claude Code MCP session. |
-| `'worktree'` | Not yet supported on React Native (web only). |
+| `'worktree'` | Each submit gets its own git worktree at `.pinagent/worktrees/<id>` on branch `pinagent/<id>` — true parallel agents, no edit races. Requires a git repo. |
+
+> **`'worktree'` on React Native.** The worktree spawn itself is platform-agnostic
+> (it runs in the Metro dev server on your machine, not on the device), so it works
+> the same as on the web plugins. What's web-only is the **dock** — the "Open app"
+> live preview and the Land / Discard buttons. There's no dock on RN, so review and
+> merge each `pinagent/<id>` branch yourself with git (e.g. `git merge pinagent/<id>`),
+> and run `npx expo start` against a worktree dir if you want to preview it.
 
 ## Verify a comment landed
 
