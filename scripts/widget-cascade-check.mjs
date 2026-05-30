@@ -31,6 +31,11 @@ function isWidgetIifeChange(path) {
   if (!path.startsWith('packages/widget/src/')) return false;
   if (path.startsWith('packages/widget/src/__generated__/')) return false;
   if (path.endsWith('.test.ts') || path.endsWith('.test.tsx')) return false;
+  // Storybook stories + their helpers. Like tests, they live under src/ for
+  // convenience but the IIFE entry (`src/index.ts`) never imports them, so
+  // they're tree-shaken out and never reach the embedded bytes.
+  if (path.startsWith('packages/widget/src/stories/')) return false;
+  if (path.endsWith('.stories.ts') || path.endsWith('.stories.tsx')) return false;
   if (NON_IIFE_FILES.has(path)) return false;
   return true;
 }
