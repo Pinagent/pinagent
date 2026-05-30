@@ -92,6 +92,17 @@ jobs:
       - name: Lint published deps
         run: pnpm lint:published-deps
 
+      # Release preflight (dry-run): a non-publishing, no-auth pass of the
+      # same guard `pnpm release` runs. On a normal PR the publish set is
+      # empty (a no-op); on a "Version Packages" PR — where versions are
+      # bumped but not yet on npm — it validates internal-dep closure (hard
+      # fail) and surfaces any new package names (warning) BEFORE the merge
+      # that would publish them. Catches the broken-registry class
+      # (next-plugin → unpublished widget-dock) at PR time. Skips cleanly if
+      # the registry is unreachable.
+      - name: Release preflight (dry-run)
+        run: pnpm release:preflight -- --dry-run
+
       # Undeclared-imports check (inverse of the above): every
       # @pinagent/* import in a package's source must correspond to a
       # declaration in its package.json (dependencies, devDependencies,
