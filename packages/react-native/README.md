@@ -42,18 +42,32 @@ export default function App() {
 **Server** — `metro.config.js`:
 
 ```js
-const { pinagentMiddleware } = require('@pinagent/react-native/server');
+const {
+  pinagentMiddleware,
+  pinagentWebsocketEndpoints,
+} = require('@pinagent/react-native/server');
 
 module.exports = {
   server: {
     enhanceMiddleware: (metroMiddleware, server) =>
       pinagentMiddleware({ projectRoot: __dirname }).chain(metroMiddleware),
+    // Optional — live agent streaming back into the app over WebSocket.
+    websocketEndpoints: {
+      ...pinagentWebsocketEndpoints({ projectRoot: __dirname }),
+    },
   },
 };
 ```
 
 `pinagentMiddleware` options: `projectRoot` (where `.pinagent/` lives) and
 `spawnMode` (`false` | `'inline'` | `'worktree'`, default `'inline'`).
+
+`pinagentWebsocketEndpoints` is optional. Add it and a spawned agent's run
+streams live into the app (text, tool calls, result) with follow-ups and
+`ask_user` answering — the native counterpart of the web widget's agent tray.
+It mounts on Metro's own port, so simulators and physical devices work with no
+extra config. Omit it and submitting still files the comment; you just won't
+see the run in-app.
 
 **Agent pickup** — identical to web. Either let the middleware spawn
 agents, or pull comments into a Claude Code session over `@pinagent/mcp`.
@@ -69,12 +83,13 @@ the RN analog of web's build-time `data-pa-loc`. `src/native/inspector.ts`
 wraps it and degrades to `loc: null` (rather than throwing) across RN
 version differences.
 
-## v1 scope / known cuts
+## Scope / known cuts
 
 - Single-pick only (`additionalAnchors` left empty — schema-compatible).
-- No live agent streaming into the widget; pull mode (MCP) works now.
 - No Fast-Refresh pin re-anchoring; `selector` carries the component name
   chain (RN has no CSS selectors).
+
+Live agent streaming is wired (opt in with `pinagentWebsocketEndpoints`).
 
 ## Tests
 
