@@ -2,6 +2,8 @@
 import { PageShell } from '../_components/PageShell';
 import { AuditClient } from './AuditClient';
 
+export const metadata = { title: 'Audit · Pinagent Cloud' };
+
 export default async function AuditPage({
   searchParams,
 }: {

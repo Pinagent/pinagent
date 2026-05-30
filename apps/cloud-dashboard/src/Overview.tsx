@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@pinagent/ui/component
 import { useState } from 'react';
 import type { CloudApiClient, Invitation } from './api-client';
 import { UnauthorizedError } from './api-client';
-import { formatDuration } from './format';
+import { formatDate, formatDuration } from './format';
 import { MembersAdmin } from './MembersAdmin';
 import { SignIn } from './SignIn';
 import { LoadError, Loading } from './states';
@@ -68,7 +68,9 @@ export function OverviewView({ usage, members }: OverviewData) {
                     <td className="py-2">
                       <Badge variant="outline">{m.status}</Badge>
                     </td>
-                    <td className="py-2 text-muted-foreground">{m.joinedAt ?? '—'}</td>
+                    <td className="py-2 text-muted-foreground">
+                      {m.joinedAt ? formatDate(m.joinedAt) : '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>

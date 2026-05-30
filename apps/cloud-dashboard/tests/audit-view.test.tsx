@@ -23,7 +23,7 @@ describe('AuditView', () => {
         ],
       }),
     );
-    expect(html).toContain('2026-05-30T12:00:00Z');
+    expect(html).toContain('30 May 2026, 12:00 UTC');
     expect(html).toContain('u-admin');
     expect(html).toContain('relay.session.issued');
     expect(html).toContain('sess-1');
