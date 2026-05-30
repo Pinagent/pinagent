@@ -45,11 +45,13 @@ export interface LoginServiceDeps {
   /** Fallback post-login redirect when the request gives no `returnTo`. */
   defaultReturnTo: string;
   /**
-   * Optional user store — when present, the callback just-in-time provisions
-   * (creates/refreshes) the user behind the IdP profile before minting the
-   * token. Omit to skip provisioning (the token still carries the subject).
+   * User store — the callback just-in-time provisions (creates/refreshes) the
+   * user behind the IdP profile, resolving the internal synthetic user id from
+   * `(connectionId, subject)`, and mints the token with that id. Required so a
+   * token never carries the raw IdP subject (which wouldn't match a
+   * synthetic-keyed membership).
    */
-  users?: UserStore;
+  users: UserStore;
   /** Optional audit sink — records successful logins when present. */
   audit?: AuditSink;
   /** Override the clock (epoch seconds) — for tests. */
@@ -123,12 +125,11 @@ export async function handleSsoCallback(
     });
     // Just-in-time provision the user behind this profile, resolving the
     // internal (synthetic) user id from `(connectionId, subject)`. The token +
-    // audit carry that id, not the IdP subject. Falls back to the subject only
-    // when no user store is wired (dev / minimal deploy).
-    const user = await deps.users?.provisionFromProfile(profile, {
+    // audit carry that id, never the IdP subject.
+    const user = await deps.users.provisionFromProfile(profile, {
       now: isoFromSeconds(deps.nowSeconds),
     });
-    const userId = user?.id ?? profile.subject;
+    const userId = user.id;
     userToken = await signUserToken(userId, deps.userTokenSecret, {
       ttlSeconds: deps.userTokenTtlSeconds,
       nowSeconds: deps.nowSeconds,

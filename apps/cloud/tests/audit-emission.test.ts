@@ -7,7 +7,7 @@ import type {
   SsoProfile,
   SsoProvider,
 } from '@pinagent/ee-auth';
-import { createInMemorySsoConnectionStore } from '@pinagent/ee-auth';
+import { createInMemorySsoConnectionStore, createInMemoryUserStore } from '@pinagent/ee-auth';
 import { AUDIT_ACTIONS, createInMemoryAuditSink } from '@pinagent/ee-team-features';
 import { describe, expect, it } from 'vitest';
 import { handleSsoCallback } from '../src/login-service';
@@ -161,6 +161,7 @@ describe('audit emission — login', () => {
         userTokenSecret: USER_SECRET,
         cookieName: 'pa_session',
         defaultReturnTo: '/',
+        users: createInMemoryUserStore([], { generateId: () => 'usr_bob' }),
         audit,
         nowSeconds: NOW,
       },
@@ -170,7 +171,8 @@ describe('audit emission — login', () => {
       {
         occurredAt: NOW_ISO,
         organizationId: 'acme',
-        actorUserId: 'idp-user-9',
+        // the provisioned synthetic id, not the IdP subject
+        actorUserId: 'usr_bob',
         action: AUDIT_ACTIONS.login,
         metadata: { connectionId: 'conn-1' },
       },
