@@ -2,11 +2,15 @@
 
 import { planById, quotaFor, type Subscription, USAGE_KINDS } from '@pinagent/ee-billing';
 import type { CostControl } from '@pinagent/ee-team-features';
+import { Button } from '@pinagent/ui/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@pinagent/ui/components/ui/card';
 import { useState } from 'react';
 import type { CloudApiClient } from './api-client';
 import { UnauthorizedError } from './api-client';
 import { CostControlForm } from './CostControlForm';
+import { KeyValue, type Row } from './KeyValue';
 import { SignIn } from './SignIn';
+import { LoadError, Loading } from './states';
 import { useAsync } from './use-async';
 
 export interface BillingData {
@@ -14,65 +18,72 @@ export interface BillingData {
   costControl: CostControl | null;
 }
 
+function subscriptionRows(subscription: Subscription): Row[] {
+  const plan = planById(subscription.planId);
+  const sessionQuota = plan ? quotaFor(plan, USAGE_KINDS.relaySession) : null;
+  return [
+    { label: 'Plan', value: plan?.name ?? subscription.planId },
+    { label: 'Billing period start', value: subscription.currentPeriodStart },
+    {
+      label: 'Included relay sessions',
+      value: sessionQuota === null ? 'Unlimited' : sessionQuota.toLocaleString(),
+    },
+  ];
+}
+
 function SubscriptionSection({ subscription }: { subscription: Subscription | null }) {
   if (!subscription) {
     return (
-      <p className="empty">No active subscription — the organization is on the default plan.</p>
+      <p className="text-sm text-muted-foreground">
+        No active subscription — the organization is on the default plan.
+      </p>
     );
   }
-  const plan = planById(subscription.planId);
-  const sessionQuota = plan ? quotaFor(plan, USAGE_KINDS.relaySession) : null;
-  return (
-    <dl className="kv">
-      <div className="kv-row">
-        <dt>Plan</dt>
-        <dd>{plan?.name ?? subscription.planId}</dd>
-      </div>
-      <div className="kv-row">
-        <dt>Billing period start</dt>
-        <dd>{subscription.currentPeriodStart}</dd>
-      </div>
-      <div className="kv-row">
-        <dt>Included relay sessions</dt>
-        <dd>{sessionQuota === null ? 'Unlimited' : sessionQuota.toLocaleString()}</dd>
-      </div>
-    </dl>
-  );
+  return <KeyValue rows={subscriptionRows(subscription)} />;
 }
 
 function CostControlsSection({ costControl }: { costControl: CostControl | null }) {
   if (!costControl) {
-    return <p className="empty">No cost controls configured.</p>;
+    return <p className="text-sm text-muted-foreground">No cost controls configured.</p>;
   }
   const { maxRelaySessionsPerPeriod, enforcement } = costControl;
   return (
-    <dl className="kv">
-      <div className="kv-row">
-        <dt>Max relay sessions / period</dt>
-        <dd>
-          {maxRelaySessionsPerPeriod === null
-            ? 'No cap'
-            : maxRelaySessionsPerPeriod.toLocaleString()}
-        </dd>
-      </div>
-      <div className="kv-row">
-        <dt>Enforcement</dt>
-        <dd>{enforcement === 'block' ? 'Block over cap' : 'Warn only'}</dd>
-      </div>
-    </dl>
+    <KeyValue
+      rows={[
+        {
+          label: 'Max relay sessions / period',
+          value:
+            maxRelaySessionsPerPeriod === null
+              ? 'No cap'
+              : maxRelaySessionsPerPeriod.toLocaleString(),
+        },
+        { label: 'Enforcement', value: enforcement === 'block' ? 'Block over cap' : 'Warn only' },
+      ]}
+    />
   );
 }
 
 /** Pure, render-only view — exercised directly in tests via renderToStaticMarkup. */
 export function BillingView({ subscription, costControl }: BillingData) {
   return (
-    <section className="panel">
-      <h2>Billing</h2>
-      <h3>Subscription</h3>
-      <SubscriptionSection subscription={subscription} />
-      <h3>Cost controls</h3>
-      <CostControlsSection costControl={costControl} />
-    </section>
+    <div className="flex flex-col gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Subscription</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <SubscriptionSection subscription={subscription} />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Cost controls</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CostControlsSection costControl={costControl} />
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -95,42 +106,41 @@ export function Billing({
     return { subscription, costControl };
   }, [client, organizationId, reloadKey]);
 
-  if (state.status === 'loading') return <p className="loading">Loading…</p>;
+  if (state.status === 'loading') return <Loading />;
   if (state.status === 'error') {
     if (state.error instanceof UnauthorizedError) return <SignIn />;
-    return (
-      <p className="error" role="alert">
-        Failed to load billing: {String(state.error)}
-      </p>
-    );
+    return <LoadError label="billing" error={state.error} />;
   }
 
   if (editing) {
     return (
-      <section className="panel">
-        <h2>Billing</h2>
-        <h3>Edit cost controls</h3>
-        <CostControlForm
-          initial={state.value.costControl}
-          onSubmit={async (input) => {
-            await client.putCostControl(organizationId, input);
-            setEditing(false);
-            setReloadKey((k) => k + 1);
-          }}
-          onCancel={() => setEditing(false)}
-        />
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>Edit cost controls</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CostControlForm
+            initial={state.value.costControl}
+            onSubmit={async (input) => {
+              await client.putCostControl(organizationId, input);
+              setEditing(false);
+              setReloadKey((k) => k + 1);
+            }}
+            onCancel={() => setEditing(false)}
+          />
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <>
+    <div className="flex flex-col gap-4">
       <BillingView subscription={state.value.subscription} costControl={state.value.costControl} />
-      <div className="panel-actions">
-        <button type="button" onClick={() => setEditing(true)}>
+      <div>
+        <Button variant="outline" onClick={() => setEditing(true)}>
           Edit cost controls
-        </button>
+        </Button>
       </div>
-    </>
+    </div>
   );
 }

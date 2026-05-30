@@ -28,6 +28,7 @@ const API_PREFIXES = [
 
 const config: NextConfig = {
   reactStrictMode: true,
+  transpilePackages: ['@pinagent/ui'],
   turbopack: { root: monorepoRoot },
   outputFileTracingRoot: monorepoRoot,
   async rewrites() {

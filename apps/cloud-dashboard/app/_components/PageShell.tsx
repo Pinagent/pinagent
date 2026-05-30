@@ -17,17 +17,22 @@ export function PageShell({
   children: ReactNode;
 }) {
   return (
-    <main className="app">
-      <header className="app-header">
-        <h1>Pinagent Cloud</h1>
-        {org ? <span className="org-id">{org}</span> : null}
+    <main className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
+      <header className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold tracking-tight">Pinagent Cloud</h1>
+        {org ? (
+          <span className="rounded-full bg-secondary px-3 py-1 font-mono text-xs text-secondary-foreground">
+            {org}
+          </span>
+        ) : null}
       </header>
       <Nav org={org} active={active} />
       {org ? (
         children
       ) : (
-        <p className="empty">
-          No organization selected. Append <code>?org=&lt;id&gt;</code> to the URL.
+        <p className="text-sm text-muted-foreground">
+          No organization selected. Append <code className="font-mono">?org=&lt;id&gt;</code> to the
+          URL.
         </p>
       )}
     </main>
