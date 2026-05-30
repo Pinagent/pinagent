@@ -9,6 +9,7 @@ describe('Nav', () => {
     expect(html).toContain('href="/?org=org%2F1"');
     expect(html).toContain('href="/billing?org=org%2F1"');
     expect(html).toContain('href="/policy?org=org%2F1"');
+    expect(html).toContain('href="/audit?org=org%2F1"');
   });
 
   it('marks only the active tab with the active class + aria-current', () => {

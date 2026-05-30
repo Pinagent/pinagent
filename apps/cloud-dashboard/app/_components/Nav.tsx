@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Elastic-2.0
 
-export type NavTab = 'overview' | 'billing' | 'policy';
+export type NavTab = 'overview' | 'billing' | 'policy' | 'audit';
 
 const TABS: ReadonlyArray<{ id: NavTab; label: string; path: string }> = [
   { id: 'overview', label: 'Overview', path: '/' },
   { id: 'billing', label: 'Billing', path: '/billing' },
   { id: 'policy', label: 'Policy', path: '/policy' },
+  { id: 'audit', label: 'Audit', path: '/audit' },
 ];
 
 /** Builds an href that preserves the active org as a query param. */

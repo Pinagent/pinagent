@@ -178,20 +178,24 @@ button.secondary {
   font-weight: 600;
 }
 
-table.members {
+table.members,
+table.events {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
 }
 
 table.members th,
-table.members td {
+table.members td,
+table.events th,
+table.events td {
   text-align: left;
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--border);
 }
 
-table.members th {
+table.members th,
+table.events th {
   color: var(--muted);
   font-weight: 500;
 }
