@@ -136,6 +136,29 @@ describe('createCloudApiClient PUT methods', () => {
     });
   });
 
+  it('PUTs a subscription as JSON and unwraps the saved record', async () => {
+    const { fetchFn, first } = fakeFetch(() => ({
+      body: {
+        subscription: { organizationId: 'o', planId: 'pro', currentPeriodStart: '2026-05-01' },
+      },
+    }));
+    const client = createCloudApiClient({ fetch: fetchFn });
+
+    const saved = await client.putSubscription('o', {
+      planId: 'pro',
+      currentPeriodStart: '2026-05-01',
+    });
+
+    expect(saved).toMatchObject({ planId: 'pro', currentPeriodStart: '2026-05-01' });
+    const call = first();
+    expect(call.url).toBe('/subscriptions?organizationId=o');
+    expect(call.init?.method).toBe('PUT');
+    expect(JSON.parse(String(call.init?.body))).toEqual({
+      planId: 'pro',
+      currentPeriodStart: '2026-05-01',
+    });
+  });
+
   it('PUTs branch routing as JSON and unwraps the saved record', async () => {
     const { fetchFn, first } = fakeFetch(() => ({
       body: {

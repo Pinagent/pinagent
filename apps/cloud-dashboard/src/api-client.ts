@@ -14,6 +14,12 @@ import type {
  * by the `/sso` login flow.
  */
 
+/** PUT /subscriptions body (org-id is taken from the query, not the body). */
+export interface SubscriptionInput {
+  planId: string;
+  currentPeriodStart: string;
+}
+
 /** PUT /cost-controls body (org-id is taken from the query, not the body). */
 export interface CostControlInput {
   maxRelaySessionsPerPeriod: number | null;
@@ -51,6 +57,7 @@ export interface CloudApiClient {
   getSubscription(organizationId: string): Promise<Subscription | null>;
   getCostControl(organizationId: string): Promise<CostControl | null>;
   getBranchRouting(organizationId: string): Promise<BranchRoutingPolicy | null>;
+  putSubscription(organizationId: string, input: SubscriptionInput): Promise<Subscription>;
   putCostControl(organizationId: string, input: CostControlInput): Promise<CostControl>;
   putBranchRouting(organizationId: string, input: BranchRoutingInput): Promise<BranchRoutingPolicy>;
 }
@@ -115,6 +122,8 @@ export function createCloudApiClient(options: CloudApiClientOptions = {}): Cloud
         `/branch-routing${orgQuery(org)}`,
         (b) => (b.branchRouting as BranchRoutingPolicy | null) ?? null,
       ),
+    putSubscription: (org, input) =>
+      put(`/subscriptions${orgQuery(org)}`, input, (b) => b.subscription as Subscription),
     putCostControl: (org, input) =>
       put(`/cost-controls${orgQuery(org)}`, input, (b) => b.costControl as CostControl),
     putBranchRouting: (org, input) =>

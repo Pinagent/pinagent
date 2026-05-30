@@ -1,6 +1,36 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { describe, expect, it } from 'vitest';
-import { parseBranchRoutingForm, parseCostControlForm, patternsToText } from '../src/forms';
+import {
+  parseBranchRoutingForm,
+  parseCostControlForm,
+  parseSubscriptionForm,
+  patternsToText,
+} from '../src/forms';
+
+describe('parseSubscriptionForm', () => {
+  it('accepts a known plan and a non-empty period start', () => {
+    const r = parseSubscriptionForm({ planId: 'pro', currentPeriodStart: '2026-05-01T00:00:00Z' });
+    expect(r).toEqual({
+      ok: true,
+      value: { planId: 'pro', currentPeriodStart: '2026-05-01T00:00:00Z' },
+    });
+  });
+
+  it('trims both fields', () => {
+    const r = parseSubscriptionForm({ planId: '  free  ', currentPeriodStart: '  2026-01-01  ' });
+    expect(r).toEqual({ ok: true, value: { planId: 'free', currentPeriodStart: '2026-01-01' } });
+  });
+
+  it('rejects an unknown or blank plan', () => {
+    expect(parseSubscriptionForm({ planId: 'platinum', currentPeriodStart: 'x' }).ok).toBe(false);
+    expect(parseSubscriptionForm({ planId: '', currentPeriodStart: 'x' }).ok).toBe(false);
+  });
+
+  it('rejects a blank period start', () => {
+    const r = parseSubscriptionForm({ planId: 'pro', currentPeriodStart: '   ' });
+    expect(r.ok).toBe(false);
+  });
+});
 
 describe('parseCostControlForm', () => {
   it('treats a blank cap as "no cap" (null)', () => {
