@@ -83,6 +83,15 @@ jobs:
       - name: Lint workspace deps
         run: pnpm lint:workspace-deps
 
+      # Published-deps check: no package that ships to npm may list, in
+      # its `dependencies`, a workspace package that is itself
+      # unpublishable (private: true or in the changeset ignore list).
+      # Such a dep 404s on a clean install — this is what broke
+      # next-plugin@0.2.0 / vite-plugin@0.3.0 (they depended on the
+      # then-private @pinagent/widget-dock).
+      - name: Lint published deps
+        run: pnpm lint:published-deps
+
       # Undeclared-imports check (inverse of the above): every
       # @pinagent/* import in a package's source must correspond to a
       # declaration in its package.json (dependencies, devDependencies,

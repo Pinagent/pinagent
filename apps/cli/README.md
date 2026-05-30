@@ -48,6 +48,38 @@ Exit codes:
 | `1`  | No `vite.config.*` / `next.config.*` found — unsupported project. |
 | `2`  | Bad usage (unknown flag, missing `--dir` value).     |
 
+### `pinagent doctor`
+
+Verify that an already-wired project is set up correctly — the read-only inverse of `init`. It replaces the ad-hoc `node -e` / `ls` probing you'd otherwise do when "the widget didn't show up", checking the whole chain:
+
+- the plugin resolves, and (on Next) its `./config` and `./route` subpath exports resolve — a stale symlink or a half-published tarball resolves the bare package but not the subpaths;
+- the runtime config (`vite.config.*` / `next.config.*` / `nuxt.config.*`) is wrapped with `pinagent(...)`;
+- `<Pinagent />` is mounted in the root layout, and the `app/pinagent/[[...slug]]/route.ts` handler exists with inline `dynamic`/`runtime` (Next);
+- `.pinagent` is gitignored (checking the app dir and every ancestor);
+- `.mcp.json` registers a `pinagent` server, and any `PINAGENT_PROJECT_ROOT` it pins points at a directory that exists;
+- no dangling `@pinagent/*` symlinks linger in `node_modules` from an earlier or renamed install.
+
+```bash
+pinagent doctor               # check the current directory
+pinagent doctor --dir ./web   # check a specific app (use this in a monorepo)
+```
+
+Doctor never writes. It detects the runtime automatically.
+
+Options:
+
+| Flag           | Default           | Effect                 |
+| -------------- | ----------------- | ---------------------- |
+| `--dir <path>` | current directory | Project root to check. |
+
+Exit codes:
+
+| Code | Meaning                                          |
+| ---- | ------------------------------------------------ |
+| `0`  | All checks passed (warnings allowed).            |
+| `1`  | At least one check failed.                       |
+| `2`  | Bad usage (unknown flag, missing `--dir` value). |
+
 ### `pinagent mcp`
 
 Start the [Model Context Protocol](https://modelcontextprotocol.io) server over stdio. Configure your coding agent (Claude Code, Cursor, etc.) to spawn this process so it can pull pending feedback, screenshots, and source context out of a running Pinagent dev session.

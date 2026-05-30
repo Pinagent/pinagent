@@ -43,6 +43,15 @@ ls metro.config.* app.json 2>/dev/null | head -1 && echo "REACT_NATIVE"  # also:
 > `<Pinagent/>` component and resolves the tapped view to `file:line` via
 > RN's built-in Inspector. The agent backend is identical.
 
+> **Monorepo with more than one app?** The detection above is per-runtime,
+> not per-app. In a workspace with several UI apps, **enumerate the
+> candidate apps and ask the developer which one** to wire — don't guess or
+> wire all of them. Run the detection inside each app dir, and **skip
+> backend-only services** (Fastify/Express/Nest, API workers, queue
+> consumers): they serve no DOM, so there's nothing to tag, click, or
+> screenshot. Pinagent only applies to apps that render a browser UI (or a
+> React Native / Expo app).
+
 After the runtime-specific install, **every project needs** the MCP server step: [mcp.md](./mcp.md).
 
 ## Quick mental model
@@ -69,6 +78,7 @@ The plugins, MCP server, and CLI are published to npm under the `@pinagent/*` sc
 
 ## Common pitfalls (skim before you start)
 
+- **Verify the wiring with `pinagent doctor` instead of probing by hand.** After setup, run `pnpm dlx @pinagent/cli doctor` (add `--dir apps/<app>` in a monorepo). It's read-only and checks the whole chain: the plugin and its subpath exports resolve, the config is wrapped, `<Pinagent />` is mounted and the route handler is correct (Next), `.pinagent` is gitignored, `.mcp.json` registers the server and any `PINAGENT_PROJECT_ROOT` points at a real directory, and there are no dangling `@pinagent/*` symlinks from an aborted install. Exits non-zero if anything's wrong.
 - **Don't put `.pinagent/` in version control.** Always add it to `.gitignore` of the target repo (monorepo root, not just the app). This covers `.pinagent/db.sqlite` (+ `-wal`/`-shm`), `.pinagent/screenshots/`, `.pinagent/logs/`, AND `.pinagent/worktrees/` (for worktree mode).
 - **Project root matters in monorepos.** Storage lives at `<wherever Next/Vite runs from>/.pinagent/`. The MCP server must point at that same directory via `PINAGENT_PROJECT_ROOT`.
 - **Hard-refresh the browser** after upgrading the plugin — the widget IIFE is cached. (Chrome DevTools → Network tab → "Disable cache" while DevTools is open helps during development.)

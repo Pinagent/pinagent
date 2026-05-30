@@ -54,7 +54,9 @@ const ALLOWLIST = new Set([
   // dist files from disk — there's no static import the scanner can see.
   // The dep must be in `dependencies` (not devDependencies) so it ships
   // alongside the plugin to consumers; otherwise `dock: true` would fail
-  // to resolve in any installed project.
+  // to resolve in any installed project. (For this to actually work,
+  // `@pinagent/widget-dock` must itself be published — enforced by
+  // `lint:published-deps`.)
   '@pinagent/vite-plugin -> @pinagent/widget-dock',
   // Same runtime-resolve pattern in next-plugin's route handler.
   '@pinagent/next-plugin -> @pinagent/widget-dock',

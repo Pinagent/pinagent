@@ -18,6 +18,7 @@
 // plugin in (see `pinagent init`) and run your existing dev command.
 
 import { startMcpServer } from '@pinagent/mcp';
+import { parseDoctorArgs, runDoctor } from './doctor';
 import { parseInitArgs, runInit } from './init';
 import {
   fetchTranscript,
@@ -43,6 +44,17 @@ Subcommands:
                        --dir <path>   Project root to scaffold. Defaults
                                       to the current directory.
                        --dry-run, -n  Print the plan without writing files.
+
+  doctor             Verify an already-wired project: plugin + subpath
+                     resolution, config wrapping, <Pinagent /> mount and
+                     route handler (Next), .pinagent gitignore, the
+                     .mcp.json server + PINAGENT_PROJECT_ROOT, and dangling
+                     @pinagent/* symlinks. Read-only; exits non-zero if any
+                     check fails. Detects the runtime automatically.
+
+                     Options:
+                       --dir <path>   Project root to check. Defaults to
+                                      the current directory.
 
   mcp                Start the stdio MCP server. Configure your coding
                      agent (Claude Code, etc.) to spawn this command so it
@@ -90,6 +102,17 @@ async function main(): Promise<void> {
       process.exit(2);
     }
     const result = runInit(parsed);
+    process.stdout.write(`${result.lines.join('\n')}\n`);
+    process.exit(result.code);
+  }
+
+  if (subcommand === 'doctor') {
+    const parsed = parseDoctorArgs(rest);
+    if ('error' in parsed) {
+      process.stderr.write(`pinagent doctor: ${parsed.error}\n\n${HELP}`);
+      process.exit(2);
+    }
+    const result = runDoctor(parsed.dir);
     process.stdout.write(`${result.lines.join('\n')}\n`);
     process.exit(result.code);
   }
