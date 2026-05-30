@@ -1,0 +1,99 @@
+# Automated release via Changesets.
+#
+# Publishing uses npm Trusted Publishing (OIDC) — no NPM_TOKEN secret. npm
+# mints short-lived, per-run credentials after verifying GitHub's OIDC token
+# against the trusted-publisher config (repo + this workflow file +
+# `production` environment) registered on npmjs.com. Until a Version Packages
+# PR merges, this workflow only opens/updates that PR; it cannot publish.
+#
+# Flow (replaces the manual `pnpm release`):
+#   1. A PR with changesets merges to main.
+#   2. This workflow runs `changeset version` and opens (or updates) a
+#      "Version Packages" PR that bumps versions + writes CHANGELOGs.
+#   3. When THAT PR merges, this workflow runs `pnpm release` (build:oss →
+#      release:preflight → changeset publish → release:smoke) and pushes tags.
+#
+# Why this exists: the 2026-05-30 release failed twice on a developer's local
+# npm token (first expired, then lacking create-rights for new package names),
+# and left the registry half-broken. Publishing from CI via OIDC removes both
+# the stored-secret risk and the "whoever-is-at-their-laptop has valid auth"
+# dependency, plus the shared-main race.
+#
+# SETUP (mostly done):
+#   - On npmjs.com, add a Trusted Publisher to EACH published @pinagent/*
+#     package: repo `Pinagent/pinagent`, workflow `release.yml`, environment
+#     `production`. This is what authorizes OIDC — there is NO token to manage.
+#   - Create a `production` GitHub Environment (Settings → Environments). The
+#     job below runs in it so its OIDC token carries the matching `production`
+#     claim. Leave it WITHOUT required reviewers unless you want every release
+#     (and every Version Packages PR update) to pause for manual approval.
+#   - Confirm the default GITHUB_TOKEN may open PRs (Settings → Actions →
+#     Workflow permissions → "Allow GitHub Actions to create and approve PRs").
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+# Never run two releases at once (publishing is not idempotent-safe under
+# concurrency); let an in-flight release finish before the next starts.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # push the version commit + tags
+  pull-requests: write # open the Version Packages PR
+  id-token: write # OIDC trusted publishing + automatic provenance
+
+jobs:
+  release:
+    name: version · publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Must match the `production` environment on the npm trusted-publisher
+    # config — npm checks the OIDC token's environment claim.
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # changesets needs full history to compute tags
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.14.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      # OIDC trusted publishing needs npm >= 11.5.1; Node 22 ships npm 10.
+      # `changeset publish` shells out to this npm, so upgrade it globally.
+      - name: Upgrade npm for OIDC support
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create Version Packages PR or publish
+        uses: changesets/action@v1
+        with:
+          # When changesets remain, opens/updates the Version Packages PR.
+          # When none remain (that PR just merged), runs the publish command.
+          version: pnpm version-packages
+          publish: pnpm release
+          commit: 'chore(release): version packages'
+          title: 'chore(release): version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No NPM_TOKEN: auth is OIDC trusted publishing (id-token: write +
+          # the trusted-publisher config + environment: production). npm mints
+          # short-lived credentials per run and attaches provenance automatically.
+          # New names publish through CI, so bypass preflight's interactive ack.
+          PINAGENT_RELEASE_ALLOW_NEW: '1'

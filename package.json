@@ -29,7 +29,9 @@
     "test:coverage": "vitest run --coverage",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "pnpm build:oss && changeset publish",
+    "release:preflight": "node scripts/check-release-preflight.mjs",
+    "release:smoke": "node scripts/smoke-install-published.mjs",
+    "release": "pnpm build:oss && pnpm release:preflight && changeset publish && pnpm release:smoke",
     "example": "pnpm --filter=react-vite-example dev"
   },
   "devDependencies": {
