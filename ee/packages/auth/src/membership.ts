@@ -41,6 +41,8 @@ export interface MembershipStore {
   getOrganization(id: OrganizationId): Promise<Organization | null>;
   listMembers(id: OrganizationId): Promise<OrganizationMembership[]>;
   getMembership(org: OrganizationId, user: UserId): Promise<OrganizationMembership | null>;
+  /** Every organization the user belongs to (any status), for "my orgs". */
+  listMembershipsByUser(user: UserId): Promise<OrganizationMembership[]>;
   upsertMembership(membership: OrganizationMembership): Promise<void>;
   removeMembership(org: OrganizationId, user: UserId): Promise<void>;
 }
@@ -58,6 +60,9 @@ export const unimplementedMembershipStore: MembershipStore = {
   },
   getMembership() {
     throw new NotImplementedError('MembershipStore.getMembership');
+  },
+  listMembershipsByUser() {
+    throw new NotImplementedError('MembershipStore.listMembershipsByUser');
   },
   upsertMembership() {
     throw new NotImplementedError('MembershipStore.upsertMembership');

@@ -55,6 +55,14 @@ export function createPgMembershipStore(db: MembershipDb): MembershipStore {
       return row ? toMembership(row) : null;
     },
 
+    async listMembershipsByUser(user: UserId): Promise<OrganizationMembership[]> {
+      const rows = await db
+        .select()
+        .from(organizationMemberships)
+        .where(eq(organizationMemberships.userId, user));
+      return rows.map(toMembership);
+    },
+
     async upsertMembership(membership: OrganizationMembership): Promise<void> {
       await db
         .insert(organizationMemberships)

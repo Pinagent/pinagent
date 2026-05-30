@@ -4,6 +4,7 @@ import {
   authorizeOrgMember,
   MembershipRequiredError,
   type MembershipStore,
+  type OrganizationMembership,
   type Permission,
 } from '@pinagent/ee-auth';
 import type { MeterSink } from '@pinagent/ee-billing';
@@ -18,6 +19,7 @@ import type { Authenticator } from './session-service';
  *   GET /usage    → billing:read   → metered usage summary
  *   GET /audit    → org:settings   → recent audit events
  *   GET /members  → org:settings   → organization members
+ *   GET /me/orgs  → authenticated  → the caller's own organizations
  *
  * Framework-agnostic (Web `Request`/`Response`), fully injected for testing.
  */
@@ -54,6 +56,44 @@ export async function handleMembers(request: Request, deps: ReadServiceDeps): Pr
   if (ctx.denied) return ctx.denied;
   const members = await deps.store.listMembers(ctx.organizationId);
   return json({ organizationId: ctx.organizationId, members }, 200);
+}
+
+/** One of the caller's organizations, enriched for the dashboard org switcher. */
+export interface MyOrg {
+  organizationId: string;
+  /** Human label; falls back to the id when the org row is missing. */
+  displayName: string;
+  slug: string | null;
+  role: OrganizationMembership['role'];
+  status: OrganizationMembership['status'];
+}
+
+/**
+ * GET /me/orgs — the organizations the authenticated caller belongs to. Unlike
+ * the other read endpoints this is NOT org-scoped or RBAC-gated: a caller may
+ * always list their own memberships. Each is enriched with the org's display
+ * name + slug so the dashboard can render a switcher without an extra round
+ * trip.
+ */
+export async function handleMyOrgs(request: Request, deps: ReadServiceDeps): Promise<Response> {
+  if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
+  const user = await deps.authenticate(request);
+  if (!user) return json({ error: 'unauthorized' }, 401);
+
+  const memberships = await deps.store.listMembershipsByUser(user.userId);
+  const orgs: MyOrg[] = await Promise.all(
+    memberships.map(async (m) => {
+      const org = await deps.store.getOrganization(m.organizationId);
+      return {
+        organizationId: m.organizationId,
+        displayName: org?.displayName ?? m.organizationId,
+        slug: org?.slug ?? null,
+        role: m.role,
+        status: m.status,
+      };
+    }),
+  );
+  return json({ orgs }, 200);
 }
 
 type ReadContext =
