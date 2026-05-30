@@ -73,6 +73,25 @@ export const organizationMemberships = authSchema.table(
 );
 
 /**
+ * Pending invitations — backs `@pinagent/ee-auth`'s `InvitationStore`. The
+ * email-keyed bridge between "an admin invited this address" and a membership
+ * row (which keys on the synthetic `userId`, minted only at first SSO login).
+ * Consumed at login into an active membership, then deleted. PK
+ * `(organization_id, email)` so re-inviting overwrites the pending role.
+ */
+export const invitations = authSchema.table(
+  'invitations',
+  {
+    organizationId: text('organization_id').notNull(),
+    email: text('email').notNull(),
+    role: text('role').notNull(),
+    invitedAt: text('invited_at').notNull(),
+    invitedByUserId: text('invited_by_user_id'),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.email] })],
+);
+
+/**
  * Configured IdP connections, one or more per org — backs
  * `@pinagent/ee-auth`'s `SsoConnectionStore`. Mirrors the `SsoConnection`
  * interface exactly. Stores connection *metadata* only: client credentials
@@ -186,6 +205,7 @@ export const activeSessions = relaySchema.table(
 export const schema = {
   organizations,
   organizationMemberships,
+  invitations,
   users,
   ssoIdentities,
   ssoConnections,

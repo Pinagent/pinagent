@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Elastic-2.0
 import type { ProvisionOptions, SsoProfile, User, UserId, UserStore } from '@pinagent/ee-auth';
 import { defaultUserId, userFromProfile } from '@pinagent/ee-auth';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import { ssoIdentities, users } from './schema';
 
@@ -41,6 +41,14 @@ export function createPgUserStore(db: UserDb, options: PgUserStoreOptions = {}):
     async get(id: UserId): Promise<User | null> {
       const [row] = await db.select().from(users).where(eq(users.id, id)).limit(1);
       return row ?? null;
+    },
+
+    async findByEmail(email: string): Promise<User[]> {
+      // Case-insensitive: `users.email` stores the raw IdP email.
+      return db
+        .select()
+        .from(users)
+        .where(sql`lower(${users.email}) = ${email.trim().toLowerCase()}`);
     },
 
     async provisionFromProfile(profile: SsoProfile, opts?: ProvisionOptions): Promise<User> {

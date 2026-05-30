@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Elastic-2.0
 import {
+  createInMemoryInvitationStore,
   createInMemorySsoConnectionStore,
   createInMemoryUserStore,
   type MembershipStore,
@@ -106,6 +107,13 @@ function makeApp() {
       subscriptions: createInMemorySubscriptionStore(),
       costControls: createInMemoryCostControlStore(),
       branchRouting: createInMemoryBranchRoutingStore(),
+    },
+    members: {
+      store,
+      users: createInMemoryUserStore(),
+      invitations: createInMemoryInvitationStore(),
+      authenticate,
+      audit,
     },
     internal: { audit, relayInternalSecret: 'internal-secret' },
   });

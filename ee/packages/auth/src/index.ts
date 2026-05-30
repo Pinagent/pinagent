@@ -24,6 +24,13 @@ export {
   NotImplementedError,
   SsoError,
 } from './errors';
+export {
+  createInMemoryInvitationStore,
+  type Invitation,
+  type InvitationStore,
+  normalizeEmail,
+  unimplementedInvitationStore,
+} from './invitation';
 export type { IdTokenClaims, IdTokenExpectations, JwkKey, Jwks } from './jwt';
 export { verifyIdToken } from './jwt';
 export {

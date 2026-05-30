@@ -78,6 +78,13 @@
       "when": 1780160553108,
       "tag": "0010_perpetual_marten_broadcloak",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780173716351,
+      "tag": "0011_absent_vengeance",
+      "breakpoints": true
     }
   ]
 }

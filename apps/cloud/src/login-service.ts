@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Elastic-2.0
 import {
+  type InvitationStore,
+  type MembershipStore,
   type SsoConnection,
   type SsoConnectionStore,
   type SsoProvider,
@@ -52,6 +54,14 @@ export interface LoginServiceDeps {
    * synthetic-keyed membership).
    */
   users: UserStore;
+  /**
+   * Optional invitation consumption: when both are wired, a pending invitation
+   * matching `(connection org, profile email)` is turned into an active
+   * membership and deleted at login. No-op if either is absent; best-effort, so
+   * a failure here never fails the login.
+   */
+  invitations?: InvitationStore;
+  memberships?: MembershipStore;
   /** Optional audit sink — records successful logins when present. */
   audit?: AuditSink;
   /** Override the clock (epoch seconds) — for tests. */
@@ -141,6 +151,7 @@ export async function handleSsoCallback(
       action: AUDIT_ACTIONS.login,
       metadata: { connectionId: connection.id },
     });
+    await consumeInvitation(deps, connection, profile.email, userId);
   } catch {
     // Generic — never leak why the IdP handshake failed to the browser.
     return text('login failed', 401);
@@ -154,6 +165,44 @@ export async function handleSsoCallback(
       'set-cookie': sessionCookie(deps.cookieName, userToken, maxAge),
     },
   });
+}
+
+/**
+ * Turn a pending invitation for `(connection org, email)` into an active
+ * membership and delete it. Best-effort: any failure is swallowed so the login
+ * still succeeds (the invitation simply stays pending for the next login).
+ */
+async function consumeInvitation(
+  deps: LoginServiceDeps,
+  connection: SsoConnection,
+  email: string,
+  userId: string,
+): Promise<void> {
+  const { invitations, memberships } = deps;
+  if (!invitations || !memberships) return;
+  try {
+    const invite = await invitations.get(connection.organizationId, email);
+    if (!invite) return;
+    const nowIso = isoFromSeconds(deps.nowSeconds);
+    await memberships.upsertMembership({
+      organizationId: connection.organizationId,
+      userId,
+      role: invite.role,
+      status: 'active',
+      invitedAt: invite.invitedAt,
+      joinedAt: nowIso,
+    });
+    await invitations.remove(connection.organizationId, email);
+    await deps.audit?.record({
+      occurredAt: nowIso,
+      organizationId: connection.organizationId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.memberJoined,
+      metadata: { email },
+    });
+  } catch {
+    // Non-fatal — login proceeds; the invitation is consumed on a later login.
+  }
 }
 
 /** Only allow same-origin path redirects, to prevent open-redirect abuse. */

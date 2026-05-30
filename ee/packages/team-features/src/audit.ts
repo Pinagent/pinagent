@@ -48,6 +48,10 @@ export const AUDIT_ACTIONS = {
   costCapBlocked: 'cost.cap.blocked',
   /** A cost control was exceeded but issuance was allowed (enforcement: warn). */
   costCapWarning: 'cost.cap.warning',
+  /** An admin invited an email to the org. */
+  memberInvited: 'member.invited',
+  /** An invitee accepted (consumed at SSO login) → active membership. */
+  memberJoined: 'member.joined',
 } as const;
 
 export const DEFAULT_AUDIT_LIMIT = 100;

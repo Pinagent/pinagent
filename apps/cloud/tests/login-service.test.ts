@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Elastic-2.0
 import {
+  createInMemoryInvitationStore,
   createInMemorySsoConnectionStore,
   createInMemoryUserStore,
+  type MembershipStore,
+  type OrganizationMembership,
   type SsoConnection,
   type SsoConnectionStore,
   type SsoProfile,
@@ -183,6 +186,73 @@ describe('GET /sso/callback', () => {
     const verified = await verifyUserToken(token as string, USER_TOKEN_SECRET);
     expect(verified.ok).toBe(true);
     if (verified.ok) expect(verified.claims.userId).toBe('usr_fixed');
+  });
+
+  it('consumes a pending invitation into an active membership at login', async () => {
+    const upserts: OrganizationMembership[] = [];
+    const memberships: MembershipStore = {
+      async getMembership() {
+        return null;
+      },
+      async getOrganization() {
+        return null;
+      },
+      async listMembers() {
+        return [];
+      },
+      async listMembershipsByUser() {
+        return [];
+      },
+      async upsertMembership(m) {
+        upserts.push(m);
+      },
+      async removeMembership() {},
+    };
+    const invitations = createInMemoryInvitationStore([
+      {
+        organizationId: 'acme',
+        email: 'bob@acme.com',
+        role: 'admin',
+        invitedAt: 'i',
+        invitedByUserId: null,
+      },
+    ]);
+    const state = await startedState('/');
+    const res = await handleSsoCallback(
+      new Request(`https://cloud.test/sso/callback?code=abc&state=${state}`),
+      { ...deps(fakeProvider()), invitations, memberships },
+    );
+    expect(res.status).toBe(302);
+    // The invitee (synthetic id 'usr_bob') is now an active admin; invite gone.
+    expect(upserts).toEqual([
+      expect.objectContaining({
+        organizationId: 'acme',
+        userId: 'usr_bob',
+        role: 'admin',
+        status: 'active',
+      }),
+    ]);
+    expect(await invitations.get('acme', 'bob@acme.com')).toBeNull();
+  });
+
+  it('login still succeeds when there is no pending invitation (no membership created)', async () => {
+    const upserts: OrganizationMembership[] = [];
+    const memberships = {
+      getMembership: async () => null,
+      getOrganization: async () => null,
+      listMembers: async () => [],
+      listMembershipsByUser: async () => [],
+      upsertMembership: async (m: OrganizationMembership) => {
+        upserts.push(m);
+      },
+      removeMembership: async () => {},
+    } satisfies MembershipStore;
+    const res = await handleSsoCallback(
+      new Request(`https://cloud.test/sso/callback?code=abc&state=${await startedState('/')}`),
+      { ...deps(fakeProvider()), invitations: createInMemoryInvitationStore(), memberships },
+    );
+    expect(res.status).toBe(302);
+    expect(upserts).toHaveLength(0);
   });
 
   it('400s on missing code or state', async () => {
