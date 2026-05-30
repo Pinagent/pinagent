@@ -25,8 +25,13 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      # Full history (fetch-depth: 0) so turbo's `--affected` can compute a
+      # merge-base against the PR's base commit, and so the widget-cascade
+      # step's `origin/<base>` diff resolves without a separate fetch.
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       # pnpm comes BEFORE Node so setup-node's `cache: 'pnpm'` can find
       # the pnpm CLI. Version pinned to match packageManager in
@@ -48,6 +53,21 @@ jobs:
       # to commit the lockfile.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Persist turbo's local cache (`.turbo`) across runs. Without it every
+      # run re-typechecks and rebuilds all ~25 packages from cold (the three
+      # biggest CI steps); with it, packages whose inputs are unchanged restore
+      # instantly. Keyed per-commit so each run writes a fresh entry, with a
+      # prefix `restore-keys` fallback so a run reuses the most recent cache
+      # from its own branch or main (GitHub scopes cache reads to the branch +
+      # base + default branch). Pairs with the `--affected` filtering below.
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
 
       # Sherif checks for cross-workspace version drift (e.g. two
       # packages on different `better-sqlite3` majors). Cheap (<1s)
@@ -144,12 +164,34 @@ jobs:
       - name: Lint (biome)
         run: pnpm lint
 
-      # `pnpm -r typecheck` runs tsc --noEmit across every package in
+      # `turbo run typecheck` runs tsc --noEmit across every package in
       # the workspace. The widget IIFE, the Next adapter, the MCP
       # server, and the shared db schema all go through their own
-      # tsconfigs.
+      # tsconfigs. On PRs, `--affected` narrows the set to packages whose
+      # inputs changed since the base commit (plus their dependents);
+      # `^build` still builds upstream deps as needed (restored from the
+      # turbo cache above). On main we run the full set so the cache that
+      # PRs restore from stays complete. TURBO_SCM_BASE points `--affected`
+      # at the PR base sha (empty/unused on push).
       - name: Typecheck
-        run: pnpm typecheck
+        run: pnpm turbo run typecheck ${{ github.event_name == 'pull_request' && '--affected' || '' }}
+        env:
+          TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
+
+      # Build BEFORE test, and NOT `--affected`. The test suite imports
+      # every @pinagent/* package through its `exports` map, which resolves
+      # to `dist/` (there is no src/source condition and vitest adds no src
+      # alias), so each package a test touches must be built first; the
+      # plugins' embed (the test step's `pretest` hook) additionally needs
+      # `packages/widget/dist`. Because the test run is unscoped, its build
+      # prerequisite can't be scoped either — this must be a full build.
+      # (Originally this was produced as a side effect of the unscoped
+      # typecheck's `^build`; with typecheck now `--affected` that no longer
+      # covers it.) Persisted turbo cache keeps this fast on unchanged
+      # packages, and it still catches packaging regressions (tsdown config,
+      # embed script, exports map) before tests run.
+      - name: Build
+        run: pnpm build
 
       # Unit + integration tests via Vitest, with a v8 coverage summary
       # printed to the run log. better-sqlite3's native binding gets
@@ -160,11 +202,6 @@ jobs:
       # fails only on a real test failure, never on a coverage dip.
       - name: Test
         run: pnpm test:coverage
-
-      # Build last so a green test run still catches packaging
-      # regressions (tsdown config, embed-widget script, exports map).
-      - name: Build
-        run: pnpm build
 
       # Smoke-test the OSS-only filter that `release` uses
       # (`pnpm build:oss && changeset publish`). After the full `pnpm
