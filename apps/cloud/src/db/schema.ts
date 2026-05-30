@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Elastic-2.0
-import { boolean, integer, jsonb, pgSchema, primaryKey, text } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgSchema, primaryKey, text } from 'drizzle-orm/pg-core';
 
 /**
  * Postgres schema backing `@pinagent/ee-auth`'s `MembershipStore`.
@@ -26,9 +26,9 @@ export const organizations = authSchema.table('organizations', {
 
 /**
  * Users provisioned just-in-time on SSO login — backs `@pinagent/ee-auth`'s
- * `UserStore`. Mirrors the `User` interface exactly. `id` is the IdP subject
- * for now (what memberships key on); ISO-8601 `text` timestamps, consistent
- * with the rest of the `auth` schema.
+ * `UserStore`. Mirrors the `User` interface exactly. `id` is an opaque
+ * synthetic id (the IdP-subject mapping lives in `sso_identities`); ISO-8601
+ * `text` timestamps, consistent with the rest of the `auth` schema.
  */
 export const users = authSchema.table('users', {
   id: text('id').primaryKey(),
@@ -37,6 +37,27 @@ export const users = authSchema.table('users', {
   createdAt: text('created_at').notNull(),
   lastLoginAt: text('last_login_at').notNull(),
 });
+
+/**
+ * Maps an external IdP identity `(connection_id, subject)` to an internal
+ * synthetic `user_id` — backs the `(connectionId, subject) → userId`
+ * resolution in `@pinagent/ee-auth`'s `UserStore`. The composite PK dedups the
+ * identity; `user_id` is indexed so a user's identities can be listed. One
+ * user may hold several identities (multiple IdP connections) all pointing at
+ * the same `user_id`.
+ */
+export const ssoIdentities = authSchema.table(
+  'sso_identities',
+  {
+    connectionId: text('connection_id').notNull(),
+    subject: text('subject').notNull(),
+    userId: text('user_id').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.connectionId, t.subject] }),
+    index('sso_identities_user_id_idx').on(t.userId),
+  ],
+);
 
 export const organizationMemberships = authSchema.table(
   'organization_memberships',
@@ -166,6 +187,7 @@ export const schema = {
   organizations,
   organizationMemberships,
   users,
+  ssoIdentities,
   ssoConnections,
   ssoConnectionCredentials,
   auditEvents,
