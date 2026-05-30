@@ -40,7 +40,7 @@
     "@vitest/coverage-v8": "^4.1.7",
     "happy-dom": "^20.9.0",
     "sherif": "^1.6.0",
-    "turbo": "^2.3.0",
+    "turbo": "^2.9.16",
     "typescript": "^6.0.3",
     "vitest": "^4.1.7"
   },

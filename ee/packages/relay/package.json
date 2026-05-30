@@ -30,7 +30,7 @@
     "@pinagent/shared": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250510.0",
+    "@cloudflare/workers-types": "^4.20260530.1",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3",
     "wrangler": "^4.14.0"
