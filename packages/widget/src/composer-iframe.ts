@@ -38,6 +38,12 @@ export interface WireComposerArgs {
   swapTo: (c: Composer) => void;
   /** Cycle the expanded composer to the next in-flight agent. */
   hopToNextActive: () => void;
+  /** Flash page outlines on the extra picked elements (hover the "+N" badge). */
+  onExtrasHover: () => void;
+  /** Clear the extra-element flash outlines. */
+  onExtrasLeave: () => void;
+  /** Report the textarea's natural height so the host can auto-grow the pane. */
+  onTextareaHeight: (natural: number) => void;
 }
 
 export function wireComposerIframe(args: WireComposerArgs): void {
@@ -52,6 +58,9 @@ export function wireComposerIframe(args: WireComposerArgs): void {
     applyMiniChrome,
     swapTo,
     hopToNextActive,
+    onExtrasHover,
+    onExtrasLeave,
+    onTextareaHeight,
   } = args;
 
   const idoc = iframe.contentDocument;
@@ -210,11 +219,11 @@ export function wireComposerIframe(args: WireComposerArgs): void {
       hideTimer = setTimeout(() => extrasPop?.classList.remove('open'), 140);
     };
     extrasBadge.addEventListener('mouseenter', () => {
-      iwin.parent.postMessage({ type: 'pa-extras-hover' }, '*');
+      onExtrasHover();
       showPop();
     });
     extrasBadge.addEventListener('mouseleave', () => {
-      iwin.parent.postMessage({ type: 'pa-extras-leave' }, '*');
+      onExtrasLeave();
       scheduleHide();
     });
     if (extrasPop) {
@@ -338,12 +347,12 @@ export function wireComposerIframe(args: WireComposerArgs): void {
   // Fresh composer: wire the composer-pane (textarea + submit/cancel).
   setTimeout(() => ta.focus(), 0);
 
-  // Auto-grow: measure the textarea's natural scrollHeight after
-  // each input and post it to the parent, which clamps + applies
-  // it to iframe.style.height. The 0-then-restore trick is the
-  // standard auto-grow pattern — without it, scrollHeight returns
-  // the current rendered height (clamped by flex sizing) instead
-  // of the content's natural height.
+  // Auto-grow: measure the textarea's natural scrollHeight after each
+  // input and hand it to the host, which clamps + applies it to
+  // iframe.style.height. The 0-then-restore trick is the standard
+  // auto-grow pattern — without it, scrollHeight returns the current
+  // rendered height (clamped by flex sizing) instead of the content's
+  // natural height.
   let lastReported = -1;
   const postTextareaHeight = () => {
     const saved = ta.style.height;
@@ -352,7 +361,7 @@ export function wireComposerIframe(args: WireComposerArgs): void {
     ta.style.height = saved;
     if (natural !== lastReported) {
       lastReported = natural;
-      iwin.parent.postMessage({ type: 'pa-composer-resize-ta', taHeight: natural }, '*');
+      onTextareaHeight(natural);
     }
   };
 

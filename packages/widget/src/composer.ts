@@ -562,7 +562,6 @@ export function createComposerController(ctx: WidgetContext): {
           }
         }
         if (rafHandle != null) cancelAnimationFrame(rafHandle);
-        window.removeEventListener('message', onIframeMessage);
         clearExtraFlashes();
         iframe.remove();
         bubble.remove();
@@ -822,28 +821,21 @@ export function createComposerController(ctx: WidgetContext): {
       }
     }
 
-    function onIframeMessage(ev: MessageEvent) {
-      if (ev.source !== iframe.contentWindow) return;
-      const data = ev.data as { type?: string; taHeight?: number } | null;
-      if (!data || typeof data.type !== 'string') return;
-      if (data.type === 'pa-extras-hover') {
-        flashExtras();
-        return;
-      }
-      if (data.type === 'pa-extras-leave') {
-        clearExtraFlashes();
-        return;
-      }
-      if (data.type !== 'pa-composer-resize-ta') return;
+    // Auto-grow the composer pane to fit the textarea as the user types.
+    // Pre-submit only — the stream pane has its own fixed STREAM_H. The
+    // iframe wiring calls this directly: the composer iframe runs no scripts
+    // of its own, so a postMessage from there is host→host and arrives with
+    // `event.source === window` (not the iframe), which an `ev.source` guard
+    // would silently drop — the same trap that broke the add-element picker.
+    function applyTextareaHeight(natural: number): void {
       if (composer.feedbackId) return;
-      const ta = Math.min(MAX_TA_H, Math.max(MIN_TA_H, Number(data.taHeight) || MIN_TA_H));
+      const ta = Math.min(MAX_TA_H, Math.max(MIN_TA_H, natural || MIN_TA_H));
       const next = COMPOSER_H + (ta - MIN_TA_H);
       if (next === currentComposerH) return;
       currentComposerH = next;
       if (composer.expanded) iframe.style.height = `${next}px`;
       reposition();
     }
-    window.addEventListener('message', onIframeMessage);
 
     reposition();
     positionLoop();
@@ -860,6 +852,9 @@ export function createComposerController(ctx: WidgetContext): {
         applyMiniChrome,
         swapTo,
         hopToNextActive,
+        onExtrasHover: flashExtras,
+        onExtrasLeave: clearExtraFlashes,
+        onTextareaHeight: applyTextareaHeight,
       });
     });
 
