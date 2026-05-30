@@ -19,9 +19,10 @@
  * Flow: tap the 💬 FAB to arm picking → tap a view → we resolve its source
  * via the RN Inspector, hide our own overlay, and capture a screenshot →
  * type a comment → submit POSTs to the Metro middleware, which stores it
- * and (optionally) spawns an agent. This is a proof-of-concept: single-pick
- * only, no live agent streaming back into the widget (pull mode via MCP
- * works on day one).
+ * and (optionally) spawns an agent. When an agent is spawned, a live
+ * transcript sheet streams the run back over WebSocket (see StreamSheet /
+ * ws-client); otherwise a toast confirms the comment was filed for pull-mode
+ * (MCP) pickup. Single-pick only.
  */
 import type { ReactElement } from 'react';
 import { useCallback, useRef, useState } from 'react';
@@ -37,6 +38,7 @@ import {
   View,
 } from 'react-native';
 import { resolvePick } from './inspector';
+import { StreamSheet } from './StreamSheet';
 import { captureScreenshot } from './screenshot';
 import { platformTag, submitFeedback } from './transport';
 import type { PickResult } from './types';
@@ -53,7 +55,7 @@ export interface PinagentProps {
   screenName?: string;
 }
 
-type Phase = 'idle' | 'picking' | 'capturing' | 'composing' | 'sending' | 'sent';
+type Phase = 'idle' | 'picking' | 'capturing' | 'composing' | 'sending';
 
 /**
  * Resolve after the next painted frame. We flip to the `capturing` phase to
@@ -87,6 +89,8 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
   const [shot, setShot] = useState<string | null>(null);
   const [comment, setComment] = useState('');
   const [toast, setToast] = useState<string | null>(null);
+  // When set, an agent run is streaming live in the transcript sheet.
+  const [stream, setStream] = useState<{ id: string; target: string } | null>(null);
 
   const onPickTap = useCallback(
     async (x: number, y: number) => {
@@ -107,6 +111,11 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
 
   const onSubmit = useCallback(async () => {
     if (!comment.trim()) return;
+    // Human-readable target for the stream header, captured before we clear
+    // the pick: file:line if resolved, else the tapped component name.
+    const target = pick?.loc
+      ? `${pick.loc.file}:${pick.loc.line}`
+      : (pick?.nameChain.at(-1) ?? 'component');
     setPhase('sending');
     const result = await submitFeedback({
       comment: comment.trim(),
@@ -124,18 +133,16 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
     setComment('');
     setPick(null);
     setShot(null);
-    setPhase('sent');
-    setToast(
-      result.ok
-        ? result.agentSpawned
-          ? 'Sent — agent working on it'
-          : 'Sent'
-        : `Failed: ${result.error ?? 'unknown'}`,
-    );
-    setTimeout(() => {
-      setToast(null);
-      setPhase('idle');
-    }, 2500);
+    setPhase('idle');
+
+    // Agent spawned → stream the run live. Otherwise (spawn off, or POST
+    // failed) fall back to a transient toast; pull mode (MCP) picks it up.
+    if (result.ok && result.agentSpawned && result.id) {
+      setStream({ id: result.id, target });
+      return;
+    }
+    setToast(result.ok ? 'Sent' : `Failed: ${result.error ?? 'unknown'}`);
+    setTimeout(() => setToast(null), 2500);
   }, [comment, pick, shot, screenName, width, height]);
 
   return (
@@ -242,6 +249,15 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
         <View pointerEvents="none" style={styles.toast}>
           <Text style={styles.toastText}>{toast}</Text>
         </View>
+      )}
+
+      {/* Live agent transcript, shown once a run is spawned. */}
+      {stream && (
+        <StreamSheet
+          feedbackId={stream.id}
+          target={stream.target}
+          onClose={() => setStream(null)}
+        />
       )}
     </View>
   );

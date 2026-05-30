@@ -2,3 +2,5 @@
 
 export type { PinagentMiddleware, PinagentMiddlewareOpts } from './metro-middleware';
 export { pinagentMiddleware } from './metro-middleware';
+export type { PinagentWsEndpointsOpts } from './ws-endpoint';
+export { pinagentWebsocketEndpoints } from './ws-endpoint';

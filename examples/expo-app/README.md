@@ -31,8 +31,15 @@ The two pinagent touch points are:
 
 - **`App.tsx`** — `<Pinagent screenName={tab} />` mounted once at the root.
 - **`metro.config.js`** — `pinagentMiddleware(...).chain(...)` mounting
-  `POST /__pinagent/feedback`, plus a `watchFolders` entry so Metro can transpile
-  the in-tree `@pinagent/react-native` source.
+  `POST /__pinagent/feedback`, `pinagentWebsocketEndpoints(...)` mounting the
+  live-stream socket at `/__pinagent/ws`, plus a `watchFolders` entry so Metro
+  can transpile the in-tree `@pinagent/react-native` source.
+
+When an agent is spawned (`spawnMode: 'inline'` or `'worktree'`), submitting a
+comment opens a live transcript sheet in the app that streams the agent's text,
+tool calls, and result over that WebSocket — and lets you send follow-ups or
+answer the agent's questions, just like the web widget. The stream rides Metro's
+own port, so it works on a simulator and a physical device with no extra setup.
 
 This demo imports `@pinagent/react-native` from in-tree source so it needs no publish
 (`App.tsx` imports `../../packages/react-native/src/native`; `metro.config.js` requires

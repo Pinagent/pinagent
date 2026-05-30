@@ -182,6 +182,38 @@ export async function startWsServer(): Promise<ServerHandle> {
   }
 }
 
+/**
+ * Build a `noServer` WebSocket endpoint to hand to a host that owns its own
+ * HTTP server and routes the `upgrade` event by pathname — notably Metro's
+ * `config.server.websocketEndpoints` (React Native / Expo).
+ *
+ * Unlike {@link startWsServer}, this binds no port: the caller's dev server
+ * (Metro) already listens, performs the HTTP upgrade, and dispatches matching
+ * requests here via `handleUpgrade`. That means RN streaming rides the *same*
+ * host:port the widget already talks to for `POST /__pinagent/feedback`, so a
+ * physical device needs no second port and no port discovery.
+ *
+ * Each accepted socket is wired to the same {@link attachConnection} the web
+ * path uses — identical wire protocol, bus subscription, and worktree
+ * controls. We also start the project-event fan-out and relay (idempotent,
+ * singleton-guarded) so worktree Land/Discard and cloud mode behave the same.
+ */
+export function createPinagentWsEndpoint(): WebSocketServer {
+  const wss = new WebSocketServer({ noServer: true });
+  wss.on('connection', (socket) => {
+    attachConnection(socket);
+  });
+
+  // Match startWsServer's one-time side effects. All are singleton-guarded, so
+  // calling them here (and again if the web server also runs) is safe.
+  void sweepStaleWorktrees(projectRoot());
+  ensureProjectListener();
+  ensureCrossProcessProjectPoller();
+  maybeStartRelayClient();
+
+  return wss;
+}
+
 /** Per-connection state — which feedback ids this socket is subscribed to. */
 interface ConnectionState {
   subscriptions: Map<string, () => void>; // feedbackId → unsubscribe

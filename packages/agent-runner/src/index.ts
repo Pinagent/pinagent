@@ -149,4 +149,4 @@ export {
   stopWorktreeServer,
   type WorktreeServerInfo,
 } from './worktree-serve';
-export { startWsServer } from './ws-server';
+export { attachConnection, createPinagentWsEndpoint, startWsServer } from './ws-server';
