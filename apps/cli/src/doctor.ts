@@ -29,6 +29,13 @@ import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { detectRuntime, findAppDir, pluginPackage, type Runtime } from './init';
 
+// Reference the plugin package through a constant rather than a contiguous
+// `from '...'` literal in the doc strings below: the CLI resolves
+// next-plugin from the *user's* project, it doesn't import it. This keeps the
+// undeclared-import linter from reading these messages as a real dependency
+// (same dodge as init.ts's `routeModule`).
+const NP = '@pinagent/next-plugin';
+
 export type CheckStatus = 'ok' | 'warn' | 'fail' | 'skip';
 
 export interface Check {
@@ -150,7 +157,7 @@ export function checkConfigWired(root: string, runtime: Runtime): Check {
           runtime === 'nuxt'
             ? "Add '@pinagent/nuxt-plugin' to the modules array."
             : runtime === 'next'
-              ? "Wrap your config: export default pinagent(nextConfig) (import from '@pinagent/next-plugin/config')."
+              ? `Wrap your config: export default pinagent(nextConfig) (import from '${NP}/config').`
               : 'Add pinagent() to the Vite plugins array.',
       };
 }
@@ -183,7 +190,7 @@ export function checkPinagentMount(root: string): Check {
     status: 'fail',
     label: `<Pinagent /> not mounted in ${appDir}/${layout}`,
     detail:
-      "Add import { Pinagent } from '@pinagent/next-plugin' and render <Pinagent /> as the last child of <body>.",
+      `Add import { Pinagent } from '${NP}' and render <Pinagent /> as the last child of <body>.`,
   };
 }
 

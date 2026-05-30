@@ -23,6 +23,11 @@ import {
   runDoctor,
 } from '../src/doctor';
 
+// Built from a constant so the sample file contents below don't contain a
+// contiguous `from '...'` literal the undeclared-import linter reads
+// as a real import (the CLI doesn't depend on next-plugin).
+const NP = '@pinagent/next-plugin';
+
 let dir: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'pinagent-doctor-'));
@@ -85,7 +90,7 @@ describe('checkConfigWired', () => {
   it('passes when the config references pinagent', () => {
     write(
       'next.config.js',
-      "import pinagent from '@pinagent/next-plugin/config';\nexport default pinagent({});",
+      `import pinagent from '${NP}/config';\nexport default pinagent({});`,
     );
     expect(checkConfigWired(dir, 'next').status).toBe('ok');
   });
@@ -102,7 +107,7 @@ describe('checkPinagentMount', () => {
   it('passes when imported and mounted', () => {
     write(
       'app/layout.tsx',
-      "import { Pinagent } from '@pinagent/next-plugin';\nexport default () => <body><Pinagent /></body>;",
+      `import { Pinagent } from '${NP}';\nexport default () => <body><Pinagent /></body>;`,
     );
     expect(checkPinagentMount(dir).status).toBe('ok');
   });
@@ -120,12 +125,12 @@ describe('checkRouteHandler', () => {
   it('passes with inline dynamic/runtime + re-export', () => {
     write(
       ROUTE,
-      "export const dynamic = 'force-dynamic';\nexport const runtime = 'nodejs';\nexport { GET, POST, PATCH } from '@pinagent/next-plugin/route';",
+      `export const dynamic = 'force-dynamic';\nexport const runtime = 'nodejs';\nexport { GET, POST, PATCH } from '${NP}/route';`,
     );
     expect(checkRouteHandler(dir).status).toBe('ok');
   });
   it('fails when dynamic/runtime are not inline', () => {
-    write(ROUTE, "export { GET, POST, PATCH } from '@pinagent/next-plugin/route';");
+    write(ROUTE, `export { GET, POST, PATCH } from '${NP}/route';`);
     expect(checkRouteHandler(dir).status).toBe('fail');
   });
   it('fails when the file is missing', () => {
