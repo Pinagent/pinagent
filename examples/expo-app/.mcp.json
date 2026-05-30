@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "pinagent": {
+      "type": "stdio",
+      "command": "pnpm",
+      "args": ["dlx", "@pinagent/cli", "mcp"],
+      "env": {
+        "PINAGENT_PROJECT_ROOT": "/Users/jacksonmalloy/code/pinagent/examples/expo-app"
+      }
+    }
+  }
+}
