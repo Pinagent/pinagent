@@ -15,13 +15,19 @@ import type { AgentState } from '../types';
  *    `body.needs-input`) that the live composer toggles at runtime.
  */
 
-export function mountShadow(styles: string, build: (root: ShadowRoot) => void): HTMLElement {
+export function mountShadow(
+  styles: string,
+  build: (root: ShadowRoot) => void,
+  size: { width?: string; height?: string } = {},
+): HTMLElement {
   const host = document.createElement('div');
-  // Give the fixed-positioned FAB a local box to anchor to so it doesn't
-  // fly to the viewport corner of the Storybook canvas.
+  // Give the fixed-positioned chrome (FAB, outline, hint) a local box to
+  // anchor to so it doesn't fly to the viewport corner of the Storybook
+  // canvas. Stories that depict fixed elements override their `position`
+  // to `absolute` so they sit inside this box.
   host.style.position = 'relative';
-  host.style.width = '320px';
-  host.style.height = '180px';
+  host.style.width = size.width ?? '320px';
+  host.style.height = size.height ?? '180px';
   const root = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style');
   style.textContent = styles;

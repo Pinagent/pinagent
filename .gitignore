@@ -19,6 +19,7 @@ packages/vite-plugin/src/__generated__
 .next
 *.tsbuildinfo
 coverage
+storybook-static
 .cache
 node-compile-cache
 .env

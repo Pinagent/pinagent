@@ -193,6 +193,14 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Build the widget's Storybook so a broken story (bad import, renamed
+      # export, type error in a .stories file) fails the PR instead of being
+      # discovered the next time someone opens Storybook. Turbo-cached and
+      # scoped to the one package that defines the task, so it's a near-instant
+      # hit when neither the widget src nor its stories changed.
+      - name: Build Storybook
+        run: pnpm turbo run build-storybook
+
       # Unit + integration tests via Vitest, with a v8 coverage summary
       # printed to the run log. better-sqlite3's native binding gets
       # compiled at `pnpm install` time (allowed by pnpm-workspace.yaml's

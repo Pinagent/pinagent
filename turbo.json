@@ -21,6 +21,11 @@
       "cache": false,
       "persistent": true
     },
+    "build-storybook": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", ".storybook/**", "tsconfig.json", "package.json"],
+      "outputs": ["storybook-static/**"]
+    },
     "typecheck": {
       "dependsOn": ["^build"],
       "inputs": ["src/**", "tests/**", "tsconfig.json", "package.json"]
