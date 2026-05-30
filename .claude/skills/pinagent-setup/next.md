@@ -61,6 +61,8 @@ export default function RootLayout({ children }) {
 
 In production builds the component returns `null` unconditionally.
 
+**Placement.** Mount `<Pinagent />` as the **last child of `<body>`, outside your provider tree** (PostHog, `QueryClientProvider`, theme providers, etc.). It's fully self-contained — shadow-root UI with its own state — so it needs none of your app context, and keeping it outside the providers means it won't re-render with your app. The bare `<body>{children}<Pinagent /></body>` above is the minimal case; a real root layout usually wraps `{children}` in providers, so put `<Pinagent />` *after* that wrapper but still inside `<body>`.
+
 ## 4. Create the route handler
 
 Create the file **exactly** as below — don't be tempted to one-line the re-export:
@@ -69,10 +71,10 @@ Create the file **exactly** as below — don't be tempted to one-line the re-exp
 // app/pinagent/[[...slug]]/route.ts
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-export * from '@pinagent/next-plugin/route';
+export { GET, POST, PATCH, PUT, DELETE } from '@pinagent/next-plugin/route';
 ```
 
-`export *` re-exports whatever HTTP verbs the installed `@pinagent/next-plugin` build exposes — `GET/POST/PATCH` cover the core feedback loop, and `PUT/DELETE` (present on builds that ship the dock) back its connection and branch management. The wildcard keeps this file working regardless of which plugin version is installed; a fixed verb list breaks with "Export DELETE doesn't exist in target module" whenever the template and the installed plugin drift.
+Re-export **all five verbs**. GET/POST/PATCH cover the core feedback loop; PUT and DELETE back the dock's connection and branch management. Leaving them out makes those dock actions 404 — harmless if you never enable the dock, but cheap to include now.
 
 Why `dynamic` and `runtime` are inline: Next 16 statically parses route-segment config at build time and refuses to follow re-exports for those fields. If you write `export { dynamic, runtime } from '@pinagent/next-plugin/route'` you'll get:
 
@@ -88,11 +90,23 @@ Continue with [mcp.md](./mcp.md) for MCP server setup and `.gitignore`.
 
 ## Verify
 
+First, a static read-only check of the wiring (no dev server needed):
+
+```bash
+cd /path/to/target && pnpm dlx @pinagent/cli doctor
+# ✓ plugin + ./config + ./route resolve, config wrapped, <Pinagent /> mounted,
+#   route handler correct, .pinagent gitignored, .mcp.json + project root OK
+```
+
+Then run the dev server and hit the widget endpoint:
+
 ```bash
 cd /path/to/target && pnpm dev   # uses the existing dev script
 curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:<port>/__pinagent/widget.js
 # expect: 200
 ```
+
+Grab `<port>` from the app's own dev script — it's often **not** 3000 (e.g. a custom `next dev -p 3434`). And note: **changes to `next.config.*` or the plugin wiring need a dev-server restart, not just HMR** — Next reads them at boot.
 
 Then open the browser and confirm:
 
@@ -116,6 +130,7 @@ If you ever need to inspect the composer in DevTools, drill into the iframe elem
 - **CSP `connect-src` blocking the widget's image inlining.** The widget uses `html-to-image.toBlob()` + `createImageBitmap()` + `canvas.toBlob()` — no `fetch()` calls. It also skips cross-origin `<img>` elements before they're inlined (CSP would block those fetches). Cross-origin images appear as blank slots in the captured screenshot. To get them captured, either (a) add the CDN to `connect-src`, or (b) proxy them through a same-origin Next rewrite (like you might do for analytics).
 - **Custom middleware (`proxy.ts` in Next 16, `middleware.ts` before that).** `/__pinagent/*` runs through every middleware just like other routes. If your middleware rejects unknown paths, add an exclusion. Most setups passthrough by default and don't need changes.
 - **Sherif / monorepo postinstall.** `pnpm add` may roll back due to unrelated workspace lint failures. Use `--ignore-scripts` to skip the postinstall hook on installs of pinagent-only.
+- **Stale `@pinagent/*` symlinks from an earlier attempt.** The package is **`@pinagent/next-plugin`** — there is no `@pinagent/next`. If a previous or aborted install left a broken symlink under `node_modules/@pinagent/` (e.g. a dangling `@pinagent/next`), module resolution can fail in confusing ways even after a correct reinstall. `pnpm dlx @pinagent/cli doctor` flags dangling `@pinagent/*` symlinks; remove the broken links and reinstall.
 
 ## Configuration
 
@@ -154,7 +169,7 @@ pinagent(coreConfig, { dock: true });   // combine with spawnAgent if you want b
 
 When using the dock:
 
-- The route handler uses `export *`, so it re-exports whatever HTTP verbs the installed `@pinagent/next-plugin` build provides — `GET, POST, PATCH`, plus `PUT, DELETE` on builds that ship the dock's Connections/Branches panels (see step 4). Using `export *` keeps the route working across plugin versions; keep `dynamic`/`runtime` inline since Next won't follow re-exports for route-segment config.
+- The route handler must re-export **all five verbs** (`GET, POST, PATCH, PUT, DELETE`) — PUT/DELETE back the Connections and Branches panels (see step 4).
 - The PR composer needs a GitHub token: set `GITHUB_TOKEN` or `PINAGENT_GITHUB_TOKEN` (tried in that order).
 - Optionally install `@pinagent/vscode-extension` — it lets the dock open a Claude Code terminal with a conversation piped in.
 

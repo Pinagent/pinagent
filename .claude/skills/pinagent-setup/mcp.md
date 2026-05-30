@@ -45,9 +45,29 @@ In a monorepo, the MCP server's project root resolution (walks up looking for `.
 
 `PINAGENT_PROJECT_ROOT` must match where Next/Vite runs from — both processes read/write the same `.pinagent/` directory.
 
+**Worked example — the common monorepo case.** You launch `claude` from the repo root (so it loads one project-scoped config) but run `pnpm dev` from `apps/web`. Put `.mcp.json` at the **repo root** and point `PINAGENT_PROJECT_ROOT` at the **app** — the two paths are different on purpose:
+
+```
+my-monorepo/
+├─ .mcp.json          ← lives here so `claude` (run from root) loads it;
+│                        env.PINAGENT_PROJECT_ROOT = "/abs/path/to/my-monorepo/apps/web"
+└─ apps/web/
+   ├─ .pinagent/      ← created by `pnpm dev`, which runs here
+   └─ next.config.ts
+```
+
+The rule: `.mcp.json` goes wherever you start `claude`; `PINAGENT_PROJECT_ROOT` goes wherever you start the dev server. They coincide only in a single-package repo.
+
 ## 3. Verify the server is reachable
 
-From the project directory:
+First, a one-shot read-only check of the whole setup (plugin, config, route, gitignore, and this `.mcp.json` + `PINAGENT_PROJECT_ROOT`):
+
+```bash
+cd /path/to/target/repo
+pnpm dlx @pinagent/cli doctor        # add --dir apps/<app> in a monorepo
+```
+
+Then confirm the server is actually connected from the project directory:
 
 ```bash
 cd /path/to/target/repo
