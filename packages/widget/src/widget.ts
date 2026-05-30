@@ -94,12 +94,14 @@ export function mount(): void {
     // background.
     composers: new Set<Composer>(),
     expandedComposer: null,
+    pickRouteComposer: null,
     enterPicking: unwired,
     exitPicking: unwired,
     applyFabPresentation: unwired,
     swapTo: unwired,
     hopToNextActive: unwired,
     openComposer: unwired,
+    addNodeToComposer: unwired,
     bubbleOwner: unwired,
     toast: unwired,
   };
@@ -117,6 +119,7 @@ export function mount(): void {
   // calls invoke another controller's actions synchronously.
   const composer = createComposerController(ctx);
   ctx.openComposer = composer.open;
+  ctx.addNodeToComposer = composer.addNodeToComposer;
   ctx.swapTo = composer.swapTo;
   ctx.hopToNextActive = composer.hopToNextActive;
   ctx.bubbleOwner = composer.bubbleOwner;

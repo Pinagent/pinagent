@@ -36,6 +36,13 @@ export interface WidgetContext {
   readonly composers: Set<Composer>;
   /** The one expanded composer, or null. Owned by the composer controller. */
   expandedComposer: Composer | null;
+  /**
+   * When set, the next plain pick routes its element into this running
+   * conversation (as a queued follow-up) instead of opening a fresh
+   * composer. Set by a composer's "add element" action right before
+   * `enterPicking`; cleared by the picker on commit or by `exitPicking`.
+   */
+  pickRouteComposer: Composer | null;
 
   // ---- late-bound cross-controller actions (assigned in mount) ----
   /** Picker: enter element-picking mode. */
@@ -50,6 +57,12 @@ export interface WidgetContext {
   hopToNextActive(): void;
   /** Composer: open a fresh composer for a freshly-picked element. */
   openComposer(target: Element, click: Click, extras?: PickExtra[]): void;
+  /**
+   * Composer: add a freshly-picked element to an already-running
+   * conversation as a queued follow-up (text location only). Used when the
+   * pick was routed via `pickRouteComposer`.
+   */
+  addNodeToComposer(composer: Composer, target: Element, click: Click, extras?: PickExtra[]): void;
   /** Composer: find the composer a bubble element belongs to, if any. */
   bubbleOwner(el: HTMLElement): Composer | null;
   /** Transient corner toast. */

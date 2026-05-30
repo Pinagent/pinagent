@@ -72,6 +72,14 @@ export function wireComposerIframe(args: WireComposerArgs): void {
   const openDockBtn = idoc.getElementById('pa-open-dock') as HTMLButtonElement | null;
   const followInput = idoc.getElementById('pa-follow-input') as HTMLTextAreaElement | null;
   const followSend = idoc.getElementById('pa-follow-send') as HTMLButtonElement | null;
+  // Minimal-bar action icons + the "add another element" picker button.
+  // Optional (looked up loosely) so a future markup tweak can't hard-fail
+  // the whole composer.
+  const addNodeBtn = idoc.getElementById('pa-add-node') as HTMLButtonElement | null;
+  const miniStop = idoc.getElementById('pa-mini-stop') as HTMLButtonElement | null;
+  const miniAnswer = idoc.getElementById('pa-mini-answer') as HTMLButtonElement | null;
+  const miniCollapse = idoc.getElementById('pa-mini-collapse') as HTMLButtonElement | null;
+  const miniCancel = idoc.getElementById('pa-mini-cancel') as HTMLButtonElement | null;
   const lifecycleRow = idoc.getElementById('pa-lifecycle') as HTMLElement | null;
   const lifecycleLabel = idoc.getElementById('pa-lifecycle-label') as HTMLElement | null;
   const landBtn = idoc.getElementById('pa-land') as HTMLButtonElement | null;
@@ -136,6 +144,37 @@ export function wireComposerIframe(args: WireComposerArgs): void {
   // lifecycle buttons) aren't hijacked.
   streamPane.addEventListener('click', () => {
     if (!c.expanded) swapTo(c);
+  });
+
+  // --- Minimal-bar action icons -------------------------------------
+  // All live inside the stream pane, so their clicks would otherwise
+  // bubble to the expand-on-click handler above — stopPropagation keeps
+  // each action distinct from "expand".
+  miniStop?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (c.feedbackId) ctx.wsClient.sendInterrupt(c.feedbackId);
+  });
+  miniAnswer?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // The agent is blocked on a question; expanding surfaces the answer form.
+    swapTo(c);
+  });
+  miniCollapse?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    c.toBubble();
+  });
+  miniCancel?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // Cancel = stop the run AND dismiss the widget.
+    if (c.feedbackId) ctx.wsClient.sendInterrupt(c.feedbackId);
+    c.close();
+  });
+
+  // "Add another element" — hand off to the picker, routed back into this
+  // conversation as a queued follow-up (see composer.ts onIframeMessage).
+  addNodeBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    iwin.parent.postMessage({ type: 'pa-pick-node' }, '*');
   });
 
   // "+N more" badge — present only when extras > 0. Hovering it
@@ -396,6 +435,8 @@ export function wireComposerIframe(args: WireComposerArgs): void {
         composerPane.hidden = true;
         streamPane.hidden = false;
         streamHeader.textContent = '✓ Submitted — agent starting…';
+        const miniLabel = idoc.getElementById('pa-mini-label');
+        if (miniLabel) miniLabel.textContent = 'Starting…';
         streamFooter.textContent = '';
         if (c.expanded) iframe.style.height = `${STREAM_H}px`;
         setAgentState2('running');

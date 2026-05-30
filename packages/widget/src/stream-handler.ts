@@ -7,7 +7,15 @@ import {
   recordEvent,
   recordUserMessage,
 } from './db/writes';
-import type { AgentEvent, AgentState, Composer, LifecycleEls, ReplayMessage } from './types';
+import type {
+  AgentEvent,
+  AgentState,
+  Composer,
+  LifecycleEls,
+  QueuedFollowUp,
+  QueuedNodeRef,
+  ReplayMessage,
+} from './types';
 import type { WidgetWsClient } from './ws-client';
 
 export function attachStreamHandler(
@@ -32,6 +40,14 @@ export function attachStreamHandler(
 ): void {
   if (!composer.feedbackId) return;
   const feedbackId = composer.feedbackId;
+  // The single-line minimal bar's label mirrors the expanded header text.
+  const miniLabel = idoc.getElementById('pa-mini-label');
+  // Set the status text on both surfaces at once — the expanded header and
+  // the minimal bar — so they never drift.
+  function setStatus(text: string) {
+    header.textContent = text;
+    if (miniLabel) miniLabel.textContent = text;
+  }
   let activeTextBlock: HTMLElement | null = null;
   let lastToolChip: HTMLElement | null = null;
   // Human-readable label of the most recent tool call, reused for the
@@ -172,14 +188,21 @@ export function attachStreamHandler(
     ctx.hidden = !any;
   })();
 
-  function setFollowEnabled(enabled: boolean) {
-    followInput.disabled = !enabled;
-    followSend.disabled = !enabled || followInput.value.trim().length === 0;
-    followInput.placeholder = enabled
-      ? 'Send a follow-up…'
-      : pendingAskId
-        ? 'Answer the question above to continue.'
-        : 'Working…';
+  // The follow-up box stays usable while a turn is in flight — typing then
+  // *queues* rather than being blocked. It's only truly disabled while the
+  // agent is waiting on a direct answer (an unanswered ask_user), which
+  // must be answered through the ask form, not the queue. The `enabled`
+  // argument is retained for call-site compatibility but the real gate is
+  // `pendingAskId`.
+  function setFollowEnabled(_enabled: boolean) {
+    const blocked = !!pendingAskId;
+    followInput.disabled = blocked;
+    followSend.disabled = blocked || followInput.value.trim().length === 0;
+    followInput.placeholder = blocked
+      ? 'Answer the question above to continue.'
+      : turnRunning
+        ? 'Queue a follow-up…'
+        : 'Send a follow-up…';
   }
 
   function renderAskUserForm(askId: string, question: string, options?: string[]) {
@@ -244,8 +267,87 @@ export function attachStreamHandler(
     }
   }
 
+  // --- Client-side follow-up queue ------------------------------------
+  // The server rejects a `user_message` while a turn is in flight, so
+  // typed follow-ups (and elements picked mid-run) are held here and
+  // flushed one-per-turn-end, FIFO. The queue itself lives on `composer`
+  // (so it survives reconnects); `queuedNodes` is the parallel list of
+  // rendered "pending" bubbles, which do NOT survive an onReset wipe — on
+  // a mismatch the flush just appends a fresh committed bubble instead.
+  const queuedNodes: HTMLElement[] = [];
+  // The item the optimistic send put on the wire, kept so a "turn already
+  // in progress" race can re-queue it rather than drop it.
+  let lastSent: QueuedFollowUp | null = null;
+
+  // Render a queued (not-yet-sent) follow-up: a dimmed bubble with a
+  // "queued" tag, plus an element pill when it carries a picked node.
+  function renderQueued(item: QueuedFollowUp): HTMLElement {
+    const node = el('div', 'user-msg pending');
+    node.appendChild(el('span', 'queued-tag', 'queued'));
+    if (item.node) node.appendChild(el('span', 'q-pill', `<${item.node.tag}>`));
+    node.appendChild(idoc.createTextNode(item.content));
+    append(node);
+    return node;
+  }
+
+  // Actually put a follow-up on the wire and flip the UI to running.
+  // `pendingNode`, when present, is the queued bubble being promoted to a
+  // committed one (drop the `.pending` styling rather than append a dup).
+  function sendFollowUp(item: QueuedFollowUp, pendingNode: HTMLElement | null) {
+    // Bump turn BEFORE recording — every event from this point until the
+    // next user message belongs to the new turn.
+    composer.turn += 1;
+    const db = getBrowserDb();
+    if (db) {
+      void recordUserMessage(db, feedbackId, composer.turn, item.content).catch((err) =>
+        // eslint-disable-next-line no-console
+        console.warn('[pinagent:db] recordUserMessage failed:', err),
+      );
+    }
+    lastSent = item;
+    client.sendUserMessage(feedbackId, item.content);
+    if (pendingNode) pendingNode.classList.remove('pending');
+    else append(el('div', 'user-msg', item.content));
+    turnRunning = true;
+    liveTurns = 0;
+    setHeaderRunning(true);
+    stopBtn.disabled = false;
+    stopBtn.textContent = 'Stop';
+    setStopVisible(true);
+    setFollowEnabled(false);
+    setStatus('Working…');
+    footer.textContent = '';
+    composer.cancelAutoClose();
+    setAgentState('running');
+  }
+
+  // Send the next queued item when the agent is idle. One per turn-end.
+  function flushQueue() {
+    if (turnRunning || pendingAskId) return;
+    const next = composer.followUpQueue.shift();
+    if (!next) return;
+    const pendingNode = queuedNodes.shift() ?? null;
+    sendFollowUp(next, pendingNode);
+  }
+
+  // Public entry: enqueue a follow-up. Sends immediately if idle, else
+  // parks it (rendered as "queued") to flush at the next turn-end.
+  function enqueueFollowUp(content: string, node?: QueuedNodeRef) {
+    const item: QueuedFollowUp = node ? { content, node } : { content };
+    if (turnRunning || pendingAskId) {
+      composer.followUpQueue.push(item);
+      queuedNodes.push(renderQueued(item));
+      composer.cancelAutoClose();
+    } else {
+      sendFollowUp(item, null);
+    }
+  }
+  composer.enqueueFollowUp = enqueueFollowUp;
+
   followInput.addEventListener('input', () => {
-    setFollowEnabled(!turnRunning && !pendingAskId);
+    // The send button is enabled whenever there's text — even mid-turn,
+    // since sending now just queues.
+    followSend.disabled = followInput.value.trim().length === 0 || !!pendingAskId;
   });
   followInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -256,29 +358,9 @@ export function attachStreamHandler(
   followSend.addEventListener('click', () => {
     const content = followInput.value.trim();
     if (!content) return;
-    // Bump turn BEFORE recording — every event from this point until
-    // the next user message belongs to the new turn.
-    composer.turn += 1;
-    const db = getBrowserDb();
-    if (db) {
-      void recordUserMessage(db, feedbackId, composer.turn, content).catch((err) =>
-        // eslint-disable-next-line no-console
-        console.warn('[pinagent:db] recordUserMessage failed:', err),
-      );
-    }
-    client.sendUserMessage(feedbackId, content);
-    append(el('div', 'user-msg', content));
+    enqueueFollowUp(content);
     followInput.value = '';
-    turnRunning = true;
-    liveTurns = 0;
-    setHeaderRunning(true);
-    stopBtn.disabled = false;
-    stopBtn.textContent = 'Stop';
-    setStopVisible(true);
-    setFollowEnabled(false);
-    header.textContent = 'Working…';
-    footer.textContent = '';
-    setAgentState('running');
+    followSend.disabled = true;
   });
   setFollowEnabled(false);
 
@@ -288,7 +370,7 @@ export function attachStreamHandler(
         const session = String(event.sessionId ?? '').slice(0, 8);
         const model = String(event.model ?? 'claude');
         apiKeySource = typeof event.apiKeySource === 'string' ? event.apiKeySource : null;
-        header.textContent = `Working · ${model}${session ? ` · ${session}` : ''}`;
+        setStatus(`Working · ${model}${session ? ` · ${session}` : ''}`);
         turnRunning = true;
         liveTurns = 0;
         setHeaderRunning(true);
@@ -364,8 +446,10 @@ export function attachStreamHandler(
         // blocked on them. Cleared when they expand (applyMiniChrome).
         if (!composer.expanded) {
           idoc.body.classList.add('needs-input');
-          header.textContent = '▲ Needs your input';
+          setStatus('Needs your input');
         }
+        // A blocked agent shouldn't auto-close out from under the user.
+        composer.cancelAutoClose();
         break;
       }
       case 'error': {
@@ -417,7 +501,7 @@ export function attachStreamHandler(
         const cost = typeof event.totalCostUsd === 'number' ? event.totalCostUsd : 0;
         const turns = typeof event.numTurns === 'number' ? event.numTurns : 0;
         const ok = subtype === 'success';
-        header.textContent = ok ? '✓ Done' : `Ended: ${subtype}`;
+        setStatus(ok ? 'Done' : `Ended: ${subtype}`);
         const turnsLabel = `${turns} turn${turns === 1 ? '' : 's'}`;
         if (isUntrackedCost(apiKeySource)) {
           // BYO-model CLI: the wrapped CLI doesn't report cost, so the 0 is a
@@ -435,7 +519,14 @@ export function attachStreamHandler(
         setHeaderRunning(false);
         showDismiss();
         setAgentState(ok ? 'done' : 'error');
-        if (!pendingAskId) setFollowEnabled(true);
+        if (!pendingAskId) {
+          setFollowEnabled(true);
+          // Queued follow-ups take precedence over tidying up: drain the
+          // next one. Only when the queue is empty (and the run actually
+          // succeeded) do we arm the completion auto-close.
+          if (composer.followUpQueue.length > 0) flushQueue();
+          else if (ok) composer.scheduleAutoClose();
+        }
         // Terminal: flip status so restoration scans skip this.
         const db = getBrowserDb();
         if (db) {
@@ -473,7 +564,7 @@ export function attachStreamHandler(
       turnRunning = false;
       setHeaderRunning(false);
       showDismiss();
-      header.textContent = '(no transcript saved)';
+      setStatus('(no transcript saved)');
       setFollowEnabled(true);
       setAgentState('done');
     }
@@ -632,6 +723,11 @@ export function attachStreamHandler(
       lastToolLabel = null;
       pendingAskId = null;
       pendingAskFormRoot = null;
+      // The rendered "queued" bubbles were just wiped with the log. Drop
+      // their DOM refs but keep `composer.followUpQueue` — those messages
+      // still need to send. flushQueue tolerates the now-empty queuedNodes
+      // (shift → undefined → append a fresh committed bubble).
+      queuedNodes.length = 0;
       const db = getBrowserDb();
       if (db) queueDbWrite(() => deleteConversationMessages(db, feedbackId));
     },
@@ -639,7 +735,10 @@ export function attachStreamHandler(
       turnRunning = false;
       setHeaderRunning(false);
       setStopVisible(false);
-      if (!pendingAskId) setFollowEnabled(true);
+      if (!pendingAskId) {
+        setFollowEnabled(true);
+        if (composer.followUpQueue.length > 0) flushQueue();
+      }
       renderLifecycle();
     },
     onWorktreeState(payload) {
@@ -656,6 +755,16 @@ export function attachStreamHandler(
       });
     },
     onError(message) {
+      // A follow-up that lost the race against the server's still-active
+      // run gets bounced with "a turn is already in progress". Don't
+      // surface that as an error or drop the message — re-queue it to the
+      // front; the active turn's result/done will flush it. (Best-effort:
+      // its rendered bubble was already promoted, so it re-renders fresh.)
+      if (lastSent && /turn (is )?already in progress/i.test(message)) {
+        composer.followUpQueue.unshift(lastSent);
+        lastSent = null;
+        return;
+      }
       append(el('div', 'err-line', message));
       // Server-side "no in-flight run to interrupt" — the agent
       // already ended (likely while we were offline, or before
@@ -667,7 +776,7 @@ export function attachStreamHandler(
         setStopVisible(false);
         stopBtn.disabled = false;
         stopBtn.textContent = 'Stop';
-        header.textContent = '(agent run not active)';
+        setStatus('(agent run not active)');
         setAgentState('done');
         if (!pendingAskId) setFollowEnabled(true);
       }
