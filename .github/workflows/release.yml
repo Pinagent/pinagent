@@ -27,8 +27,18 @@
 #     job below runs in it so its OIDC token carries the matching `production`
 #     claim. Leave it WITHOUT required reviewers unless you want every release
 #     (and every Version Packages PR update) to pause for manual approval.
-#   - Confirm the default GITHUB_TOKEN may open PRs (Settings → Actions →
-#     Workflow permissions → "Allow GitHub Actions to create and approve PRs").
+#   - The Version Packages PR is opened with a GitHub App token, NOT the
+#     default GITHUB_TOKEN. The org policy "Allow GitHub Actions to create or
+#     approve pull requests" is disabled org-wide, which blocks GITHUB_TOKEN
+#     from opening PRs (409 Conflict). A GitHub App is a separate identity not
+#     subject to that toggle, and — unlike GITHUB_TOKEN — PRs/commits it pushes
+#     DO trigger CI. Setup:
+#       1. Create a GitHub App (org Settings → Developer settings → GitHub
+#          Apps). Repository permissions: Contents = Read & write, Pull
+#          requests = Read & write. No webhook needed.
+#       2. Install it on `Pinagent/pinagent` (only this repo).
+#       3. Store its App ID as repo/org secret `RELEASE_APP_ID` and a generated
+#          private key (the .pem contents) as `RELEASE_APP_PRIVATE_KEY`.
 
 name: Release
 
@@ -56,10 +66,22 @@ jobs:
     # config — npm checks the OIDC token's environment claim.
     environment: production
     steps:
+      # Mint a short-lived token for an org-owned GitHub App. Used for checkout
+      # (so the version commit/tags push as the App) and for the changesets
+      # step (so it can open the Version Packages PR despite the org policy
+      # that forbids the default GITHUB_TOKEN from creating PRs).
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0 # changesets needs full history to compute tags
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -91,7 +113,9 @@ jobs:
           commit: 'chore(release): version packages'
           title: 'chore(release): version packages'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # App token (not GITHUB_TOKEN): the org forbids GITHUB_TOKEN from
+          # opening PRs, and App-authored commits trigger CI on the PR.
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           # No NPM_TOKEN: auth is OIDC trusted publishing (id-token: write +
           # the trusted-publisher config + environment: production). npm mints
           # short-lived credentials per run and attaches provenance automatically.
