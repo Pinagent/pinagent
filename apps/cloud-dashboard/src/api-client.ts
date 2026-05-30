@@ -14,6 +14,15 @@ import type {
  * by the `/sso` login flow.
  */
 
+/** One organization the caller belongs to (GET /me/orgs), for the switcher. */
+export interface MyOrg {
+  organizationId: string;
+  displayName: string;
+  slug: string | null;
+  role: string;
+  status: string;
+}
+
 /** PUT /subscriptions body (org-id is taken from the query, not the body). */
 export interface SubscriptionInput {
   planId: string;
@@ -51,6 +60,8 @@ export class UnauthorizedError extends CloudApiError {
 }
 
 export interface CloudApiClient {
+  /** The caller's own organizations (not org-scoped). */
+  getMyOrgs(): Promise<MyOrg[]>;
   getUsage(organizationId: string): Promise<UsageSummary>;
   getMembers(organizationId: string): Promise<OrganizationMembership[]>;
   getAudit(organizationId: string, opts?: { limit?: number }): Promise<AuditEvent[]>;
@@ -105,6 +116,7 @@ export function createCloudApiClient(options: CloudApiClientOptions = {}): Cloud
     `?organizationId=${encodeURIComponent(organizationId)}`;
 
   return {
+    getMyOrgs: () => get('/me/orgs', (b) => (b.orgs as MyOrg[]) ?? []),
     getUsage: (org) => get(`/usage${orgQuery(org)}`, (b) => (b.usage as UsageSummary) ?? {}),
     getMembers: (org) =>
       get(`/members${orgQuery(org)}`, (b) => (b.members as OrganizationMembership[]) ?? []),

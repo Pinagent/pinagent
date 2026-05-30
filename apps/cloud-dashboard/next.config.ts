@@ -17,6 +17,7 @@ const apiOrigin = process.env.CLOUD_API_ORIGIN ?? 'http://127.0.0.1:8787';
 // API surfaces the dashboard reads. Proxied same-origin so the browser sends
 // the session cookie without a cross-site request.
 const API_PREFIXES = [
+  'me',
   'usage',
   'members',
   'audit',

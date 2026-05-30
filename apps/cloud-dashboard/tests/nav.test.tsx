@@ -1,7 +1,16 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { Nav } from '../app/_components/Nav';
+import { Nav, pathForTab } from '../app/_components/Nav';
+
+describe('pathForTab', () => {
+  it('maps each tab to its route path', () => {
+    expect(pathForTab('overview')).toBe('/');
+    expect(pathForTab('billing')).toBe('/billing');
+    expect(pathForTab('policy')).toBe('/policy');
+    expect(pathForTab('audit')).toBe('/audit');
+  });
+});
 
 describe('Nav', () => {
   it('preserves the org across tab links and encodes it', () => {
