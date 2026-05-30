@@ -35,6 +35,13 @@ pnpm --filter nuxt-app-example dev           # :3000 (Nuxt + Vue)
 pnpm --filter sveltekit-app-example dev      # :5173 (SvelteKit + Svelte)
 ```
 
+There's also a **React Native (Expo)** demo in [`examples/expo-app`](./examples/expo-app/) — tap a component to leave a comment, captured through Metro middleware. It's a standalone app (not a workspace member, so its Expo/RN deps stay out of the root lockfile); run it on its own:
+
+```bash
+pnpm --filter @pinagent/react-native build   # build the package the demo consumes
+cd examples/expo-app && npm install && npx expo start
+```
+
 ## How it works
 
 ```
