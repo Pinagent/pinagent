@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-import { composerHTML } from './composer-html';
+import { composerHTML, ICON_STOP, ICON_X } from './composer-html';
 import { wireComposerIframe } from './composer-iframe';
 import {
+  AUTO_CLOSE_MS,
   BUBBLE_SIZE,
   COMPOSER_H,
   ENDPOINT,
@@ -30,7 +31,14 @@ import {
   locInstanceInfo,
   shortSelector,
 } from './selector';
-import type { AgentState, Composer, ComposerMeta, ExtraAnchor, InstanceInfo } from './types';
+import type {
+  AgentState,
+  Composer,
+  ComposerMeta,
+  ExtraAnchor,
+  InstanceInfo,
+  QueuedNodeRef,
+} from './types';
 
 /**
  * Composer lifecycle: creating the per-element feedback widget (iframe +
@@ -42,6 +50,7 @@ import type { AgentState, Composer, ComposerMeta, ExtraAnchor, InstanceInfo } fr
  */
 export function createComposerController(ctx: WidgetContext): {
   open(target: Element, click: Click, extras?: PickExtra[]): void;
+  addNodeToComposer(composer: Composer, target: Element, click: Click, extras?: PickExtra[]): void;
   restore(row: PendingRow): void;
   swapTo(c: Composer): void;
   hopToNextActive(): void;
@@ -84,6 +93,43 @@ export function createComposerController(ctx: WidgetContext): {
     const composer = createComposer(target, click, extras);
     ctx.composers.add(composer);
     ctx.expandedComposer = composer;
+  }
+
+  /**
+   * Add a freshly-picked element to a running conversation as a queued
+   * follow-up (text location only — no screenshot, so it rides the
+   * existing `user_message` frame). Resolves the same loc/selector/
+   * component context `createComposer` does, folds it into a short
+   * message, and hands it to the live stream handler's enqueue. Expands
+   * the conversation so the user sees the queued item land.
+   */
+  function addNodeToComposer(
+    composer: Composer,
+    target: Element,
+    _click: Click,
+    _extras: PickExtra[] = [],
+  ): void {
+    if (!composer.feedbackId || !composer.enqueueFollowUp) {
+      ctx.toast('Conversation not ready yet', 'error');
+      return;
+    }
+    const loc = findLoc(target);
+    const selector = shortSelector(target);
+    const component = componentOf(target);
+    const tag = target.tagName.toLowerCase();
+    const node: QueuedNodeRef = {
+      file: loc?.file ?? null,
+      line: loc?.line ?? null,
+      col: loc?.col ?? null,
+      selector,
+      component,
+      tag,
+    };
+    const where = loc ? `${loc.file}:${loc.line}:${loc.col}` : selector;
+    const inComp = component ? ` in <${component}>` : '';
+    const content = `Also look at this <${tag}>${inComp} (${where}).`;
+    composer.enqueueFollowUp(content, node);
+    swapTo(composer);
   }
 
   /**
@@ -226,6 +272,29 @@ export function createComposerController(ctx: WidgetContext): {
     dismissBtn.hidden = true;
     document.body.appendChild(dismissBtn);
 
+    // Floating-bubble action row (viewState: 'bubble'). Same affordances
+    // as the minimal bar — stop while running, cancel (stop + dismiss)
+    // always — revealed on hover of the dot or the row. Lives in
+    // document.body next to the bubble so reposition() can track it.
+    const bubbleActions = document.createElement('div');
+    bubbleActions.className = 'pa-bubble-actions';
+    bubbleActions.hidden = true;
+    const baStop = document.createElement('button');
+    baStop.className = 'pa-ba-btn';
+    baStop.type = 'button';
+    baStop.title = 'Stop the agent';
+    baStop.setAttribute('aria-label', 'Stop the agent');
+    baStop.innerHTML = ICON_STOP;
+    const baCancel = document.createElement('button');
+    baCancel.className = 'pa-ba-btn danger';
+    baCancel.type = 'button';
+    baCancel.title = 'Cancel — stop and dismiss';
+    baCancel.setAttribute('aria-label', 'Cancel — stop and dismiss');
+    baCancel.innerHTML = ICON_X;
+    bubbleActions.appendChild(baStop);
+    bubbleActions.appendChild(baCancel);
+    document.body.appendChild(bubbleActions);
+
     // Drag grip — small visible handle inside the top-right corner of
     // the iframe header. Lives in document.body (not inside the iframe)
     // so we can track mousemove/mouseup on the parent document during a
@@ -267,6 +336,8 @@ export function createComposerController(ctx: WidgetContext): {
       if (next === 'done') bubble.innerHTML = '✓';
       else if (next === 'error') bubble.innerHTML = '✗';
       else bubble.innerHTML = '<div class="pa-bubble-spinner"></div>';
+      // Stop only makes sense while the agent is in flight; cancel stays.
+      baStop.hidden = !(next === 'running' || next === 'pending');
       // Mirror onto the mini card so its border can echo the bubble
       // palette (done = ready tint, error = error tint) while minimized.
       const idoc = iframe.contentDocument;
@@ -331,13 +402,25 @@ export function createComposerController(ctx: WidgetContext): {
       // Moves with the target as it scrolls/layout-shifts.
       const anchorDocX = r.left + window.scrollX + relX;
       const anchorDocY = r.top + window.scrollY + relY;
-      // Anchor in viewport coords (used to decide above/below placement).
+      // Anchor in viewport coords (used to decide above/below placement
+      // and whether the anchor has scrolled out of view).
       const anchorViewportY = r.top + relY;
+      const anchorViewportX = r.left + relX;
 
-      // When minimized post-submit we keep the iframe visible as the
-      // mini progress card (MINI_H); only the dashed anchor-lost dot
-      // falls back to hiding it. Expanded uses the full height.
-      const showDot = composer.anchorLost && !!composer.feedbackId && !composer.reviewingLost;
+      // Dot (floating bubble) shows in three cases:
+      //  - anchor lost (existing fallback — no live element to pin to),
+      //  - the user explicitly collapsed to the bubble (viewState),
+      //  - the anchored element scrolled out of view while minimal.
+      // Expanded stays put even off-screen (the user opened it on purpose).
+      const anchorLostDot = composer.anchorLost && !!composer.feedbackId && !composer.reviewingLost;
+      const offScreen =
+        !!composer.feedbackId &&
+        (anchorViewportY < 0 ||
+          anchorViewportY > window.innerHeight ||
+          anchorViewportX < 0 ||
+          anchorViewportX > window.innerWidth);
+      const offScreenDot = offScreen && composer.viewState === 'minimal';
+      const showDot = anchorLostDot || composer.viewState === 'bubble' || offScreenDot;
       const composerH = currentIframeH();
       const spaceBelow = window.innerHeight - anchorViewportY;
       const placeBelow = spaceBelow >= composerH + 16 || anchorViewportY < composerH + 16;
@@ -355,9 +438,21 @@ export function createComposerController(ctx: WidgetContext): {
       iframe.style.left = `${iframeLeft}px`;
 
       // Bubble: top-left of the iframe (loading-state indicator that
-      // shows where the widget is/was).
-      const bubbleTop = iframeTop - BUBBLE_SIZE / 2;
-      const bubbleLeft = iframeLeft - BUBBLE_SIZE / 2;
+      // shows where the widget is/was). When the dot is showing because
+      // the anchor scrolled off-screen, clamp it to the viewport edges so
+      // it stays reachable instead of scrolling away with the anchor.
+      let bubbleTop = iframeTop - BUBBLE_SIZE / 2;
+      let bubbleLeft = iframeLeft - BUBBLE_SIZE / 2;
+      if (offScreenDot && !anchorLostDot) {
+        bubbleTop = Math.max(
+          window.scrollY + 8,
+          Math.min(window.scrollY + window.innerHeight - BUBBLE_SIZE - 8, bubbleTop),
+        );
+        bubbleLeft = Math.max(
+          window.scrollX + 8,
+          Math.min(window.scrollX + window.innerWidth - BUBBLE_SIZE - 8, bubbleLeft),
+        );
+      }
       bubble.style.top = `${bubbleTop}px`;
       bubble.style.left = `${bubbleLeft}px`;
 
@@ -366,6 +461,10 @@ export function createComposerController(ctx: WidgetContext): {
       const DISMISS_SIZE = 16;
       dismissBtn.style.top = `${bubbleTop - DISMISS_SIZE / 2}px`;
       dismissBtn.style.left = `${bubbleLeft + BUBBLE_SIZE - DISMISS_SIZE / 2}px`;
+
+      // Bubble action row: tucked just under the dot, left-aligned with it.
+      bubbleActions.style.top = `${bubbleTop + BUBBLE_SIZE + 4}px`;
+      bubbleActions.style.left = `${bubbleLeft}px`;
 
       // Drag handle: nestled inside the iframe's top-right header
       // corner — 12px in from the iframe's right and top edges, lining
@@ -406,7 +505,12 @@ export function createComposerController(ctx: WidgetContext): {
       // iframe is visible.
       iframe.hidden = showDot;
       bubble.hidden = !showDot;
-      dismissBtn.hidden = !showDot;
+      // Archive control is for the orphaned (anchor-lost) dot only; the
+      // deliberate bubble/off-screen dot uses the hover action row instead.
+      dismissBtn.hidden = !anchorLostDot;
+      // The stop/cancel action row rides the non-orphaned dot.
+      bubbleActions.hidden = !showDot || anchorLostDot;
+      if (bubbleActions.hidden) bubbleActions.classList.remove('show');
       pointer.style.display = showDot ? 'none' : '';
     }
 
@@ -439,12 +543,16 @@ export function createComposerController(ctx: WidgetContext): {
       turn: 0,
       agentState: 'pending',
       expanded: true,
+      viewState: 'expanded',
       streamFitH: null,
+      followUpQueue: [],
+      autoCloseTimer: null,
       close() {
         // User-initiated dismissal — drop from cache so it doesn't
         // come back on the next reload. Markers (status='fixed') would
         // also suppress restoration, but the user explicitly said
         // "go away" so we don't keep their transcript around either.
+        composer.cancelAutoClose();
         if (composer.feedbackId) {
           ctx.wsClient.unsubscribe(composer.feedbackId);
           const db = getBrowserDb();
@@ -458,6 +566,7 @@ export function createComposerController(ctx: WidgetContext): {
         iframe.remove();
         bubble.remove();
         dismissBtn.remove();
+        bubbleActions.remove();
         dragHandle.remove();
         pointer.remove();
         ctx.composers.delete(composer);
@@ -465,6 +574,9 @@ export function createComposerController(ctx: WidgetContext): {
       },
       expand() {
         composer.expanded = true;
+        composer.viewState = 'expanded';
+        // Reading the conversation cancels any pending completion auto-close.
+        composer.cancelAutoClose();
         // Chrome first (it toggles `.follow`/`.header-block` visibility),
         // then refit so a measured loading-gap fit reflects the right
         // chrome; refitStream applies the height + repositions.
@@ -472,15 +584,43 @@ export function createComposerController(ctx: WidgetContext): {
         composer.refitStream();
       },
       minimize() {
-        // Minimized = the mini progress card, NOT a hidden iframe. The
-        // iframe stays visible at MINI_H with `body.mini` toggled on;
-        // reposition() decides iframe-vs-dot visibility. Multiple mini
-        // cards can coexist (one per anchored agent) — only the *full*
+        // Minimized = the single-line minimal bar, NOT a hidden iframe.
+        // The iframe stays visible at MINI_H with `body.mini` toggled on;
+        // reposition() decides iframe-vs-dot visibility. Multiple minimal
+        // bars can coexist (one per anchored agent) — only the *full*
         // expanded composer is tracked by expandedComposer.
         composer.expanded = false;
+        composer.viewState = 'minimal';
         applyMiniChrome();
         composer.refitStream();
         if (ctx.expandedComposer === composer) ctx.expandedComposer = null;
+      },
+      toBubble() {
+        // Collapse to the floating status dot. The iframe stays in the DOM
+        // (body.mini chrome applied) but reposition() hides it in favour of
+        // the bubble while viewState is 'bubble'.
+        composer.expanded = false;
+        composer.viewState = 'bubble';
+        applyMiniChrome();
+        composer.refitStream();
+        reposition();
+        if (ctx.expandedComposer === composer) ctx.expandedComposer = null;
+      },
+      scheduleAutoClose() {
+        // Tidy a finished conversation that's still collapsed. No-op while
+        // expanded (the user is reading) or when a timer is already armed.
+        if (composer.viewState === 'expanded') return;
+        if (composer.autoCloseTimer != null) return;
+        composer.autoCloseTimer = setTimeout(() => {
+          composer.autoCloseTimer = null;
+          composer.close();
+        }, AUTO_CLOSE_MS);
+      },
+      cancelAutoClose() {
+        if (composer.autoCloseTimer != null) {
+          clearTimeout(composer.autoCloseTimer);
+          composer.autoCloseTimer = null;
+        }
       },
       refitStream() {
         // While the stream log is still empty (the gap between submit and
@@ -610,6 +750,38 @@ export function createComposerController(ctx: WidgetContext): {
       composer.close();
     });
 
+    // Bubble action row (viewState: 'bubble' / off-screen dot). Reveal on
+    // hover/focus of either the dot or the row, with a short hide delay so
+    // the pointer can cross the gap. Mirrors the extras-popover pattern.
+    let baHideTimer: ReturnType<typeof setTimeout> | null = null;
+    function showBubbleActions() {
+      if (bubbleActions.hidden) return;
+      if (baHideTimer) {
+        clearTimeout(baHideTimer);
+        baHideTimer = null;
+      }
+      bubbleActions.classList.add('show');
+    }
+    function scheduleHideBubbleActions() {
+      if (baHideTimer) clearTimeout(baHideTimer);
+      baHideTimer = setTimeout(() => bubbleActions.classList.remove('show'), 160);
+    }
+    bubble.addEventListener('mouseenter', showBubbleActions);
+    bubble.addEventListener('mouseleave', scheduleHideBubbleActions);
+    bubbleActions.addEventListener('mouseenter', showBubbleActions);
+    bubbleActions.addEventListener('mouseleave', scheduleHideBubbleActions);
+    baStop.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (composer.feedbackId) ctx.wsClient.sendInterrupt(composer.feedbackId);
+    });
+    baCancel.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (composer.feedbackId) ctx.wsClient.sendInterrupt(composer.feedbackId);
+      composer.close();
+    });
+
     // Auto-grow: the iframe's textarea posts its desired scrollHeight
     // here as it changes. We clamp to [MIN_TA_H, MAX_TA_H] (so a giant
     // paste doesn't push the composer past the viewport — internal
@@ -657,6 +829,13 @@ export function createComposerController(ctx: WidgetContext): {
         clearExtraFlashes();
         return;
       }
+      if (data.type === 'pa-pick-node') {
+        // The user clicked "add another element" in the expanded footer.
+        // Route the next pick into this conversation as a queued follow-up.
+        ctx.pickRouteComposer = composer;
+        ctx.enterPicking();
+        return;
+      }
       if (data.type !== 'pa-composer-resize-ta') return;
       if (composer.feedbackId) return;
       const ta = Math.min(MAX_TA_H, Math.max(MIN_TA_H, Number(data.taHeight) || MIN_TA_H));
@@ -689,5 +868,5 @@ export function createComposerController(ctx: WidgetContext): {
     return composer;
   }
 
-  return { open, restore, swapTo, hopToNextActive, bubbleOwner };
+  return { open, addNodeToComposer, restore, swapTo, hopToNextActive, bubbleOwner };
 }

@@ -59,6 +59,9 @@ export function createPicker(ctx: WidgetContext): {
 
   function exitPicking() {
     state.mode = 'idle';
+    // Clear any pending "add to conversation" routing — whether we
+    // committed a pick or the user cancelled with Esc.
+    ctx.pickRouteComposer = null;
     fab.classList.remove('active');
     document.documentElement.classList.remove('pa-picking');
     outline.style.display = 'none';
@@ -128,11 +131,16 @@ export function createPicker(ctx: WidgetContext): {
       return;
     }
 
-    // Plain click — commit. Snapshot pending picks before exitPicking
-    // wipes them, then hand the array to the composer as extras.
+    // Plain click — commit. Snapshot pending picks (and the routing
+    // target) before exitPicking wipes them. If a conversation requested
+    // the pick (the "add element" action), route the element into it as a
+    // queued follow-up; otherwise open a fresh composer.
     const extras = pendingPicks.map((p) => ({ target: p.target, click: p.click }));
+    const routeTo = ctx.pickRouteComposer;
     exitPicking();
-    ctx.openComposer(target, { x: e.clientX, y: e.clientY }, extras);
+    const click = { x: e.clientX, y: e.clientY };
+    if (routeTo) ctx.addNodeToComposer(routeTo, target, click, extras);
+    else ctx.openComposer(target, click, extras);
   }
 
   function onKey(e: KeyboardEvent) {
@@ -167,11 +175,16 @@ export function createPicker(ctx: WidgetContext): {
   function updatePickHint(): void {
     const hint = root.querySelector('[data-pp="hint"]');
     if (!hint) return;
+    // "Add to conversation" mode reads differently — the pick joins a
+    // running agent rather than starting a new comment.
+    const adding = ctx.pickRouteComposer !== null;
     if (pendingPicks.length === 0) {
-      hint.textContent = `Click an element. ${MOD_LABEL}-click to add more. Esc to cancel.`;
+      hint.textContent = adding
+        ? `Click an element to add it to the conversation. Esc to cancel.`
+        : `Click an element. ${MOD_LABEL}-click to add more. Esc to cancel.`;
     } else {
       const n = pendingPicks.length;
-      hint.textContent = `${n} selected. Click to comment. ${MOD_LABEL}-click to add more. Esc to cancel.`;
+      hint.textContent = `${n} selected. Click to ${adding ? 'add' : 'comment'}. ${MOD_LABEL}-click to add more. Esc to cancel.`;
     }
   }
 

@@ -384,6 +384,32 @@ export const COMPOSER_STYLES = `
     align-self: flex-start;
     max-width: 100%;
   }
+  /* Queued follow-up — typed (or a picked element added) while a turn was
+     in flight, waiting its turn to send. Dashed + dimmed with a small
+     "queued" tag; the de-pending on send drops both. */
+  .user-msg.pending { opacity: 0.62; border-left-style: dashed; }
+  .user-msg .queued-tag {
+    display: inline-block;
+    font-family: ${FONT_MONO};
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8a7a2e;
+    margin-right: 6px;
+  }
+  .user-msg:not(.pending) .queued-tag { display: none; }
+  .user-msg .q-pill {
+    display: inline-block;
+    font-family: ${FONT_MONO};
+    font-size: 10px;
+    font-weight: 600;
+    background: ${BRAND_INK};
+    color: ${BRAND_CREAM};
+    padding: 0 5px;
+    border-radius: 3px;
+    margin-right: 4px;
+  }
   .chip {
     display: inline-flex;
     align-items: center;
@@ -562,52 +588,112 @@ export const COMPOSER_STYLES = `
   /* Dot separator between the two spans, only when both render (mini). */
   body.mini .sc-comp + .sc-instance::before { content: '·'; margin-right: 6px; opacity: 0.6; }
 
-  /* --- Mini progress card --------------------------------------- */
-  /* The minimized-while-running state. Same stream pane, condensed:
-     the identity/breadcrumb header, lifecycle row, follow-up box and
-     Stop button all collapse, leaving a status line, the last couple
-     of activity rows, and a turns/cost footer with an Expand control.
-     Driven by the parent toggling \`body.mini\`. */
+  /* --- Minimal single-line bar (viewState: 'minimal') ----------- */
+  /* The default state right after spawn. Everything else in the stream
+     pane collapses, leaving one row: a status indicator, an ellipsized
+     activity label, and the state-driven action cluster. Driven by the
+     parent toggling \`body.mini\` (set whenever the composer isn't
+     expanded). The bar is hidden in the expanded view. */
+  .mini-bar { display: none; }
+  body.mini .header,
   body.mini .header-block,
+  body.mini .stream-context,
   body.mini #pa-lifecycle,
+  body.mini .log,
   body.mini .follow,
-  body.mini #pa-stop { display: none; }
-  body.mini .card { gap: 6px; padding: 10px; cursor: pointer; }
-  body.mini .header {
-    display: block;
-    padding: 0;
-    /* Hold the full line: overflow:hidden gives the horizontal ellipsis,
-       but without an explicit line-height (and with flex-shrink left on)
-       a too-tall card would let flexbox collapse this box and shear the
-       text/spinner vertically. Pin both so the status line never clips. */
-    line-height: 1.4;
-    flex-shrink: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  /* Same guard for the context line — never a shrink victim. */
-  body.mini .stream-context { flex-shrink: 0; }
-  /* Keep the running spinner inline with the (now block) header text. */
-  body.mini .header.running::before { vertical-align: middle; margin-right: 6px; }
-  body.mini .log {
-    flex: none;
-    max-height: 52px;
-    overflow: hidden;
-    gap: 4px;
-  }
-  /* Only the two most-recent activity rows stay visible — the tail of
-     the transcript is the part that reads as "what's happening now". */
-  body.mini .log > *:not(:nth-last-child(-n + 2)) { display: none; }
-  body.mini .log > * {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-  }
+  body.mini #pa-stream-footer-row,
   body.mini .ask-form,
   body.mini .ask-resolved,
   body.mini .conflict-block { display: none; }
+  body.mini .card { gap: 0; padding: 8px 10px; cursor: pointer; justify-content: center; }
+  body.mini .mini-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .mini-label {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    font-weight: 500;
+    color: ${BRAND_INK};
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Status indicator — exactly one child shows, selected by the agent
+     state mirrored onto the body. Lives only inside the (mini-only) bar. */
+  .mini-status {
+    position: relative;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mini-status > * { display: none; }
+  .ms-spinner {
+    width: 13px;
+    height: 13px;
+    border: 2px solid ${STATUS.working.fg};
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: pa-mini-spin 0.9s linear infinite;
+  }
+  @keyframes pa-mini-spin { to { transform: rotate(360deg); } }
+  .ms-check { width: 16px; height: 16px; }
+  .ms-check path {
+    stroke: ${STATUS.readyToLand.fg};
+    stroke-width: 2.5;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 22;
+    stroke-dashoffset: 22;
+  }
+  @keyframes pa-mini-check { to { stroke-dashoffset: 0; } }
+  .ms-x { color: ${STATUS.error.fg}; font-size: 13px; font-weight: 700; line-height: 1; }
+  .ms-alert { color: ${STATUS.awaitingClarification.fg}; font-size: 11px; line-height: 1; }
+  body[data-agent-state='pending'] .ms-spinner,
+  body[data-agent-state='running'] .ms-spinner { display: block; }
+  body[data-agent-state='done'] .ms-check { display: block; }
+  body[data-agent-state='done'] .ms-check path { animation: pa-mini-check 0.45s ease forwards; }
+  body[data-agent-state='error'] .ms-x { display: block; }
+  /* Needs-input wins over the running spinner — the agent is blocked. */
+  body.needs-input .ms-spinner { display: none; }
+  body.needs-input .ms-alert { display: block; }
+
+  /* Action cluster. Visibility per state is CSS-only off the body state:
+     stop while running (unless blocked on input), answer when blocked,
+     collapse + cancel always. */
+  .mini-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+  .mini-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: ${BRAND_INK};
+    cursor: pointer;
+    transition: background 100ms ease, color 100ms ease;
+  }
+  .mini-icon-btn:hover { background: rgba(32, 27, 33, 0.08); }
+  .mini-icon-btn svg { width: 15px; height: 15px; display: block; }
+  .mini-icon-btn.danger { color: ${STATUS.error.fg}; }
+  .mini-icon-btn.danger:hover { background: ${STATUS.error.bg}; }
+  #pa-mini-stop, #pa-mini-answer { display: none; }
+  body[data-agent-state='pending'] #pa-mini-stop,
+  body[data-agent-state='running'] #pa-mini-stop { display: inline-flex; }
+  body.needs-input #pa-mini-stop { display: none; }
+  body.needs-input #pa-mini-answer { display: inline-flex; }
 
   /* Terminal tint — the card border echoes the bubble palette so a
      finished run reads done/errored at a glance even while minimized. */
@@ -640,8 +726,11 @@ export const COMPOSER_STYLES = `
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .meta, textarea, .btn, .ask-option { transition: none !important; }
+    .meta, textarea, .btn, .ask-option, .mini-icon-btn { transition: none !important; }
     .header.running::before { animation: none; border-color: ${STATUS.working.fg}; }
+    .ms-spinner { animation: none; }
+    /* Snap the check to drawn rather than animating the stroke. */
+    body[data-agent-state='done'] .ms-check path { animation: none; stroke-dashoffset: 0; }
     body.mini.needs-input .card { animation: none; box-shadow: 0 0 0 2px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(32, 27, 33, 0.18); }
     body.mini.activity .card { animation: none; }
   }

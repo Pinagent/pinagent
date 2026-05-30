@@ -114,6 +114,37 @@ export interface FeedbackHandler {
 export type AgentState = 'pending' | 'running' | 'done' | 'error';
 
 /**
+ * Presentation state of a spawned-agent widget, orthogonal to the agent
+ * lifecycle (`AgentState`). Drives which surface is shown:
+ *  - `minimal` — the single-line status bar (default after spawn).
+ *  - `expanded` — the full conversation (transcript + follow-up + lifecycle).
+ *  - `bubble` — the floating status dot (unanchored / collapsed).
+ * `expanded` is kept mirrored onto `Composer.expanded` so existing readers
+ * (reposition/picker/keyboard) keep working.
+ */
+export type ViewState = 'minimal' | 'expanded' | 'bubble';
+
+/**
+ * A picked element added to a running conversation mid-flight. Text-only
+ * (no screenshot) so it rides the existing `user_message` WS frame with no
+ * protocol change — folded into the follow-up message content.
+ */
+export interface QueuedNodeRef {
+  file: string | null;
+  line: number | null;
+  col: number | null;
+  selector: string;
+  component: string | null;
+  tag: string;
+}
+
+/** A follow-up message waiting to be sent once the current turn settles. */
+export interface QueuedFollowUp {
+  content: string;
+  node?: QueuedNodeRef;
+}
+
+/**
  * DOM nodes for the Phase H worktree-lifecycle row. Looked up once when
  * the composer iframe loads and threaded through `attachStreamHandler`
  * so the worktree_state listener can mutate them.
@@ -192,7 +223,14 @@ export interface Composer {
    */
   turn: number;
   agentState: AgentState;
+  /**
+   * Mirror of `viewState === 'expanded'`, kept in lockstep by
+   * expand/minimize/toBubble so the many existing `c.expanded` readers
+   * (reposition, picker, keyboard) don't have to learn about `viewState`.
+   */
   expanded: boolean;
+  /** Presentation surface — see {@link ViewState}. */
+  viewState: ViewState;
   /**
    * Override height (px) for the loading gap between submit and the first
    * streamed event, while the stream log is empty. `null` means "use the
@@ -201,9 +239,32 @@ export interface Composer {
    * rAF placement loop reads it as the active height.
    */
   streamFitH: number | null;
+  /**
+   * Follow-up messages the user queued while a turn was in flight. The
+   * server rejects a `user_message` mid-turn, so we hold them client-side
+   * and flush one per turn-end (FIFO). Survives reconnects (the rendered
+   * "pending" bubbles don't, but the messages still send).
+   */
+  followUpQueue: QueuedFollowUp[];
+  /** Pending auto-close timer (set on completion while minimal/bubble). */
+  autoCloseTimer: ReturnType<typeof setTimeout> | null;
+  /**
+   * Enqueue a follow-up turn. Assigned by `attachStreamHandler` once the
+   * stream pane is live; lets the picker route a freshly-added node into a
+   * running conversation. Sends immediately if the agent is idle.
+   */
+  enqueueFollowUp?(content: string, node?: QueuedNodeRef): void;
   close(): void;
   expand(): void;
   minimize(): void;
+  /** Collapse to the floating status dot (`viewState = 'bubble'`). */
+  toBubble(): void;
+  /**
+   * Arm the completion auto-close (~5s) — no-op while expanded or when a
+   * timer is already pending. Cancelled by {@link cancelAutoClose}.
+   */
+  scheduleAutoClose(): void;
+  cancelAutoClose(): void;
   /**
    * Recompute the iframe height: a measured fit when the run is mid-gap
    * (feedbackId set, stream log still empty), otherwise the normal height.

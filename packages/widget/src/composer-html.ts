@@ -10,6 +10,44 @@ const ICON_EXTERNAL = `<svg class="hdr-icon" viewBox="0 0 24 24" fill="none" str
 
 const ICON_SIDEBAR = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="15" y1="4" x2="15" y2="20"/></svg>`;
 
+// Action-icon set shared by the single-line minimal bar (and mirrored on
+// the floating bubble in composer.ts). Stop = interrupt the run; X = cancel
+// (interrupt + close); comment = the agent is waiting on an answer, click to
+// expand; pick = add another element to this conversation; dot = collapse to
+// the floating bubble.
+export const ICON_STOP = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>`;
+export const ICON_X = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>`;
+export const ICON_COMMENT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`;
+const ICON_PICK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>`;
+const ICON_DOT = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="5"/></svg>`;
+
+/**
+ * The single-line minimal bar — `viewState === 'minimal'`. A status
+ * indicator (spinner / drawn green check / alert / ✗, driven purely by
+ * `body[data-agent-state]` + `body.needs-input`), an ellipsized activity
+ * label, and the state-driven action cluster. Lives inside the stream pane;
+ * shown only when `body.mini` is set (everything else in the pane hides).
+ */
+const MINI_STATUS =
+  `<span class="mini-status" id="pa-mini-status" aria-hidden="true">` +
+  `<span class="ms-spinner"></span>` +
+  `<svg class="ms-check" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4 10-10"/></svg>` +
+  `<span class="ms-x">✕</span>` +
+  `<span class="ms-alert">▲</span>` +
+  `</span>`;
+
+const MINI_BAR =
+  `<div class="mini-bar" id="pa-mini-bar">` +
+  MINI_STATUS +
+  `<span class="mini-label" id="pa-mini-label">Working…</span>` +
+  `<div class="mini-actions">` +
+  `<button class="mini-icon-btn" id="pa-mini-stop" type="button" title="Stop the agent" aria-label="Stop the agent">${ICON_STOP}</button>` +
+  `<button class="mini-icon-btn" id="pa-mini-answer" type="button" title="Answer the agent" aria-label="Answer the agent">${ICON_COMMENT}</button>` +
+  `<button class="mini-icon-btn" id="pa-mini-collapse" type="button" title="Collapse to a dot" aria-label="Collapse to a dot">${ICON_DOT}</button>` +
+  `<button class="mini-icon-btn danger" id="pa-mini-cancel" type="button" title="Cancel — stop and dismiss" aria-label="Cancel — stop and dismiss">${ICON_X}</button>` +
+  `</div>` +
+  `</div>`;
+
 export function composerHTML(meta: ComposerMeta): string {
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -31,6 +69,7 @@ export function composerHTML(meta: ComposerMeta): string {
     </div>
 
     <div class="pane" id="pa-stream-pane" hidden>
+      ${MINI_BAR}
       <div class="header" id="pa-stream-header">Working…</div>
       <div class="stream-context" id="pa-stream-context" hidden></div>
       <div class="lifecycle" id="pa-lifecycle" hidden>
@@ -45,9 +84,10 @@ export function composerHTML(meta: ComposerMeta): string {
         <textarea id="pa-follow-input" rows="2" placeholder="Working…" disabled></textarea>
         <button class="btn primary" id="pa-follow-send" type="button" disabled>Send</button>
       </div>
-      <div class="row spread">
+      <div class="row spread" id="pa-stream-footer-row">
         <span class="footer-note" id="pa-stream-footer"></span>
         <div class="row" style="gap:6px;">
+          <button class="btn ghost icon" id="pa-add-node" type="button" title="Add another element to this conversation" aria-label="Add another element to this conversation">${ICON_PICK}</button>
           <button class="btn ghost icon" id="pa-open-dock" type="button" title="Open in dock" aria-label="Open conversation in dock" hidden>${ICON_SIDEBAR}</button>
           <button class="btn ghost stop" id="pa-stop" type="button" hidden>Stop</button>
           <button class="btn ghost" id="pa-dismiss" type="button">Minimize</button>

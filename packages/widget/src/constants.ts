@@ -38,14 +38,11 @@ export const ICON_MINIMIZE =
 
 export const COMPOSER_H = 320;
 export const STREAM_H = 340;
-// Minimized "mini progress card" height — tall enough for the status
-// line, the component/loop context line, the last two activity rows,
-// and the turns/cost footer. 150 was a few px short of the natural
-// content height, so flexbox shrank the (overflow:hidden) header and
-// sheared its text; the styles now also pin the header, but the card
-// is sized to hug the content outright. Reuses IFRAME_W for width so
-// reposition()/drag/pointer math is untouched.
-export const MINI_H = 168;
+// Minimized height — the single-line minimal bar (viewState: 'minimal').
+// Just the card padding (8px top/bottom) plus one ~24px action row, so the
+// status indicator, label, and icon cluster sit on one line. Reuses IFRAME_W
+// for width so reposition()/drag/pointer math is untouched.
+export const MINI_H = 46;
 export const IFRAME_W = 400;
 export const BUBBLE_SIZE = 36;
 
@@ -58,6 +55,13 @@ export const BUBBLE_SIZE = 36;
  */
 export const MIN_TA_H = 80;
 export const MAX_TA_H = 240;
+
+/**
+ * Delay before a completed conversation that's still collapsed (minimal
+ * bar or floating bubble) auto-closes itself. Cancelled if the user
+ * expands or otherwise interacts. Expanded conversations never auto-close.
+ */
+export const AUTO_CLOSE_MS = 5_000;
 
 /**
  * Document-level styles for elements that live in document.body (iframes
@@ -196,6 +200,48 @@ export const DOC_STYLES = `
   color: ${STATUS.error.fg};
 }
 .pa-anchor-lost-dismiss[hidden] { display: none; }
+
+/* Floating-bubble action row (viewState: 'bubble'). Mirrors the minimal
+   bar's affordances — stop while running, cancel always — as a small pill
+   tucked under the dot. Revealed on hover/focus of the dot or the row
+   (JS toggles \`.show\`, with a short hide delay so the gap is traversable). */
+.pa-bubble-actions {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: ${BRAND_CREAM};
+  border: 1px solid #e8dfb0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(32, 27, 33, 0.2);
+  z-index: 2147483646;
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.pa-bubble-actions.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.pa-bubble-actions[hidden] { display: none; }
+.pa-ba-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: ${BRAND_INK};
+  cursor: pointer;
+  font-family: ${FONT_SANS};
+}
+.pa-ba-btn:hover { background: rgba(32, 27, 33, 0.08); }
+.pa-ba-btn svg { width: 15px; height: 15px; display: block; }
+.pa-ba-btn.danger { color: ${STATUS.error.fg}; }
+.pa-ba-btn.danger:hover { background: ${STATUS.error.bg}; }
+.pa-ba-btn[hidden] { display: none; }
 
 .pa-drag-handle {
   position: absolute;
