@@ -1,5 +1,28 @@
 # @pinagent/cli
 
+## 0.2.0
+
+### Minor Changes
+
+- Add `pinagent doctor` — a read-only command that verifies pinagent is wired into a project correctly. It checks plugin and subpath (`./config`, `./route`) resolution, that the runtime config is wrapped with `pinagent(...)`, that `<Pinagent />` is mounted and the route handler is correct (Next), that `.pinagent` is gitignored, that `.mcp.json` registers the server and any `PINAGENT_PROJECT_ROOT` points at a real directory, and that no dangling `@pinagent/*` symlinks linger in `node_modules`. Exits non-zero if any check fails.
+- 86d277e: `pinagent init` now detects and scaffolds Nuxt projects. A `nuxt.config.*` is
+  recognized as the `nuxt` runtime (checked ahead of `vite.config.*`, since Nuxt
+  runs Vite under the hood), wires up `.gitignore` + `.mcp.json` the same way, and
+  prints the Nuxt-specific manual step (add `@pinagent/nuxt-plugin` to the
+  `modules` array). No route handler is needed — the Nuxt module wires everything.
+- c2a2296: `pinagent init` now detects and scaffolds SvelteKit projects. SvelteKit is
+  recognized via the `@sveltejs/kit` dependency (checked ahead of `vite.config.*`,
+  since SvelteKit runs Vite under the hood) and wired up with the Vite plugin —
+  there's no dedicated package, because SvelteKit is Vite-native. `init` sets up
+  `.gitignore` + `.mcp.json` and prints the SvelteKit-specific steps: add
+  `pinagent()` to `vite.config` ahead of `sveltekit()`, and inject the widget via
+  a dev-only `transformPageChunk` in `src/hooks.server.ts`. A plain Svelte + Vite
+  app (no `@sveltejs/kit`) stays on the `vite` path, where the widget auto-injects.
+
+### Patch Changes
+
+- a389780: `pinagent init` now generates the Next.js route handler with `export * from '@pinagent/next-plugin/route'` instead of a fixed verb list. This re-exports exactly the HTTP handlers the installed plugin provides, so the route stops breaking with "Export DELETE doesn't exist in target module" when the plugin version's handler set differs from the template. `dynamic`/`runtime` stay inline (Next won't follow re-exports for route-segment config).
+
 ## 0.1.0
 
 ### Minor Changes

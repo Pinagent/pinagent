@@ -1,5 +1,134 @@
 # @pinagent/vite-plugin
 
+## 0.4.0
+
+### Minor Changes
+
+- 346bbd7: Let the running-agents tray be minimized back to the pin. The tray gains a
+  minimize button; when collapsed while agents are still live, the FAB pin shows
+  a count badge plus a pulse ring (while any agent is working) so live runs stay
+  glanceable, and a click re-expands the tray. The expanded default is unchanged —
+  a newly-appeared agent (or the list emptying) auto-expands again, so a fresh run
+  is never hidden behind a minimized pin.
+- 832e583: Surface running inline-mode agents in the widget's running-agents tray. The FAB
+  tray previously only morphed open for `worktree`-mode runs (which persist as
+  `worktreeState: 'active'`); a default `inline`-mode agent runs as
+  `(status: 'pending', worktreeState: 'none')`, which derives to the terminal
+  `pending` and never appeared. The `GET /__pinagent/feedback` projection now
+  carries an `isRunning` flag (true while an `active_runs` row exists), and
+  `deriveDockStatus` folds it in as a top-precedence `working` state, so a live
+  inline run shows in the tray (and the dock status badge) and clears the moment
+  the turn ends. The agent runtime also emits `conversations_changed` on run
+  start/finish so the tray re-fetches without waiting on the project poller.
+- b29c2df: Add a `GET /__pinagent/git-branches` endpoint listing the repo's real git
+  branches (local heads + origin remotes, normalized and de-duplicated). Feeds the
+  PR composer's base-branch field, which now offers those branches as a dropdown
+  while staying free-text so you can still target a branch git doesn't know yet.
+- 6435cb2: Add dock support to the Nuxt module. `@pinagent/vite-plugin` now exports the
+  dock iframe loader and host-bridge script bodies (`DOCK_IFRAME_SCRIPT`,
+  `DOCK_HOST_BRIDGE_SCRIPT`) it already used internally, so non-Vite hosts can
+  inject them their own way (the tags it injects via `transformIndexHtml` are
+  unchanged). `@pinagent/nuxt-plugin` gains a `dock: boolean` option: when enabled
+  it passes `dock: true` through to the reused Vite plugin (so the middleware
+  serves `/__pinagent/dock/*`) and injects the dock iframe + host bridge into the
+  Nuxt app head at body-close — the SSR analogue of the SPA `transformIndexHtml`
+  injection. Dev-only, like everything else in the module.
+- 3d026bd: Add a `POST /__pinagent/prs/refresh` endpoint that reconciles each recorded pull
+  request's state against GitHub (open → merged / closed / draft) and returns the
+  updated list. Backs the new "Refresh" button in the dock's PRs view, which until
+  now showed whatever state was known when the PR was opened. Reuses the compose
+  flow's GitHub token resolution and origin-remote detection; a no-op when no token
+  or non-GitHub remote is configured.
+- cf692f5: Tag Svelte components. The plugin's `transform` hook now also dispatches
+  `.svelte` files through `@pinagent/svelte-plugin`'s `transformSvelte` (splicing
+  `data-pa-loc` + `data-pa-comp` onto component markup), alongside the existing
+  `.vue` and `.tsx`/`.jsx` handling. Because the plugin already runs with
+  `enforce: 'pre'`, components are tagged before `@sveltejs/vite-plugin-svelte`
+  compiles them. The widget, `/__pinagent` middleware, WebSocket server, and agent
+  runtime are unchanged, so the full click→agent loop now works in Svelte + Vite
+  apps with no extra setup beyond adding `pinagent()` to `vite.config`.
+- 0762aae: Tag Vue Single-File Components. The plugin's `transform` hook now dispatches on
+  file extension — `.vue` SFCs are tagged via `@pinagent/vue-plugin`'s
+  `transformVue` (splicing `data-pa-loc` + `data-pa-comp` onto `<template>`
+  markup), while `.tsx`/`.jsx` continue through the JSX transform. Because the
+  plugin already runs with `enforce: 'pre'`, SFCs are tagged before
+  `@vitejs/plugin-vue` compiles them. The widget, `/__pinagent` middleware,
+  WebSocket server, and agent runtime are unchanged, so the full click→agent loop
+  now works in Vue + Vite apps with no extra setup beyond adding `pinagent()` to
+  `vite.config`.
+
+### Patch Changes
+
+- 9f4706c: Anchor-lost pins can now be opened (click to open the conversation in the dock) and dismissed (archive button removes the orphaned pin).
+- 08145bb: Fix broken npm install: published artifacts depended on the unpublished `@pinagent/widget-dock@0.0.0` (404). `@pinagent/widget-dock` is now published, so `dock: true` resolves for installed consumers.
+- 66399c8: Fix the minimized agent progress card clipping its status line. The mini
+  card's content was a few pixels taller than its fixed height, so flexbox
+  shrank the `overflow: hidden` header and sheared the "Working · model · id"
+  text and spinner. The card now hugs its content height, and the header /
+  context lines are pinned so they can never become flex-shrink victims.
+- 08145bb: Publish `@pinagent/widget-dock` so the optional `dock: true` surface resolves for npm consumers.
+
+  Both plugins resolve `@pinagent/widget-dock` at runtime (`require.resolve('@pinagent/widget-dock/package.json')`) to serve the dock's static assets, and declare it in `dependencies`. But the package was `private: true` and never published — so a clean `npm i @pinagent/next-plugin` (0.2.0) / `@pinagent/vite-plugin` (0.3.0) 404'd trying to fetch `@pinagent/widget-dock@0.0.0`. The core install was broken out of the box.
+
+  `@pinagent/widget-dock` is now published. Its build (`vite build`) bundles everything into a self-contained static `dist/`, so it ships with **no** runtime dependencies — react, the TanStack packages, and the internal `@pinagent/*` packages (which are themselves unpublished) moved to `devDependencies`. A new `lint:published-deps` CI gate now fails if any published package lists a private/unpublishable workspace package in `dependencies`, so this class of broken-install can't ship again.
+
+- 6d7b12e: The in-page widget no longer duplicates a conversation's transcript when its WebSocket reconnects.
+
+  The dev-server replays a conversation's full transcript from the start on
+  every fresh `subscribe`. On a reconnect the widget re-subscribed the open
+  conversation, so the whole transcript was re-rendered onto the stream log
+  it already had (and re-inserted into the browser-cache mirror, which then
+  resurfaced the duplicates on the next page reload).
+
+  `WidgetWsClient` now fires an `onReset` on each per-feedback handler before
+  re-subscribing on a reconnect (not on the initial connect). The stream
+  handler clears its rendered log and render accumulators and wipes the
+  conversation's cached messages — serialised on one write chain so the
+  delete lands before the replay re-inserts — letting the replay rebuild
+  exactly one copy. This mirrors the dock-side fix and also self-heals events
+  that arrived while the socket was down.
+
+- b3a153a: refactor(widget): split the 3.2k-line `widget.ts` into focused modules
+
+  Internal-only restructuring of `@pinagent/widget`. `widget.ts` shrinks from
+  ~3230 lines to ~200 — it now only builds the DOM + a shared `WidgetContext`
+  and wires three controllers together. Everything else moves to its own module:
+
+  - `ws-client.ts` — the multiplexed page WebSocket
+  - `stream-handler.ts` — transcript rendering + worktree lifecycle row
+  - `composer.ts` — composer lifecycle (create/open/restore/swap/hop) + positioning
+  - `composer-iframe.ts` — the composer iframe's internal form, submit, and stream wiring
+  - `composer-html.ts` — composer HTML templating
+  - `picker.ts` — the element-picking session
+  - `fab-tray.ts` — the FAB and running-agents tray
+  - `context.ts` — the shared `WidgetContext` + small shared types
+  - `crop.ts`, `keyboard.ts`, `config.ts`, `constants.ts`, `pin-icon.ts`, `types.ts`
+
+  The embedded widget IIFE is functionally unchanged — this bumps the consumer
+  plugins only so the re-embedded bytes ship (per the widget-cascade rule).
+
+- 8d871a1: The in-page widget now trusts the dev-server's injected WS config instead of guessing the default port.
+
+  When the dev-server can't bind the default WS port 53636 (a stale or
+  second pinagent dev-server already holds it) it walks to a fallback port
+  and injects the actually-bound URL into the widget bundle as
+  `window.__pinagentConfig`. The widget's `createWsClient` previously fell
+  back to a hardcoded `ws://<host>:53636` whenever `wsUrl` was missing —
+  which, when the config explicitly carried `wsUrl: null` ("this server has
+  no agent WS"), connected the widget to whatever _other_ project's
+  dev-server held 53636.
+
+  `resolveWsUrl` now treats injected config as authoritative: an explicit
+  `null` leaves the WS client inert (feedback capture still works; only live
+  streaming is unavailable, which is correct when no agent runs here). The
+  default-port guess survives only when no config was injected at all (a host
+  page mounting the widget without the plugin prelude). Mirrors the dock-side
+  hardening.
+
+- Updated dependencies [832e583]
+- Updated dependencies [08145bb]
+  - @pinagent/widget-dock@0.1.0
+
 ## 0.3.0
 
 ### Minor Changes
