@@ -97,4 +97,13 @@ describe('createInMemoryUserStore', () => {
     );
     expect(new Set([a.id, b.id, c.id]).size).toBe(3);
   });
+
+  it('finds users by email case-insensitively', async () => {
+    const store = createInMemoryUserStore([], { generateId: sequentialIds() });
+    await store.provisionFromProfile(profile({ subject: 'sub-a', email: 'Bob@Acme.com' }));
+    const matches = await store.findByEmail('  BOB@acme.COM ');
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.email).toBe('Bob@Acme.com');
+    expect(await store.findByEmail('nobody@acme.com')).toEqual([]);
+  });
 });

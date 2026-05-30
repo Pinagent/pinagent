@@ -8,6 +8,7 @@ import { createPgAuditSink } from './db/audit-sink';
 import { createPgBranchRoutingStore } from './db/branch-routing-store';
 import { createNeonDb } from './db/client';
 import { createPgCostControlStore } from './db/cost-control-store';
+import { createPgInvitationStore } from './db/invitation-store';
 import { createPgMembershipStore } from './db/membership-store';
 import { createPgMeterSink } from './db/meter-sink';
 import { createPgOidcCredentialStore } from './db/oidc-credential-store';
@@ -44,6 +45,7 @@ async function buildApp(config: CloudConfig) {
   const subscriptions = createPgSubscriptionStore(db);
   const costControls = createPgCostControlStore(db);
   const users = createPgUserStore(db);
+  const invitations = createPgInvitationStore(db);
   const branchRouting = createPgBranchRoutingStore(db);
   const activeSessions = createPgActiveSessionStore(db);
   // Control-plane → device push, reusing the relay's internal secret. Lets a
@@ -114,9 +116,12 @@ async function buildApp(config: CloudConfig) {
       cookieName: config.sessionCookieName,
       defaultReturnTo: config.loginReturnTo,
       users,
+      invitations,
+      memberships: store,
       audit,
     },
     read: { store, authenticate, audit, meter },
+    members: { store, users, invitations, authenticate, audit },
     config: {
       store,
       authenticate,
