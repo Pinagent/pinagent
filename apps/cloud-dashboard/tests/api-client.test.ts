@@ -82,6 +82,28 @@ describe('createCloudApiClient', () => {
     expect(first().url).toBe('/audit?organizationId=o&limit=25');
   });
 
+  it('unwraps /me/orgs to the orgs array (no org param)', async () => {
+    const myOrg = {
+      organizationId: 'acme',
+      displayName: 'Acme',
+      slug: 'acme',
+      role: 'admin',
+      status: 'active',
+    };
+    const { fetchFn, first } = fakeFetch(() => ({ body: { orgs: [myOrg] } }));
+    const client = createCloudApiClient({ fetch: fetchFn });
+
+    expect(await client.getMyOrgs()).toEqual([myOrg]);
+    expect(first().url).toBe('/me/orgs');
+    expect(first().init?.credentials).toBe('include');
+  });
+
+  it('defaults /me/orgs to an empty array when absent', async () => {
+    const { fetchFn } = fakeFetch(() => ({ body: {} }));
+    const client = createCloudApiClient({ fetch: fetchFn });
+    expect(await client.getMyOrgs()).toEqual([]);
+  });
+
   it('defaults absent config payloads to null', async () => {
     const { fetchFn } = fakeFetch(() => ({ body: { organizationId: 'o' } }));
     const client = createCloudApiClient({ fetch: fetchFn });

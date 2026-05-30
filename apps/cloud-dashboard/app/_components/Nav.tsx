@@ -10,6 +10,11 @@ const TABS: ReadonlyArray<{ id: NavTab; label: string; path: string }> = [
   { id: 'audit', label: 'Audit', path: '/audit' },
 ];
 
+/** The route path for a tab — used to build org-switch links that keep the tab. */
+export function pathForTab(tab: NavTab): string {
+  return TABS.find((t) => t.id === tab)?.path ?? '/';
+}
+
 /** Builds an href that preserves the active org as a query param. */
 function hrefFor(path: string, org?: string): string {
   return org ? `${path}?org=${encodeURIComponent(org)}` : path;
