@@ -20,6 +20,7 @@ const API_PREFIXES = [
   'me',
   'usage',
   'members',
+  'invitations',
   'audit',
   'subscriptions',
   'cost-controls',

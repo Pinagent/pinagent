@@ -41,6 +41,21 @@ export interface BranchRoutingInput {
   allowedBranchPatterns: string[];
 }
 
+/** A pending invitation (GET /invitations). */
+export interface Invitation {
+  organizationId: string;
+  email: string;
+  role: string;
+  invitedAt: string;
+  invitedByUserId: string | null;
+}
+
+/** POST /invitations body. */
+export interface MemberInviteInput {
+  email: string;
+  role: string;
+}
+
 export class CloudApiError extends Error {
   constructor(
     readonly status: number,
@@ -64,6 +79,9 @@ export interface CloudApiClient {
   getMyOrgs(): Promise<MyOrg[]>;
   getUsage(organizationId: string): Promise<UsageSummary>;
   getMembers(organizationId: string): Promise<OrganizationMembership[]>;
+  getInvitations(organizationId: string): Promise<Invitation[]>;
+  inviteMember(organizationId: string, input: MemberInviteInput): Promise<void>;
+  revokeInvitation(organizationId: string, email: string): Promise<void>;
   getAudit(organizationId: string, opts?: { limit?: number }): Promise<AuditEvent[]>;
   getSubscription(organizationId: string): Promise<Subscription | null>;
   getCostControl(organizationId: string): Promise<CostControl | null>;
@@ -112,6 +130,23 @@ export function createCloudApiClient(options: CloudApiClientOptions = {}): Cloud
     return pick(payload);
   }
 
+  async function post(path: string, body: unknown): Promise<void> {
+    const res = await fetchFn(`${base}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 401) throw new UnauthorizedError();
+    if (!res.ok) throw new CloudApiError(res.status, `POST ${path} failed (${res.status})`);
+  }
+
+  async function del(path: string): Promise<void> {
+    const res = await fetchFn(`${base}${path}`, { method: 'DELETE', credentials: 'include' });
+    if (res.status === 401) throw new UnauthorizedError();
+    if (!res.ok) throw new CloudApiError(res.status, `DELETE ${path} failed (${res.status})`);
+  }
+
   const orgQuery = (organizationId: string) =>
     `?organizationId=${encodeURIComponent(organizationId)}`;
 
@@ -120,6 +155,11 @@ export function createCloudApiClient(options: CloudApiClientOptions = {}): Cloud
     getUsage: (org) => get(`/usage${orgQuery(org)}`, (b) => (b.usage as UsageSummary) ?? {}),
     getMembers: (org) =>
       get(`/members${orgQuery(org)}`, (b) => (b.members as OrganizationMembership[]) ?? []),
+    getInvitations: (org) =>
+      get(`/invitations${orgQuery(org)}`, (b) => (b.invitations as Invitation[]) ?? []),
+    inviteMember: (org, input) => post(`/invitations${orgQuery(org)}`, input),
+    revokeInvitation: (org, email) =>
+      del(`/invitations${orgQuery(org)}&email=${encodeURIComponent(email)}`),
     getAudit: (org, opts) =>
       get(
         `/audit${orgQuery(org)}${opts?.limit ? `&limit=${opts.limit}` : ''}`,
