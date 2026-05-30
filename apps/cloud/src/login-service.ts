@@ -121,21 +121,22 @@ export async function handleSsoCallback(
       payload: code,
       state: stateParam,
     });
-    // Just-in-time provision the user behind this profile. `User.id` is the IdP
-    // subject for now, so the token + memberships keep keying on the same id;
-    // the record simply captures email/displayName/lastLogin. Skipped when no
-    // store is wired.
+    // Just-in-time provision the user behind this profile, resolving the
+    // internal (synthetic) user id from `(connectionId, subject)`. The token +
+    // audit carry that id, not the IdP subject. Falls back to the subject only
+    // when no user store is wired (dev / minimal deploy).
     const user = await deps.users?.provisionFromProfile(profile, {
       now: isoFromSeconds(deps.nowSeconds),
     });
-    userToken = await signUserToken(user?.id ?? profile.subject, deps.userTokenSecret, {
+    const userId = user?.id ?? profile.subject;
+    userToken = await signUserToken(userId, deps.userTokenSecret, {
       ttlSeconds: deps.userTokenTtlSeconds,
       nowSeconds: deps.nowSeconds,
     });
     await deps.audit?.record({
       occurredAt: isoFromSeconds(deps.nowSeconds),
       organizationId: connection.organizationId,
-      actorUserId: profile.subject,
+      actorUserId: userId,
       action: AUDIT_ACTIONS.login,
       metadata: { connectionId: connection.id },
     });

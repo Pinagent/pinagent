@@ -71,6 +71,13 @@
       "when": 1780091527067,
       "tag": "0009_great_stardust",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1780160553108,
+      "tag": "0010_perpetual_marten_broadcloak",
+      "breakpoints": true
     }
   ]
 }
