@@ -59,6 +59,9 @@ const store: MembershipStore = {
   async listMembers() {
     return [membership];
   },
+  async listMembershipsByUser() {
+    return [];
+  },
   async upsertMembership() {},
   async removeMembership() {},
 };

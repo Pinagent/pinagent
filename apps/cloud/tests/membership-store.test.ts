@@ -79,6 +79,16 @@ describe('PgMembershipStore', () => {
     expect(members.map((m) => m.userId).sort()).toEqual(['user-1', 'user-2']);
   });
 
+  it('lists a user’s memberships scoped to that user, across orgs', async () => {
+    await store.upsertMembership(membership({ organizationId: 'acme', userId: 'user-1' }));
+    await store.upsertMembership(membership({ organizationId: 'other', userId: 'user-1' }));
+    await store.upsertMembership(membership({ organizationId: 'acme', userId: 'user-2' }));
+
+    const mine = await store.listMembershipsByUser('user-1');
+    expect(mine.map((m) => m.organizationId).sort()).toEqual(['acme', 'other']);
+    expect(await store.listMembershipsByUser('nobody')).toEqual([]);
+  });
+
   it('removes a membership', async () => {
     await store.upsertMembership(membership());
     await store.removeMembership('acme', 'user-1');

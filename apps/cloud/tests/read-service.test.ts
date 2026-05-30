@@ -3,7 +3,13 @@ import type { MembershipStore, OrganizationMembership, Role } from '@pinagent/ee
 import { createInMemoryMeterSink, USAGE_KINDS } from '@pinagent/ee-billing';
 import { AUDIT_ACTIONS, createInMemoryAuditSink } from '@pinagent/ee-team-features';
 import { describe, expect, it } from 'vitest';
-import { handleAudit, handleMembers, handleUsage, type ReadServiceDeps } from '../src/read-service';
+import {
+  handleAudit,
+  handleMembers,
+  handleMyOrgs,
+  handleUsage,
+  type ReadServiceDeps,
+} from '../src/read-service';
 
 function membership(userId: string, role: Role): OrganizationMembership {
   return {
@@ -23,11 +29,16 @@ function store(): MembershipStore {
     async getMembership(org, user) {
       return org === 'acme' ? (members.find((m) => m.userId === user) ?? null) : null;
     },
-    async getOrganization() {
-      return null;
+    async getOrganization(id) {
+      return id === 'acme'
+        ? { id: 'acme', slug: 'acme', displayName: 'Acme', createdAt: '2026-01-01T00:00:00Z' }
+        : null;
     },
     async listMembers(org) {
       return org === 'acme' ? members : [];
+    },
+    async listMembershipsByUser(user) {
+      return members.filter((m) => m.userId === user);
     },
     async upsertMembership() {},
     async removeMembership() {},
@@ -114,5 +125,38 @@ describe('GET /members', () => {
   it('405s on a non-GET method', async () => {
     const req = new Request('https://cloud.test/members?organizationId=acme', { method: 'POST' });
     expect((await handleMembers(req, await deps('u-admin'))).status).toBe(405);
+  });
+});
+
+describe('GET /me/orgs', () => {
+  it("returns the caller's enriched memberships (no org param, no RBAC)", async () => {
+    const res = await handleMyOrgs(get('/me/orgs'), await deps('u-viewer'));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      orgs: [
+        {
+          organizationId: 'acme',
+          displayName: 'Acme',
+          slug: 'acme',
+          role: 'viewer',
+          status: 'active',
+        },
+      ],
+    });
+  });
+
+  it('returns an empty list for a user with no memberships', async () => {
+    const res = await handleMyOrgs(get('/me/orgs'), await deps('outsider'));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgs: [] });
+  });
+
+  it('401s when unauthenticated', async () => {
+    expect((await handleMyOrgs(get('/me/orgs'), await deps(null))).status).toBe(401);
+  });
+
+  it('405s on a non-GET method', async () => {
+    const req = new Request('https://cloud.test/me/orgs', { method: 'POST' });
+    expect((await handleMyOrgs(req, await deps('u-admin'))).status).toBe(405);
   });
 });

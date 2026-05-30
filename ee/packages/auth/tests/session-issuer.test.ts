@@ -22,6 +22,9 @@ function storeWith(membership: OrganizationMembership | null): MembershipStore {
     async listMembers() {
       return membership ? [membership] : [];
     },
+    async listMembershipsByUser() {
+      return membership ? [membership] : [];
+    },
     async upsertMembership() {},
     async removeMembership() {},
   };

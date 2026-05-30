@@ -7,7 +7,13 @@ import {
 } from './config-service';
 import { handleRelayEvents, type InternalServiceDeps } from './internal-service';
 import { handleSsoCallback, handleSsoStart, type LoginServiceDeps } from './login-service';
-import { handleAudit, handleMembers, handleUsage, type ReadServiceDeps } from './read-service';
+import {
+  handleAudit,
+  handleMembers,
+  handleMyOrgs,
+  handleUsage,
+  type ReadServiceDeps,
+} from './read-service';
 import { handleSessionRequest, type SessionServiceDeps } from './session-service';
 
 /**
@@ -52,6 +58,8 @@ export function createCloudApp(deps: CloudAppDeps): { fetch(request: Request): P
           return handleAudit(request, deps.read);
         case '/members':
           return handleMembers(request, deps.read);
+        case '/me/orgs':
+          return handleMyOrgs(request, deps.read);
         case '/subscriptions':
           return handleSubscriptionConfig(request, deps.config);
         case '/cost-controls':

@@ -38,6 +38,9 @@ function store(): MembershipStore {
     async listMembers() {
       return members;
     },
+    async listMembershipsByUser(user) {
+      return members.filter((m) => m.userId === user);
+    },
     async upsertMembership() {},
     async removeMembership() {},
   };
