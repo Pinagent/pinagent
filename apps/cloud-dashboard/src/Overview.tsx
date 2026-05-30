@@ -3,9 +3,11 @@ import type { OrganizationMembership } from '@pinagent/ee-auth';
 import { USAGE_KINDS, type UsageSummary } from '@pinagent/ee-billing';
 import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@pinagent/ui/components/ui/card';
-import type { CloudApiClient } from './api-client';
+import { useState } from 'react';
+import type { CloudApiClient, Invitation } from './api-client';
 import { UnauthorizedError } from './api-client';
 import { formatDuration } from './format';
+import { MembersAdmin } from './MembersAdmin';
 import { SignIn } from './SignIn';
 import { LoadError, Loading } from './states';
 import { useAsync } from './use-async';
@@ -78,6 +80,10 @@ export function OverviewView({ usage, members }: OverviewData) {
   );
 }
 
+interface OverviewLoad extends OverviewData {
+  invitations: Invitation[];
+}
+
 /** Data-loading container. */
 export function Overview({
   client,
@@ -86,18 +92,37 @@ export function Overview({
   client: CloudApiClient;
   organizationId: string;
 }) {
-  const state = useAsync<OverviewData>(async () => {
-    const [usage, members] = await Promise.all([
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = () => setReloadKey((k) => k + 1);
+
+  const state = useAsync<OverviewLoad>(async () => {
+    const [usage, members, invitations] = await Promise.all([
       client.getUsage(organizationId),
       client.getMembers(organizationId),
+      client.getInvitations(organizationId),
     ]);
-    return { usage, members };
-  }, [client, organizationId]);
+    return { usage, members, invitations };
+  }, [client, organizationId, reloadKey]);
 
   if (state.status === 'loading') return <Loading />;
   if (state.status === 'error') {
     if (state.error instanceof UnauthorizedError) return <SignIn />;
     return <LoadError label="overview" error={state.error} />;
   }
-  return <OverviewView usage={state.value.usage} members={state.value.members} />;
+  return (
+    <div className="flex flex-col gap-6">
+      <OverviewView usage={state.value.usage} members={state.value.members} />
+      <MembersAdmin
+        invitations={state.value.invitations}
+        onInvite={async (input) => {
+          await client.inviteMember(organizationId, input);
+          reload();
+        }}
+        onRevoke={async (email) => {
+          await client.revokeInvitation(organizationId, email);
+          reload();
+        }}
+      />
+    </div>
+  );
 }

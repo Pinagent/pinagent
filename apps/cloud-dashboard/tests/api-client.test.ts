@@ -220,3 +220,49 @@ describe('createCloudApiClient PUT methods', () => {
     ).rejects.toMatchObject({ name: 'CloudApiError', status: 403 });
   });
 });
+
+describe('createCloudApiClient invitations', () => {
+  it('unwraps GET /invitations to the array', async () => {
+    const inv = {
+      organizationId: 'o',
+      email: 'a@acme.com',
+      role: 'member',
+      invitedAt: 'i',
+      invitedByUserId: null,
+    };
+    const { fetchFn, first } = fakeFetch(() => ({ body: { invitations: [inv] } }));
+    const client = createCloudApiClient({ fetch: fetchFn });
+    expect(await client.getInvitations('o')).toEqual([inv]);
+    expect(first().url).toBe('/invitations?organizationId=o');
+  });
+
+  it('POSTs an invite as JSON', async () => {
+    const { fetchFn, first } = fakeFetch(() => ({ body: {} }));
+    const client = createCloudApiClient({ fetch: fetchFn });
+    await client.inviteMember('o', { email: 'a@acme.com', role: 'admin' });
+    const call = first();
+    expect(call.url).toBe('/invitations?organizationId=o');
+    expect(call.init?.method).toBe('POST');
+    expect(JSON.parse(String(call.init?.body))).toEqual({ email: 'a@acme.com', role: 'admin' });
+  });
+
+  it('DELETEs a revoke with the email in the query', async () => {
+    const { fetchFn, first } = fakeFetch(() => ({ body: {} }));
+    const client = createCloudApiClient({ fetch: fetchFn });
+    await client.revokeInvitation('o', 'a b@acme.com');
+    const call = first();
+    expect(call.url).toBe('/invitations?organizationId=o&email=a%20b%40acme.com');
+    expect(call.init?.method).toBe('DELETE');
+  });
+
+  it('maps invitation failures to typed errors', async () => {
+    const forbidden = createCloudApiClient({ fetch: fakeFetch(() => ({ status: 403 })).fetchFn });
+    await expect(
+      forbidden.inviteMember('o', { email: 'a@acme.com', role: 'member' }),
+    ).rejects.toMatchObject({ name: 'CloudApiError', status: 403 });
+    const unauth = createCloudApiClient({ fetch: fakeFetch(() => ({ status: 401 })).fetchFn });
+    await expect(unauth.revokeInvitation('o', 'a@acme.com')).rejects.toBeInstanceOf(
+      UnauthorizedError,
+    );
+  });
+});
