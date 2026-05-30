@@ -178,6 +178,21 @@ jobs:
         env:
           TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
 
+      # Build BEFORE test, and NOT `--affected`. The test suite imports
+      # every @pinagent/* package through its `exports` map, which resolves
+      # to `dist/` (there is no src/source condition and vitest adds no src
+      # alias), so each package a test touches must be built first; the
+      # plugins' embed (the test step's `pretest` hook) additionally needs
+      # `packages/widget/dist`. Because the test run is unscoped, its build
+      # prerequisite can't be scoped either — this must be a full build.
+      # (Originally this was produced as a side effect of the unscoped
+      # typecheck's `^build`; with typecheck now `--affected` that no longer
+      # covers it.) Persisted turbo cache keeps this fast on unchanged
+      # packages, and it still catches packaging regressions (tsdown config,
+      # embed script, exports map) before tests run.
+      - name: Build
+        run: pnpm build
+
       # Unit + integration tests via Vitest, with a v8 coverage summary
       # printed to the run log. better-sqlite3's native binding gets
       # compiled at `pnpm install` time (allowed by pnpm-workspace.yaml's
@@ -187,16 +202,6 @@ jobs:
       # fails only on a real test failure, never on a coverage dip.
       - name: Test
         run: pnpm test:coverage
-
-      # Build last so a green test run still catches packaging
-      # regressions (tsdown config, embed-widget script, exports map).
-      # Same PR-only `--affected` scoping as typecheck; the OSS-filter
-      # step below still builds all of packages/* (cache hits) to validate
-      # the release glob.
-      - name: Build
-        run: pnpm turbo run build ${{ github.event_name == 'pull_request' && '--affected' || '' }}
-        env:
-          TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
 
       # Smoke-test the OSS-only filter that `release` uses
       # (`pnpm build:oss && changeset publish`). After the full `pnpm
