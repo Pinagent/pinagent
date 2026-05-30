@@ -96,7 +96,7 @@ const PINAGENT_REWRITE = {
  *   // app/pinagent/[[...slug]]/route.ts — exactly this content:
  *   export const dynamic = 'force-dynamic';
  *   export const runtime = 'nodejs';
- *   export { GET, POST, PATCH } from '@pinagent/next-plugin/route';
+ *   export * from '@pinagent/next-plugin/route';
  *
  * Note: `dynamic` and `runtime` must be declared inline. Next 16 statically
  * parses route-segment config and rejects re-exports of those fields.

@@ -61,7 +61,7 @@ Create `app/pinagent/[[...slug]]/route.ts` with **exactly** this content:
 ```ts
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-export { GET, POST, PATCH } from '@pinagent/next-plugin/route';
+export * from '@pinagent/next-plugin/route';
 ```
 
 > **Why the folder is `pinagent/` not `__pinagent/`**: Next treats folders starting with `_` as private (not routable). The `pinagent(config)` wrapper adds a rewrite so the widget's hardcoded `/__pinagent/*` URLs land at your `/pinagent/*` route handler.

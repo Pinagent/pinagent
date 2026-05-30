@@ -78,7 +78,7 @@ if (process.env.NODE_ENV !== 'production' && resolveAgentMode(process.env) !== f
 //
 //   export const dynamic = 'force-dynamic';
 //   export const runtime = 'nodejs';
-//   export { GET, POST, PATCH, PUT, DELETE } from '@pinagent/next-plugin/route';
+//   export * from '@pinagent/next-plugin/route';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 

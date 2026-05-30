@@ -102,7 +102,7 @@ import { Pinagent } from '@pinagent/next-plugin';
 // app/pinagent/[[...slug]]/route.ts
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-export { GET, POST, PATCH, PUT, DELETE } from '@pinagent/next-plugin/route';
+export * from '@pinagent/next-plugin/route';
 ```
 
 **Nuxt** (`nuxt.config.ts`)

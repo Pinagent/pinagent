@@ -118,7 +118,7 @@ describe('renderNextRoute', () => {
     expect(out).toContain("export const runtime = 'nodejs';");
     // Asserted as two fragments so the generated re-export line isn't a
     // contiguous import literal the undeclared-import linter would flag.
-    expect(out).toContain('export { GET, POST, PATCH }');
+    expect(out).toContain('export *');
     expect(out).toContain('@pinagent/next-plugin/route');
   });
 });
