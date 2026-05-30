@@ -642,6 +642,60 @@ describe('runFollowUpTurn', () => {
     expect(second.capturedParams?.prompt).toBe('still not bold enough');
     expect(resultsSeen).toBeGreaterThanOrEqual(1);
   });
+
+  /**
+   * Regression: a follow-up the widget flushes the instant it sees the
+   * prior turn's `result` can arrive a few ms before that turn's
+   * `clearActiveRun` deletes its `active_runs` row. The follow-up must
+   * WAIT for the row to clear, not bounce with "a turn is already in
+   * progress" — a bounce is effectively a dropped follow-up (the widget
+   * has no later turn-end to re-flush it on, so the agent just ends).
+   */
+  it('waits for the prior run to wind down instead of bouncing a follow-up', async () => {
+    const { id, storage } = await makeFeedback('original');
+    await storage.patch(id, { agentSessionId: 'sess-race' });
+
+    // Reproduce the cleanup-window race deterministically: insert the
+    // lingering `active_runs` row directly, no timing games.
+    const { getDb } = await import('../src/db/client');
+    const { activeRuns, eq } = await import('@pinagent/db');
+    const db = getDb(PROJECT_ROOT);
+    await db
+      .insert(activeRuns)
+      .values({ conversationId: id, startedAt: new Date(), currentTurn: 1 })
+      .onConflictDoUpdate({ target: activeRuns.conversationId, set: { startedAt: new Date() } });
+    expect(await agent.hasActiveRun(id)).toBe(true);
+
+    const followUp = scriptQuery([
+      {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'on it' }] },
+      } as never,
+      {
+        type: 'result',
+        subtype: 'success',
+        num_turns: 2,
+        usage: { input_tokens: 1, output_tokens: 1 },
+        total_cost_usd: 0,
+        duration_ms: 1,
+      } as never,
+    ]);
+
+    // Launch while the row still lingers. It must neither throw nor start
+    // the query yet — it's polling for the slot to free up.
+    const followUpDone = collectUntil(id, (e) => e.type === 'result');
+    const turn = agent.runFollowUpTurn(id, 'and bolder');
+    await new Promise((r) => setTimeout(r, 100));
+    expect(sdk.query).not.toHaveBeenCalled();
+
+    // Cleanup lands (what `clearActiveRun` does): the follow-up proceeds.
+    await db.delete(activeRuns).where(eq(activeRuns.conversationId, id));
+    await expect(turn).resolves.toBeUndefined();
+    await followUpDone;
+
+    expect(followUp.capturedParams?.options?.resume).toBe('sess-race');
+    expect(followUp.capturedParams?.prompt).toBe('and bolder');
+  });
 });
 
 describe('interruptRun', () => {
