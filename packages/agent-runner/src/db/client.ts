@@ -142,13 +142,23 @@ function runMigrations(raw: DatabaseSync, migrationsDir: string): void {
     return;
   }
 
-  // Track applied migrations the same way drizzle's stock migrator
-  // does: a `__drizzle_migrations` table keyed by sha256(rawSql) so
-  // re-running is a no-op AND so DBs created by the stock migrator
-  // (or by the browser-side mirror in @pinagent/widget) interop with
-  // this one. Storing `entry.tag` here instead silently re-runs every
-  // migration on existing DBs and crashes on `CREATE TABLE … already
-  // exists`.
+  // Decide "already applied?" by the `created_at` watermark, exactly
+  // like drizzle's own migrator (and the browser-side mirror in
+  // `@pinagent/widget/src/db/migrations.ts`): the highest recorded
+  // `created_at` is the high-water mark, and any journal entry whose
+  // `when` is at or below it is already applied.
+  //
+  // We deliberately do NOT key off the `hash` *value* in the tracking
+  // table. Earlier Pinagent builds wrote the migration *tag*
+  // (`0000_fast_swarm`) into the `hash` column instead of
+  // `sha256(rawSql)`; a build keying on hash membership treats every
+  // one of those legacy rows as unknown, re-runs migration 0000, and
+  // crashes on `CREATE TABLE active_runs … already exists` — which
+  // 500s every `POST /__pinagent/feedback`. `created_at` is identical
+  // across all three writers (stock drizzle, the tag-era build, and
+  // this one — all store the journal `when`), so the watermark is
+  // robust to the format drift. We still *write* sha256 going forward
+  // to stay byte-compatible with stock drizzle and the browser mirror.
   raw.exec(
     `CREATE TABLE IF NOT EXISTS __drizzle_migrations (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,14 +171,38 @@ function runMigrations(raw: DatabaseSync, migrationsDir: string): void {
     entries: { idx: number; when: number; tag: string }[];
   };
   const sortedEntries = journal.entries.slice().sort((a, b) => a.idx - b.idx);
-  const appliedStmt = raw.prepare('SELECT hash FROM __drizzle_migrations');
-  const applied = new Set((appliedStmt.all() as { hash: string }[]).map((r) => r.hash));
+
+  const hashOf = (entry: { tag: string }): string => {
+    const sql = readFileSync(join(migrationsDir, `${entry.tag}.sql`), 'utf8');
+    return createHash('sha256').update(sql).digest('hex');
+  };
+  const insert = raw.prepare('INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)');
+
+  const lastRow = raw
+    .prepare('SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1')
+    .get() as { created_at: number | null } | undefined;
+  let lastWhen = lastRow?.created_at != null ? Number(lastRow.created_at) : null;
+
+  // Backfill: a pre-tracking DB has the schema but an empty tracking
+  // table (e.g. one created before the tracking table existed). Probe
+  // for `conversations` — the first table migration 0000 creates — and
+  // if it's there, record every known migration as applied rather than
+  // re-running their `CREATE TABLE`s. Mirrors the browser-side migrator.
+  if (lastWhen == null && sortedEntries.length > 0) {
+    const probe = raw
+      .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='conversations'")
+      .get();
+    if (probe) {
+      for (const entry of sortedEntries) {
+        insert.run(hashOf(entry), entry.when);
+      }
+      return;
+    }
+  }
 
   for (const entry of sortedEntries) {
-    const sqlPath = join(migrationsDir, `${entry.tag}.sql`);
-    const sql = readFileSync(sqlPath, 'utf8');
-    const hash = createHash('sha256').update(sql).digest('hex');
-    if (applied.has(hash)) continue;
+    if (lastWhen != null && lastWhen >= entry.when) continue;
+    const sql = readFileSync(join(migrationsDir, `${entry.tag}.sql`), 'utf8');
     const statements = sql
       .split('--> statement-breakpoint')
       .map((s) => s.trim())
@@ -176,9 +210,8 @@ function runMigrations(raw: DatabaseSync, migrationsDir: string): void {
     for (const stmt of statements) {
       raw.exec(stmt);
     }
-    raw
-      .prepare('INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)')
-      .run(hash, entry.when);
+    insert.run(createHash('sha256').update(sql).digest('hex'), entry.when);
+    lastWhen = entry.when;
   }
 }
 
