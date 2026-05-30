@@ -159,25 +159,27 @@ describe('GET /sso/callback', () => {
   });
 
   it('just-in-time provisions the user when a store is wired', async () => {
-    const users = createInMemoryUserStore();
+    // Synthetic id model: the store mints an opaque id for the identity, NOT
+    // the IdP subject. Inject a fixed generator so the id is assertable.
+    const users = createInMemoryUserStore([], { generateId: () => 'usr_fixed' });
     const state = await startedState('/');
     const res = await handleSsoCallback(
       new Request(`https://cloud.test/sso/callback?code=abc&state=${state}`),
       { ...deps(fakeProvider()), users },
     );
     expect(res.status).toBe(302);
-    // The user behind the profile now exists, keyed on the IdP subject so the
-    // token + memberships still match.
-    const provisioned = await users.get('idp-user-9');
-    expect(provisioned).toMatchObject({
-      id: 'idp-user-9',
+    // The user behind the profile now exists under its synthetic id; the IdP
+    // subject ('idp-user-9') is not used as the id.
+    expect(await users.get('idp-user-9')).toBeNull();
+    expect(await users.get('usr_fixed')).toMatchObject({
+      id: 'usr_fixed',
       email: 'bob@acme.com',
       displayName: 'Bob',
     });
     const token = getCookieToken(res);
     const verified = await verifyUserToken(token as string, USER_TOKEN_SECRET);
     expect(verified.ok).toBe(true);
-    if (verified.ok) expect(verified.claims.userId).toBe('idp-user-9');
+    if (verified.ok) expect(verified.claims.userId).toBe('usr_fixed');
   });
 
   it('400s on missing code or state', async () => {

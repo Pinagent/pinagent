@@ -92,7 +92,10 @@ export {
 } from './token-codec';
 export {
   createInMemoryUserStore,
+  defaultUserId,
+  type InMemoryUserStoreOptions,
   type ProvisionOptions,
+  type SsoIdentity,
   type User,
   type UserStore,
   userFromProfile,
