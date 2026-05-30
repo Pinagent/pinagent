@@ -57,6 +57,12 @@ permissions:
   pull-requests: write # open the Version Packages PR
   id-token: write # OIDC trusted publishing + automatic provenance
 
+# Run JS actions on Node 24. create-github-app-token@v2 still bundles Node 20,
+# which GitHub deprecated (forced to Node 24 on 2026-06-16, removed 2026-09-16);
+# opting in now silences the warning and de-risks the cutover.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   release:
     name: version · publish
