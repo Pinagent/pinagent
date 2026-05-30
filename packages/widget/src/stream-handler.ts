@@ -208,6 +208,9 @@ export function attachStreamHandler(
   function renderAskUserForm(askId: string, question: string, options?: string[]) {
     if (pendingAskFormRoot) pendingAskFormRoot.remove();
     pendingAskId = askId;
+    // Record on the composer so minimizing mid-question re-surfaces the
+    // attention state (see applyMiniChrome).
+    composer.needsInput = true;
 
     const wrap = el('div', 'ask-form');
     wrap.appendChild(el('div', 'ask-question', question));
@@ -263,7 +266,11 @@ export function attachStreamHandler(
       wrap.replaceWith(replaced);
       pendingAskFormRoot = null;
       pendingAskId = null;
+      composer.needsInput = false;
+      idoc.body.classList.remove('needs-input');
       setFollowEnabled(!turnRunning);
+      // Answering resumes the turn; drain any follow-ups queued behind it.
+      if (composer.followUpQueue.length > 0) flushQueue();
     }
   }
 
@@ -723,6 +730,7 @@ export function attachStreamHandler(
       lastToolLabel = null;
       pendingAskId = null;
       pendingAskFormRoot = null;
+      composer.needsInput = false;
       // The rendered "queued" bubbles were just wiped with the log. Drop
       // their DOM refs but keep `composer.followUpQueue` — those messages
       // still need to send. flushQueue tolerates the now-empty queuedNodes

@@ -232,6 +232,13 @@ export interface Composer {
   /** Presentation surface — see {@link ViewState}. */
   viewState: ViewState;
   /**
+   * True while the agent is blocked on an `ask_user` answer. Lets
+   * `applyMiniChrome` re-apply the `needs-input` attention state (alert
+   * indicator + answer icon) when the user minimizes mid-question — the
+   * stream handler that owns the ask sets/clears it.
+   */
+  needsInput: boolean;
+  /**
    * Override height (px) for the loading gap between submit and the first
    * streamed event, while the stream log is empty. `null` means "use the
    * normal STREAM_H/MINI_H". The card is shrunk to hug just the header +

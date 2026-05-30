@@ -544,6 +544,7 @@ export function createComposerController(ctx: WidgetContext): {
       agentState: 'pending',
       expanded: true,
       viewState: 'expanded',
+      needsInput: false,
       streamFitH: null,
       followUpQueue: [],
       autoCloseTimer: null,
@@ -662,7 +663,11 @@ export function createComposerController(ctx: WidgetContext): {
       const idoc = iframe.contentDocument;
       if (!idoc?.body) return;
       idoc.body.classList.toggle('mini', !composer.expanded);
-      if (composer.expanded) idoc.body.classList.remove('needs-input');
+      // Expanding clears the attention state (the answer form is now
+      // visible); minimizing re-applies it when a question is still
+      // pending, so the collapsed bar shows the alert + answer icon
+      // rather than a stop icon for a not-actually-running agent.
+      idoc.body.classList.toggle('needs-input', !composer.expanded && composer.needsInput);
       const dismiss = idoc.getElementById('pa-dismiss');
       if (dismiss) dismiss.textContent = composer.expanded ? 'Minimize' : 'Expand';
     }
