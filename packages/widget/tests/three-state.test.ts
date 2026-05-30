@@ -347,6 +347,64 @@ describe('composer view-state transitions', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// "Add another element to this conversation" — the picked element joins the
+// running conversation as a queued follow-up via the controller's
+// addNodeToComposer. The footer BUTTON wiring lives in composer-iframe.ts's
+// srcdoc-iframe load handler, which happy-dom doesn't drive — that blind spot
+// is why the host→host postMessage routing (event.source === window, not the
+// iframe) silently dropped the pick. These lock the controller-side contract
+// the button now calls into directly.
+// ---------------------------------------------------------------------------
+describe('addNodeToComposer', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+  });
+  afterEach(() => {
+    document.body.replaceChildren();
+    vi.unstubAllGlobals();
+  });
+
+  function openComposer(ctx: WidgetContext) {
+    const controller = createComposerController(ctx);
+    const anchor = document.createElement('div');
+    document.body.appendChild(anchor);
+    controller.open(anchor, { x: 5, y: 5 });
+    return { controller, composer: Array.from(ctx.composers)[0] as Composer };
+  }
+
+  it('enqueues a follow-up referencing the picked element', () => {
+    const ctx = makeCtx();
+    const { controller, composer } = openComposer(ctx);
+    composer.feedbackId = 'fb-1';
+    const enqueueFollowUp = vi.fn();
+    composer.enqueueFollowUp = enqueueFollowUp;
+
+    const picked = document.createElement('button');
+    document.body.appendChild(picked);
+    controller.addNodeToComposer(composer, picked, { x: 0, y: 0 });
+
+    expect(enqueueFollowUp).toHaveBeenCalledTimes(1);
+    const [content, node] = enqueueFollowUp.mock.calls[0];
+    expect(content).toContain('<button>');
+    expect(node?.tag).toBe('button');
+  });
+
+  it('toasts instead of sending when the conversation is not ready', () => {
+    const toast = vi.fn();
+    const ctx = makeCtx({ toast });
+    const { controller, composer } = openComposer(ctx);
+    // No feedbackId / enqueueFollowUp — the agent stream isn't wired yet.
+    const picked = document.createElement('button');
+    document.body.appendChild(picked);
+    controller.addNodeToComposer(composer, picked, { x: 0, y: 0 });
+
+    expect(toast).toHaveBeenCalledWith('Conversation not ready yet', 'error');
+  });
+});
+
 describe('composer auto-close timer', () => {
   beforeEach(() => {
     document.body.replaceChildren();

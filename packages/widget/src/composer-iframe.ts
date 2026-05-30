@@ -170,11 +170,18 @@ export function wireComposerIframe(args: WireComposerArgs): void {
     c.close();
   });
 
-  // "Add another element" — hand off to the picker, routed back into this
-  // conversation as a queued follow-up (see composer.ts onIframeMessage).
+  // "Add another element" — enter the picker, routed back into THIS
+  // conversation as a queued follow-up. Call the controller directly
+  // rather than via postMessage: the composer iframe runs no scripts of
+  // its own, so this handler executes in the host realm. A host→host
+  // `postMessage` here lands with `event.source === window` (not
+  // `iframe.contentWindow`), which the message guard in composer.ts
+  // rejects — silently dropping the pick. `ctx` + `c` are already in
+  // scope, so the hop was never needed.
   addNodeBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
-    iwin.parent.postMessage({ type: 'pa-pick-node' }, '*');
+    ctx.pickRouteComposer = c;
+    ctx.enterPicking();
   });
 
   // "+N more" badge — present only when extras > 0. Hovering it

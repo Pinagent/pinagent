@@ -834,13 +834,6 @@ export function createComposerController(ctx: WidgetContext): {
         clearExtraFlashes();
         return;
       }
-      if (data.type === 'pa-pick-node') {
-        // The user clicked "add another element" in the expanded footer.
-        // Route the next pick into this conversation as a queued follow-up.
-        ctx.pickRouteComposer = composer;
-        ctx.enterPicking();
-        return;
-      }
       if (data.type !== 'pa-composer-resize-ta') return;
       if (composer.feedbackId) return;
       const ta = Math.min(MAX_TA_H, Math.max(MIN_TA_H, Number(data.taHeight) || MIN_TA_H));
