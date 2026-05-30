@@ -76,3 +76,28 @@ import widgetIifeUrl from '@pinagent/widget/iife?url';  // URL to the IIFE
 import { BRAND_INK } from '@pinagent/widget/brand';
 import { Logo } from '@pinagent/widget/logo';
 ```
+
+## Storybook
+
+The widget is vanilla shadow-root DOM (no React framework), so Storybook runs
+on the **HTML** renderer (`@storybook/html-vite`). Stories import the real
+shipped source (`composerHTML`, `STYLES`, the controllers) — never copies — so
+what you design is what ships in the embedded IIFE.
+
+```bash
+pnpm --filter @pinagent/widget storybook          # dev server on :6007
+pnpm --filter @pinagent/widget build-storybook    # static build (also a CI gate)
+```
+
+- **Stories live in `src/stories/`** and are excluded from the IIFE entry
+  (`src/index.ts` never imports them) — so they never reach the shipped bytes
+  and don't trip the widget-cascade check.
+- **`story-mount.ts`** mirrors `mount()`'s shadow-root + composer-iframe
+  scaffolding for presentational stories; visual states are driven by the same
+  CSS-only knobs the runtime uses (`body.mini`, `body[data-agent-state]`,
+  `body.needs-input`).
+- **`live-widget.ts`** (`Widget/Live`) wires the real controllers exactly as
+  `mount()` does, against an inert `WidgetWsClient(null)` and a faked
+  `/__pinagent` API — so picking, the composer, FAB drag/snap, and the
+  running-agents tray are fully interactive offline.
+- `build-storybook` is a turbo task gated in CI, so a broken story fails the PR.
