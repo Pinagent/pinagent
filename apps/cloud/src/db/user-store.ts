@@ -30,7 +30,10 @@ export function createPgUserStore(db: UserDb): UserStore {
         .from(users)
         .where(eq(users.id, profile.subject))
         .limit(1);
-      const user = userFromProfile(profile, existing ?? null, now);
+      // PR1 compile shim: still subject-keyed in Postgres (behavior unchanged).
+      // PR2 replaces this with `(connectionId, subject)` → synthetic-id
+      // resolution via the `auth.sso_identities` table.
+      const user = userFromProfile(profile.subject, profile, existing ?? null, now);
       await db
         .insert(users)
         .values(user)
