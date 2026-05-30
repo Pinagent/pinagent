@@ -189,12 +189,22 @@ export async function spawnAgent(ctx: AgentContext): Promise<void> {
  * Resumes the prior SDK session so the agent keeps full context. Resolves
  * once the new turn has been started, not when it finishes.
  *
- * Refuses if there's no prior session (the feedback was never spawn-mode)
- * or a turn is already in flight (no input queueing yet).
+ * Refuses if there's no prior session (the feedback was never spawn-mode).
+ *
+ * The widget queues follow-ups client-side and flushes the next one the
+ * instant it sees the prior turn's `result` event. That flush can reach us
+ * a few ms BEFORE the just-finished run has torn down its `active_runs`
+ * row (the teardown's `clearActiveRun` runs in `runQuery`'s finally, after
+ * the `result` was already published). The widget only ever has one turn
+ * in flight, so a lingering active run here is that finishing turn — not a
+ * parallel one — so we briefly wait for it to clear rather than bouncing
+ * the follow-up back. A bounced follow-up is effectively dropped: the
+ * widget re-queues it but has no further turn-end event to re-flush it on,
+ * so the agent appears to "just end" without addressing the follow-up.
  */
 export async function runFollowUpTurn(feedbackId: string, content: string): Promise<void> {
   const projectRoot = process.env.PINAGENT_PROJECT_ROOT ?? process.cwd();
-  if (await hasActiveRun(feedbackId, projectRoot)) {
+  if (!(await waitForRunToClear(feedbackId, projectRoot))) {
     throw new Error('a turn is already in progress for this feedback');
   }
 
@@ -269,6 +279,27 @@ export async function hasActiveRun(feedbackId: string, projectRoot?: string): Pr
   } catch {
     return false;
   }
+}
+
+/** Longest a follow-up waits for the prior turn's cleanup to land. */
+const FOLLOWUP_RUN_CLEAR_TIMEOUT_MS = 3_000;
+/** How often `waitForRunToClear` re-checks the `active_runs` row. */
+const FOLLOWUP_RUN_CLEAR_POLL_MS = 25;
+
+/**
+ * Wait (bounded) for any in-flight run for `feedbackId` to finish, polling
+ * `hasActiveRun`. Returns true once it's clear, or false if the timeout
+ * elapses with a run still active. Returns true immediately when nothing is
+ * in flight — the common case — so this is cheap. See `runFollowUpTurn` for
+ * why a follow-up tolerates a briefly-lingering run rather than bouncing it.
+ */
+async function waitForRunToClear(feedbackId: string, projectRoot: string): Promise<boolean> {
+  const deadline = Date.now() + FOLLOWUP_RUN_CLEAR_TIMEOUT_MS;
+  while (await hasActiveRun(feedbackId, projectRoot)) {
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, FOLLOWUP_RUN_CLEAR_POLL_MS));
+  }
+  return true;
 }
 
 /**
@@ -418,7 +449,11 @@ async function runQuery(opts: RunQueryOpts): Promise<void> {
   } finally {
     activeRuns.delete(opts.feedbackId);
     process.off(INTERRUPT_EVENT, onInterrupt);
-    void clearActiveRun(opts.projectRoot, opts.feedbackId);
+    // Await (don't fire-and-forget) so the `active_runs` row is gone before
+    // this run is considered finished — a follow-up the widget flushes off
+    // this turn's `result` then sees a clear slot instead of racing the
+    // delete. `waitForRunToClear` still absorbs any residual lag.
+    await clearActiveRun(opts.projectRoot, opts.feedbackId);
     // Any ask_user calls still hanging die with the run; otherwise the
     // SDK Promise would wait until ASK_TTL with no UI to answer.
     rejectAsk(opts.feedbackId, 'agent run ended');
