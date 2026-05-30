@@ -3,6 +3,9 @@ packages:
   - 'ee/packages/*'
   - 'apps/*'
   - 'examples/*'
+  # Standalone Expo demo — kept OUT of the workspace so its Expo/RN 0.74 (React 18.2)
+  # deps never enter the React 19 root lockfile. It installs its own tree with npm.
+  - '!examples/expo-app'
 allowBuilds:
   '@biomejs/biome': true
   better-sqlite3: true

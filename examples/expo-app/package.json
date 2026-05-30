@@ -1,0 +1,24 @@
+{
+  "name": "expo-app-example",
+  "version": "0.0.0",
+  "private": true,
+  "//": "Standalone Expo app — excluded from the pnpm workspace (see ../../pnpm-workspace.yaml). Its Expo/RN deps never enter the monorepo lockfile. It consumes @pinagent/react-native via in-tree relative imports (App.tsx / metro.config.js), so it declares no @pinagent dep here. Run it on its own: build @pinagent/react-native from the repo root first, then `cd examples/expo-app && npm install && npx expo start`.",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo start --ios",
+    "android": "expo start --android"
+  },
+  "dependencies": {
+    "expo": "~51.0.0",
+    "expo-status-bar": "~1.12.1",
+    "react": "18.2.0",
+    "react-native": "0.74.5",
+    "react-native-view-shot": "^3.8.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@types/react": "~18.2.79",
+    "typescript": "~5.3.3"
+  }
+}
