@@ -181,6 +181,7 @@ export async function spawnAgent(ctx: AgentContext): Promise<void> {
     prompt,
     isInitial: true,
     permissionMode,
+    targetFile: ctx.feedback.file,
   });
 }
 
@@ -256,6 +257,7 @@ export async function runFollowUpTurn(feedbackId: string, content: string): Prom
     isInitial: false,
     permissionMode,
     resume: rec.agentSessionId,
+    targetFile: rec.file,
   });
 }
 
@@ -352,6 +354,8 @@ interface RunQueryOpts {
   isInitial: boolean;
   permissionMode: PermissionMode;
   resume?: string;
+  /** Clicked element's source file, threaded to the provider for guide lookup. */
+  targetFile?: string | null;
 }
 
 /**
@@ -437,6 +441,7 @@ async function runQuery(opts: RunQueryOpts): Promise<void> {
     projectRoot: opts.projectRoot,
     feedbackId: opts.feedbackId,
     cwd: opts.cwd,
+    targetFile: opts.targetFile,
     prompt: opts.prompt,
     isInitial: opts.isInitial,
     permissionMode: permissionMode as AgentPermissionMode,
