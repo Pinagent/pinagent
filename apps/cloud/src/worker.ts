@@ -147,7 +147,7 @@ async function buildApp(config: CloudConfig) {
       memberships: store,
       audit,
     },
-    read: { store, authenticate, audit, meter },
+    read: { store, users, authenticate, audit, meter },
     members: { store, users, invitations, authenticate, audit },
     config: {
       store,

@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Elastic-2.0
-import type { OrganizationMembership } from '@pinagent/ee-auth';
 import { USAGE_KINDS, type UsageSummary } from '@pinagent/ee-billing';
 import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@pinagent/ui/components/ui/card';
 import { useState } from 'react';
-import type { CloudApiClient, Invitation } from './api-client';
+import type { CloudApiClient, Invitation, Member } from './api-client';
 import { UnauthorizedError } from './api-client';
 import { formatDate, formatDuration } from './format';
 import { MembersAdmin } from './MembersAdmin';
@@ -14,7 +13,7 @@ import { useAsync } from './use-async';
 
 export interface OverviewData {
   usage: UsageSummary;
-  members: OrganizationMembership[];
+  members: Member[];
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -52,7 +51,7 @@ export function OverviewView({ usage, members }: OverviewData) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-muted-foreground">
-                  <th className="py-2 font-medium">User</th>
+                  <th className="py-2 font-medium">Member</th>
                   <th className="py-2 font-medium">Role</th>
                   <th className="py-2 font-medium">Status</th>
                   <th className="py-2 font-medium">Joined</th>
@@ -61,7 +60,12 @@ export function OverviewView({ usage, members }: OverviewData) {
               <tbody>
                 {members.map((m) => (
                   <tr key={m.userId} className="border-t border-border">
-                    <td className="py-2 font-mono text-xs">{m.userId}</td>
+                    <td className="py-2">
+                      <div>{m.displayName ?? m.email ?? m.userId}</div>
+                      {m.displayName && m.email ? (
+                        <div className="text-xs text-muted-foreground">{m.email}</div>
+                      ) : null}
+                    </td>
                     <td className="py-2">
                       <Badge variant="secondary">{m.role}</Badge>
                     </td>

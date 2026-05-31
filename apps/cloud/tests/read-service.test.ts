@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Elastic-2.0
 import type { MembershipStore, OrganizationMembership, Role } from '@pinagent/ee-auth';
+import { createInMemoryUserStore } from '@pinagent/ee-auth';
 import { createInMemoryMeterSink, USAGE_KINDS } from '@pinagent/ee-billing';
 import { AUDIT_ACTIONS, createInMemoryAuditSink } from '@pinagent/ee-team-features';
 import { describe, expect, it } from 'vitest';
@@ -60,8 +61,19 @@ async function deps(asUserId: string | null): Promise<ReadServiceDeps> {
     actorUserId: 'u-admin',
     action: AUDIT_ACTIONS.sessionIssued,
   });
+  // u-admin has a user record (name + email); u-viewer has none → null fields.
+  const users = createInMemoryUserStore([
+    {
+      id: 'u-admin',
+      email: 'admin@acme.com',
+      displayName: 'Admin',
+      createdAt: '2026-01-01T00:00:00Z',
+      lastLoginAt: '2026-01-01T00:00:00Z',
+    },
+  ]);
   return {
     store: store(),
+    users,
     authenticate: async () => (asUserId ? { userId: asUserId } : null),
     audit,
     meter,
@@ -110,11 +122,18 @@ describe('GET /audit', () => {
 });
 
 describe('GET /members', () => {
-  it('lists members for an admin', async () => {
+  it('lists members enriched with the user email + display name', async () => {
     const res = await handleMembers(get('/members?organizationId=acme'), await deps('u-admin'));
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { members: unknown[] };
+    const body = (await res.json()) as {
+      members: { userId: string; email: string | null; displayName: string | null }[];
+    };
     expect(body.members).toHaveLength(2);
+    const admin = body.members.find((m) => m.userId === 'u-admin');
+    expect(admin).toMatchObject({ email: 'admin@acme.com', displayName: 'Admin' });
+    // u-viewer has no user record → null enrichment fields, membership still listed
+    const viewer = body.members.find((m) => m.userId === 'u-viewer');
+    expect(viewer).toMatchObject({ email: null, displayName: null });
   });
 
   it('403s for a viewer', async () => {

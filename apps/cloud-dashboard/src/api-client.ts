@@ -23,6 +23,12 @@ export interface MyOrg {
   status: string;
 }
 
+/** A member (GET /members) — the membership enriched with the user's identity. */
+export interface Member extends OrganizationMembership {
+  email: string | null;
+  displayName: string | null;
+}
+
 /** PUT /subscriptions body (org-id is taken from the query, not the body). */
 export interface SubscriptionInput {
   planId: string;
@@ -78,7 +84,7 @@ export interface CloudApiClient {
   /** The caller's own organizations (not org-scoped). */
   getMyOrgs(): Promise<MyOrg[]>;
   getUsage(organizationId: string): Promise<UsageSummary>;
-  getMembers(organizationId: string): Promise<OrganizationMembership[]>;
+  getMembers(organizationId: string): Promise<Member[]>;
   getInvitations(organizationId: string): Promise<Invitation[]>;
   inviteMember(organizationId: string, input: MemberInviteInput): Promise<void>;
   revokeInvitation(organizationId: string, email: string): Promise<void>;
@@ -153,8 +159,7 @@ export function createCloudApiClient(options: CloudApiClientOptions = {}): Cloud
   return {
     getMyOrgs: () => get('/me/orgs', (b) => (b.orgs as MyOrg[]) ?? []),
     getUsage: (org) => get(`/usage${orgQuery(org)}`, (b) => (b.usage as UsageSummary) ?? {}),
-    getMembers: (org) =>
-      get(`/members${orgQuery(org)}`, (b) => (b.members as OrganizationMembership[]) ?? []),
+    getMembers: (org) => get(`/members${orgQuery(org)}`, (b) => (b.members as Member[]) ?? []),
     getInvitations: (org) =>
       get(`/invitations${orgQuery(org)}`, (b) => (b.invitations as Invitation[]) ?? []),
     inviteMember: (org, input) => post(`/invitations${orgQuery(org)}`, input),
