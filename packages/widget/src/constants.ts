@@ -83,6 +83,11 @@ export const DOC_STYLES = `
 :root.pa-picking, :root.pa-picking * {
   cursor: ${PICKER_CURSOR_DATA_URL}, crosshair !important;
 }
+/* Region-snip sub-mode: a plain crosshair while the user drags out a
+   rectangle (overrides the pin cursor above). */
+:root.pa-region, :root.pa-region * {
+  cursor: crosshair !important;
+}
 
 .pa-iframe {
   position: absolute;

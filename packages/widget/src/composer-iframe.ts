@@ -433,7 +433,7 @@ export function wireComposerIframe(args: WireComposerArgs): void {
       // enough that the elements + a little surrounding context are
       // visible. When there are no extras, omit the crop and keep
       // today's full-page screenshot behavior.
-      const cropRect = computeUnionCropRect(c.target, c.extraAnchors);
+      const cropRect = computeUnionCropRect(c.target, c.extraAnchors, c.regions);
       const screenshot = await capturePageScreenshot(
         (node) =>
           node !== ctx.host &&
