@@ -7,6 +7,7 @@ import {
   recordEvent,
   recordUserMessage,
 } from './db/writes';
+import { attachMentionMenu } from './mention-menu';
 import type {
   AgentEvent,
   AgentState,
@@ -423,6 +424,16 @@ export function attachStreamHandler(
     // element) — even mid-turn, since sending now just queues.
     followSend.disabled =
       (followInput.value.trim().length === 0 && !attachedNode) || !!pendingAskId;
+  });
+  // `@`-mention file picker on the follow-up box (same UX as the pre-submit
+  // composer). Re-runs the send-enabled check when it rewrites the value.
+  attachMentionMenu({
+    textarea: followInput,
+    doc: idoc,
+    onValueChange: () => {
+      followSend.disabled =
+        (followInput.value.trim().length === 0 && !attachedNode) || !!pendingAskId;
+    },
   });
   followInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {

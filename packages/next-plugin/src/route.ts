@@ -22,6 +22,7 @@ import {
   listBranches,
   listChanges,
   listGitBranches,
+  listProjectFiles,
   listPullRequests,
   listWorktreeServers,
   openInEditor,
@@ -220,6 +221,17 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
       ...(conversationId ? { conversationId } : {}),
     });
     return json(200, events);
+  }
+
+  // /__pinagent/files?q= — file source for the composer's `@`-mention
+  // picker. Empty/plain `q` fuzzy-matches project files; a `q` starting
+  // with `/` or `~` browses that filesystem directory. Mirror of the
+  // vite-plugin handler.
+  if (slug.length === 1 && slug[0] === 'files') {
+    const url = new URL(req.url);
+    const q = url.searchParams.get('q') ?? '';
+    const result = await listProjectFiles(storage.root, q);
+    return json(200, result);
   }
 
   // /__pinagent/changes/:id/diff — full unified diff for one

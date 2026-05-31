@@ -39,6 +39,7 @@ import type {
   CreatePullRequestResult,
   DockProjectSettings,
   DockTransport,
+  FileListResult,
   HistorySearchHit,
   HistorySearchQuery,
   ListAuditEventsQuery,
@@ -271,6 +272,23 @@ const BulkReopenResultSchema = z
         })
         .loose(),
     ),
+  })
+  .loose();
+
+const FileListResultSchema = z
+  .object({
+    mode: z.enum(['project', 'path']),
+    entries: z.array(
+      z
+        .object({
+          path: z.string(),
+          name: z.string(),
+          dir: z.string(),
+          isDir: z.boolean(),
+        })
+        .loose(),
+    ),
+    truncated: z.boolean(),
   })
   .loose();
 
@@ -693,6 +711,12 @@ export class LocalTransport implements DockTransport {
       `/__pinagent/audit-log${qs ? `?${qs}` : ''}`,
       z.array(AuditEventSchema),
     );
+  }
+
+  async listFiles(query: string): Promise<FileListResult> {
+    const params = new URLSearchParams();
+    params.set('q', query);
+    return this.jsonGetValidated(`/__pinagent/files?${params.toString()}`, FileListResultSchema);
   }
 
   /**

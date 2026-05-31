@@ -23,6 +23,7 @@ import {
   listBranches,
   listChanges,
   listGitBranches,
+  listProjectFiles,
   listPullRequests,
   listWorktreeServers,
   openInEditor,
@@ -226,6 +227,17 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       if (req.method === 'GET' && url === '/__pinagent/git-branches') {
         const branches = await listGitBranches(storage.root);
         return json(res, 200, branches);
+      }
+
+      // GET /__pinagent/files?q= — file source for the composer's
+      // `@`-mention picker. Empty/plain `q` fuzzy-matches project files;
+      // a `q` starting with `/` or `~` browses that filesystem directory
+      // (the "reach anywhere" mode). See agent-runner/src/files.ts.
+      if (req.method === 'GET' && url.startsWith('/__pinagent/files')) {
+        const parsed = new URL(url, 'http://localhost');
+        const q = parsed.searchParams.get('q') ?? '';
+        const result = await listProjectFiles(storage.root, q);
+        return json(res, 200, result);
       }
 
       // GET /__pinagent/worktree-servers — the on-demand dev servers
