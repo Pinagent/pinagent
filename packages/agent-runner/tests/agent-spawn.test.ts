@@ -449,6 +449,72 @@ describe('spawnAgent', () => {
 
       expect(captured.capturedParams?.options?.permissionMode).toBe('bypassPermissions');
     });
+
+    it('dry-run installs a canUseTool guard that hard-denies writes + ExitPlanMode', async () => {
+      // Regression: plan mode alone doesn't stop a headless run from
+      // writing — the SDK auto-approves ExitPlanMode (no human to gate it)
+      // and edits flow. The guard must deny every mutating / mode-exiting
+      // tool so a dry run can only ever describe the change.
+      await store.patch({ permissionMode: 'dry-run' });
+      restoreSettings = () => store.patch({ permissionMode: 'auto' }).then(() => undefined);
+
+      const { id, storage } = await makeFeedback();
+      const rec = await storage.read(id);
+      const captured = scriptQuery([
+        {
+          type: 'result',
+          subtype: 'success',
+          num_turns: 0,
+          usage: { input_tokens: 0, output_tokens: 0 },
+          total_cost_usd: 0,
+          duration_ms: 0,
+        } as never,
+      ]);
+
+      const done = collectUntil(id, (e) => e.type === 'result');
+      await agent.spawnAgent({ projectRoot: PROJECT_ROOT, feedback: rec!, mode: 'inline' });
+      await done;
+      await waitForRunIdle(id);
+
+      const opts = captured.capturedParams?.options;
+      expect(opts?.permissionMode).toBe('plan');
+      const canUseTool = opts?.canUseTool;
+      expect(canUseTool).toBeTypeOf('function');
+
+      const ctx = { signal: new AbortController().signal, toolUseID: 't' };
+      for (const tool of ['ExitPlanMode', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'Bash']) {
+        const res = await canUseTool!(tool, {}, ctx);
+        expect(res.behavior, `${tool} should be denied in dry-run`).toBe('deny');
+      }
+      // Read-only tools still run so the agent can research its proposal.
+      const read = await canUseTool!('Read', { file_path: 'src/Foo.tsx' }, ctx);
+      expect(read.behavior).toBe('allow');
+    });
+
+    it('non-dry-run modes leave canUseTool unset (no behavior change)', async () => {
+      await store.patch({ permissionMode: 'auto' });
+      restoreSettings = () => store.patch({ permissionMode: 'auto' }).then(() => undefined);
+
+      const { id, storage } = await makeFeedback();
+      const rec = await storage.read(id);
+      const captured = scriptQuery([
+        {
+          type: 'result',
+          subtype: 'success',
+          num_turns: 0,
+          usage: { input_tokens: 0, output_tokens: 0 },
+          total_cost_usd: 0,
+          duration_ms: 0,
+        } as never,
+      ]);
+
+      const done = collectUntil(id, (e) => e.type === 'result');
+      await agent.spawnAgent({ projectRoot: PROJECT_ROOT, feedback: rec!, mode: 'inline' });
+      await done;
+      await waitForRunIdle(id);
+
+      expect(captured.capturedParams?.options?.canUseTool).toBeUndefined();
+    });
   });
 });
 

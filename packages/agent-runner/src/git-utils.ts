@@ -32,7 +32,13 @@ export function runGitCapture(cwd: string, args: string[]): Promise<GitCapture> 
       stderr += d.toString('utf8');
     });
     child.on('error', reject);
-    child.on('exit', (code) => resolve({ code: code ?? -1, stdout, stderr }));
+    // Resolve on 'close', not 'exit'. 'exit' fires when the process ends but
+    // before its stdout/stderr streams are guaranteed drained — under load the
+    // final 'data' chunk can land after 'exit', so a reader that resolves there
+    // sees truncated/empty stdout. For `rev-list --count` an empty stdout reads
+    // as `Number('') === 0`, silently masking a behind-base worktree as clean.
+    // 'close' fires only once all stdio streams have closed, so stdout is whole.
+    child.on('close', (code) => resolve({ code: code ?? -1, stdout, stderr }));
   });
 }
 
@@ -50,7 +56,9 @@ export function runGit(cwd: string, args: string[], logPath: string): Promise<vo
       stderr += d.toString('utf8');
     });
     child.on('error', rej);
-    child.on('exit', (code) => {
+    // 'close' (not 'exit') so the captured stderr is complete before we log it
+    // — see runGitCapture for the drain-race rationale.
+    child.on('close', (code) => {
       if (code === 0) {
         res();
       } else {
