@@ -115,6 +115,11 @@ function makeApp() {
       authenticate,
       audit,
     },
+    billing: {
+      subscriptions: createInMemorySubscriptionStore(),
+      now: () => '2026-01-01T00:00:00.000Z',
+      internalSecret: 'internal-secret',
+    },
     internal: { audit, relayInternalSecret: 'internal-secret' },
   });
 }

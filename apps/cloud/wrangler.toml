@@ -14,3 +14,8 @@ main = "src/worker.ts"
 compatibility_date = "2026-05-01"
 # Neon serverless driver pulls in Node built-ins (e.g. crypto/stream shims).
 compatibility_flags = ["nodejs_compat"]
+
+# Daily billing-period rollover — the Worker's `scheduled()` handler advances
+# every subscription whose period has elapsed (resets usage/quota windows).
+[triggers]
+crons = ["0 0 * * *"]
