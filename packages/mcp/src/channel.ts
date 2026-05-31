@@ -51,6 +51,16 @@ export async function startFeedbackWatcher(
         seen.add(rec.id);
         if (rec.status !== 'pending') continue;
 
+        // Cmd/Ctrl-click multi-select: the one comment applies to every
+        // picked element. The channel meta is a flat string map, so encode
+        // the extras as a compact `file:line:col` (or selector) list that
+        // the agent can act on alongside the primary file/line/col.
+        const additional = (rec.additionalAnchors ?? [])
+          .map((a) =>
+            a.file ? `${a.file}:${a.line ?? '?'}${a.col != null ? `:${a.col}` : ''}` : a.selector,
+          )
+          .join(', ');
+
         try {
           await mcp.notification({
             method: 'notifications/claude/channel',
@@ -63,6 +73,7 @@ export async function startFeedbackWatcher(
                 col: rec.col != null ? String(rec.col) : '',
                 selector: rec.selector,
                 url: rec.url,
+                ...(additional ? { additionalTargets: additional } : {}),
               },
             },
           });
@@ -91,6 +102,11 @@ export const CHANNEL_INSTRUCTIONS = [
   '     the developer clicked, so start there.',
   '  3. Call `resolve_feedback` with status="fixed" and a short note describing what you did.',
   '     If you cannot apply the change, use status="wontfix" with an explanation.',
+  '',
+  'If the tag carries an `additionalTargets` attribute (a comma-separated list of',
+  'file:line locations), the developer multi-selected several elements and the one',
+  'comment applies to ALL of them — address the primary `file`/`line` target AND',
+  'every location in `additionalTargets` before resolving.',
   '',
   'Multiple events may arrive together. Handle them in order.',
 ].join('\n');

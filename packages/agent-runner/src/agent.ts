@@ -655,7 +655,7 @@ async function appendResolution(
   await appendLog(logPath, lines.join('\n'));
 }
 
-function buildInitialPrompt(rec: FeedbackRecord, mode: SpawnAgentMode, cwd: string): string {
+export function buildInitialPrompt(rec: FeedbackRecord, mode: SpawnAgentMode, cwd: string): string {
   const where = rec.file
     ? `${rec.file}:${rec.line ?? '?'}${rec.col != null ? `:${rec.col}` : ''}`
     : rec.selector;
@@ -699,6 +699,28 @@ function buildInitialPrompt(rec: FeedbackRecord, mode: SpawnAgentMode, cwd: stri
           .join('\n')
       : '';
 
+  // Cmd/Ctrl-click multi-select: the developer's one comment applies to
+  // every picked element, not just the primary `Target` above. Enumerate
+  // the extras so the agent edits all of them rather than stopping at the
+  // first. The primary target stays at `Target:` for backward compatibility.
+  const additional = rec.additionalAnchors ?? [];
+  const additionalTargets =
+    additional.length > 0
+      ? [
+          '',
+          `The developer multi-selected ${additional.length + 1} elements and left a single`,
+          `comment that applies to ALL of them. Besides the primary Target above, also`,
+          `address these (apply the same change to each unless the comment says otherwise):`,
+          ...additional.map((a, i) => {
+            const aloc = a.file
+              ? `${a.file}:${a.line ?? '?'}${a.col != null ? `:${a.col}` : ''}`
+              : a.selector;
+            const comp = a.component ? ` (<${a.component}>)` : '';
+            return `  ${i + 2}. ${aloc}${comp}`;
+          }),
+        ].join('\n')
+      : '';
+
   return [
     'A developer submitted Pinagent feedback. Address it autonomously.',
     '',
@@ -708,6 +730,7 @@ function buildInitialPrompt(rec: FeedbackRecord, mode: SpawnAgentMode, cwd: stri
     componentPathLine,
     `Comment: "${rec.comment.replace(/\s+/g, ' ').slice(0, 200)}"`,
     instanceNote,
+    additionalTargets,
     worktreeContext,
     '',
     'Workflow:',
