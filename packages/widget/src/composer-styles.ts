@@ -306,6 +306,55 @@ export const COMPOSER_STYLES = `
   }
   textarea:disabled { background: #f5efd0; color: #5c5546; }
   #pa-ta { flex: 1; min-height: 80px; }
+
+  /* --- @-mention file picker (mention-menu.ts) ------------------- */
+  .pa-mention {
+    position: fixed;
+    z-index: 50;
+    overflow-y: auto;
+    background: ${BRAND_CREAM};
+    border: 1px solid #e8dfb0;
+    border-radius: 8px;
+    box-shadow: 0 8px 22px rgba(32, 27, 33, 0.22);
+    padding: 4px;
+    font-size: 12px;
+  }
+  .pa-mention[hidden] { display: none; }
+  .pa-mention-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 6px;
+    border-radius: 5px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .pa-mention-row.is-active { background: #f5efd0; }
+  .pa-mention-icon { display: inline-flex; flex: 0 0 auto; color: #8a8270; }
+  .pa-mention-icon svg { width: 13px; height: 13px; display: block; }
+  .pa-mention-name {
+    flex: 0 1 auto;
+    color: ${BRAND_INK};
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pa-mention-dir {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: #8a8270;
+    font-family: ${FONT_MONO};
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: right;
+    direction: rtl;
+  }
+  .pa-mention-empty, .pa-mention-more {
+    padding: 6px;
+    color: #8a8270;
+    font-size: 11px;
+  }
   .row { display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
   .row.spread { justify-content: space-between; }
   .btn {

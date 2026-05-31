@@ -34,6 +34,7 @@ import type {
   CreatePullRequestResult,
   DockProjectSettings,
   DockTransport,
+  FileListResult,
   HistoryMatchedField,
   HistorySearchHit,
   HistorySearchQuery,
@@ -480,7 +481,39 @@ export class MockTransport implements DockTransport {
       : FIXTURE_AUDIT_EVENTS;
     return filtered.slice(offset, offset + limit);
   }
+
+  async listFiles(query: string): Promise<FileListResult> {
+    await sleep(SIMULATED_LATENCY_MS);
+    const q = query.trim().toLowerCase();
+    const matched = q
+      ? FIXTURE_FILES.filter((p) => p.toLowerCase().includes(q))
+      : FIXTURE_FILES.slice();
+    return {
+      mode: 'project',
+      entries: matched.slice(0, 50).map((path) => {
+        const slash = path.lastIndexOf('/');
+        return {
+          path,
+          name: slash === -1 ? path : path.slice(slash + 1),
+          dir: slash === -1 ? '.' : path.slice(0, slash),
+          isDir: false,
+        };
+      }),
+      truncated: matched.length > 50,
+    };
+  }
 }
+
+/** A few plausible source paths so the picker has something to show in fixtures mode. */
+const FIXTURE_FILES = [
+  'src/App.tsx',
+  'src/components/Button.tsx',
+  'src/components/PriceCard.tsx',
+  'src/routes/index.tsx',
+  'src/lib/utils.ts',
+  'package.json',
+  'README.md',
+];
 
 // Synthetic audit feed for the fixtures preview. Derived from the
 // FIXTURE_CONVERSATIONS list so the timeline lines up with the rows the

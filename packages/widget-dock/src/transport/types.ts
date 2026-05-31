@@ -335,6 +335,32 @@ export interface DockTransport {
    * dock's History → Activity tab.
    */
   listAuditEvents(opts?: ListAuditEventsQuery): Promise<AuditEvent[]>;
+
+  /**
+   * File source for the reply box's `@`-mention picker. A plain/empty
+   * `query` fuzzy-matches project files; a `query` starting with `/` or
+   * `~` browses that filesystem directory (the "reach anywhere" mode).
+   * Backed by `GET /__pinagent/files`.
+   */
+  listFiles(query: string): Promise<FileListResult>;
+}
+
+/** One pickable row in the dock's `@`-mention dropdown. */
+export interface FileEntry {
+  /** The string inserted into the reply when picked. */
+  path: string;
+  /** Basename — the primary label. */
+  name: string;
+  /** Directory shown alongside the name. */
+  dir: string;
+  /** True for directories — the picker keeps browsing into them. */
+  isDir: boolean;
+}
+
+export interface FileListResult {
+  mode: 'project' | 'path';
+  entries: FileEntry[];
+  truncated: boolean;
 }
 
 export interface ListAuditEventsQuery {

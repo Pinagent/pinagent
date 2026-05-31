@@ -49,6 +49,8 @@ export type {
   CreatePullRequestResult,
   DockProjectSettings,
   DockTransport,
+  FileEntry,
+  FileListResult,
   HistoryMatchedField,
   HistorySearchHit,
   HistorySearchQuery,

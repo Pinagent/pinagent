@@ -7,6 +7,7 @@ import { getBrowserDb } from './db/client';
 import { getConversationMessages } from './db/reads';
 import { recordConversationStart } from './db/writes';
 import { isHopKey, isMinimizeAllKey, shouldIgnoreHotkey } from './keyboard';
+import { attachMentionMenu } from './mention-menu';
 import { capturePageScreenshot } from './screenshot';
 import type { PaLoc } from './selector';
 import { attachStreamHandler } from './stream-handler';
@@ -406,6 +407,19 @@ export function wireComposerIframe(args: WireComposerArgs): void {
       ta.setSelectionRange(ta.value.length, ta.value.length);
       postTextareaHeight();
     });
+  });
+
+  // `@`-mention file picker. Keeps submit-enabled + auto-grow in sync when
+  // it rewrites the textarea (it doesn't fire a synthetic input event). The
+  // menu's capture-phase keydown runs ahead of the Enter-to-submit handler
+  // above, so picking a file with Enter never accidentally submits.
+  attachMentionMenu({
+    textarea: ta,
+    doc: idoc,
+    onValueChange: () => {
+      submit.disabled = ta.value.trim().length === 0;
+      postTextareaHeight();
+    },
   });
 
   cancel.addEventListener('click', () => c.close());

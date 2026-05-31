@@ -29,6 +29,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnchorChip } from '../components/AnchorChip';
 import { AnchorContext } from '../components/AnchorContext';
 import { CostChip } from '../components/CostChip';
+import { useFileMention } from '../components/FileMention';
 import { TimestampDot } from '../components/TimestampDot';
 import { useConversation } from '../hooks/useConversation';
 import { useConversationStream } from '../hooks/useConversationStream';
@@ -85,6 +86,8 @@ export function ConversationDetailView({ id, onBack }: { id: string; onBack: () 
   }, [stream.items]);
 
   const [reply, setReply] = useState('');
+  // Wrap so `this` stays bound on the class-based local transport.
+  const mention = useFileMention({ listFiles: (q) => transport.listFiles(q), setValue: setReply });
   const [optimisticItems, setOptimisticItems] = useState<OptimisticItem[]>([]);
   const [answeredAskIds, setAnsweredAskIds] = useState<ReadonlySet<string>>(() => new Set());
   const [intent, setIntent] = useState<LifecycleIntent>(null);
@@ -365,19 +368,28 @@ export function ConversationDetailView({ id, onBack }: { id: string; onBack: () 
       )}
 
       <div className="border-t border-border bg-card p-3 space-y-2">
-        <Textarea
-          value={reply}
-          onChange={(e) => setReply(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          placeholder={isMock ? 'Sending disabled in mock mode' : 'Reply to the agent…'}
-          className="min-h-[64px] resize-y text-xs"
-          disabled={isMock}
-        />
+        <div className="relative">
+          {mention.popover}
+          <Textarea
+            value={reply}
+            onChange={(e) => {
+              setReply(e.target.value);
+              mention.onChange(e.target);
+            }}
+            onKeyDown={(e) => {
+              // The mention picker gets first crack at the key — when its
+              // menu is open, Enter/Tab pick a file instead of sending.
+              if (mention.onKeyDown(e)) return;
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            placeholder={isMock ? 'Sending disabled in mock mode' : 'Reply to the agent…'}
+            className="min-h-[64px] resize-y text-xs"
+            disabled={isMock}
+          />
+        </div>
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-muted-foreground">
             {isMock
