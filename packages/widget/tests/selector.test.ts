@@ -10,6 +10,7 @@ import {
   findLoc,
   findLocEl,
   findReanchorTarget,
+  locAncestors,
   locInstanceInfo,
   shortSelector,
 } from '../src/selector';
@@ -253,6 +254,52 @@ describe('findLocEl', () => {
     expect(findLocEl(document.querySelector('span') as Element)).toBeNull();
     // findLoc stays consistent with findLocEl.
     expect(findLoc(document.querySelector('span') as Element)).toBeNull();
+  });
+});
+
+describe('locAncestors', () => {
+  it('returns each tagged level innermost→outermost for a nested hierarchy', () => {
+    document.body.innerHTML =
+      '<div data-pa-loc="App.tsx:1:1">' +
+      '<aside data-pa-loc="Layout.tsx:5:2">' +
+      '<nav data-pa-loc="Nav.tsx:10:3">' +
+      '<a data-pa-loc="Link.tsx:20:5">Home</a>' +
+      '</nav></aside></div>';
+    const a = document.querySelector('a') as Element;
+    expect(locAncestors(a).map((el) => el.tagName)).toEqual(['A', 'NAV', 'ASIDE', 'DIV']);
+  });
+
+  it('starts at the hovered element when it is itself tagged', () => {
+    document.body.innerHTML =
+      '<section data-pa-loc="A.tsx:1:1"><button data-pa-loc="A.tsx:2:2">x</button></section>';
+    const button = document.querySelector('button') as Element;
+    expect(locAncestors(button)[0]).toBe(button);
+  });
+
+  it('skips untagged elements in the chain', () => {
+    document.body.innerHTML =
+      '<div data-pa-loc="A.tsx:1:1"><span><i data-pa-loc="A.tsx:3:3">x</i></span></div>';
+    const i = document.querySelector('i') as Element;
+    // The intermediate untagged <span> is omitted.
+    expect(locAncestors(i).map((el) => el.tagName)).toEqual(['I', 'DIV']);
+  });
+
+  it('omits an untagged start element (it has no resolvable level of its own)', () => {
+    document.body.innerHTML = '<div data-pa-loc="A.tsx:1:1"><span>x</span></div>';
+    const span = document.querySelector('span') as Element;
+    expect(locAncestors(span).map((el) => el.tagName)).toEqual(['DIV']);
+  });
+
+  it('ignores malformed data-pa-loc attributes', () => {
+    document.body.innerHTML =
+      '<div data-pa-loc="ok.tsx:1:1"><p data-pa-loc="broken"><b>x</b></p></div>';
+    const b = document.querySelector('b') as Element;
+    expect(locAncestors(b).map((el) => el.tagName)).toEqual(['DIV']);
+  });
+
+  it('returns an empty array when nothing is tagged', () => {
+    document.body.innerHTML = '<div><span>x</span></div>';
+    expect(locAncestors(document.querySelector('span') as Element)).toEqual([]);
   });
 });
 

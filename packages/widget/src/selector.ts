@@ -123,6 +123,27 @@ export function findLoc(start: Element): PaLoc | null {
 }
 
 /**
+ * Every element from `start` (inclusive) up to the document root that carries
+ * a *valid* `data-pa-loc`, ordered innermost→outermost. The picker uses this
+ * to let the user walk the highlight up the source-tagged ancestry with ↑/↓
+ * when a descendant visually covers the parent the developer actually wants to
+ * comment on (e.g. an `<a>` filling its `<nav>`/`<aside>`/`<div>` wrappers).
+ * Elements whose attribute is missing or unparseable are skipped, so every
+ * entry resolves to a real `file:line`.
+ */
+export function locAncestors(start: Element): Element[] {
+  const out: Element[] = [];
+  let cur: Element | null = start;
+  while (cur && cur.nodeType === 1) {
+    // findLocEl returns the nearest tagged ancestor; it equals `cur` only when
+    // `cur` itself carries a valid data-pa-loc — exactly the levels we want.
+    if (findLocEl(cur)?.el === cur) out.push(cur);
+    cur = cur.parentElement;
+  }
+  return out;
+}
+
+/**
  * Nearest enclosing component name, read from the `data-pa-comp`
  * attribute the Babel plugin stamps alongside `data-pa-loc`. Walks up
  * the same way `findLoc` does so the result lines up with the resolved
