@@ -471,14 +471,23 @@ export function createComposerController(ctx: WidgetContext): {
       bubbleActions.style.top = `${bubbleTop + BUBBLE_SIZE + 4}px`;
       bubbleActions.style.left = `${bubbleLeft}px`;
 
-      // Drag handle: nestled inside the iframe's top-right header
-      // corner — 12px in from the iframe's right and top edges, lining
-      // up visually with the card's 12px padding. Hidden when the
-      // composer is minimized to a bubble.
+      // Drag handle. Expanded: nestled inside the iframe's top-right header
+      // corner — 12px in from the right/top edges, lining up with the card's
+      // 12px padding. Minimal bar: a leading grip at the left edge, centered
+      // in the short bar (the card reserves matching left padding so it reads
+      // as part of the bar). Either placement drives the same userOffset drag,
+      // so a minimized widget repositions exactly like the expanded composer.
+      // Hidden only when the bar collapses to a dot — there's no card to grab.
       const handleW = 16;
-      dragHandle.style.top = `${iframeTop + 12}px`;
-      dragHandle.style.left = `${iframeLeft + IFRAME_W - handleW - 12}px`;
-      dragHandle.hidden = showDot || !composer.expanded;
+      const handleH = 22;
+      if (composer.expanded) {
+        dragHandle.style.top = `${iframeTop + 12}px`;
+        dragHandle.style.left = `${iframeLeft + IFRAME_W - handleW - 12}px`;
+      } else {
+        dragHandle.style.top = `${iframeTop + (MINI_H - handleH) / 2}px`;
+        dragHandle.style.left = `${iframeLeft + 7}px`;
+      }
+      dragHandle.hidden = showDot;
 
       // Pointer tail. Sits on whichever widget edge faces the click;
       // horizontally aligned with the click's X, clamped so it stays
