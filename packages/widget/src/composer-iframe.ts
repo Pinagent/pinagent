@@ -376,10 +376,10 @@ export function wireComposerIframe(args: WireComposerArgs): void {
     postTextareaHeight();
   });
   ta.addEventListener('keydown', (e) => {
-    // Cmd/Ctrl+Enter submits; plain Enter inserts a newline so
-    // long-form prompts read naturally. Matches the "⌘↵ submit"
-    // hint shown in the composer footer.
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    // Plain Enter submits; Shift+Enter (or Cmd/Ctrl+Enter) inserts a
+    // newline for multi-line prompts. Matches the "↵ submit" hint
+    // shown in the composer footer.
+    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
       e.preventDefault();
       if (!submit.disabled) submit.click();
     }
