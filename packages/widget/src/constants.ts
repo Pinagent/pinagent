@@ -39,10 +39,10 @@ export const ICON_MINIMIZE =
 export const COMPOSER_H = 320;
 export const STREAM_H = 340;
 // Minimized height — the single-line minimal bar (viewState: 'minimal').
-// Just the card padding (8px top/bottom) plus one ~24px action row, so the
-// status indicator, label, and icon cluster sit on one line. Reuses IFRAME_W
-// for width so reposition()/drag/pointer math is untouched.
-export const MINI_H = 46;
+// Just the card padding (4px top/bottom) plus one 24px action row, so the
+// status indicator, label, and icon cluster sit on one compact line. Reuses
+// IFRAME_W for width so reposition()/drag/pointer math is untouched.
+export const MINI_H = 36;
 export const IFRAME_W = 400;
 export const BUBBLE_SIZE = 36;
 
