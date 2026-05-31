@@ -28,6 +28,13 @@ export interface AgentRunRequest {
   feedbackId: string;
   /** Working directory the agent edits in (project root or a worktree). */
   cwd: string;
+  /**
+   * Project-relative source location of the clicked element (`src/Foo.tsx`),
+   * or null when the feedback only carries a CSS selector. Providers use it
+   * to surface the nearest `CLAUDE.md`/`AGENTS.md` to the edit — see
+   * `agent-guide.ts`.
+   */
+  targetFile?: string | null;
   /** The prompt for this turn (initial instructions or a follow-up reply). */
   prompt: string;
   /** True for the first turn of a conversation, false for follow-ups. */

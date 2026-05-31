@@ -6,6 +6,7 @@ import {
   type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentEvent } from '@pinagent/shared';
+import { findNearestAgentGuide, renderAgentGuide } from '../agent-guide';
 import {
   renderInitFooter,
   renderMessage,
@@ -166,6 +167,13 @@ async function buildSdkOptions(req: AgentRunRequest): Promise<Options> {
   const storedKey = await new SecretsStore(req.projectRoot).getAnthropicKey();
   if (storedKey) env.ANTHROPIC_API_KEY = storedKey;
 
+  // Surface the guide nearest to the clicked element. The `claude_code`
+  // preset already discovers guides by walking up from `cwd`, but that
+  // misses a nested `CLAUDE.md` sitting beside the target file below the
+  // worktree/project root — which is the one most relevant to this edit.
+  // Prefer CLAUDE.md (this is the Claude provider) but accept AGENTS.md.
+  const guide = findNearestAgentGuide(req.targetFile, req.projectRoot, { prefer: 'CLAUDE.md' });
+
   const options: Options = {
     cwd: req.cwd,
     permissionMode: req.permissionMode as PermissionMode,
@@ -189,6 +197,7 @@ async function buildSdkOptions(req: AgentRunRequest): Promise<Options> {
         `If you need clarification mid-task, call the \`${ASK_USER_TOOL_NAME}\``,
         'tool with a clear question (and optional `options` for closed-ended',
         'answers). Prefer asking over guessing on ambiguous requirements.',
+        ...(guide ? [renderAgentGuide(guide)] : []),
       ].join('\n'),
     },
   };
