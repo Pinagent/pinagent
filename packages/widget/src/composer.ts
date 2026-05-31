@@ -96,12 +96,13 @@ export function createComposerController(ctx: WidgetContext): {
   }
 
   /**
-   * Add a freshly-picked element to a running conversation as a queued
-   * follow-up (text location only — no screenshot, so it rides the
-   * existing `user_message` frame). Resolves the same loc/selector/
-   * component context `createComposer` does, folds it into a short
-   * message, and hands it to the live stream handler's enqueue. Expands
-   * the conversation so the user sees the queued item land.
+   * Add a freshly-picked element to an existing conversation (text location
+   * only — no screenshot, so it rides the existing `user_message` frame).
+   * Resolves the same loc/selector/component context `createComposer` does
+   * and hands it to the live stream handler. While a turn is in flight it
+   * queues a standalone "Also look at this…" message; while idle it attaches
+   * the element to the follow-up draft so the user can describe the change
+   * first. Expands the conversation either way so the result is visible.
    */
   function addNodeToComposer(
     composer: Composer,
@@ -109,7 +110,7 @@ export function createComposerController(ctx: WidgetContext): {
     _click: Click,
     _extras: PickExtra[] = [],
   ): void {
-    if (!composer.feedbackId || !composer.enqueueFollowUp) {
+    if (!composer.feedbackId || !composer.addPickedElement) {
       ctx.toast('Conversation not ready yet', 'error');
       return;
     }
@@ -128,8 +129,9 @@ export function createComposerController(ctx: WidgetContext): {
     const where = loc ? `${loc.file}:${loc.line}:${loc.col}` : selector;
     const inComp = component ? ` in <${component}>` : '';
     const content = `Also look at this <${tag}>${inComp} (${where}).`;
-    composer.enqueueFollowUp(content, node);
+    // Expand first so the focused follow-up input (idle case) is visible.
     swapTo(composer);
+    composer.addPickedElement(content, node);
   }
 
   /**
@@ -333,6 +335,9 @@ export function createComposerController(ctx: WidgetContext): {
       composer.agentState = next;
       bubble.classList.remove('pending', 'running', 'done', 'error');
       bubble.classList.add(next);
+      // A finished/errored run is no longer blocked on the user — drop the
+      // needs-input dot state even if a question was pending at the end.
+      if (next === 'done' || next === 'error') bubble.classList.remove('needs-input');
       if (next === 'done') bubble.innerHTML = '✓';
       else if (next === 'error') bubble.innerHTML = '✗';
       else bubble.innerHTML = '<div class="pa-bubble-spinner"></div>';
