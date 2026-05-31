@@ -1,5 +1,19 @@
 # @pinagent/nuxt-plugin
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [4b51350]
+- Updated dependencies [373027c]
+- Updated dependencies [93d4ac7]
+- Updated dependencies [6228c2a]
+- Updated dependencies [6d40d1f]
+- Updated dependencies [d68d610]
+- Updated dependencies [60f4d94]
+- Updated dependencies [327517d]
+  - @pinagent/vite-plugin@0.6.0
+
 ## 0.1.1
 
 ### Patch Changes

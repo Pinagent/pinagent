@@ -1,6 +1,6 @@
 {
   "name": "@pinagent/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Pinagent CLI: thin wrapper around the OSS packages. `pinagent init`, `pinagent mcp`, `pinagent transcript`.",
   "license": "Apache-2.0",
   "repository": {

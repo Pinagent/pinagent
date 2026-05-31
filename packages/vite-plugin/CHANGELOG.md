@@ -1,5 +1,98 @@
 # @pinagent/vite-plugin
 
+## 0.6.0
+
+### Minor Changes
+
+- 373027c: feat(widget): walk the picker highlight up the ancestry with ↑/↓
+
+  `document.elementFromPoint` always returns the innermost element under the
+  cursor, so a parent that a descendant visually covers — e.g. a `<nav>`,
+  `<aside>`, or `<div>` fully filled by the `<a>` inside it — was impossible
+  to hover or select. Picking now tracks the chain of source-tagged
+  (`data-pa-loc`) ancestors for the hovered element: ↑ walks the highlight
+  outward to the enclosing element, ↓ back toward the cursor, and a click
+  commits whichever level is currently highlighted. Moving the mouse rebuilds
+  the chain and snaps back to the hovered element. The pick hint advertises
+  ↑/↓ whenever a parent exists and shows the targeted tag once you climb.
+
+### Patch Changes
+
+- 4b51350: fix(widget): make "Add another element to this conversation" work
+
+  The expanded-widget footer button that adds another picked element to a
+  running conversation did nothing. It handed off to the picker via a
+  `postMessage` to the host window, but the composer iframe runs no scripts
+  of its own — the button's handler executes in the host realm, so the
+  message arrived with `event.source === window` rather than
+  `iframe.contentWindow`, and the receiving guard dropped it. The handler
+  now calls the picker controller directly (it already had the context and
+  composer in scope), so picking an element joins the conversation as a
+  queued follow-up as intended.
+
+- 93d4ac7: fix(widget): composer auto-grow, dot needs-input state, pick-into-draft
+
+  Three follow-on fixes to the spawned-agent widget:
+
+  - **Auto-grow no longer runs away.** The pre-submit composer textarea is
+    `flex: 1`, so measuring its `scrollHeight` reported the flex-filled height,
+    which grew the iframe, which re-filled the textarea — looping bigger on every
+    keystroke. The measure now drops the textarea out of flex to an auto height,
+    so it reflects the content and settles (capped at MAX_TA_H).
+  - **Collapsed dot:** the running spinner is smaller, and when the agent asks a
+    question (`ask_user`) the dot now shows a distinct needs-input state (alert
+    glyph + attention pulse) instead of the spinner, mirroring the minimal bar.
+  - **Adding an element when idle opens a draft.** Picking another element after
+    the agent finished no longer auto-fires a bare "Also look at this…" turn; it
+    attaches the element as a removable pill and focuses the follow-up input so
+    you can describe the change, then folds the element reference into your
+    message on send. Mid-turn picks still queue as before.
+
+- 6228c2a: fix(widget): submit the composer prompt with plain Enter (Shift+Enter for a newline)
+- 6d40d1f: feat(widget): `@`-mention file picker in the composer
+
+  Type `@` in the composer (the initial "describe the change" box and the
+  follow-up reply box) to get an autocomplete of project files — the browser
+  analogue of Claude Code's own `@`. Picking a file inserts its path into the
+  prompt so the agent gets an exact `file` reference; picking a directory keeps
+  the menu open to drill in. A query starting with `/` or `~` browses the real
+  filesystem instead of project files (the "reach anywhere" mode), which is safe
+  because the dev server is localhost-only.
+
+  Backed by a new `GET /__pinagent/files` endpoint (in both plugins) over a
+  shared `listProjectFiles` helper: `git ls-files` for project mode (respects
+  `.gitignore`, with an `fs`-walk fallback for non-git projects) and a directory
+  listing for path mode. The same picker is also wired into the dock's
+  conversation reply box.
+
+- d68d610: fix(widget): restore composer auto-grow and the "+N" extras hover-flash
+
+  These shared the root cause fixed for the add-element picker: the composer
+  `srcdoc` iframe runs no scripts of its own, so its event handlers execute
+  in the host realm. Their `iwin.parent.postMessage(...)` calls therefore
+  arrived with `event.source === window` (not `iframe.contentWindow`) and
+  were dropped by the receiving `ev.source` guard — so the composer textarea
+  never grew to fit a multi-line comment, and hovering the "+N more" badge
+  didn't flash the extra picked elements on the page.
+
+  The iframe wiring now calls the controller directly (`onTextareaHeight`,
+  `onExtrasHover`, `onExtrasLeave`) instead of posting messages, and the
+  now-dead `onIframeMessage` listener and its broken guard are removed.
+
+- 60f4d94: widget: add Control+` shortcut to minimize all spawned agents to their bubble state
+- 327517d: feat(widget): smaller, draggable minimized agent bar
+
+  The single-line minimal bar (`viewState: 'minimal'`) shown for a spawned agent
+  is now more compact and can be repositioned by hand:
+
+  - **Smaller.** The status spinner shrinks (13px → 10px, thinner stroke) and the
+    card's vertical padding tightens (8px → 4px), dropping the bar's height from
+    46px to 36px (`MINI_H`).
+  - **Draggable.** A leading grip now rides the left edge of the minimized bar, so
+    it can be dragged to reposition exactly like the expanded composer (same
+    `userOffset` machinery). Clicking elsewhere on the bar still expands it; the
+    grip is hidden only when the widget collapses to a floating dot.
+
 ## 0.5.0
 
 ### Minor Changes
