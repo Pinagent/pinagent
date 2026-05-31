@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import type { RegionRect } from './crop';
 import type { Composer } from './types';
 import type { WidgetWsClient } from './ws-client';
 
@@ -10,6 +11,8 @@ export type Click = { x: number; y: number };
 
 /** A single Cmd/Ctrl-click pick: its element plus where the cursor hit. */
 export type PickExtra = { target: Element; click: Click };
+
+export type { RegionRect } from './crop';
 
 /**
  * Shared state + cross-controller actions for one mounted widget.
@@ -57,8 +60,12 @@ export interface WidgetContext {
   hopToNextActive(): void;
   /** Composer: minimize every spawned agent to its bubble (smallest) state. */
   minimizeAll(): void;
-  /** Composer: open a fresh composer for a freshly-picked element. */
-  openComposer(target: Element, click: Click, extras?: PickExtra[]): void;
+  /**
+   * Composer: open a fresh composer for a freshly-picked element.
+   * `regions` are user-drawn snippet rects (document coords) that narrow
+   * the submitted screenshot; empty in the common element-pick case.
+   */
+  openComposer(target: Element, click: Click, extras?: PickExtra[], regions?: RegionRect[]): void;
   /**
    * Composer: add a freshly-picked element to an already-running
    * conversation as a queued follow-up (text location only). Used when the

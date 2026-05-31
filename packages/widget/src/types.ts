@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { WorktreeWireState } from '@pinagent/shared';
+import type { RegionRect } from './crop';
 import type { QuickAction } from './quick-actions';
 import type { PaLoc } from './selector';
 
@@ -181,6 +182,14 @@ export interface Composer {
    * common single-pick case.
    */
   extraAnchors: ExtraAnchor[];
+  /**
+   * User-drawn region snippets (document coords, CSS px incl. scroll)
+   * captured at pick time. They narrow the submitted screenshot to the
+   * drawn area(s) via `computeUnionCropRect` — the crop is baked into the
+   * uploaded image, so nothing about regions is persisted server-side.
+   * Empty in the common element-pick case.
+   */
+  regions: RegionRect[];
   /**
    * Enclosing-component context for the primary target, captured at pick
    * time from `data-pa-comp`. `component` is the nearest component name;

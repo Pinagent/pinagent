@@ -293,6 +293,37 @@ export const STYLES = `
   z-index: 2147483646;
   border-radius: 4px;
 }
+/* Order number for each committed selection (element or region). Sits at
+   the outline's top-left corner so multi-node picks read "1, 2, 3…". */
+.selection-badge {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: ${BRAND_INK};
+  color: ${BRAND_CREAM};
+  border: 2px solid ${BRAND_GOLD};
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 2px 6px rgba(32, 27, 33, 0.28);
+}
+/* The rubber-band rectangle drawn while in region-snip mode. Dashed so it
+   reads as "being drawn" vs. the solid committed selection outlines. */
+.region-drawing {
+  position: fixed;
+  pointer-events: none;
+  border: 2px dashed ${BRAND_INK};
+  background: rgba(255, 215, 0, 0.12);
+  z-index: 2147483646;
+  border-radius: 4px;
+}
 
 .hint {
   position: fixed;

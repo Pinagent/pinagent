@@ -162,12 +162,18 @@ function renderHeader(meta: ComposerMeta, esc: (s: string) => string): string {
  * fires from the badge's mouseenter (see `wireComposerIframe`).
  */
 function renderExtrasPopover(meta: ComposerMeta, esc: (s: string) => string): string {
-  const row = (tag: string, label: string | null, loc: PaLoc | null, primary: boolean): string =>
+  const row = (
+    tag: string,
+    label: string | null,
+    loc: PaLoc | null,
+    marker: 'picked' | number,
+  ): string =>
     `<div class="ex-row">` +
     `<div class="ex-head">` +
+    (typeof marker === 'number' ? `<span class="ex-num">${marker}</span>` : '') +
     `<span class="ex-pill">&lt;${esc(tag)}&gt;</span>` +
     (label ? `<span class="ex-label">"${esc(label)}"</span>` : '') +
-    (primary ? `<span class="ex-tag-primary">picked</span>` : '') +
+    (marker === 'picked' ? `<span class="ex-tag-primary">picked</span>` : '') +
     `</div>` +
     (loc ? `<div class="ex-loc">${esc(`${loc.file}:${loc.line}:${loc.col}`)}</div>` : '') +
     `</div>`;
@@ -175,8 +181,10 @@ function renderExtrasPopover(meta: ComposerMeta, esc: (s: string) => string): st
   return (
     `<div class="el-extras-pop" id="pa-extras-pop" role="tooltip">` +
     `<div class="ex-title">${total} elements selected</div>` +
-    row(meta.tag, meta.label, meta.loc, true) +
-    meta.extras.map((e) => row(e.tag, e.label, e.loc, false)).join('') +
+    row(meta.tag, meta.label, meta.loc, 'picked') +
+    // Extras are numbered 1-based in selection order, matching the badges
+    // drawn on the page while multi-picking and on the "+N" hover flash.
+    meta.extras.map((e, i) => row(e.tag, e.label, e.loc, i + 1)).join('') +
     `</div>`
   );
 }

@@ -12,7 +12,7 @@ import {
   MINI_H,
   STREAM_H,
 } from './constants';
-import type { Click, PickExtra, WidgetContext } from './context';
+import type { Click, PickExtra, RegionRect, WidgetContext } from './context';
 import { getBrowserDb } from './db/client';
 import type { PendingRow } from './db/reads';
 import { deleteConversation } from './db/writes';
@@ -49,7 +49,7 @@ import type {
  * picker (enter/exit) and FAB/tray (toast) through `ctx`.
  */
 export function createComposerController(ctx: WidgetContext): {
-  open(target: Element, click: Click, extras?: PickExtra[]): void;
+  open(target: Element, click: Click, extras?: PickExtra[], regions?: RegionRect[]): void;
   addNodeToComposer(composer: Composer, target: Element, click: Click, extras?: PickExtra[]): void;
   restore(row: PendingRow): void;
   swapTo(c: Composer): void;
@@ -86,11 +86,16 @@ export function createComposerController(ctx: WidgetContext): {
     if (next) swapTo(next);
   }
 
-  function open(target: Element, click: Click, extras: PickExtra[] = []) {
+  function open(
+    target: Element,
+    click: Click,
+    extras: PickExtra[] = [],
+    regions: RegionRect[] = [],
+  ) {
     if (ctx.expandedComposer) {
       ctx.expandedComposer.minimize();
     }
-    const composer = createComposer(target, click, extras);
+    const composer = createComposer(target, click, extras, regions);
     ctx.composers.add(composer);
     ctx.expandedComposer = composer;
   }
@@ -191,7 +196,12 @@ export function createComposerController(ctx: WidgetContext): {
     return true;
   }
 
-  function createComposer(target: Element, click: Click, extras: PickExtra[] = []): Composer {
+  function createComposer(
+    target: Element,
+    click: Click,
+    extras: PickExtra[] = [],
+    regions: RegionRect[] = [],
+  ): Composer {
     const locHit = findLocEl(target);
     const loc = locHit?.loc ?? null;
     const selector = shortSelector(target);
@@ -547,6 +557,7 @@ export function createComposerController(ctx: WidgetContext): {
       dataPaLoc,
       selector,
       extraAnchors,
+      regions,
       component,
       componentPath: compPath,
       instance,
@@ -817,12 +828,12 @@ export function createComposerController(ctx: WidgetContext): {
     }
     function flashExtras(): void {
       clearExtraFlashes();
-      for (const a of composer.extraAnchors) {
+      composer.extraAnchors.forEach((a, i) => {
         const t = findReanchorTarget(
           a.file && a.line != null && a.col != null ? `${a.file}:${a.line}:${a.col}` : null,
           a.selector,
         );
-        if (!t) continue;
+        if (!t) return;
         const r = t.getBoundingClientRect();
         const el = document.createElement('div');
         el.className = 'selection-outline';
@@ -830,9 +841,16 @@ export function createComposerController(ctx: WidgetContext): {
         el.style.left = `${r.left}px`;
         el.style.width = `${r.width}px`;
         el.style.height = `${r.height}px`;
+        // Numbered badge mirrors the picker's selection badges (1-based,
+        // in selection order) so hovering "+N" re-shows the same numbering
+        // the user saw while multi-picking.
+        const badge = document.createElement('span');
+        badge.className = 'selection-badge';
+        badge.textContent = String(i + 1);
+        el.appendChild(badge);
         ctx.root.appendChild(el);
         extraFlashes.push(el);
-      }
+      });
     }
 
     // Auto-grow the composer pane to fit the textarea as the user types.
