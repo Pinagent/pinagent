@@ -25,7 +25,7 @@ describe('BillingView', () => {
       BillingView({ subscription: subscription({ planId: 'pro' }), costControl: costControl() }),
     );
     expect(html).toContain('Pro'); // plan name resolved from planId
-    expect(html).toContain('2026-05-01T00:00:00.000Z');
+    expect(html).toContain('1 May 2026'); // friendly formatted period start
     expect(html).toContain('10,000'); // pro plan's included relay.session quota
     expect(html).toContain('5,000'); // cost-control cap
     expect(html).toContain('Block over cap');

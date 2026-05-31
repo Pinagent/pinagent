@@ -8,6 +8,7 @@ import { useState } from 'react';
 import type { CloudApiClient } from './api-client';
 import { UnauthorizedError } from './api-client';
 import { CostControlForm } from './CostControlForm';
+import { formatDate } from './format';
 import { KeyValue, type Row } from './KeyValue';
 import { SignIn } from './SignIn';
 import { SubscriptionForm } from './SubscriptionForm';
@@ -26,7 +27,7 @@ function subscriptionRows(subscription: Subscription): Row[] {
   const sessionQuota = plan ? quotaFor(plan, USAGE_KINDS.relaySession) : null;
   return [
     { label: 'Plan', value: plan?.name ?? subscription.planId },
-    { label: 'Billing period start', value: subscription.currentPeriodStart },
+    { label: 'Billing period start', value: formatDate(subscription.currentPeriodStart) },
     {
       label: 'Included relay sessions',
       value: sessionQuota === null ? 'Unlimited' : sessionQuota.toLocaleString(),

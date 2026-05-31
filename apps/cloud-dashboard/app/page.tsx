@@ -2,6 +2,8 @@
 import { PageShell } from './_components/PageShell';
 import { Dashboard } from './Dashboard';
 
+export const metadata = { title: 'Overview · Pinagent Cloud' };
+
 /**
  * The active org is read from `?org=` so the dashboard is deep-linkable.
  * In Next 16 `searchParams` is async.
