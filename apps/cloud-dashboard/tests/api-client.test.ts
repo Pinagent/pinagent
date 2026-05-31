@@ -266,3 +266,32 @@ describe('createCloudApiClient invitations', () => {
     );
   });
 });
+
+describe('createCloudApiClient member mutations', () => {
+  it('PATCHes a role change with userId in the query', async () => {
+    const { fetchFn, first } = fakeFetch(() => ({ body: {} }));
+    const client = createCloudApiClient({ fetch: fetchFn });
+    await client.changeMemberRole('o', 'usr_a', 'admin');
+    const call = first();
+    expect(call.url).toBe('/members?organizationId=o&userId=usr_a');
+    expect(call.init?.method).toBe('PATCH');
+    expect(JSON.parse(String(call.init?.body))).toEqual({ role: 'admin' });
+  });
+
+  it('DELETEs a member with userId in the query', async () => {
+    const { fetchFn, first } = fakeFetch(() => ({ body: {} }));
+    const client = createCloudApiClient({ fetch: fetchFn });
+    await client.removeMember('o', 'usr_a');
+    const call = first();
+    expect(call.url).toBe('/members?organizationId=o&userId=usr_a');
+    expect(call.init?.method).toBe('DELETE');
+  });
+
+  it('maps a 409 (last-owner) to a typed CloudApiError', async () => {
+    const conflict = createCloudApiClient({ fetch: fakeFetch(() => ({ status: 409 })).fetchFn });
+    await expect(conflict.changeMemberRole('o', 'usr_a', 'member')).rejects.toMatchObject({
+      name: 'CloudApiError',
+      status: 409,
+    });
+  });
+});

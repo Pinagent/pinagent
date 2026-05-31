@@ -30,35 +30,23 @@ describe('formatDuration', () => {
 });
 
 describe('OverviewView', () => {
-  it('renders usage totals and the member roster', () => {
+  it('renders the usage + member-count stats', () => {
+    // The roster table itself now lives in MembersTable; OverviewView owns the
+    // three stat cards.
     const html = renderToStaticMarkup(
       OverviewView({
         usage: { 'relay.session': 1234, 'relay.connection.seconds': 3661 },
-        members: [
-          member({ userId: 'usr_a', role: 'admin', displayName: 'Alice', email: 'alice@acme.com' }),
-          // no user record → falls back to the raw id; invited, never joined
-          member({ userId: 'usr_b', status: 'invited', joinedAt: null }),
-        ],
+        members: [member({ userId: 'usr_a' }), member({ userId: 'usr_b' })],
       }),
     );
 
-    expect(html).toContain('1,234');
-    expect(html).toContain('1h 1m');
-    // enriched: name primary, email secondary
-    expect(html).toContain('Alice');
-    expect(html).toContain('alice@acme.com');
-    expect(html).toContain('admin');
-    // member with no user record falls back to its id
-    expect(html).toContain('usr_b');
-    expect(html).toContain('invited');
-    // pending member shows a placeholder for the missing join date
-    expect(html).toContain('—');
+    expect(html).toContain('1,234'); // relay sessions
+    expect(html).toContain('1h 1m'); // connection time
+    expect(html).toContain('>2<'); // member count
   });
 
-  it('shows an empty state with no members', () => {
+  it('falls usage back to zero with no data', () => {
     const html = renderToStaticMarkup(OverviewView({ usage: {}, members: [] }));
-    expect(html).toContain('No members yet.');
-    // usage falls back to zero
     expect(html).toContain('>0<');
   });
 });
