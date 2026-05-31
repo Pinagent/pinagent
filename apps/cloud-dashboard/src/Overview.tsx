@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { USAGE_KINDS, type UsageSummary } from '@pinagent/ee-billing';
-import { Badge } from '@pinagent/ui/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@pinagent/ui/components/ui/card';
+import { Card, CardContent } from '@pinagent/ui/components/ui/card';
 import { useState } from 'react';
 import type { CloudApiClient, Invitation, Member } from './api-client';
-import { UnauthorizedError } from './api-client';
-import { formatDate, formatDuration } from './format';
+import { CloudApiError, UnauthorizedError } from './api-client';
+import { formatDuration } from './format';
 import { MembersAdmin } from './MembersAdmin';
+import { MembersTable, memberLabel } from './MembersTable';
 import { SignIn } from './SignIn';
 import { LoadError, Loading } from './states';
 import { useAsync } from './use-async';
@@ -39,55 +39,21 @@ export function OverviewView({ usage, members }: OverviewData) {
         <Stat label="Connection time" value={formatDuration(connectionSeconds)} />
         <Stat label="Members" value={members.length.toLocaleString()} />
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Members</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {members.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No members yet.</p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-muted-foreground">
-                  <th className="py-2 font-medium">Member</th>
-                  <th className="py-2 font-medium">Role</th>
-                  <th className="py-2 font-medium">Status</th>
-                  <th className="py-2 font-medium">Joined</th>
-                </tr>
-              </thead>
-              <tbody>
-                {members.map((m) => (
-                  <tr key={m.userId} className="border-t border-border">
-                    <td className="py-2">
-                      <div>{m.displayName ?? m.email ?? m.userId}</div>
-                      {m.displayName && m.email ? (
-                        <div className="text-xs text-muted-foreground">{m.email}</div>
-                      ) : null}
-                    </td>
-                    <td className="py-2">
-                      <Badge variant="secondary">{m.role}</Badge>
-                    </td>
-                    <td className="py-2">
-                      <Badge variant="outline">{m.status}</Badge>
-                    </td>
-                    <td className="py-2 text-muted-foreground">
-                      {m.joinedAt ? formatDate(m.joinedAt) : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
 interface OverviewLoad extends OverviewData {
   invitations: Invitation[];
+}
+
+/** Map a member-mutation failure to a friendly message. */
+function memberActionError(err: unknown): string {
+  if (err instanceof CloudApiError) {
+    if (err.status === 409) return 'That change would leave the organization without an owner.';
+    if (err.status === 403) return 'You don’t have permission to make that change.';
+  }
+  return err instanceof Error ? err.message : String(err);
 }
 
 /** Data-loading container. */
@@ -100,6 +66,17 @@ export function Overview({
 }) {
   const [reloadKey, setReloadKey] = useState(0);
   const reload = () => setReloadKey((k) => k + 1);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  async function runAction(action: () => Promise<unknown>): Promise<void> {
+    setActionError(null);
+    try {
+      await action();
+      reload();
+    } catch (err) {
+      setActionError(memberActionError(err));
+    }
+  }
 
   const state = useAsync<OverviewLoad>(async () => {
     const [usage, members, invitations] = await Promise.all([
@@ -118,6 +95,21 @@ export function Overview({
   return (
     <div className="flex flex-col gap-6">
       <OverviewView usage={state.value.usage} members={state.value.members} />
+      {actionError ? (
+        <p className="text-sm text-destructive" role="alert">
+          {actionError}
+        </p>
+      ) : null}
+      <MembersTable
+        members={state.value.members}
+        onChangeRole={(userId, role) =>
+          runAction(() => client.changeMemberRole(organizationId, userId, role))
+        }
+        onRemove={(m) => {
+          if (!window.confirm(`Remove ${memberLabel(m)} from the organization?`)) return;
+          runAction(() => client.removeMember(organizationId, m.userId));
+        }}
+      />
       <MembersAdmin
         invitations={state.value.invitations}
         onInvite={async (input) => {

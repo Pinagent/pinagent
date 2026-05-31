@@ -85,6 +85,8 @@ export interface CloudApiClient {
   getMyOrgs(): Promise<MyOrg[]>;
   getUsage(organizationId: string): Promise<UsageSummary>;
   getMembers(organizationId: string): Promise<Member[]>;
+  changeMemberRole(organizationId: string, userId: string, role: string): Promise<void>;
+  removeMember(organizationId: string, userId: string): Promise<void>;
   getInvitations(organizationId: string): Promise<Invitation[]>;
   inviteMember(organizationId: string, input: MemberInviteInput): Promise<void>;
   revokeInvitation(organizationId: string, email: string): Promise<void>;
@@ -147,6 +149,17 @@ export function createCloudApiClient(options: CloudApiClientOptions = {}): Cloud
     if (!res.ok) throw new CloudApiError(res.status, `POST ${path} failed (${res.status})`);
   }
 
+  async function patch(path: string, body: unknown): Promise<void> {
+    const res = await fetchFn(`${base}${path}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 401) throw new UnauthorizedError();
+    if (!res.ok) throw new CloudApiError(res.status, `PATCH ${path} failed (${res.status})`);
+  }
+
   async function del(path: string): Promise<void> {
     const res = await fetchFn(`${base}${path}`, { method: 'DELETE', credentials: 'include' });
     if (res.status === 401) throw new UnauthorizedError();
@@ -160,6 +173,10 @@ export function createCloudApiClient(options: CloudApiClientOptions = {}): Cloud
     getMyOrgs: () => get('/me/orgs', (b) => (b.orgs as MyOrg[]) ?? []),
     getUsage: (org) => get(`/usage${orgQuery(org)}`, (b) => (b.usage as UsageSummary) ?? {}),
     getMembers: (org) => get(`/members${orgQuery(org)}`, (b) => (b.members as Member[]) ?? []),
+    changeMemberRole: (org, userId, role) =>
+      patch(`/members${orgQuery(org)}&userId=${encodeURIComponent(userId)}`, { role }),
+    removeMember: (org, userId) =>
+      del(`/members${orgQuery(org)}&userId=${encodeURIComponent(userId)}`),
     getInvitations: (org) =>
       get(`/invitations${orgQuery(org)}`, (b) => (b.invitations as Invitation[]) ?? []),
     inviteMember: (org, input) => post(`/invitations${orgQuery(org)}`, input),
