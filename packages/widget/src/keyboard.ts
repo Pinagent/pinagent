@@ -21,6 +21,18 @@ export function isHopKey(e: KeyboardEvent): boolean {
 }
 
 /**
+ * Hotkey for "minimize every spawned agent to a bubble." Control+`
+ * (the backtick/tilde key). Ctrl-based on purpose: `shouldIgnoreHotkey`
+ * bails on any modifier, so this can't piggyback on the plain-key
+ * hotkeys — it carries its own modifier guard instead.
+ */
+export function isMinimizeAllKey(e: KeyboardEvent): boolean {
+  if (!e.ctrlKey) return false;
+  if (e.metaKey || e.altKey) return false;
+  return e.key === '`' || e.key === '~' || e.code === 'Backquote';
+}
+
+/**
  * Pick the next composer to expand from a list of currently-active
  * (running or pending) composers, given the currently-expanded one.
  * Pure: no DOM, no side effects — the caller does the swap.

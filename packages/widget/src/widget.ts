@@ -7,7 +7,7 @@ import type { State, WidgetContext } from './context';
 import { flushBrowserDb, initBrowserDb } from './db/client';
 import { listPendingForCurrentPage } from './db/reads';
 import { createFabTray } from './fab-tray';
-import { isHopKey, shouldIgnoreHotkey } from './keyboard';
+import { isHopKey, isMinimizeAllKey, shouldIgnoreHotkey } from './keyboard';
 import { createPicker } from './picker';
 import { buildPinIcon } from './pin-icon';
 import { STYLES } from './styles';
@@ -100,6 +100,7 @@ export function mount(): void {
     applyFabPresentation: unwired,
     swapTo: unwired,
     hopToNextActive: unwired,
+    minimizeAll: unwired,
     openComposer: unwired,
     addNodeToComposer: unwired,
     bubbleOwner: unwired,
@@ -130,6 +131,14 @@ export function mount(): void {
 
   const fabTray = createFabTray(ctx);
   ctx.applyFabPresentation = fabTray.applyFabPresentation;
+
+  // Minimize every spawned agent to its bubble (smallest) state. Each
+  // composer's `toBubble()` already nulls `expandedComposer` if it was
+  // the expanded one; we clear it afterward too, defensively.
+  ctx.minimizeAll = () => {
+    for (const c of ctx.composers) c.toBubble();
+    ctx.expandedComposer = null;
+  };
 
   // Fire-and-forget OPFS-in-Worker DB init. Once ready, walk the
   // cache for any conversations that were still `pending` when the
@@ -191,6 +200,17 @@ export function mount(): void {
       if (shouldIgnoreHotkey(e)) return;
       e.preventDefault();
       ctx.hopToNextActive();
+    },
+    { capture: true },
+  );
+
+  // Control+` minimizes every spawned agent down to its bubble.
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (!isMinimizeAllKey(e)) return;
+      e.preventDefault();
+      ctx.minimizeAll();
     },
     { capture: true },
   );
