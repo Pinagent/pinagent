@@ -8,7 +8,7 @@ import {
 } from './config-service';
 import { handleRelayEvents, type InternalServiceDeps } from './internal-service';
 import { handleSsoCallback, handleSsoStart, type LoginServiceDeps } from './login-service';
-import { handleInvitations, type MemberServiceDeps } from './member-service';
+import { handleInvitations, handleMemberWrite, type MemberServiceDeps } from './member-service';
 import {
   handleAudit,
   handleMembers,
@@ -29,6 +29,7 @@ import { handleSessionRequest, type SessionServiceDeps } from './session-service
  *   GET      /usage            → usage summary (admin read)
  *   GET      /audit            → audit events (admin read)
  *   GET      /members          → organization members (admin read)
+ *   PATCH/DELETE /members     → change a member's role / remove a member
  *   GET/POST/DELETE /invitations → list / invite / revoke (admin)
  *   GET/PUT  /subscriptions    → read/set the org's plan (admin config)
  *   GET/PUT  /cost-controls    → read/set the org's cost cap (admin config)
@@ -63,7 +64,10 @@ export function createCloudApp(deps: CloudAppDeps): { fetch(request: Request): P
         case '/audit':
           return handleAudit(request, deps.read);
         case '/members':
-          return handleMembers(request, deps.read);
+          // GET reads the roster; DELETE/PATCH mutate a member (member-service).
+          return request.method === 'GET'
+            ? handleMembers(request, deps.read)
+            : handleMemberWrite(request, deps.members);
         case '/invitations':
           return handleInvitations(request, deps.members);
         case '/me/orgs':

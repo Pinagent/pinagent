@@ -52,6 +52,10 @@ export const AUDIT_ACTIONS = {
   memberInvited: 'member.invited',
   /** An invitee accepted (consumed at SSO login) → active membership. */
   memberJoined: 'member.joined',
+  /** A member was removed from the org. */
+  memberRemoved: 'member.removed',
+  /** A member's role was changed. */
+  memberRoleChanged: 'member.role_changed',
   /** An org's billing period advanced (usage window reset). */
   periodRolled: 'billing.period.rolled',
 } as const;
