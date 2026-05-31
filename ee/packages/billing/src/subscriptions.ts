@@ -21,6 +21,8 @@ export interface Subscription {
 
 export interface SubscriptionStore {
   get(organizationId: string): Promise<Subscription | null>;
+  /** Every subscription — enumerated by the billing-period rollover pass. */
+  listAll(): Promise<Subscription[]>;
   upsert(subscription: Subscription): Promise<void>;
 }
 
@@ -67,6 +69,9 @@ export function createInMemorySubscriptionStore(seed: Subscription[] = []): Subs
   return {
     async get(organizationId: string): Promise<Subscription | null> {
       return byOrg.get(organizationId) ?? null;
+    },
+    async listAll(): Promise<Subscription[]> {
+      return [...byOrg.values()];
     },
     async upsert(subscription: Subscription): Promise<void> {
       byOrg.set(subscription.organizationId, subscription);

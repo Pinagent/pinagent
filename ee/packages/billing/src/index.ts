@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Elastic-2.0
 export const PACKAGE_NAME = '@pinagent/ee-billing';
 
+export { advanceElapsedPeriods, nextPeriodStart, type PeriodRoll } from './billing-period';
 export {
   createInMemoryMeterSink,
   type MeterSink,
@@ -19,6 +20,11 @@ export {
   quotaStatus,
   wouldExceedQuota,
 } from './plans';
+export {
+  type BillingReporter,
+  noopBillingReporter,
+  type PeriodRolloverEvent,
+} from './reporter';
 export {
   checkQuota,
   createInMemorySubscriptionStore,

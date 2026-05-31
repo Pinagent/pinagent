@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import type { AgentEvent } from '@pinagent/shared';
 import { nanoid } from 'nanoid';
+import { findNearestAgentGuide, renderAgentGuide } from '../agent-guide';
 import { summariseToolInput } from '../agent-render';
 import type { AgentProvider, AgentRunRequest, ProviderRunItem } from './types';
 
@@ -60,8 +61,15 @@ export class CliAgentProvider implements AgentProvider {
       sessionId,
     };
 
+    // A wrapped CLI has no separate system-prompt channel, so fold the
+    // guide nearest to the clicked element into the task prompt. Prefer
+    // AGENTS.md (the cross-agent convention a Codex-style CLI reads) but
+    // accept CLAUDE.md.
+    const guide = findNearestAgentGuide(req.targetFile, req.projectRoot, { prefer: 'AGENTS.md' });
+    const prompt = guide ? `${req.prompt}\n${renderAgentGuide(guide)}` : req.prompt;
+
     const args = [...config.argv.slice(1)];
-    if (config.promptMode === 'arg') args.push(req.prompt);
+    if (config.promptMode === 'arg') args.push(prompt);
 
     const child = spawn(config.argv[0] as string, args, {
       cwd: req.cwd,
@@ -84,7 +92,7 @@ export class CliAgentProvider implements AgentProvider {
     // run's outcome is owned by the exit/error handlers below.
     child.stdin.on('error', () => {});
     try {
-      if (config.promptMode === 'stdin') child.stdin.write(req.prompt);
+      if (config.promptMode === 'stdin') child.stdin.write(prompt);
       child.stdin.end();
     } catch {
       // Stream already destroyed (child gone) — nothing to feed it.

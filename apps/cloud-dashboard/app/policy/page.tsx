@@ -2,6 +2,8 @@
 import { PageShell } from '../_components/PageShell';
 import { PolicyClient } from './PolicyClient';
 
+export const metadata = { title: 'Policy · Pinagent Cloud' };
+
 export default async function PolicyPage({
   searchParams,
 }: {

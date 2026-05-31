@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { createOidcProvider, type SsoConnection } from '@pinagent/ee-auth';
+import { noopBillingReporter } from '@pinagent/ee-billing';
 import { createCloudApp } from './app';
 import { createBearerAuthenticator } from './authenticators';
+import { type BillingServiceDeps, runBillingRollover } from './billing-service';
 import { type CloudConfig, loadCloudConfig } from './config';
 import { createPgActiveSessionStore } from './db/active-session-store';
 import { createPgAuditSink } from './db/audit-sink';
@@ -27,12 +29,26 @@ import { createRelayClient } from './relay-client';
 
 type CloudEnv = Record<string, string | undefined>;
 
-let appPromise: Promise<{ fetch(request: Request): Promise<Response> }> | null = null;
+interface BuiltApp {
+  fetch(request: Request): Promise<Response>;
+  runRollover(): Promise<{ rolled: number }>;
+}
+
+let appPromise: Promise<BuiltApp> | null = null;
+
+function built(env: CloudEnv): Promise<BuiltApp> {
+  appPromise ??= buildApp(loadCloudConfig(env));
+  return appPromise;
+}
 
 export default {
   fetch(request: Request, env: CloudEnv): Promise<Response> {
-    appPromise ??= buildApp(loadCloudConfig(env));
-    return appPromise.then((app) => app.fetch(request));
+    return built(env).then((app) => app.fetch(request));
+  },
+  // Cloudflare Cron Trigger (see wrangler.toml) — advance elapsed billing
+  // periods. Loosely typed to avoid a hard dependency on @cloudflare/workers-types.
+  scheduled(_event: unknown, env: CloudEnv, ctx: { waitUntil(p: Promise<unknown>): void }): void {
+    ctx.waitUntil(built(env).then((app) => app.runRollover()));
   },
 };
 
@@ -94,7 +110,18 @@ async function buildApp(config: CloudConfig) {
     cookieName: config.sessionCookieName,
   });
 
-  return createCloudApp({
+  // Billing-period rollover. `noopBillingReporter` is the Stripe seam — a
+  // `createStripeReporter` (needs API keys) replaces it later. Triggered by the
+  // `scheduled()` Cron handler and the `/internal/billing/roll` endpoint.
+  const billing: BillingServiceDeps = {
+    subscriptions,
+    reporter: noopBillingReporter,
+    audit,
+    now: () => new Date().toISOString(),
+    internalSecret: config.relayInternalSecret,
+  };
+
+  const app = createCloudApp({
     session: {
       store,
       authenticate,
@@ -120,7 +147,7 @@ async function buildApp(config: CloudConfig) {
       memberships: store,
       audit,
     },
-    read: { store, authenticate, audit, meter },
+    read: { store, users, authenticate, audit, meter },
     members: { store, users, invitations, authenticate, audit },
     config: {
       store,
@@ -131,6 +158,12 @@ async function buildApp(config: CloudConfig) {
       activeSessions,
       relay,
     },
+    billing,
     internal: { audit, meter, activeSessions, relayInternalSecret: config.relayInternalSecret },
   });
+
+  return {
+    fetch: (request: Request) => app.fetch(request),
+    runRollover: () => runBillingRollover(billing),
+  };
 }

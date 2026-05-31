@@ -20,6 +20,10 @@ export function createPgSubscriptionStore(db: MembershipDb): SubscriptionStore {
       return row ?? null;
     },
 
+    async listAll(): Promise<Subscription[]> {
+      return db.select().from(subscriptions);
+    },
+
     async upsert(subscription: Subscription): Promise<void> {
       await db
         .insert(subscriptions)

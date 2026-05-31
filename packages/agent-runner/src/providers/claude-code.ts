@@ -6,6 +6,7 @@ import {
   type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentEvent } from '@pinagent/shared';
+import { findNearestAgentGuide, renderAgentGuide } from '../agent-guide';
 import {
   renderInitFooter,
   renderMessage,
@@ -36,6 +37,21 @@ const PINAGENT_MCP_TOOLS = [
   'mcp__pinagent__get_source_context',
   'mcp__pinagent__list_pending_feedback',
 ];
+
+/**
+ * Tools a dry-run must never be allowed to call: anything that writes to
+ * the workspace, runs a command, or transitions the agent out of plan
+ * mode. See `buildSdkOptions` for why denying `ExitPlanMode` is the load-
+ * bearing entry — without it a headless `plan`-mode run silently writes.
+ */
+const DRY_RUN_DENIED_TOOLS = new Set([
+  'ExitPlanMode',
+  'Edit',
+  'MultiEdit',
+  'Write',
+  'NotebookEdit',
+  'Bash',
+]);
 
 /**
  * The default, most capable provider: the Claude Agent SDK. Runs the full
@@ -166,6 +182,13 @@ async function buildSdkOptions(req: AgentRunRequest): Promise<Options> {
   const storedKey = await new SecretsStore(req.projectRoot).getAnthropicKey();
   if (storedKey) env.ANTHROPIC_API_KEY = storedKey;
 
+  // Surface the guide nearest to the clicked element. The `claude_code`
+  // preset already discovers guides by walking up from `cwd`, but that
+  // misses a nested `CLAUDE.md` sitting beside the target file below the
+  // worktree/project root — which is the one most relevant to this edit.
+  // Prefer CLAUDE.md (this is the Claude provider) but accept AGENTS.md.
+  const guide = findNearestAgentGuide(req.targetFile, req.projectRoot, { prefer: 'CLAUDE.md' });
+
   const options: Options = {
     cwd: req.cwd,
     permissionMode: req.permissionMode as PermissionMode,
@@ -189,9 +212,34 @@ async function buildSdkOptions(req: AgentRunRequest): Promise<Options> {
         `If you need clarification mid-task, call the \`${ASK_USER_TOOL_NAME}\``,
         'tool with a clear question (and optional `options` for closed-ended',
         'answers). Prefer asking over guessing on ambiguous requirements.',
+        ...(guide ? [renderAgentGuide(guide)] : []),
       ].join('\n'),
     },
   };
+
+  // Dry-run ('plan') has to be a hard guarantee, not a hope the model
+  // stays compliant. Plan mode keeps the agent read-only only until it
+  // calls `ExitPlanMode` to ask permission to proceed — and headless
+  // `query()` has no human to gate that request, so the SDK auto-approves
+  // it, drops into an edit-capable mode, and the "dry run" writes files.
+  // (The spawn prompt actively pushes there: it tells the agent to edit
+  // and resolve.) We install a permission gate that denies every mutating
+  // / mode-exiting tool, so a dry run can only ever describe the change.
+  // The pinagent MCP tools + `ask_user` stay allowed via `allowedTools`,
+  // which auto-approve ahead of `canUseTool` and never touch the tree.
+  if (req.permissionMode === 'plan') {
+    options.canUseTool = async (toolName) =>
+      DRY_RUN_DENIED_TOOLS.has(toolName)
+        ? {
+            behavior: 'deny',
+            message:
+              `Dry-run mode: \`${toolName}\` is blocked. Pinagent is in dry-run ` +
+              '(plan) mode — describe the change you would make, but do not edit ' +
+              'files, run commands, or exit plan mode.',
+          }
+        : { behavior: 'allow' };
+  }
+
   if (req.resume) options.resume = req.resume;
   return options;
 }

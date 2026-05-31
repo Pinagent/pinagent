@@ -100,7 +100,7 @@ function makeApp() {
       // above is keyed on — so the login → /sessions handshake resolves.
       users: createInMemoryUserStore([], { generateId: () => SYNTHETIC_USER_ID }),
     },
-    read: { store, authenticate, audit, meter },
+    read: { store, users: createInMemoryUserStore(), authenticate, audit, meter },
     config: {
       store,
       authenticate,
@@ -114,6 +114,11 @@ function makeApp() {
       invitations: createInMemoryInvitationStore(),
       authenticate,
       audit,
+    },
+    billing: {
+      subscriptions: createInMemorySubscriptionStore(),
+      now: () => '2026-01-01T00:00:00.000Z',
+      internalSecret: 'internal-secret',
     },
     internal: { audit, relayInternalSecret: 'internal-secret' },
   });

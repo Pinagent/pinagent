@@ -2,6 +2,8 @@
 import { PageShell } from '../_components/PageShell';
 import { BillingClient } from './BillingClient';
 
+export const metadata = { title: 'Billing · Pinagent Cloud' };
+
 export default async function BillingPage({
   searchParams,
 }: {

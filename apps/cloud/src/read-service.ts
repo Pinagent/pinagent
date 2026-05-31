@@ -6,6 +6,7 @@ import {
   type MembershipStore,
   type OrganizationMembership,
   type Permission,
+  type UserStore,
 } from '@pinagent/ee-auth';
 import type { MeterSink } from '@pinagent/ee-billing';
 import type { AuditSink } from '@pinagent/ee-team-features';
@@ -25,9 +26,17 @@ import type { Authenticator } from './session-service';
  */
 export interface ReadServiceDeps {
   store: MembershipStore;
+  /** Resolves a membership's `userId` to the user record for `/members`. */
+  users: UserStore;
   authenticate: Authenticator;
   audit: AuditSink;
   meter: MeterSink;
+}
+
+/** A membership enriched with the user's email + display name for the UI. */
+export interface EnrichedMember extends OrganizationMembership {
+  email: string | null;
+  displayName: string | null;
 }
 
 const MAX_AUDIT_LIMIT = 500;
@@ -50,11 +59,22 @@ export async function handleAudit(request: Request, deps: ReadServiceDeps): Prom
   return json({ organizationId: ctx.organizationId, events }, 200);
 }
 
-/** GET /members — the organization's members. */
+/**
+ * GET /members — the organization's members, each enriched with the user's
+ * email + display name (resolved from the synthetic `userId`) so the UI can
+ * show a human label instead of an opaque id. `email`/`displayName` are `null`
+ * when no user record backs the membership.
+ */
 export async function handleMembers(request: Request, deps: ReadServiceDeps): Promise<Response> {
   const ctx = await openOrgRead(request, deps, 'org:settings');
   if (ctx.denied) return ctx.denied;
-  const members = await deps.store.listMembers(ctx.organizationId);
+  const memberships = await deps.store.listMembers(ctx.organizationId);
+  const members: EnrichedMember[] = await Promise.all(
+    memberships.map(async (m) => {
+      const user = await deps.users.get(m.userId);
+      return { ...m, email: user?.email ?? null, displayName: user?.displayName ?? null };
+    }),
+  );
   return json({ organizationId: ctx.organizationId, members }, 200);
 }
 

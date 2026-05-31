@@ -6,7 +6,11 @@ import {
   type InvitationStore,
 } from '@pinagent/ee-auth';
 import { describe, expect, it } from 'vitest';
-import { handleInvitations, type MemberServiceDeps } from '../src/member-service';
+import {
+  handleInvitations,
+  handleMemberWrite,
+  type MemberServiceDeps,
+} from '../src/member-service';
 
 const NOW = '2026-05-30T00:00:00.000Z';
 
@@ -205,5 +209,201 @@ describe('GET / DELETE /invitations', () => {
       (await handleInvitations(req('GET', '/invitations?organizationId=acme'), deps(null))).status,
     ).toBe(401);
     expect((await handleInvitations(req('GET', '/invitations'), deps('u-admin'))).status).toBe(400);
+  });
+});
+
+/** Flexible roster (incl. owners) that captures upserts + removes. */
+function roster(members: OrganizationMembership[]) {
+  const list = [...members];
+  const upserts: OrganizationMembership[] = [];
+  const removes: Array<[string, string]> = [];
+  const store: MembershipStore = {
+    async getMembership(org, user) {
+      return org === 'acme' ? (list.find((m) => m.userId === user) ?? null) : null;
+    },
+    async getOrganization() {
+      return null;
+    },
+    async listMembers() {
+      return list;
+    },
+    async listMembershipsByUser() {
+      return [];
+    },
+    async upsertMembership(m) {
+      upserts.push(m);
+      const i = list.findIndex((x) => x.userId === m.userId);
+      if (i >= 0) list[i] = m;
+      else list.push(m);
+    },
+    async removeMembership(org, user) {
+      removes.push([org, user]);
+      const i = list.findIndex((x) => x.userId === user);
+      if (i >= 0) list.splice(i, 1);
+    },
+  };
+  return { store, upserts, removes };
+}
+
+function mgmtDeps(
+  asUserId: string,
+  members: OrganizationMembership[],
+): MemberServiceDeps & {
+  upserts: OrganizationMembership[];
+  removes: Array<[string, string]>;
+} {
+  const { store, upserts, removes } = roster(members);
+  return {
+    store,
+    users: createInMemoryUserStore(),
+    invitations: createInMemoryInvitationStore(),
+    authenticate: async () => ({ userId: asUserId }),
+    now: () => NOW,
+    upserts,
+    removes,
+  };
+}
+
+const TEAM = () => [
+  member('u-owner', 'owner'),
+  member('u-admin', 'admin'),
+  member('u-member', 'member'),
+  member('u-viewer', 'viewer'),
+];
+
+describe('DELETE /members (remove)', () => {
+  it('an admin removes a regular member', async () => {
+    const d = mgmtDeps('u-admin', TEAM());
+    const res = await handleMemberWrite(
+      req('DELETE', '/members?organizationId=acme&userId=u-member'),
+      d,
+    );
+    expect(res.status).toBe(200);
+    expect(d.removes).toEqual([['acme', 'u-member']]);
+  });
+
+  it('403s for a viewer (member:remove required)', async () => {
+    const d = mgmtDeps('u-viewer', TEAM());
+    const res = await handleMemberWrite(
+      req('DELETE', '/members?organizationId=acme&userId=u-member'),
+      d,
+    );
+    expect(res.status).toBe(403);
+    expect(d.removes).toHaveLength(0);
+  });
+
+  it('403s when an admin tries to remove an owner', async () => {
+    const d = mgmtDeps('u-admin', TEAM());
+    const res = await handleMemberWrite(
+      req('DELETE', '/members?organizationId=acme&userId=u-owner'),
+      d,
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('an owner removes another owner when more than one exists', async () => {
+    const d = mgmtDeps('u-owner', [member('u-owner', 'owner'), member('u-owner2', 'owner')]);
+    const res = await handleMemberWrite(
+      req('DELETE', '/members?organizationId=acme&userId=u-owner2'),
+      d,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('409s removing the last owner', async () => {
+    const d = mgmtDeps('u-owner', [member('u-owner', 'owner'), member('u-admin', 'admin')]);
+    const res = await handleMemberWrite(
+      req('DELETE', '/members?organizationId=acme&userId=u-owner'),
+      d,
+    );
+    expect(res.status).toBe(409);
+    expect(d.removes).toHaveLength(0);
+  });
+
+  it('404s for an unknown member; 400 without userId', async () => {
+    const d = mgmtDeps('u-admin', TEAM());
+    expect(
+      (await handleMemberWrite(req('DELETE', '/members?organizationId=acme&userId=ghost'), d))
+        .status,
+    ).toBe(404);
+    expect((await handleMemberWrite(req('DELETE', '/members?organizationId=acme'), d)).status).toBe(
+      400,
+    );
+  });
+});
+
+describe('PATCH /members (change role)', () => {
+  it('an admin changes a regular member’s role', async () => {
+    const d = mgmtDeps('u-admin', TEAM());
+    const res = await handleMemberWrite(
+      req('PATCH', '/members?organizationId=acme&userId=u-member', { role: 'admin' }),
+      d,
+    );
+    expect(res.status).toBe(200);
+    expect(d.upserts).toEqual([expect.objectContaining({ userId: 'u-member', role: 'admin' })]);
+  });
+
+  it('403s when an admin promotes someone to owner', async () => {
+    const d = mgmtDeps('u-admin', TEAM());
+    const res = await handleMemberWrite(
+      req('PATCH', '/members?organizationId=acme&userId=u-member', { role: 'owner' }),
+      d,
+    );
+    expect(res.status).toBe(403);
+    expect(d.upserts).toHaveLength(0);
+  });
+
+  it('an owner promotes a member to owner', async () => {
+    const d = mgmtDeps('u-owner', TEAM());
+    const res = await handleMemberWrite(
+      req('PATCH', '/members?organizationId=acme&userId=u-member', { role: 'owner' }),
+      d,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('403s when an admin changes an owner’s role', async () => {
+    const d = mgmtDeps('u-admin', TEAM());
+    const res = await handleMemberWrite(
+      req('PATCH', '/members?organizationId=acme&userId=u-owner', { role: 'admin' }),
+      d,
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('409s when an owner demotes the last owner', async () => {
+    const d = mgmtDeps('u-owner', [member('u-owner', 'owner'), member('u-admin', 'admin')]);
+    const res = await handleMemberWrite(
+      req('PATCH', '/members?organizationId=acme&userId=u-owner', { role: 'admin' }),
+      d,
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it('400s on a bad role; 404s for an unknown member', async () => {
+    const d = mgmtDeps('u-admin', TEAM());
+    expect(
+      (
+        await handleMemberWrite(
+          req('PATCH', '/members?organizationId=acme&userId=u-member', { role: 'super' }),
+          d,
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await handleMemberWrite(
+          req('PATCH', '/members?organizationId=acme&userId=ghost', { role: 'member' }),
+          d,
+        )
+      ).status,
+    ).toBe(404);
+  });
+
+  it('405s on an unsupported method', async () => {
+    const d = mgmtDeps('u-admin', TEAM());
+    expect((await handleMemberWrite(req('POST', '/members?organizationId=acme'), d)).status).toBe(
+      405,
+    );
   });
 });

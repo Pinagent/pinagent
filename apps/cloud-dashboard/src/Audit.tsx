@@ -5,6 +5,7 @@ import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@pinagent/ui/components/ui/card';
 import type { CloudApiClient } from './api-client';
 import { UnauthorizedError } from './api-client';
+import { formatDateTime } from './format';
 import { SignIn } from './SignIn';
 import { LoadError, Loading } from './states';
 import { useAsync } from './use-async';
@@ -40,7 +41,9 @@ export function AuditView({ events }: AuditData) {
                 // index is a stable key.
                 // biome-ignore lint/suspicious/noArrayIndexKey: append-only, render-once list
                 <tr key={`${e.occurredAt}-${e.action}-${i}`} className="border-t border-border">
-                  <td className="py-2 text-muted-foreground tabular-nums">{e.occurredAt}</td>
+                  <td className="py-2 text-muted-foreground tabular-nums">
+                    {formatDateTime(e.occurredAt)}
+                  </td>
                   <td className="py-2 font-mono text-xs">
                     {e.actorUserId ?? <span className="text-muted-foreground">system</span>}
                   </td>
