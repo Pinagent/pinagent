@@ -55,6 +55,8 @@ export interface WidgetContext {
   swapTo(c: Composer): void;
   /** Composer: cycle the expanded composer to the next in-flight agent. */
   hopToNextActive(): void;
+  /** Composer: minimize every spawned agent to its bubble (smallest) state. */
+  minimizeAll(): void;
   /** Composer: open a fresh composer for a freshly-picked element. */
   openComposer(target: Element, click: Click, extras?: PickExtra[]): void;
   /**

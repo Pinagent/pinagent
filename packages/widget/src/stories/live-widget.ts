@@ -106,6 +106,7 @@ export function mountLiveWidget(opts: { dockEnabled?: boolean } = {}): LiveWidge
     applyFabPresentation: unwired,
     swapTo: unwired,
     hopToNextActive: unwired,
+    minimizeAll: unwired,
     openComposer: unwired,
     addNodeToComposer: unwired,
     bubbleOwner: unwired,

@@ -6,7 +6,7 @@ import { computeUnionCropRect } from './crop';
 import { getBrowserDb } from './db/client';
 import { getConversationMessages } from './db/reads';
 import { recordConversationStart } from './db/writes';
-import { isHopKey, shouldIgnoreHotkey } from './keyboard';
+import { isHopKey, isMinimizeAllKey, shouldIgnoreHotkey } from './keyboard';
 import { capturePageScreenshot } from './screenshot';
 import type { PaLoc } from './selector';
 import { attachStreamHandler } from './stream-handler';
@@ -290,6 +290,14 @@ export function wireComposerIframe(args: WireComposerArgs): void {
     if (isHopKey(e) && !shouldIgnoreHotkey(e)) {
       e.preventDefault();
       hopToNextActive();
+      return;
+    }
+    // Control+` from inside an iframe — same minimize-all as on the
+    // host doc. `ctx` is reachable directly here (no postMessage), so
+    // call straight through.
+    if (isMinimizeAllKey(e)) {
+      e.preventDefault();
+      ctx.minimizeAll();
     }
   });
 
