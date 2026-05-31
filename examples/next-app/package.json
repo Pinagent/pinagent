@@ -5,7 +5,6 @@
   "scripts": {
     "predev": "pnpm exec turbo run build --filter=@pinagent/next-plugin",
     "dev": "next dev",
-    "prebuild": "pnpm exec turbo run build --filter=@pinagent/next-plugin",
     "build": "next build",
     "start": "next start"
   },

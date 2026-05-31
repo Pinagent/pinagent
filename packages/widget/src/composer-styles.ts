@@ -651,11 +651,14 @@ export const COMPOSER_STYLES = `
   body.mini .ask-form,
   body.mini .ask-resolved,
   body.mini .conflict-block { display: none; }
-  body.mini .card { gap: 0; padding: 8px 10px; cursor: pointer; justify-content: center; }
+  /* Compact card: tight vertical padding, and extra left padding to clear
+     the leading drag grip (a body-level overlay positioned by reposition()
+     so the minimized bar can be dragged just like the expanded composer). */
+  body.mini .card { gap: 0; padding: 4px 8px 4px 30px; cursor: pointer; justify-content: center; }
   body.mini .mini-bar {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
   }
   .mini-label {
@@ -674,8 +677,8 @@ export const COMPOSER_STYLES = `
      state mirrored onto the body. Lives only inside the (mini-only) bar. */
   .mini-status {
     position: relative;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
@@ -683,15 +686,15 @@ export const COMPOSER_STYLES = `
   }
   .mini-status > * { display: none; }
   .ms-spinner {
-    width: 13px;
-    height: 13px;
-    border: 2px solid ${STATUS.working.fg};
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid ${STATUS.working.fg};
     border-top-color: transparent;
     border-radius: 50%;
     animation: pa-mini-spin 0.9s linear infinite;
   }
   @keyframes pa-mini-spin { to { transform: rotate(360deg); } }
-  .ms-check { width: 16px; height: 16px; }
+  .ms-check { width: 14px; height: 14px; }
   .ms-check path {
     stroke: ${STATUS.readyToLand.fg};
     stroke-width: 2.5;

@@ -8,7 +8,6 @@
     "dev": "nuxt dev",
     "predev:dogfood": "pnpm exec turbo run build --filter=@pinagent/nuxt-plugin --filter=@pinagent/mcp",
     "dev:dogfood": "PINAGENT_SPAWN_AGENT=off nuxt dev",
-    "prebuild": "pnpm exec turbo run build --filter=@pinagent/nuxt-plugin",
     "build": "nuxt build",
     "preview": "nuxt preview"
   },
