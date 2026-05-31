@@ -100,7 +100,7 @@ function makeApp() {
       // above is keyed on — so the login → /sessions handshake resolves.
       users: createInMemoryUserStore([], { generateId: () => SYNTHETIC_USER_ID }),
     },
-    read: { store, authenticate, audit, meter },
+    read: { store, users: createInMemoryUserStore(), authenticate, audit, meter },
     config: {
       store,
       authenticate,

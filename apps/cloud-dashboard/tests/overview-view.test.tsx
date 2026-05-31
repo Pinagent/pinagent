@@ -1,17 +1,19 @@
 // SPDX-License-Identifier: Elastic-2.0
-import type { OrganizationMembership } from '@pinagent/ee-auth';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import type { Member } from '../src/api-client';
 import { formatDuration } from '../src/format';
 import { OverviewView } from '../src/Overview';
 
-const member = (over: Partial<OrganizationMembership>): OrganizationMembership => ({
+const member = (over: Partial<Member>): Member => ({
   organizationId: 'org_1',
   userId: 'user_1',
   role: 'member',
   status: 'active',
   invitedAt: '2026-01-01T00:00:00.000Z',
   joinedAt: '2026-01-02T00:00:00.000Z',
+  email: null,
+  displayName: null,
   ...over,
 });
 
@@ -33,17 +35,21 @@ describe('OverviewView', () => {
       OverviewView({
         usage: { 'relay.session': 1234, 'relay.connection.seconds': 3661 },
         members: [
-          member({ userId: 'alice', role: 'admin' }),
-          member({ userId: 'bob', status: 'invited', joinedAt: null }),
+          member({ userId: 'usr_a', role: 'admin', displayName: 'Alice', email: 'alice@acme.com' }),
+          // no user record → falls back to the raw id; invited, never joined
+          member({ userId: 'usr_b', status: 'invited', joinedAt: null }),
         ],
       }),
     );
 
     expect(html).toContain('1,234');
     expect(html).toContain('1h 1m');
-    expect(html).toContain('alice');
+    // enriched: name primary, email secondary
+    expect(html).toContain('Alice');
+    expect(html).toContain('alice@acme.com');
     expect(html).toContain('admin');
-    expect(html).toContain('bob');
+    // member with no user record falls back to its id
+    expect(html).toContain('usr_b');
     expect(html).toContain('invited');
     // pending member shows a placeholder for the missing join date
     expect(html).toContain('—');
