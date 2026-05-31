@@ -197,20 +197,25 @@ export function attachStreamHandler(
   function setFollowEnabled(_enabled: boolean) {
     const blocked = !!pendingAskId;
     followInput.disabled = blocked;
-    followSend.disabled = blocked || followInput.value.trim().length === 0;
+    // An attached element is sendable on its own, so it also enables Send.
+    followSend.disabled = blocked || (followInput.value.trim().length === 0 && !attachedNode);
     followInput.placeholder = blocked
       ? 'Answer the question above to continue.'
       : turnRunning
         ? 'Queue a follow-up…'
-        : 'Send a follow-up…';
+        : attachedNode
+          ? 'Describe the change for this element…'
+          : 'Send a follow-up…';
   }
 
   function renderAskUserForm(askId: string, question: string, options?: string[]) {
     if (pendingAskFormRoot) pendingAskFormRoot.remove();
     pendingAskId = askId;
     // Record on the composer so minimizing mid-question re-surfaces the
-    // attention state (see applyMiniChrome).
+    // attention state (see applyMiniChrome). Mirror it onto the bubble so
+    // the fully-collapsed dot shows the alert state, not the spinner.
     composer.needsInput = true;
+    composer.bubble.classList.add('needs-input');
 
     const wrap = el('div', 'ask-form');
     wrap.appendChild(el('div', 'ask-question', question));
@@ -268,6 +273,7 @@ export function attachStreamHandler(
       pendingAskId = null;
       composer.needsInput = false;
       idoc.body.classList.remove('needs-input');
+      composer.bubble.classList.remove('needs-input');
       setFollowEnabled(!turnRunning);
       // Answering resumes the turn; drain any follow-ups queued behind it.
       if (composer.followUpQueue.length > 0) flushQueue();
@@ -285,6 +291,50 @@ export function attachStreamHandler(
   // The item the optimistic send put on the wire, kept so a "turn already
   // in progress" race can re-queue it rather than drop it.
   let lastSent: QueuedFollowUp | null = null;
+  // An element the user picked (via "Add another element") while the agent
+  // was idle — attached to the draft so they can describe the change before
+  // sending, rather than auto-firing a bare "Also look at this…" turn.
+  let attachedNode: QueuedNodeRef | null = null;
+  let attachedPill: HTMLElement | null = null;
+
+  // Short human reference for a picked element, folded into the next send.
+  function nodeReference(node: QueuedNodeRef): string {
+    const where =
+      node.file && node.line != null
+        ? `${node.file}:${node.line}${node.col != null ? `:${node.col}` : ''}`
+        : node.selector;
+    const inComp = node.component ? ` in <${node.component}>` : '';
+    return `<${node.tag}>${inComp} (${where})`;
+  }
+
+  // Drop the attached-element draft (× on the pill, or after it sends).
+  function clearAttachment() {
+    attachedNode = null;
+    if (attachedPill) {
+      attachedPill.remove();
+      attachedPill = null;
+    }
+  }
+
+  // Show a removable pill above the follow-up input for the attached element.
+  function renderAttachment(node: QueuedNodeRef) {
+    if (attachedPill) attachedPill.remove();
+    const pill = el('div', 'attach-pill');
+    pill.appendChild(el('span', 'q-pill', `<${node.tag}>`));
+    // The leading `<tag>` is already shown as the pill; keep just the
+    // "in <Comp> (where)" remainder as the descriptive, truncatable text.
+    pill.appendChild(el('span', 'attach-ref', nodeReference(node).replace(/^<[^>]+>\s*/, '')));
+    const x = el('button', 'attach-x', '×') as HTMLButtonElement;
+    x.type = 'button';
+    x.title = 'Remove this element';
+    x.addEventListener('click', () => {
+      clearAttachment();
+      setFollowEnabled(!turnRunning);
+    });
+    pill.appendChild(x);
+    followInput.closest('.follow')?.before(pill);
+    attachedPill = pill;
+  }
 
   // Render a queued (not-yet-sent) follow-up: a dimmed bubble with a
   // "queued" tag, plus an element pill when it carries a picked node.
@@ -351,10 +401,28 @@ export function attachStreamHandler(
   }
   composer.enqueueFollowUp = enqueueFollowUp;
 
+  // Public entry for the "Add another element" picker. Mid-turn, keep the
+  // existing behavior (queue a standalone "Also look at this…" message).
+  // Idle, attach the element to the draft and open the input so the user
+  // can say what they want changed, instead of auto-firing a bare turn.
+  function addPickedElement(content: string, node: QueuedNodeRef) {
+    if (turnRunning || pendingAskId) {
+      enqueueFollowUp(content, node);
+      return;
+    }
+    attachedNode = node;
+    renderAttachment(node);
+    composer.cancelAutoClose();
+    setFollowEnabled(true);
+    followInput.focus();
+  }
+  composer.addPickedElement = addPickedElement;
+
   followInput.addEventListener('input', () => {
-    // The send button is enabled whenever there's text — even mid-turn,
-    // since sending now just queues.
-    followSend.disabled = followInput.value.trim().length === 0 || !!pendingAskId;
+    // The send button is enabled whenever there's text (or an attached
+    // element) — even mid-turn, since sending now just queues.
+    followSend.disabled =
+      (followInput.value.trim().length === 0 && !attachedNode) || !!pendingAskId;
   });
   followInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -363,9 +431,19 @@ export function attachStreamHandler(
     }
   });
   followSend.addEventListener('click', () => {
-    const content = followInput.value.trim();
-    if (!content) return;
-    enqueueFollowUp(content);
+    const typed = followInput.value.trim();
+    if (!typed && !attachedNode) return;
+    if (attachedNode) {
+      const node = attachedNode;
+      const ref = nodeReference(node);
+      // Fold the picked element into the user's instruction (or stand alone
+      // if they didn't type anything), then send as one follow-up turn.
+      const content = typed ? `${typed}\n\n(Focus on this ${ref}.)` : `Also look at this ${ref}.`;
+      clearAttachment();
+      enqueueFollowUp(content, node);
+    } else {
+      enqueueFollowUp(typed);
+    }
     followInput.value = '';
     followSend.disabled = true;
   });
@@ -731,6 +809,9 @@ export function attachStreamHandler(
       pendingAskId = null;
       pendingAskFormRoot = null;
       composer.needsInput = false;
+      composer.bubble.classList.remove('needs-input');
+      // The attached-element pill lived in the (now-wiped) follow row.
+      clearAttachment();
       // The rendered "queued" bubbles were just wiped with the log. Drop
       // their DOM refs but keep `composer.followUpQueue` — those messages
       // still need to send. flushQueue tolerates the now-empty queuedNodes

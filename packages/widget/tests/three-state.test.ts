@@ -66,6 +66,7 @@ function fakeComposer(over: Partial<Composer> = {}): Composer {
     needsInput: false,
     agentState: 'running',
     autoCloseTimer: null,
+    bubble: document.createElement('div'),
     refitStream: vi.fn(),
     scheduleAutoClose: vi.fn(),
     cancelAutoClose: vi.fn(),
@@ -243,6 +244,8 @@ describe('attachStreamHandler — needs-input (ask_user)', () => {
     ws.handler.onEvent({ type: 'ask_user', askId: 'a1', question: 'Which one?' });
     expect(composer.needsInput).toBe(true);
     expect(document.body.classList.contains('needs-input')).toBe(true);
+    // The fully-collapsed dot mirrors the attention state too.
+    expect(composer.bubble.classList.contains('needs-input')).toBe(true);
 
     const askInput = dom.log.querySelector('.ask-input') as HTMLTextAreaElement;
     const askSend = dom.log.querySelector('.ask-form .btn.primary') as HTMLButtonElement;
@@ -253,6 +256,7 @@ describe('attachStreamHandler — needs-input (ask_user)', () => {
     expect(ws.sendAskResponse).toHaveBeenCalledWith('a1', 'the second');
     expect(composer.needsInput).toBe(false);
     expect(document.body.classList.contains('needs-input')).toBe(false);
+    expect(composer.bubble.classList.contains('needs-input')).toBe(false);
   });
 
   it('does not flush queued follow-ups while an answer is pending', () => {
@@ -375,19 +379,19 @@ describe('addNodeToComposer', () => {
     return { controller, composer: Array.from(ctx.composers)[0] as Composer };
   }
 
-  it('enqueues a follow-up referencing the picked element', () => {
+  it('routes the picked element into the conversation', () => {
     const ctx = makeCtx();
     const { controller, composer } = openComposer(ctx);
     composer.feedbackId = 'fb-1';
-    const enqueueFollowUp = vi.fn();
-    composer.enqueueFollowUp = enqueueFollowUp;
+    const addPickedElement = vi.fn();
+    composer.addPickedElement = addPickedElement;
 
     const picked = document.createElement('button');
     document.body.appendChild(picked);
     controller.addNodeToComposer(composer, picked, { x: 0, y: 0 });
 
-    expect(enqueueFollowUp).toHaveBeenCalledTimes(1);
-    const [content, node] = enqueueFollowUp.mock.calls[0];
+    expect(addPickedElement).toHaveBeenCalledTimes(1);
+    const [content, node] = addPickedElement.mock.calls[0];
     expect(content).toContain('<button>');
     expect(node?.tag).toBe('button');
   });
@@ -396,12 +400,70 @@ describe('addNodeToComposer', () => {
     const toast = vi.fn();
     const ctx = makeCtx({ toast });
     const { controller, composer } = openComposer(ctx);
-    // No feedbackId / enqueueFollowUp — the agent stream isn't wired yet.
+    // No feedbackId / addPickedElement — the agent stream isn't wired yet.
     const picked = document.createElement('button');
     document.body.appendChild(picked);
     controller.addNodeToComposer(composer, picked, { x: 0, y: 0 });
 
     expect(toast).toHaveBeenCalledWith('Conversation not ready yet', 'error');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// addPickedElement — what "Add another element" does once it reaches the live
+// stream handler. Mid-turn it queues a standalone message; idle it attaches
+// the element to the follow-up draft so the user can describe the change.
+// ---------------------------------------------------------------------------
+describe('attachStreamHandler — add picked element', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  const node = {
+    file: 'src/Foo.tsx',
+    line: 12,
+    col: 3,
+    selector: 'button',
+    component: 'Card',
+    tag: 'button',
+  };
+  const content = 'Also look at this <button> in <Card> (src/Foo.tsx:12:3).';
+
+  it('attaches to the draft (no auto-send) and enables the input when idle', () => {
+    const composer = fakeComposer();
+    const { dom, ws } = attach(composer);
+    ws.handler.onEvent(okResult); // turn-end → idle
+    ws.sendUserMessage.mockClear();
+
+    composer.addPickedElement?.(content, node);
+
+    // Does NOT auto-send; instead opens a draft the user can complete.
+    expect(ws.sendUserMessage).not.toHaveBeenCalled();
+    expect(document.querySelector('.attach-pill')).not.toBeNull();
+    expect(dom.followInput.disabled).toBe(false);
+    // The attachment alone makes Send actionable, even with no text yet.
+    expect(dom.followSend.disabled).toBe(false);
+
+    // Typing + Send folds the element reference into one message, clears pill.
+    dom.followInput.value = 'make it bold';
+    dom.followSend.click();
+    expect(ws.sendUserMessage).toHaveBeenCalledTimes(1);
+    const [, sent] = ws.sendUserMessage.mock.calls[0];
+    expect(sent).toContain('make it bold');
+    expect(sent).toContain('src/Foo.tsx:12:3');
+    expect(document.querySelector('.attach-pill')).toBeNull();
+  });
+
+  it('queues a standalone reference message when a turn is in flight', () => {
+    const composer = fakeComposer();
+    const { ws } = attach(composer); // starts running (turnRunning = true)
+
+    composer.addPickedElement?.(content, node);
+
+    // Mid-turn: parked in the queue, not attached as a draft.
+    expect(ws.sendUserMessage).not.toHaveBeenCalled();
+    expect(composer.followUpQueue).toHaveLength(1);
+    expect(document.querySelector('.attach-pill')).toBeNull();
   });
 });
 

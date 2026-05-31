@@ -160,11 +160,31 @@ export const DOC_STYLES = `
   background: ${STATUS.anchorLost.bg};
   color: ${STATUS.anchorLost.fg};
 }
+/* Needs human input — the agent asked a question (ask_user) while
+   collapsed to the dot. Mirrors the minimal bar's awaitingClarification
+   language: the alert glyph replaces the spinner, the running pulse ring
+   is dropped, and the dot pulses on its own to pull attention. Defined
+   after the .running rule so its ::after override wins on equal specificity. */
+.pa-bubble.needs-input {
+  border-color: ${STATUS.awaitingClarification.border};
+  background: ${STATUS.awaitingClarification.bg};
+  color: ${STATUS.awaitingClarification.fg};
+  font-size: 13px;
+  line-height: 1;
+  animation: pa-bubble-attn 1.6s ease-out infinite;
+}
+.pa-bubble.needs-input .pa-bubble-spinner { display: none; }
+.pa-bubble.needs-input::after { display: none; }
+.pa-bubble.needs-input::before { content: '▲'; }
+@keyframes pa-bubble-attn {
+  0%, 100% { box-shadow: 0 4px 12px rgba(32, 27, 33, 0.16), 0 0 0 0 ${STATUS.awaitingClarification.border}; }
+  50%      { box-shadow: 0 4px 12px rgba(32, 27, 33, 0.16), 0 0 0 4px ${STATUS.awaitingClarification.border}; }
+}
 
 .pa-bubble-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid currentColor;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
   border-top-color: transparent;
   border-radius: 50%;
   animation: pa-bubble-spin 0.9s linear infinite;

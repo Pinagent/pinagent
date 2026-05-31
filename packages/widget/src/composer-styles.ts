@@ -564,6 +564,52 @@ export const COMPOSER_STYLES = `
   #pa-follow-input { font-size: 12px; min-height: 0; }
   #pa-follow-send { white-space: nowrap; }
 
+  /* Attached-element draft pill — shown above the follow-up input when the
+     user picks another element while the agent is idle, so they can type
+     what they want changed before sending. */
+  .attach-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: ${BRAND_INK};
+    background: ${BRAND_CREAM};
+    border: 1px solid #e8dfb0;
+    border-radius: 6px;
+    padding: 4px 6px;
+    margin-bottom: 6px;
+  }
+  .attach-pill .q-pill {
+    display: inline-block;
+    flex-shrink: 0;
+    font-family: ${FONT_MONO};
+    font-size: 10px;
+    font-weight: 600;
+    background: ${BRAND_INK};
+    color: ${BRAND_CREAM};
+    padding: 0 5px;
+    border-radius: 3px;
+  }
+  .attach-pill .attach-ref {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.8;
+  }
+  .attach-pill .attach-x {
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    color: ${BRAND_INK};
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 0 2px;
+  }
+  .attach-pill .attach-x:hover { opacity: 0.6; }
+
   /* Enclosing-component / loop-instance context line (from #166), under
      the stream header. sc-comp mirrors the header-block's component
      chip, so it's hidden when expanded (the block already shows it) and

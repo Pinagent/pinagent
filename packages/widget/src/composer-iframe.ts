@@ -349,16 +349,22 @@ export function wireComposerIframe(args: WireComposerArgs): void {
 
   // Auto-grow: measure the textarea's natural scrollHeight after each
   // input and hand it to the host, which clamps + applies it to
-  // iframe.style.height. The 0-then-restore trick is the standard
-  // auto-grow pattern — without it, scrollHeight returns the current
-  // rendered height (clamped by flex sizing) instead of the content's
-  // natural height.
+  // iframe.style.height. The textarea is `flex: 1`, so it fills the pane
+  // (and thus the iframe) — measuring scrollHeight as-is reports that
+  // flex-filled height, which then grows the iframe, which re-fills the
+  // textarea, looping unbounded on every keystroke. Drop out of flex to
+  // an auto height for the measure so scrollHeight reflects the CONTENT,
+  // then restore. (The standard 0-then-restore trick alone doesn't work
+  // here: flex-grow overrides the inline height.)
   let lastReported = -1;
   const postTextareaHeight = () => {
-    const saved = ta.style.height;
-    ta.style.height = '0';
+    const prevFlex = ta.style.flex;
+    const prevHeight = ta.style.height;
+    ta.style.flex = '0 0 auto';
+    ta.style.height = 'auto';
     const natural = ta.scrollHeight;
-    ta.style.height = saved;
+    ta.style.flex = prevFlex;
+    ta.style.height = prevHeight;
     if (natural !== lastReported) {
       lastReported = natural;
       onTextareaHeight(natural);

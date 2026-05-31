@@ -261,6 +261,13 @@ export interface Composer {
    * running conversation. Sends immediately if the agent is idle.
    */
   enqueueFollowUp?(content: string, node?: QueuedNodeRef): void;
+  /**
+   * Route a freshly-picked element ("Add another element") into this
+   * conversation. Assigned by `attachStreamHandler`. Mid-turn it queues a
+   * standalone reference message; idle it attaches the element to the
+   * follow-up draft so the user can describe the change before sending.
+   */
+  addPickedElement?(content: string, node: QueuedNodeRef): void;
   close(): void;
   expand(): void;
   minimize(): void;
