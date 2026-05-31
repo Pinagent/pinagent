@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { Click, WidgetContext } from './context';
+import { locAncestors } from './selector';
 
 /**
  * Element-picking session. While active, the cursor turns into the pin,
  * a hint banner shows, and mousemove highlights the element under the
  * pointer. A plain click commits the picked element to a new composer;
- * Cmd/Ctrl-click accumulates additional anchors first. The controller
- * owns the in-progress `pendingPicks` and the rAF that keeps their
- * outlines pinned through scroll/reflow.
+ * Cmd/Ctrl-click accumulates additional anchors first. ↑/↓ walk the
+ * highlight up and down the source-tagged ancestry so a parent element a
+ * descendant visually covers (e.g. a `<nav>`/`<aside>`/`<div>` wrapping the
+ * `<a>` under the cursor) can still be targeted. The controller owns the
+ * in-progress `pendingPicks` and the rAF that keeps their outlines pinned
+ * through scroll/reflow.
  */
 export function createPicker(ctx: WidgetContext): {
   enterPicking(): void;
@@ -24,8 +28,34 @@ export function createPicker(ctx: WidgetContext): {
   let pendingPicksRaf: number | null = null;
   const MOD_LABEL = ctx.isMac ? 'Cmd' : 'Ctrl';
 
+  // Ancestor walk for the current hover. `levels` is the navigable chain for
+  // the element under the cursor — its raw target at index 0, then each
+  // enclosing `data-pa-loc` element outward. ↑/↓ move `levelIndex` along it;
+  // a mousemove rebuilds the chain and snaps back to the hovered element.
+  let hoverBase: Element | null = null;
+  let levels: Element[] = [];
+  let levelIndex = 0;
+
+  function buildLevels(base: Element): Element[] {
+    const locs = locAncestors(base);
+    // When the hovered element is itself tagged it's already locs[0]; otherwise
+    // keep it as the bottom rung so a plain click still targets what's hovered.
+    return locs[0] === base ? locs : [base, ...locs];
+  }
+
+  function currentTarget(): Element | null {
+    return levels[levelIndex] ?? hoverBase;
+  }
+
+  function resetHover(): void {
+    hoverBase = null;
+    levels = [];
+    levelIndex = 0;
+  }
+
   function enterPicking() {
     state.mode = 'picking';
+    resetHover();
     // Collapse the tray (if showing) back to the pin — picking owns the FAB.
     ctx.applyFabPresentation();
     fab.classList.add('active');
@@ -74,6 +104,7 @@ export function createPicker(ctx: WidgetContext): {
     document.removeEventListener('click', onPick, true);
     document.removeEventListener('keydown', onKey, true);
     clearPendingPicks();
+    resetHover();
     if (pendingPicksRaf !== null) {
       cancelAnimationFrame(pendingPicksRaf);
       pendingPicksRaf = null;
@@ -85,26 +116,32 @@ export function createPicker(ctx: WidgetContext): {
   function onMove(e: MouseEvent) {
     const target = elementFromEvent(e);
     if (!target) return;
+    // A fresh hover rebuilds the ancestor chain and snaps the highlight back
+    // to the element under the cursor — moving the mouse cancels any ↑/↓ walk.
+    hoverBase = target;
+    levels = buildLevels(target);
+    levelIndex = 0;
     drawOutline(target);
+    updatePickHint();
   }
 
   function onPick(e: MouseEvent) {
-    const target = elementFromEvent(e);
-    if (!target) return;
+    const raw = elementFromEvent(e);
+    if (!raw) return;
     // Don't pick a bubble as the new target — bubbles are part of the
     // widget's own UI. Clicking a bubble during picker = expand that
     // composer instead.
-    if (target.classList.contains('pa-bubble')) {
+    if (raw.classList.contains('pa-bubble')) {
       e.preventDefault();
       e.stopPropagation();
       exitPicking();
-      const owner = ctx.bubbleOwner(target as HTMLElement);
+      const owner = ctx.bubbleOwner(raw as HTMLElement);
       if (owner) ctx.swapTo(owner);
       return;
     }
     // Don't pick the drag handle either — silently cancel picker so the
     // user can grab the handle they were aiming for.
-    if (target.classList.contains('pa-drag-handle')) {
+    if (raw.classList.contains('pa-drag-handle')) {
       e.preventDefault();
       e.stopPropagation();
       exitPicking();
@@ -112,6 +149,10 @@ export function createPicker(ctx: WidgetContext): {
     }
     e.preventDefault();
     e.stopPropagation();
+
+    // Commit whatever the highlight currently sits on — the user may have
+    // walked it up the ancestry with ↑/↓ since the last mousemove.
+    const target = currentTarget() ?? raw;
 
     const additive = e.metaKey || e.ctrlKey;
     if (additive) {
@@ -147,6 +188,20 @@ export function createPicker(ctx: WidgetContext): {
     if (e.key === 'Escape') {
       e.preventDefault();
       exitPicking();
+      return;
+    }
+    // ↑ walks the highlight to the enclosing tagged element, ↓ back toward the
+    // hovered one. No-op until a hover has built a multi-level chain.
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      if (levels.length <= 1) return;
+      e.preventDefault();
+      levelIndex =
+        e.key === 'ArrowUp'
+          ? Math.min(levelIndex + 1, levels.length - 1)
+          : Math.max(levelIndex - 1, 0);
+      const target = currentTarget();
+      if (target) drawOutline(target);
+      updatePickHint();
     }
   }
 
@@ -178,13 +233,18 @@ export function createPicker(ctx: WidgetContext): {
     // "Add to conversation" mode reads differently — the pick joins a
     // running agent rather than starting a new comment.
     const adding = ctx.pickRouteComposer !== null;
+    // Once the highlight is walked onto a parent, lead with which element the
+    // click will actually target. Offer the ↑/↓ hint whenever a parent exists.
+    const target = currentTarget();
+    const prefix = levelIndex > 0 && target ? `<${target.tagName.toLowerCase()}> · ` : '';
+    const climb = levels.length > 1 ? ' ↑/↓ for parent.' : '';
     if (pendingPicks.length === 0) {
       hint.textContent = adding
-        ? `Click an element to add it to the conversation. Esc to cancel.`
-        : `Click an element. ${MOD_LABEL}-click to add more. Esc to cancel.`;
+        ? `${prefix}Click an element to add it to the conversation.${climb} Esc to cancel.`
+        : `${prefix}Click an element. ${MOD_LABEL}-click to add more.${climb} Esc to cancel.`;
     } else {
       const n = pendingPicks.length;
-      hint.textContent = `${n} selected. Click to ${adding ? 'add' : 'comment'}. ${MOD_LABEL}-click to add more. Esc to cancel.`;
+      hint.textContent = `${prefix}${n} selected. Click to ${adding ? 'add' : 'comment'}. ${MOD_LABEL}-click to add more.${climb} Esc to cancel.`;
     }
   }
 
