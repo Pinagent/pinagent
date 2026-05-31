@@ -16,12 +16,14 @@ export interface Plan {
    * map means unlimited.
    */
   limits: Record<string, number>;
+  /** Length of a billing period in days — how often usage windows reset. */
+  intervalDays: number;
 }
 
 export const PLANS = {
-  free: { id: 'free', name: 'Free', limits: { 'relay.session': 100 } },
-  pro: { id: 'pro', name: 'Pro', limits: { 'relay.session': 10_000 } },
-  enterprise: { id: 'enterprise', name: 'Enterprise', limits: {} },
+  free: { id: 'free', name: 'Free', limits: { 'relay.session': 100 }, intervalDays: 30 },
+  pro: { id: 'pro', name: 'Pro', limits: { 'relay.session': 10_000 }, intervalDays: 30 },
+  enterprise: { id: 'enterprise', name: 'Enterprise', limits: {}, intervalDays: 30 },
 } as const satisfies Record<string, Plan>;
 
 export type PlanId = keyof typeof PLANS;

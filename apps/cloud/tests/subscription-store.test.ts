@@ -51,4 +51,18 @@ describe('PgSubscriptionStore', () => {
       currentPeriodStart: '2026-06-01T00:00:00Z',
     });
   });
+
+  it('lists every subscription for the rollover pass', async () => {
+    await store.upsert({
+      organizationId: 'a',
+      planId: 'pro',
+      currentPeriodStart: '2026-05-01T00:00:00Z',
+    });
+    await store.upsert({
+      organizationId: 'b',
+      planId: 'free',
+      currentPeriodStart: '2026-05-01T00:00:00Z',
+    });
+    expect((await store.listAll()).map((s) => s.organizationId).sort()).toEqual(['a', 'b']);
+  });
 });

@@ -52,6 +52,8 @@ export const AUDIT_ACTIONS = {
   memberInvited: 'member.invited',
   /** An invitee accepted (consumed at SSO login) → active membership. */
   memberJoined: 'member.joined',
+  /** An org's billing period advanced (usage window reset). */
+  periodRolled: 'billing.period.rolled',
 } as const;
 
 export const DEFAULT_AUDIT_LIMIT = 100;

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Elastic-2.0
+import { type BillingServiceDeps, handleBillingRoll } from './billing-service';
 import {
   type ConfigServiceDeps,
   handleBranchRoutingConfig,
@@ -33,6 +34,7 @@ import { handleSessionRequest, type SessionServiceDeps } from './session-service
  *   GET/PUT  /cost-controls    → read/set the org's cost cap (admin config)
  *   GET/PUT  /branch-routing   → read/set the org's branch policy (admin config)
  *   POST     /internal/relay/events → relay lifecycle ingest (service auth)
+ *   POST     /internal/billing/roll → advance elapsed billing periods (service auth)
  *   GET      /healthz          → liveness
  */
 export interface CloudAppDeps {
@@ -41,6 +43,7 @@ export interface CloudAppDeps {
   read: ReadServiceDeps;
   config: ConfigServiceDeps;
   members: MemberServiceDeps;
+  billing: BillingServiceDeps;
   internal: InternalServiceDeps;
 }
 
@@ -73,6 +76,8 @@ export function createCloudApp(deps: CloudAppDeps): { fetch(request: Request): P
           return handleBranchRoutingConfig(request, deps.config);
         case '/internal/relay/events':
           return handleRelayEvents(request, deps.internal);
+        case '/internal/billing/roll':
+          return handleBillingRoll(request, deps.billing);
         case '/healthz':
           return Promise.resolve(new Response('ok', { status: 200 }));
         default:
