@@ -1,23 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Shadow-root CSS for the picker FAB, the element-picker outline, and
- * the picker hint banner. Templated from @pinagent/ui/tokens so the
- * widget reads as the same brand as the dock — cream surfaces, ink
- * text, gold accent for "active" state.
+ * the picker hint banner. Templated from the widget's dark theme
+ * (theme.ts → @pinagent/ui/tokens) so the widget reads as the same
+ * brand as the dock's dark mode — deep ink surfaces, cream text, gold
+ * accent for "active" state.
  *
- * `:host { all: initial; }` + explicit `color-scheme: light;` keep the
- * styles isolated from the host page's dark-mode CSS variables and
- * user-agent form-control theming.
+ * `:host { all: initial; }` + explicit `color-scheme: dark;` keep the
+ * styles isolated from the host page's own CSS variables while opting our
+ * form controls into dark user-agent theming (scrollbars, autofill).
+ *
+ * The element-picker outline / selection / region markers overlay the
+ * host app (not widget chrome), so they keep the ink + gold + cream
+ * treatment that reads on arbitrary light *or* dark host content.
  */
-import { BRAND_CREAM, BRAND_GOLD, BRAND_INK, FONT_SANS, STATUS } from '@pinagent/ui/tokens';
+import { FONT_SANS } from '@pinagent/ui/tokens';
+import { STATUS, THEME } from './theme';
 
 export const STYLES = `
 :host {
   all: initial;
   /* color-scheme is one of the few properties that pierces shadow DOM —
-     force light so the host page's dark scheme doesn't paint our form
-     controls (textarea, button) with dark browser defaults. */
-  color-scheme: light;
+     force dark so the host page's scheme doesn't paint our form controls
+     (textarea, button) with mismatched browser defaults. */
+  color-scheme: dark;
 }
 * { box-sizing: border-box; font-family: ${FONT_SANS}; }
 
@@ -28,12 +34,13 @@ export const STYLES = `
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: ${BRAND_INK};
-  color: ${BRAND_CREAM};
-  border: 0;
+  background: ${THEME.surface};
+  color: ${THEME.text};
+  /* Hairline so the dark FAB stays defined against a dark host page. */
+  border: 1px solid rgba(252, 249, 232, 0.14);
   cursor: pointer;
   font-size: 22px;
-  box-shadow: 0 10px 28px rgba(32, 27, 33, 0.28);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -57,12 +64,12 @@ export const STYLES = `
 }
 .fab:hover {
   transform: scale(1.06);
-  box-shadow: 0 14px 32px rgba(32, 27, 33, 0.34);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.55);
 }
-/* "Active" = picker mode. Gold ring + slight scale, ink stays — keeps
+/* "Active" = picker mode. Gold ring + slight scale, surface stays — keeps
    the pin recognizable while flagging "click an element next". */
 .fab.active {
-  box-shadow: 0 0 0 3px ${BRAND_GOLD}, 0 10px 28px rgba(32, 27, 33, 0.32);
+  box-shadow: 0 0 0 3px ${THEME.accent}, 0 10px 28px rgba(0, 0, 0, 0.5);
 }
 
 /* Keyboard-shortcut chip for opening the dock. Only rendered when the
@@ -77,14 +84,14 @@ export const STYLES = `
   transform: translateX(-50%);
   padding: 2px 7px;
   border-radius: 999px;
-  background: ${BRAND_GOLD};
-  color: ${BRAND_INK};
+  background: ${THEME.accent};
+  color: ${THEME.primaryFg};
   font-size: 10px;
   font-weight: 700;
   line-height: 1.5;
   white-space: nowrap;
   letter-spacing: 0.02em;
-  box-shadow: 0 2px 6px rgba(32, 27, 33, 0.22);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   pointer-events: none;
 }
 
@@ -103,12 +110,12 @@ export const STYLES = `
   box-sizing: border-box;
   border-radius: 999px;
   background: ${STATUS.working.fg};
-  color: ${BRAND_CREAM};
+  color: ${THEME.base};
   font-size: 11px;
   font-weight: 700;
   line-height: 18px;
   text-align: center;
-  box-shadow: 0 2px 6px rgba(32, 27, 33, 0.28);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   pointer-events: none;
 }
 .fab.running::after {
@@ -147,7 +154,7 @@ export const STYLES = `
 /* No hover-scale in tray mode — it's a panel, not a button. */
 .fab.tray:hover {
   transform: none;
-  box-shadow: 0 14px 32px rgba(32, 27, 33, 0.34);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.55);
 }
 
 .pa-tray-handle {
@@ -181,7 +188,7 @@ export const STYLES = `
   border: 0;
   border-radius: 7px;
   background: rgba(252, 249, 232, 0.12);
-  color: ${BRAND_CREAM};
+  color: ${THEME.text};
   cursor: pointer;
 }
 .pa-tray-pick:hover { background: rgba(252, 249, 232, 0.22); }
@@ -198,7 +205,7 @@ export const STYLES = `
   color: rgba(252, 249, 232, 0.7);
   cursor: pointer;
 }
-.pa-tray-min:hover { background: rgba(252, 249, 232, 0.12); color: ${BRAND_CREAM}; }
+.pa-tray-min:hover { background: rgba(252, 249, 232, 0.12); color: ${THEME.text}; }
 
 .pa-tray-list {
   list-style: none;
@@ -260,7 +267,7 @@ export const STYLES = `
 .pa-tray-btn {
   border: 0;
   background: rgba(252, 249, 232, 0.12);
-  color: ${BRAND_CREAM};
+  color: ${THEME.text};
   font-family: inherit;
   font-size: 11px;
   font-weight: 600;
@@ -270,26 +277,26 @@ export const STYLES = `
 }
 .pa-tray-btn:hover { background: rgba(252, 249, 232, 0.24); }
 .pa-tray-btn:disabled { opacity: 0.5; cursor: default; }
-.pa-tray-btn.danger:hover { background: ${STATUS.error.fg}; color: ${BRAND_CREAM}; }
+.pa-tray-btn.danger:hover { background: ${STATUS.error.bg}; color: ${STATUS.error.fg}; }
 
 .outline {
   position: fixed;
   pointer-events: none;
-  border: 2px solid ${BRAND_INK};
+  border: 2px solid ${THEME.accent};
   background: rgba(255, 215, 0, 0.12);
   z-index: 2147483646;
   transition: all 60ms ease;
   border-radius: 4px;
 }
 /* Persistent outlines drawn for each Cmd/Ctrl-click pick that hasn't
-   committed yet. Same look as the hover outline but solid gold edge so
-   "queued" reads as more committed than "hovering". No transition so
-   they don't drift while the page scrolls under the rAF loop. */
+   committed yet. Solid gold edge + denser fill so "queued" reads as more
+   committed than "hovering". No transition so they don't drift while the
+   page scrolls under the rAF loop. */
 .selection-outline {
   position: fixed;
   pointer-events: none;
-  border: 2px solid ${BRAND_GOLD};
-  background: rgba(255, 215, 0, 0.18);
+  border: 2px solid ${THEME.accent};
+  background: rgba(255, 215, 0, 0.20);
   z-index: 2147483646;
   border-radius: 4px;
 }
@@ -304,22 +311,22 @@ export const STYLES = `
   padding: 0 5px;
   box-sizing: border-box;
   border-radius: 999px;
-  background: ${BRAND_INK};
-  color: ${BRAND_CREAM};
-  border: 2px solid ${BRAND_GOLD};
+  background: ${THEME.surface};
+  color: ${THEME.text};
+  border: 2px solid ${THEME.accent};
   font-size: 11px;
   font-weight: 700;
   line-height: 16px;
   text-align: center;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 2px 6px rgba(32, 27, 33, 0.28);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 /* The rubber-band rectangle drawn while in region-snip mode. Dashed so it
    reads as "being drawn" vs. the solid committed selection outlines. */
 .region-drawing {
   position: fixed;
   pointer-events: none;
-  border: 2px dashed ${BRAND_INK};
+  border: 2px dashed ${THEME.accent};
   background: rgba(255, 215, 0, 0.12);
   z-index: 2147483646;
   border-radius: 4px;
@@ -330,24 +337,25 @@ export const STYLES = `
   top: 16px;
   left: 50%;
   transform: translateX(-50%);
-  background: ${BRAND_INK};
-  color: ${BRAND_CREAM};
+  background: ${THEME.surface};
+  color: ${THEME.text};
+  border: 1px solid ${THEME.border};
   padding: 8px 14px;
   font-size: 13px;
   border-radius: 8px;
-  box-shadow: 0 6px 16px rgba(32, 27, 33, 0.28);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
   font-weight: 500;
 }
 
 /* Inline-mode shadow-root composer (separate from the iframe composer in
-   composer-styles.ts). Same cream + ink + soft shadow language. */
+   composer-styles.ts). Same dark surface + cream text + gold accent. */
 .composer {
   position: fixed;
   width: 320px;
-  background: ${BRAND_CREAM};
-  border: 1px solid #e8dfb0;
+  background: ${THEME.surface};
+  border: 1px solid ${THEME.border};
   border-radius: 10px;
-  box-shadow: 0 10px 25px rgba(32, 27, 33, 0.18);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -356,13 +364,13 @@ export const STYLES = `
      for [popover] sets inset:0 + margin:auto which would center us. */
   inset: auto;
   margin: 0;
-  color: ${BRAND_INK};
+  color: ${THEME.text};
   overflow: visible;
 }
 .composer::backdrop { background: transparent; }
 .composer .meta {
   font-size: 11px;
-  color: #5c5546;
+  color: ${THEME.textMuted};
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   word-break: break-all;
 }
@@ -372,17 +380,17 @@ export const STYLES = `
   resize: vertical;
   padding: 8px;
   font-size: 13px;
-  border: 1px solid #e8dfb0;
+  border: 1px solid ${THEME.border};
   border-radius: 6px;
   outline: none;
   font-family: inherit;
-  background: #fffdf3;
-  color: ${BRAND_INK};
+  background: ${THEME.base};
+  color: ${THEME.text};
 }
-.composer textarea::placeholder { color: #8a8270; }
+.composer textarea::placeholder { color: ${THEME.textFaint}; }
 .composer textarea:focus {
-  border-color: ${BRAND_INK};
-  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.40);
+  border-color: ${THEME.text};
+  box-shadow: 0 0 0 3px ${THEME.ring};
 }
 
 .row { display: flex; justify-content: flex-end; gap: 8px; }
@@ -395,24 +403,25 @@ export const STYLES = `
   font-family: inherit;
   font-weight: 500;
 }
-.btn.primary { background: ${BRAND_INK}; color: ${BRAND_CREAM}; }
-.btn.primary:hover { background: #2a2528; }
-.btn.primary:disabled { background: #8a8270; cursor: not-allowed; }
-.btn.ghost { background: transparent; color: ${BRAND_INK}; }
-.btn.ghost:hover { background: rgba(32, 27, 33, 0.06); }
+.btn.primary { background: ${THEME.primary}; color: ${THEME.primaryFg}; }
+.btn.primary:hover { background: ${THEME.primaryHover}; }
+.btn.primary:disabled { background: ${THEME.hoverStrong}; color: ${THEME.textFaint}; cursor: not-allowed; }
+.btn.ghost { background: transparent; color: ${THEME.text}; }
+.btn.ghost:hover { background: ${THEME.hover}; }
 
 .toast {
   position: fixed;
   bottom: 80px;
   right: 20px;
-  background: ${BRAND_INK};
-  color: ${BRAND_CREAM};
+  background: ${THEME.surface};
+  color: ${THEME.text};
+  border: 1px solid ${THEME.border};
   padding: 10px 14px;
   font-size: 13px;
   border-radius: 8px;
-  box-shadow: 0 6px 16px rgba(32, 27, 33, 0.28);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
 }
-.toast.error { background: ${STATUS.error.fg}; color: ${BRAND_CREAM}; }
+.toast.error { background: ${STATUS.error.bg}; color: ${STATUS.error.fg}; border-color: ${STATUS.error.border}; }
 
 @media (prefers-reduced-motion: reduce) {
   .fab, .fab:hover, .fab.dragging,

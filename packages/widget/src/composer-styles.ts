@@ -2,29 +2,24 @@
 /**
  * Inline CSS for the composer iframe (composerHTML in widget.ts).
  *
- * Templated from @pinagent/ui/tokens so the composer reads as the same
- * brand as the dock — cream surfaces, ink text, gold accent, status
- * colors tuned for cream. Token values inline at module-load time;
- * the string is dropped into the iframe's <style> block via srcdoc.
+ * Templated from the widget's dark theme (theme.ts → @pinagent/ui/tokens)
+ * so the composer reads as the same brand as the dock's dark mode — deep
+ * ink surfaces, cream text, gold accent, status colors tuned for dark.
+ * Token values inline at module-load time; the string is dropped into the
+ * iframe's <style> block via srcdoc.
  */
-import {
-  BRAND_CREAM,
-  BRAND_GOLD,
-  BRAND_INK,
-  FONT_MONO,
-  FONT_SANS,
-  STATUS,
-} from '@pinagent/ui/tokens';
+import { FONT_MONO, FONT_SANS } from '@pinagent/ui/tokens';
+import { STATUS, THEME } from './theme';
 
 export const COMPOSER_STYLES = `
   html, body { margin: 0; padding: 0; background: transparent; height: 100%; }
   * { box-sizing: border-box; font-family: ${FONT_SANS}; }
-  body { color: ${BRAND_INK}; }
+  body { color: ${THEME.text}; }
   .card {
-    background: ${BRAND_CREAM};
-    border: 1px solid #e8dfb0;
+    background: ${THEME.surface};
+    border: 1px solid ${THEME.border};
     border-radius: 10px;
-    box-shadow: 0 10px 25px rgba(32, 27, 33, 0.18);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
     padding: 12px;
     display: flex;
     flex-direction: column;
@@ -41,7 +36,7 @@ export const COMPOSER_STYLES = `
     flex-direction: column;
     gap: 6px;
     padding-bottom: 8px;
-    border-bottom: 1px solid #e8dfb0;
+    border-bottom: 1px solid ${THEME.border};
   }
   .hdr-row {
     display: flex;
@@ -51,10 +46,11 @@ export const COMPOSER_STYLES = `
   }
   .hdr-row[hidden] { display: none; }
 
-  /* Identity row: tag pill + quoted label. Pill uses ink-on-cream so
-     it visually matches the same tag highlighted in the breadcrumb.
-     The right padding reserves space for the drag handle that the
-     parent positions inside the iframe's top-right corner. */
+  /* Identity row: tag pill + quoted label. Pill uses a cream-tint fill so
+     it reads as a highlighted code chip on the dark card and matches the
+     same tag highlighted in the breadcrumb. The right padding reserves
+     space for the drag handle that the parent positions inside the
+     iframe's top-right corner. */
   .hdr-identity { padding-right: 28px; }
   .el-pill {
     display: inline-flex;
@@ -62,8 +58,8 @@ export const COMPOSER_STYLES = `
     font-family: ${FONT_MONO};
     font-size: 11px;
     font-weight: 600;
-    background: ${BRAND_INK};
-    color: ${BRAND_CREAM};
+    background: ${THEME.chip};
+    color: ${THEME.text};
     padding: 2px 8px;
     border-radius: 4px;
     flex-shrink: 0;
@@ -71,7 +67,7 @@ export const COMPOSER_STYLES = `
   .el-label {
     font-size: 13px;
     font-weight: 500;
-    color: ${BRAND_INK};
+    color: ${THEME.text};
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -82,7 +78,7 @@ export const COMPOSER_STYLES = `
   .el-comp {
     font-family: ${FONT_MONO};
     font-size: 11px;
-    color: ${BRAND_INK};
+    color: ${THEME.text};
     opacity: 0.6;
     white-space: nowrap;
     flex-shrink: 0;
@@ -96,14 +92,14 @@ export const COMPOSER_STYLES = `
     align-items: center;
     font-size: 11px;
     font-weight: 600;
-    background: ${BRAND_GOLD};
-    color: ${BRAND_INK};
+    background: ${THEME.accent};
+    color: ${THEME.primaryFg};
     padding: 2px 8px;
     border-radius: 4px;
     flex-shrink: 0;
     cursor: help;
   }
-  .el-extras:focus-visible { outline: 2px solid ${BRAND_INK}; outline-offset: 1px; }
+  .el-extras:focus-visible { outline: 2px solid ${THEME.text}; outline-offset: 1px; }
 
   /* Popover listing every selected element. Anchored to the header
      block's right edge (not the badge) so it always grows leftward and
@@ -121,10 +117,10 @@ export const COMPOSER_STYLES = `
     max-width: 320px;
     max-height: 232px;
     overflow-y: auto;
-    background: #fff;
-    border: 1px solid #e8dfb0;
+    background: ${THEME.surface};
+    border: 1px solid ${THEME.border};
     border-radius: 8px;
-    box-shadow: 0 8px 20px rgba(32, 27, 33, 0.18);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
     padding: 8px 10px;
     text-align: left;
   }
@@ -135,25 +131,25 @@ export const COMPOSER_STYLES = `
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: #8a7a2e;
+    color: ${THEME.textMuted};
     margin-bottom: 6px;
   }
   .ex-row { display: flex; flex-direction: column; gap: 2px; padding: 5px 0; }
-  .ex-row + .ex-row { border-top: 1px solid #f0e9cf; }
+  .ex-row + .ex-row { border-top: 1px solid ${THEME.border}; }
   .ex-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .ex-pill {
     font-family: ${FONT_MONO};
     font-size: 10px;
     font-weight: 600;
-    background: ${BRAND_INK};
-    color: ${BRAND_CREAM};
+    background: ${THEME.chip};
+    color: ${THEME.text};
     padding: 1px 6px;
     border-radius: 3px;
     flex-shrink: 0;
   }
   .ex-label {
     font-size: 12px;
-    color: ${BRAND_INK};
+    color: ${THEME.text};
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -164,8 +160,8 @@ export const COMPOSER_STYLES = `
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: #8a7a2e;
-    background: ${BRAND_GOLD};
+    color: ${THEME.primaryFg};
+    background: ${THEME.accent};
     padding: 1px 5px;
     border-radius: 3px;
     flex-shrink: 0;
@@ -174,7 +170,7 @@ export const COMPOSER_STYLES = `
   .ex-loc {
     font-family: ${FONT_MONO};
     font-size: 10px;
-    color: #5c5546;
+    color: ${THEME.textMuted};
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -185,7 +181,7 @@ export const COMPOSER_STYLES = `
      loc resolved. Hover/loading/ok/err mirror the old .meta states. */
   .hdr-file {
     font-size: 11px;
-    color: #5c5546;
+    color: ${THEME.textMuted};
     font-family: ${FONT_MONO};
     padding: 2px 6px;
     margin: 0 -6px;
@@ -207,7 +203,7 @@ export const COMPOSER_STYLES = `
     opacity: 0.65;
   }
   .hdr-file.clickable { cursor: pointer; }
-  .hdr-file.clickable:hover { background: #f5efd0; color: ${BRAND_INK}; }
+  .hdr-file.clickable:hover { background: ${THEME.hover}; color: ${THEME.text}; }
   .hdr-file.clickable:hover .hdr-icon { opacity: 1; }
   .hdr-file.loading { opacity: 0.5; }
   .hdr-file.ok { background: ${STATUS.landed.bg}; color: ${STATUS.landed.fg}; }
@@ -222,17 +218,17 @@ export const COMPOSER_STYLES = `
     gap: 4px;
   }
   .bc-item {
-    color: #8a8270;
+    color: ${THEME.textMuted};
     padding: 1px 6px;
     border-radius: 3px;
   }
   .bc-item.bc-selected {
-    background: ${BRAND_INK};
-    color: ${BRAND_CREAM};
+    background: ${THEME.chip};
+    color: ${THEME.text};
     font-weight: 600;
   }
   .bc-sep {
-    color: #b8ad88;
+    color: ${THEME.textFaint};
     font-size: 12px;
     user-select: none;
   }
@@ -250,21 +246,21 @@ export const COMPOSER_STYLES = `
     font-family: inherit;
     font-size: 12px;
     font-weight: 500;
-    color: ${BRAND_INK};
+    color: ${THEME.text};
     background: transparent;
-    border: 1px solid #e8dfb0;
+    border: 1px solid ${THEME.border};
     border-radius: 999px;
     padding: 5px 10px;
     cursor: pointer;
     transition: background 100ms ease, border-color 100ms ease, box-shadow 100ms ease;
   }
   .qa-chip:hover {
-    background: #f5efd0;
-    border-color: ${BRAND_INK};
+    background: ${THEME.hover};
+    border-color: ${THEME.text};
   }
   .qa-chip:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.45);
+    box-shadow: 0 0 0 3px ${THEME.ring};
   }
   .qa-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.85; }
 
@@ -272,16 +268,16 @@ export const COMPOSER_STYLES = `
   .footer-row { padding-top: 2px; }
   .kbd-hint {
     font-size: 11px;
-    color: #5c5546;
+    color: ${THEME.textMuted};
     font-family: ${FONT_MONO};
     user-select: none;
   }
   .kbd-hint kbd {
     font-family: ${FONT_MONO};
     font-size: 11px;
-    color: ${BRAND_INK};
-    background: #f5efd0;
-    border: 1px solid #e8dfb0;
+    color: ${THEME.text};
+    background: ${THEME.hoverStrong};
+    border: 1px solid ${THEME.border};
     border-radius: 3px;
     padding: 0 4px;
     margin-right: 2px;
@@ -291,20 +287,20 @@ export const COMPOSER_STYLES = `
     resize: none;
     padding: 8px;
     font-size: 13px;
-    border: 1px solid #e8dfb0;
+    border: 1px solid ${THEME.border};
     border-radius: 6px;
     outline: none;
     font-family: inherit;
-    background: #fffdf3;
-    color: ${BRAND_INK};
+    background: ${THEME.base};
+    color: ${THEME.text};
     transition: border-color 120ms ease, box-shadow 120ms ease;
   }
-  textarea::placeholder { color: #8a8270; }
+  textarea::placeholder { color: ${THEME.textFaint}; }
   textarea:focus {
-    border-color: ${BRAND_INK};
-    box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.40);
+    border-color: ${THEME.text};
+    box-shadow: 0 0 0 3px ${THEME.ring};
   }
-  textarea:disabled { background: #f5efd0; color: #5c5546; }
+  textarea:disabled { background: ${THEME.hover}; color: ${THEME.textMuted}; }
   #pa-ta { flex: 1; min-height: 80px; }
 
   /* --- @-mention file picker (mention-menu.ts) ------------------- */
@@ -312,10 +308,10 @@ export const COMPOSER_STYLES = `
     position: fixed;
     z-index: 50;
     overflow-y: auto;
-    background: ${BRAND_CREAM};
-    border: 1px solid #e8dfb0;
+    background: ${THEME.surface};
+    border: 1px solid ${THEME.border};
     border-radius: 8px;
-    box-shadow: 0 8px 22px rgba(32, 27, 33, 0.22);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
     padding: 4px;
     font-size: 12px;
   }
@@ -329,12 +325,12 @@ export const COMPOSER_STYLES = `
     cursor: pointer;
     white-space: nowrap;
   }
-  .pa-mention-row.is-active { background: #f5efd0; }
-  .pa-mention-icon { display: inline-flex; flex: 0 0 auto; color: #8a8270; }
+  .pa-mention-row.is-active { background: ${THEME.hoverStrong}; }
+  .pa-mention-icon { display: inline-flex; flex: 0 0 auto; color: ${THEME.textMuted}; }
   .pa-mention-icon svg { width: 13px; height: 13px; display: block; }
   .pa-mention-name {
     flex: 0 1 auto;
-    color: ${BRAND_INK};
+    color: ${THEME.text};
     font-weight: 500;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -342,7 +338,7 @@ export const COMPOSER_STYLES = `
   .pa-mention-dir {
     flex: 1 1 auto;
     min-width: 0;
-    color: #8a8270;
+    color: ${THEME.textMuted};
     font-family: ${FONT_MONO};
     font-size: 11px;
     overflow: hidden;
@@ -352,7 +348,7 @@ export const COMPOSER_STYLES = `
   }
   .pa-mention-empty, .pa-mention-more {
     padding: 6px;
-    color: #8a8270;
+    color: ${THEME.textMuted};
     font-size: 11px;
   }
   .row { display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
@@ -367,11 +363,11 @@ export const COMPOSER_STYLES = `
     font-weight: 500;
     transition: background 100ms ease, color 100ms ease;
   }
-  .btn.primary { background: ${BRAND_INK}; color: ${BRAND_CREAM}; }
-  .btn.primary:hover { background: #2a2528; }
-  .btn.primary:disabled { background: #8a8270; cursor: not-allowed; }
-  .btn.ghost { background: transparent; color: ${BRAND_INK}; }
-  .btn.ghost:hover { background: rgba(32, 27, 33, 0.06); }
+  .btn.primary { background: ${THEME.primary}; color: ${THEME.primaryFg}; }
+  .btn.primary:hover { background: ${THEME.primaryHover}; }
+  .btn.primary:disabled { background: ${THEME.hoverStrong}; color: ${THEME.textFaint}; cursor: not-allowed; }
+  .btn.ghost { background: transparent; color: ${THEME.text}; }
+  .btn.ghost:hover { background: ${THEME.hover}; }
   .btn.ghost.stop,
   .btn.ghost.cancel { color: ${STATUS.error.fg}; }
   .btn.ghost.stop:hover,
@@ -382,7 +378,7 @@ export const COMPOSER_STYLES = `
   .header {
     font-size: 12px;
     font-weight: 500;
-    color: ${BRAND_INK};
+    color: ${THEME.text};
     display: flex;
     align-items: center;
     gap: 6px;
@@ -406,12 +402,12 @@ export const COMPOSER_STYLES = `
   .log {
     flex: 1;
     overflow-y: auto;
-    border: 1px solid #e8dfb0;
+    border: 1px solid ${THEME.border};
     border-radius: 6px;
     padding: 8px;
     font-size: 12px;
     line-height: 1.45;
-    background: #fffdf3;
+    background: ${THEME.base};
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -421,13 +417,13 @@ export const COMPOSER_STYLES = `
      the card hugs the header/footer until content lands. The iframe height
      is shrunk to match by Composer.refitStream() in widget.ts. */
   .log:empty { display: none; }
-  .msg { white-space: pre-wrap; word-break: break-word; color: ${BRAND_INK}; }
+  .msg { white-space: pre-wrap; word-break: break-word; color: ${THEME.text}; }
   .user-msg {
     white-space: pre-wrap;
     word-break: break-word;
-    color: ${BRAND_INK};
-    background: #f5efd0;
-    border-left: 3px solid ${BRAND_INK};
+    color: ${THEME.text};
+    background: ${THEME.hoverStrong};
+    border-left: 3px solid ${THEME.accent};
     padding: 4px 8px;
     border-radius: 0 4px 4px 0;
     align-self: flex-start;
@@ -444,7 +440,7 @@ export const COMPOSER_STYLES = `
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: #8a7a2e;
+    color: ${THEME.textMuted};
     margin-right: 6px;
   }
   .user-msg:not(.pending) .queued-tag { display: none; }
@@ -453,8 +449,8 @@ export const COMPOSER_STYLES = `
     font-family: ${FONT_MONO};
     font-size: 10px;
     font-weight: 600;
-    background: ${BRAND_INK};
-    color: ${BRAND_CREAM};
+    background: ${THEME.chip};
+    color: ${THEME.text};
     padding: 0 5px;
     border-radius: 3px;
     margin-right: 4px;
@@ -465,13 +461,13 @@ export const COMPOSER_STYLES = `
     gap: 6px;
     font-family: ${FONT_MONO};
     font-size: 11px;
-    background: #f5efd0;
-    color: ${BRAND_INK};
+    background: ${THEME.hoverStrong};
+    color: ${THEME.text};
     border-radius: 4px;
     padding: 3px 6px;
     align-self: flex-start;
     max-width: 100%;
-    border: 1px solid #e8dfb0;
+    border: 1px solid ${THEME.border};
   }
   .chip.err {
     background: ${STATUS.error.bg};
@@ -480,7 +476,7 @@ export const COMPOSER_STYLES = `
   }
   .chip-name { font-weight: 600; }
   .chip-summary {
-    color: #5c5546;
+    color: ${THEME.textMuted};
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -489,7 +485,7 @@ export const COMPOSER_STYLES = `
   .chip-status.ok { color: ${STATUS.landed.fg}; opacity: 1; }
   .chip-status.err { color: ${STATUS.error.fg}; opacity: 1; }
   .err-line { color: ${STATUS.error.fg}; font-size: 12px; white-space: pre-wrap; }
-  .footer-note { font-size: 11px; color: #5c5546; font-family: ${FONT_MONO}; }
+  .footer-note { font-size: 11px; color: ${THEME.textMuted}; font-family: ${FONT_MONO}; }
 
   /* Phase H — worktree lifecycle row. The text label on the left
      describes the current state; buttons on the right are the terminal
@@ -574,7 +570,7 @@ export const COMPOSER_STYLES = `
   }
   .ask-options { display: flex; flex-wrap: wrap; gap: 4px; }
   .ask-option {
-    background: ${BRAND_CREAM};
+    background: ${THEME.surface};
     border: 1px solid ${STATUS.awaitingClarification.border};
     color: ${STATUS.awaitingClarification.fg};
     padding: 3px 8px;
@@ -584,7 +580,7 @@ export const COMPOSER_STYLES = `
     font-family: inherit;
     transition: background 100ms ease;
   }
-  .ask-option:hover { background: #fffdf3; box-shadow: 0 0 0 2px ${BRAND_GOLD}; }
+  .ask-option:hover { background: ${THEME.hoverStrong}; box-shadow: 0 0 0 2px ${THEME.accent}; }
   .ask-row { display: flex; gap: 4px; align-items: stretch; }
   .ask-input { font-size: 12px; min-height: 0; }
   .ask-resolved {
@@ -601,13 +597,13 @@ export const COMPOSER_STYLES = `
     font-size: 11px;
     font-weight: 500;
   }
-  .ask-answer { color: ${BRAND_INK}; font-size: 12px; white-space: pre-wrap; }
+  .ask-answer { color: ${THEME.text}; font-size: 12px; white-space: pre-wrap; }
 
   .follow {
     display: flex;
     gap: 6px;
     align-items: stretch;
-    border-top: 1px solid #e8dfb0;
+    border-top: 1px solid ${THEME.border};
     padding-top: 8px;
   }
   #pa-follow-input { font-size: 12px; min-height: 0; }
@@ -621,9 +617,9 @@ export const COMPOSER_STYLES = `
     align-items: center;
     gap: 6px;
     font-size: 11px;
-    color: ${BRAND_INK};
-    background: ${BRAND_CREAM};
-    border: 1px solid #e8dfb0;
+    color: ${THEME.text};
+    background: ${THEME.base};
+    border: 1px solid ${THEME.border};
     border-radius: 6px;
     padding: 4px 6px;
     margin-bottom: 6px;
@@ -634,8 +630,8 @@ export const COMPOSER_STYLES = `
     font-family: ${FONT_MONO};
     font-size: 10px;
     font-weight: 600;
-    background: ${BRAND_INK};
-    color: ${BRAND_CREAM};
+    background: ${THEME.chip};
+    color: ${THEME.text};
     padding: 0 5px;
     border-radius: 3px;
   }
@@ -651,7 +647,7 @@ export const COMPOSER_STYLES = `
     flex-shrink: 0;
     border: none;
     background: transparent;
-    color: ${BRAND_INK};
+    color: ${THEME.text};
     cursor: pointer;
     font-size: 15px;
     line-height: 1;
@@ -671,7 +667,7 @@ export const COMPOSER_STYLES = `
     min-width: 0;
     font-family: ${FONT_MONO};
     font-size: 11px;
-    color: ${BRAND_INK};
+    color: ${THEME.text};
     opacity: 0.6;
   }
   .stream-context[hidden] { display: none; }
@@ -715,7 +711,7 @@ export const COMPOSER_STYLES = `
     min-width: 0;
     font-size: 12px;
     font-weight: 500;
-    color: ${BRAND_INK};
+    color: ${THEME.text};
     line-height: 1.4;
     white-space: nowrap;
     overflow: hidden;
@@ -779,11 +775,11 @@ export const COMPOSER_STYLES = `
     border: 0;
     border-radius: 6px;
     background: transparent;
-    color: ${BRAND_INK};
+    color: ${THEME.text};
     cursor: pointer;
     transition: background 100ms ease, color 100ms ease;
   }
-  .mini-icon-btn:hover { background: rgba(32, 27, 33, 0.08); }
+  .mini-icon-btn:hover { background: ${THEME.hover}; }
   .mini-icon-btn svg { width: 15px; height: 15px; display: block; }
   .mini-icon-btn.danger { color: ${STATUS.error.fg}; }
   .mini-icon-btn.danger:hover { background: ${STATUS.error.bg}; }
@@ -806,8 +802,8 @@ export const COMPOSER_STYLES = `
     animation: pa-card-pulse 1.6s ease-out infinite;
   }
   @keyframes pa-card-pulse {
-    0%, 100% { box-shadow: 0 0 0 1px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(32, 27, 33, 0.18); }
-    50%      { box-shadow: 0 0 0 4px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(32, 27, 33, 0.18); }
+    0%, 100% { box-shadow: 0 0 0 1px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(0, 0, 0, 0.5); }
+    50%      { box-shadow: 0 0 0 4px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(0, 0, 0, 0.5); }
   }
 
   /* One-shot gold flash when a new tool activity lands while minimized,
@@ -819,8 +815,8 @@ export const COMPOSER_STYLES = `
     animation: pa-activity-pulse 0.45s ease-out;
   }
   @keyframes pa-activity-pulse {
-    0%   { box-shadow: 0 0 0 3px ${BRAND_GOLD}, 0 10px 25px rgba(32, 27, 33, 0.18); }
-    100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0), 0 10px 25px rgba(32, 27, 33, 0.18); }
+    0%   { box-shadow: 0 0 0 3px ${THEME.accent}, 0 10px 25px rgba(0, 0, 0, 0.5); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0), 0 10px 25px rgba(0, 0, 0, 0.5); }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -829,7 +825,7 @@ export const COMPOSER_STYLES = `
     .ms-spinner { animation: none; }
     /* Snap the check to drawn rather than animating the stroke. */
     body[data-agent-state='done'] .ms-check path { animation: none; stroke-dashoffset: 0; }
-    body.mini.needs-input .card { animation: none; box-shadow: 0 0 0 2px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(32, 27, 33, 0.18); }
+    body.mini.needs-input .card { animation: none; box-shadow: 0 0 0 2px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(0, 0, 0, 0.5); }
     body.mini.activity .card { animation: none; }
   }
 `;

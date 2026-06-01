@@ -132,6 +132,28 @@ export const STATUS: Record<StatusKey, StatusTone> = {
   },
 };
 
+/**
+ * Dark-mode status palette — same eight tones tuned to read on the deep ink
+ * surfaces (#201B21 / #2A2528) instead of cream: brighter fg, dim desaturated
+ * bg, mid-tone border. Mirrors the `.dark` status block in globals.css and is
+ * consumed by the dark-mode widget (see packages/widget/src/theme.ts).
+ */
+export const STATUS_DARK: Record<StatusKey, StatusTone> = {
+  pending: { fg: '#C9BC85', bg: '#2F2925', border: '#4A4030' },
+  working: { fg: '#E3A268', bg: '#322820', border: '#5A4530' },
+  awaitingClarification: { fg: '#FFD700', bg: '#3A3010', border: '#806020' },
+  readyToLand: { fg: '#8FBF90', bg: '#1F2A20', border: '#3A5240' },
+  landed: { fg: '#6FA275', bg: '#1A2520', border: '#2F4230' },
+  discarded: { fg: '#A39A72', bg: '#2A2520', border: '#4A4030' },
+  error: { fg: '#E89478', bg: '#3A2520', border: '#6A3A2A' },
+  anchorLost: {
+    fg: '#C9B863',
+    bg: '#2F2925',
+    border: '#6A5A2A',
+    borderStyle: 'dashed',
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Radii
 // ---------------------------------------------------------------------------

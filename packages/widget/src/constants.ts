@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import { formatCompactUsd } from '@pinagent/shared';
-import { BRAND_GOLD, FONT_SANS, STATUS, type StatusKey } from '@pinagent/ui/tokens';
-import { BRAND_CREAM, BRAND_INK, PICKER_CURSOR_DATA_URL } from './brand';
+import { FONT_SANS, type StatusKey } from '@pinagent/ui/tokens';
+import { PICKER_CURSOR_DATA_URL } from './brand';
+import { STATUS, THEME } from './theme';
 
 export const ENDPOINT = '/__pinagent/feedback';
 export const RECONNECT_MIN_MS = 1_000;
@@ -94,7 +95,7 @@ export const DOC_STYLES = `
   border: 0;
   background: transparent;
   z-index: 2147483646;
-  color-scheme: light;
+  color-scheme: dark;
   /* iframe is positioned relative to documentElement origin — set via JS */
 }
 .pa-iframe[hidden] { display: none; }
@@ -104,20 +105,20 @@ export const DOC_STYLES = `
   width: ${BUBBLE_SIZE}px;
   height: ${BUBBLE_SIZE}px;
   border-radius: 50%;
-  background: ${BRAND_CREAM};
-  border: 2px solid #e8dfb0;
-  box-shadow: 0 4px 12px rgba(32, 27, 33, 0.16);
+  background: ${THEME.surface};
+  border: 2px solid ${THEME.border};
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
   cursor: pointer;
   z-index: 2147483645;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  color: ${BRAND_INK};
+  color: ${THEME.text};
   transition: transform 120ms ease, box-shadow 120ms ease;
   font-family: ${FONT_SANS};
 }
-.pa-bubble:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(32, 27, 33, 0.22); }
+.pa-bubble:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22); }
 .pa-bubble[hidden] { display: none; }
 
 /* Status-driven bubble variants. Color palette comes from
@@ -182,8 +183,8 @@ export const DOC_STYLES = `
 .pa-bubble.needs-input::after { display: none; }
 .pa-bubble.needs-input::before { content: '▲'; }
 @keyframes pa-bubble-attn {
-  0%, 100% { box-shadow: 0 4px 12px rgba(32, 27, 33, 0.16), 0 0 0 0 ${STATUS.awaitingClarification.border}; }
-  50%      { box-shadow: 0 4px 12px rgba(32, 27, 33, 0.16), 0 0 0 4px ${STATUS.awaitingClarification.border}; }
+  0%, 100% { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16), 0 0 0 0 ${STATUS.awaitingClarification.border}; }
+  50%      { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16), 0 0 0 4px ${STATUS.awaitingClarification.border}; }
 }
 
 .pa-bubble-spinner {
@@ -206,10 +207,10 @@ export const DOC_STYLES = `
   height: 16px;
   padding: 0;
   border-radius: 50%;
-  border: 1px solid #e8dfb0;
-  background: ${BRAND_CREAM};
-  color: ${BRAND_INK};
-  box-shadow: 0 2px 6px rgba(32, 27, 33, 0.2);
+  border: 1px solid ${THEME.border};
+  background: ${THEME.surface};
+  color: ${THEME.text};
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   cursor: pointer;
   z-index: 2147483646;
   display: flex;
@@ -236,10 +237,10 @@ export const DOC_STYLES = `
   align-items: center;
   gap: 2px;
   padding: 3px;
-  background: ${BRAND_CREAM};
-  border: 1px solid #e8dfb0;
+  background: ${THEME.surface};
+  border: 1px solid ${THEME.border};
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(32, 27, 33, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   z-index: 2147483646;
   opacity: 0;
   transform: translateY(-4px);
@@ -258,11 +259,11 @@ export const DOC_STYLES = `
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: ${BRAND_INK};
+  color: ${THEME.text};
   cursor: pointer;
   font-family: ${FONT_SANS};
 }
-.pa-ba-btn:hover { background: rgba(32, 27, 33, 0.08); }
+.pa-ba-btn:hover { background: ${THEME.hover}; }
 .pa-ba-btn svg { width: 15px; height: 15px; display: block; }
 .pa-ba-btn.danger { color: ${STATUS.error.fg}; }
 .pa-ba-btn.danger:hover { background: ${STATUS.error.bg}; }
@@ -277,17 +278,17 @@ export const DOC_STYLES = `
   justify-content: center;
   cursor: grab;
   z-index: 2147483646;
-  color: #8a8270;
+  color: ${THEME.textMuted};
   border-radius: 4px;
   transition: color 100ms ease, background 100ms ease, box-shadow 100ms ease;
 }
 .pa-drag-handle svg { display: block; }
-.pa-drag-handle:hover { color: ${BRAND_INK}; background: #f5efd0; }
+.pa-drag-handle:hover { color: ${THEME.text}; background: ${THEME.hover}; }
 .pa-drag-handle.dragging {
   cursor: grabbing;
-  color: ${BRAND_INK};
-  background: #f5efd0;
-  box-shadow: 0 0 0 3px ${BRAND_GOLD};
+  color: ${THEME.text};
+  background: ${THEME.hover};
+  box-shadow: 0 0 0 3px ${THEME.accent};
 }
 .pa-drag-handle[hidden] { display: none; }
 

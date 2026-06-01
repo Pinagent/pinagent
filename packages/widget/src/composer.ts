@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+
 import { composerHTML, ICON_STOP, ICON_X } from './composer-html';
 import { wireComposerIframe } from './composer-iframe';
 import {
@@ -31,6 +32,7 @@ import {
   locInstanceInfo,
   shortSelector,
 } from './selector';
+import { THEME } from './theme';
 import type {
   AgentState,
   Composer,
@@ -334,8 +336,8 @@ export function createComposerController(ctx: WidgetContext): {
     pointer.setAttribute('class', 'pa-pointer');
     pointer.setAttribute('viewBox', '0 0 18 10');
     const pointerPath = document.createElementNS(SVG_NS, 'path');
-    pointerPath.setAttribute('fill', '#fff');
-    pointerPath.setAttribute('stroke', '#e5e7eb');
+    pointerPath.setAttribute('fill', THEME.surface);
+    pointerPath.setAttribute('stroke', THEME.border);
     pointerPath.setAttribute('stroke-width', '1');
     pointerPath.setAttribute('stroke-linejoin', 'round');
     pointer.appendChild(pointerPath);
