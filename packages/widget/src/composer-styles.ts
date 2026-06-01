@@ -238,37 +238,6 @@ export const COMPOSER_STYLES = `
     user-select: none;
   }
 
-  /* --- Quick-action chips ------------------------------------- */
-  .qa-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .qa-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-family: inherit;
-    font-size: 12px;
-    font-weight: 500;
-    color: ${THEME.text};
-    background: transparent;
-    border: 1px solid ${THEME.border};
-    border-radius: 999px;
-    padding: 5px 10px;
-    cursor: pointer;
-    transition: background 100ms ease, border-color 100ms ease, box-shadow 100ms ease;
-  }
-  .qa-chip:hover {
-    background: ${THEME.hover};
-    border-color: ${THEME.text};
-  }
-  .qa-chip:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px ${THEME.ring};
-  }
-  .qa-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.85; }
-
   /* --- Footer kbd hint --------------------------------------- */
   .footer-row { padding-top: 2px; }
   .kbd-hint {

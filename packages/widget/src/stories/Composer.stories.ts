@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { composerHTML } from '../composer-html';
-import type { QuickAction } from '../quick-actions';
 import type { AgentState, ComposerMeta } from '../types';
 import { type ComposerFrameOptions, mountComposerFrame } from './story-mount';
 
@@ -14,26 +13,12 @@ import { type ComposerFrameOptions, mountComposerFrame } from './story-mount';
  * and `body.needs-input`.
  */
 
-const ICON_BUG = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="6" width="8" height="14" rx="4"/><path d="M3 9h3M18 9h3M3 15h3M18 15h3M12 2v2"/></svg>`;
-const ICON_TEXT = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7V5h16v2M9 19h6M12 5v14"/></svg>`;
-
-const SAMPLE_CHIPS: QuickAction[] = [
-  { id: 'fix', label: 'Fix this', icon: ICON_BUG, prompt: 'Fix the bug in this element: ' },
-  {
-    id: 'copy',
-    label: 'Edit copy',
-    icon: ICON_TEXT,
-    prompt: 'Reword the text in this element to ',
-  },
-];
-
 const SAMPLE_META: ComposerMeta = {
   tag: 'button',
   label: 'Add to cart',
   loc: { file: 'src/components/PriceCard.tsx', line: 42, col: 7 },
   component: 'PriceCard',
   breadcrumbs: ['main', 'section', 'div', 'button'],
-  chips: SAMPLE_CHIPS,
   extraCount: 0,
   extras: [],
 };
@@ -61,7 +46,7 @@ export default meta;
 type Story = StoryObj<ComposerFrameOptions & { agentState: AgentState }>;
 
 /** The pre-submit form: header (element identity + file:line + breadcrumb),
- *  quick-action chips, textarea, and the submit/cancel row. */
+ *  textarea, and the submit/cancel row. */
 export const PreSubmit: Story = {
   args: { pane: 'compose' },
 };

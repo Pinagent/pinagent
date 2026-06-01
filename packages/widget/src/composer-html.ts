@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 import { COMPOSER_STYLES } from './composer-styles';
-import type { QuickAction } from './quick-actions';
 import type { PaLoc } from './selector';
 import type { ComposerMeta } from './types';
 
@@ -57,7 +56,6 @@ export function composerHTML(meta: ComposerMeta): string {
     ${renderHeader(meta, esc)}
 
     <div class="pane" id="pa-composer-pane">
-      ${renderQuickActions(meta.chips, esc)}
       <textarea id="pa-ta" placeholder="Describe the change you want…"></textarea>
       <div class="row spread footer-row">
         <span class="kbd-hint"><kbd>↵</kbd> submit · <kbd>⇧↵</kbd> newline · <kbd>esc</kbd> cancel</span>
@@ -185,19 +183,6 @@ function renderExtrasPopover(meta: ComposerMeta, esc: (s: string) => string): st
     // Extras are numbered 1-based in selection order, matching the badges
     // drawn on the page while multi-picking and on the "+N" hover flash.
     meta.extras.map((e, i) => row(e.tag, e.label, e.loc, i + 1)).join('') +
-    `</div>`
-  );
-}
-
-function renderQuickActions(chips: ReadonlyArray<QuickAction>, esc: (s: string) => string): string {
-  return (
-    `<div class="qa-chips">` +
-    chips
-      .map(
-        (a) =>
-          `<button class="qa-chip" type="button" data-prompt="${esc(a.prompt)}">${a.icon}<span>${esc(a.label)}</span></button>`,
-      )
-      .join('') +
     `</div>`
   );
 }

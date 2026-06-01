@@ -19,7 +19,6 @@ import type { PendingRow } from './db/reads';
 import { deleteConversation } from './db/writes';
 import { openConversationInDock } from './dock-bridge';
 import { pickNextActive } from './keyboard';
-import { quickActionsFor } from './quick-actions';
 import {
   breadcrumbTags,
   componentOf,
@@ -249,7 +248,6 @@ export function createComposerController(ctx: WidgetContext): {
       loc,
       component,
       breadcrumbs: breadcrumbTags(target),
-      chips: quickActionsFor(target),
       extraCount: extraAnchors.length,
       extras: extraData.map((d) => d.display),
     };
