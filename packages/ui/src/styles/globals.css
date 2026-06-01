@@ -138,6 +138,9 @@
 }
 
 .dark {
+  /* Opt form controls, scrollbars, and UA chrome into dark rendering
+     wherever the .dark class is applied (dock, future hosted dashboard). */
+  color-scheme: dark;
   --background: #201b21;
   --foreground: #fcf9e8;
   --card: #2a2528;

@@ -106,7 +106,7 @@ export function ExtensionNudgeBanner() {
         type="button"
         onClick={dismiss}
         aria-label="Dismiss"
-        className="-mr-1 -mt-0.5 rounded p-0.5 hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+        className="-mr-1 -mt-0.5 rounded p-0.5 hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
       >
         <X className="h-3.5 w-3.5" />
       </button>
