@@ -241,10 +241,18 @@ export const COMPOSER_STYLES = `
   /* --- Footer kbd hint --------------------------------------- */
   .footer-row { padding-top: 2px; }
   .kbd-hint {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 4px 12px;
     font-size: 11px;
     color: ${THEME.textMuted};
     font-family: ${FONT_MONO};
     user-select: none;
+  }
+  .kbd-hint-item {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
   }
   .kbd-hint kbd {
     font-family: ${FONT_MONO};
