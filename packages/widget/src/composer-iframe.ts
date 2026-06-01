@@ -6,6 +6,7 @@ import { computeUnionCropRect } from './crop';
 import { getBrowserDb } from './db/client';
 import { getConversationMessages } from './db/reads';
 import { recordConversationStart } from './db/writes';
+import { toggleDock } from './dock-bridge';
 import { isHopKey, isMinimizeAllKey, shouldIgnoreHotkey } from './keyboard';
 import { attachMentionMenu } from './mention-menu';
 import { capturePageScreenshot } from './screenshot';
@@ -266,6 +267,16 @@ export function wireComposerIframe(args: WireComposerArgs): void {
   }
 
   iwin.addEventListener('keydown', (e) => {
+    // Cmd/Ctrl+Shift+P toggles the dock from anywhere — including while
+    // focus is inside this composer iframe (a spawned agent). The host
+    // bridge's own keydown listener only fires on the host document, and
+    // iframe keystrokes never bubble there, so relay straight to the dock
+    // (this handler runs in the host realm — see `ctx` use below).
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+      e.preventDefault();
+      toggleDock();
+      return;
+    }
     if (e.key === 'Escape') {
       e.preventDefault();
       // Esc steps down one level:
