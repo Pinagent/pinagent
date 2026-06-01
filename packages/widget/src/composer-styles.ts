@@ -12,6 +12,11 @@ import { FONT_MONO, FONT_SANS } from '@pinagent/ui/tokens';
 import { STATUS, THEME } from './theme';
 
 export const COMPOSER_STYLES = `
+  /* color-scheme: dark on the iframe document itself (not just the host's
+     .pa-iframe element) so the UA canvas behind the transparent body is dark,
+     not the default light. Without it a light frame bleeds out around the
+     card's rounded corners and edges on a dark page. */
+  html { color-scheme: dark; }
   html, body { margin: 0; padding: 0; background: transparent; height: 100%; }
   * { box-sizing: border-box; font-family: ${FONT_SANS}; }
   body { color: ${THEME.text}; }

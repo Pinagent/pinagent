@@ -16,6 +16,15 @@
  */
 html[data-pinagent-embedded="true"] {
   background: transparent;
+  /* `.dark` (on <html>) sets color-scheme: dark. When the ROOT element of
+     an iframe document is dark, the browser paints an OPAQUE dark canvas
+     behind it — ignoring `background: transparent` — which blacks out the
+     whole host page through this full-viewport iframe. Reset the root's
+     color-scheme to normal so the iframe canvas stays see-through. The body
+     below keeps color-scheme: dark, so the dock's own controls and
+     scrollbars still render dark (color-scheme on a non-root element doesn't
+     force the canvas opaque). */
+  color-scheme: normal;
 }
 html[data-pinagent-embedded="true"] body {
   background: transparent;
