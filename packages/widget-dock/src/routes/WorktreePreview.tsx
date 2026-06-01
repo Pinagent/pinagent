@@ -238,7 +238,7 @@ export function WorktreePreview() {
             key={`${iframeSrc}#${reloadNonce}`}
             src={iframeSrc}
             title="Worktree app preview"
-            className="h-full w-full border-0 bg-white"
+            className="h-full w-full border-0 bg-background"
           />
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-center">

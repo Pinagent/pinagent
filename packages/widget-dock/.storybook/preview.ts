@@ -4,6 +4,12 @@ import type { Preview } from '@storybook/react-vite';
 // and scans the dock source for utilities (see styles/globals.css @source).
 import '../src/styles/globals.css';
 
+// The dock ships dark by default (see index/embedded/standalone.html); render
+// Storybook stories on the same dark surface so they read truthfully.
+if (typeof document !== 'undefined') {
+  document.documentElement.classList.add('dark');
+}
+
 const preview: Preview = {
   parameters: {
     layout: 'centered',
