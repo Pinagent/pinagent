@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { WorktreeWireState } from '@pinagent/shared';
 import type { RegionRect } from './crop';
-import type { QuickAction } from './quick-actions';
 import type { PaLoc } from './selector';
 
 /**
  * Composer header shape. Built once when the user picks an element
  * and passed straight into composerHTML; tag/label/breadcrumbs come
  * from the live DOM, `loc` is from data-pa-loc (may be null in
- * unstrumented apps). `chips` is the element-aware quick-action set
- * — see quick-actions.ts.
+ * unstrumented apps).
  */
 export interface ExtraAnchor {
   file: string | null;
@@ -40,7 +38,6 @@ export interface ComposerMeta {
   /** Enclosing component name from `data-pa-comp`; null when uninstrumented. */
   component: string | null;
   breadcrumbs: string[];
-  chips: QuickAction[];
   /**
    * Number of Cmd/Ctrl-click extras the user queued before this
    * committing click. 0 in the single-pick case (the default); when > 0

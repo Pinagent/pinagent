@@ -394,21 +394,6 @@ export function wireComposerIframe(args: WireComposerArgs): void {
     }
   });
 
-  // Quick-action chips: clicking one drops the chip's starter
-  // prompt into the textarea, focuses it, and parks the cursor
-  // at the end so the user can finish the sentence.
-  const chips = idoc.querySelectorAll<HTMLButtonElement>('.qa-chip');
-  chips.forEach((chip) => {
-    chip.addEventListener('click', () => {
-      const prompt = chip.getAttribute('data-prompt') ?? '';
-      ta.value = prompt;
-      submit.disabled = ta.value.trim().length === 0;
-      ta.focus();
-      ta.setSelectionRange(ta.value.length, ta.value.length);
-      postTextareaHeight();
-    });
-  });
-
   // `@`-mention file picker. Keeps submit-enabled + auto-grow in sync when
   // it rewrites the textarea (it doesn't fire a synthetic input event). The
   // menu's capture-phase keydown runs ahead of the Enter-to-submit handler
