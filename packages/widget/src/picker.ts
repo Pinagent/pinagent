@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { Click, RegionRect, WidgetContext } from './context';
+import { setDockHidden } from './dock-bridge';
 import { locAncestors } from './selector';
 
 /** Minimum drawn size (px) for a region to count — guards stray clicks. */
@@ -91,6 +92,13 @@ export function createPicker(ctx: WidgetContext): {
     fab.classList.add('active');
     document.documentElement.classList.add('pa-picking');
 
+    // Hide the dock while picking so a fullscreen/floating dock — pressing
+    // the pick hotkey from inside the open dock is a supported flow — can't
+    // occlude the page being picked. Restored in `exitPicking`; hiding the
+    // iframe element keeps the dock's React tree (and any reply draft)
+    // alive, unlike closing it.
+    setDockHidden(true);
+
     const hint = document.createElement('div');
     hint.className = 'hint';
     hint.dataset.pp = 'hint';
@@ -156,6 +164,8 @@ export function createPicker(ctx: WidgetContext): {
       cancelAnimationFrame(pendingPicksRaf);
       pendingPicksRaf = null;
     }
+    // Reveal the dock again (no-op if it wasn't open / was already hidden).
+    setDockHidden(false);
     // Restore the tray if agents are still running.
     ctx.applyFabPresentation();
   }
