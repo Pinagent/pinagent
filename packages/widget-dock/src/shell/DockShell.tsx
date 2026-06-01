@@ -157,7 +157,7 @@ function HostBackdrop({ transportKind }: { transportKind: DockTransport['kind'] 
   const isMock = transportKind === 'mock';
   return (
     <div className="absolute inset-0 overflow-hidden -z-10">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,#F5EFD0_0%,transparent_55%),radial-gradient(circle_at_80%_70%,#F5EFD0_0%,transparent_50%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,var(--secondary)_0%,transparent_55%),radial-gradient(circle_at_80%_70%,var(--secondary)_0%,transparent_50%)]" />
       <div className="container mx-auto max-w-4xl px-8 pt-24">
         <div className="flex items-center gap-3 text-muted-foreground">
           <PinMark size="sm" tone="ink" />

@@ -20,8 +20,9 @@ html[data-pinagent-embedded="true"] {
 html[data-pinagent-embedded="true"] body {
   background: transparent;
   pointer-events: none;
-  /* Keep the dock's color-scheme stable regardless of host page settings. */
-  color-scheme: light;
+  /* Keep the dock's color-scheme stable regardless of host page settings.
+     The dock ships dark (see <html class="dark">), so pin it dark here too. */
+  color-scheme: dark;
 }
 html[data-pinagent-embedded="true"] body > * {
   /*
