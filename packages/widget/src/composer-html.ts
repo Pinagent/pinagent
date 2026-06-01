@@ -60,7 +60,12 @@ export function composerHTML(meta: ComposerMeta): string {
       ${renderQuickActions(meta.chips, esc)}
       <textarea id="pa-ta" placeholder="Describe the change you want…"></textarea>
       <div class="row spread footer-row">
-        <span class="kbd-hint"><kbd>↵</kbd> submit · <kbd>⇧↵</kbd> newline · <kbd>esc</kbd> cancel</span>
+        <span class="kbd-hint">
+          <span class="kbd-hint-item"><kbd>↵</kbd> submit</span>
+          <span class="kbd-hint-item"><kbd>⇧↵</kbd> newline</span>
+          <span class="kbd-hint-item"><kbd>esc</kbd> cancel</span>
+          <span class="kbd-hint-item"><kbd>c</kbd> comment</span>
+        </span>
         <div class="row" style="gap:8px;">
           <button class="btn ghost" id="pa-cancel" type="button">Cancel</button>
           <button class="btn primary" id="pa-submit" type="button" disabled>Submit</button>
