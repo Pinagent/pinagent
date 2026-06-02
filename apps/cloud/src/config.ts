@@ -36,6 +36,13 @@ export interface CloudConfig {
   /** Shared secret the relay presents when reporting lifecycle events. */
   relayInternalSecret: string;
   /**
+   * Shared secret the billing-rollover trigger (`POST /internal/billing/roll`)
+   * presents. Distinct from {@link relayInternalSecret} on purpose: the relay
+   * and the billing cron are different trust domains, so a party holding one
+   * secret can't drive the other's endpoint.
+   */
+  billingInternalSecret: string;
+  /**
    * base64url AES-256 key (32 bytes) for encrypting additional connections'
    * OIDC client secrets at rest. Optional — without it only the env-configured
    * connection can authenticate; stored per-connection credentials need it.
@@ -67,6 +74,7 @@ export function loadCloudConfig(env: Record<string, string | undefined>): CloudC
     ssoStateSecret: required(env, 'SSO_STATE_SECRET'),
     oidcNonceSecret: required(env, 'OIDC_NONCE_SECRET'),
     relayInternalSecret: required(env, 'RELAY_INTERNAL_SECRET'),
+    billingInternalSecret: required(env, 'BILLING_INTERNAL_SECRET'),
     ssoConnectionKek: env.SSO_CONNECTION_KEK,
     oidc: {
       connectionId: required(env, 'OIDC_CONNECTION_ID'),

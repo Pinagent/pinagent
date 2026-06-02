@@ -6,7 +6,9 @@
 #
 # Secrets (set via `wrangler secret put` / dashboard, NOT here):
 #   RELAY_AUTH_SECRET, DATABASE_URL, USER_TOKEN_SECRET, SSO_STATE_SECRET,
-#   OIDC_NONCE_SECRET, OIDC_CLIENT_SECRET
+#   OIDC_NONCE_SECRET, OIDC_CLIENT_SECRET,
+#   RELAY_INTERNAL_SECRET (relay↔cloud service auth),
+#   BILLING_INTERNAL_SECRET (billing-rollover trigger; separate trust domain)
 # Plain vars: PINAGENT_RELAY_PUBLIC_URL, OIDC_CONNECTION_ID, OIDC_ORG_ID,
 #   OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_REDIRECT_URI, LOGIN_RETURN_TO
 name = "pinagent-cloud"
