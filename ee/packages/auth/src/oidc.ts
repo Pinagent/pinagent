@@ -48,6 +48,11 @@ interface OidcMetadata {
 
 const DEFAULT_SCOPES = ['openid', 'email', 'profile'] as const;
 
+/** Drop trailing slashes so an issuer compares/serializes canonically. */
+function trimTrailingSlash(s: string): string {
+  return s.replace(/\/+$/, '');
+}
+
 export function createOidcProvider(config: OidcProviderConfig): SsoProvider {
   const fetchFn: FetchLike = config.fetch ?? ((url, init) => fetch(url, init));
   const now = config.nowSeconds ?? (() => Math.floor(Date.now() / 1000));
@@ -56,12 +61,21 @@ export function createOidcProvider(config: OidcProviderConfig): SsoProvider {
   async function discover(issuer: string): Promise<OidcMetadata> {
     const cached = metadataCache.get(issuer);
     if (cached) return cached;
-    const url = `${issuer.replace(/\/+$/, '')}/.well-known/openid-configuration`;
+    const url = `${trimTrailingSlash(issuer)}/.well-known/openid-configuration`;
     const res = await fetchFn(url, { headers: { accept: 'application/json' } });
     if (!res.ok) throw new SsoError(`OIDC discovery failed (${res.status})`);
     const meta = (await res.json()) as Partial<OidcMetadata>;
     if (!meta.authorization_endpoint || !meta.token_endpoint || !meta.jwks_uri || !meta.issuer) {
       throw new SsoError('OIDC discovery document missing required endpoints');
+    }
+    // RFC 8414 §3.3 / OIDC Discovery: the metadata's `issuer` MUST match the
+    // issuer we requested discovery for. This is the trust anchor — every
+    // endpoint we then call (authorize/token/jwks) AND the `iss` we later
+    // accept on the ID token come from this document, so without the check a
+    // discovery response an attacker can influence (DNS/MITM on a non-pinned
+    // issuer, or an issuer that redirects) could swap them all out.
+    if (trimTrailingSlash(meta.issuer) !== trimTrailingSlash(issuer)) {
+      throw new SsoError('OIDC discovery issuer mismatch');
     }
     const full = meta as OidcMetadata;
     metadataCache.set(issuer, full);
