@@ -19,7 +19,7 @@ export function Counter({ label }: { label: string }) {
         transition: 'background 120ms ease, border-color 120ms ease',
       }}
     >
-      <span>{label}</span>
+      <span style={{ fontWeight: 700 }}>{label}</span>
       <button
         type="button"
         onClick={() => setCount((c) => c + 1)}
