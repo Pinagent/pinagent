@@ -20,6 +20,7 @@ import {
   getWorkingCopyStatus,
   type HistoryStatusFilter,
   ID_RE,
+  isWorkingTreeDirty,
   listAuditEvents,
   listBranches,
   listChanges,
@@ -48,6 +49,7 @@ import {
   startHostBranch,
   stopWorktreeServer,
   summarizeChangesForPr,
+  summarizeCommitMessage,
   validateAnthropicKey,
   validateGithubToken,
 } from '@pinagent/agent-runner';
@@ -401,14 +403,21 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
             });
           }
         }
-        const result = await openHostBranchPr(storage.root, { title, body });
+        // Commit uncommitted edits (git add -A) with the generated title as
+        // the message so the PR contains them; openHostBranchPr no-ops the
+        // commit when the tree is clean.
+        const result = await openHostBranchPr(storage.root, { title, body, commitMessage: title });
         return json(res, result.ok ? 200 : 422, result);
       }
 
-      // POST /__pinagent/working-copy/push — push the current host branch
-      // to its upstream (the dashboard's "Push changes" action).
+      // POST /__pinagent/working-copy/push — commit any uncommitted changes
+      // (agent-generated message) then push the current host branch to its
+      // upstream (the dashboard's "Push changes" action).
       if (req.method === 'POST' && url === '/__pinagent/working-copy/push') {
-        const result = await pushHostBranch(storage.root);
+        const commitMessage = (await isWorkingTreeDirty(storage.root))
+          ? await summarizeCommitMessage(storage.root)
+          : undefined;
+        const result = await pushHostBranch(storage.root, commitMessage ? { commitMessage } : {});
         return json(res, result.ok ? 200 : 422, result);
       }
 

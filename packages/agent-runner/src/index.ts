@@ -73,6 +73,7 @@ export {
 export { type OpenInEditorResult, openInEditor } from './editor';
 export { type FileEntry, type ListFilesResult, listProjectFiles } from './files';
 export { listGitBranches, parseGitBranches } from './git-branches';
+export { isWorkingTreeDirty } from './git-utils';
 export {
   type GitHubPrResult,
   type OpenPrOpts,
@@ -87,6 +88,8 @@ export {
   searchHistory,
 } from './history';
 export {
+  type CommitResult,
+  commitWorkingChanges,
   type OpenHostBranchPrOpts,
   openHostBranchPr,
   type PushHostBranchResult,
@@ -156,7 +159,12 @@ export {
   type WorktreeState,
   WorktreeStateSchema,
 } from './storage';
-export { type PrSummary, parsePrSummary, summarizeChangesForPr } from './summarize-changes';
+export {
+  type PrSummary,
+  parsePrSummary,
+  summarizeChangesForPr,
+  summarizeCommitMessage,
+} from './summarize-changes';
 export {
   getWorkingCopyStatus,
   type WorkingCopyFile,

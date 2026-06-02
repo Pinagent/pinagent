@@ -104,7 +104,7 @@ const TOOL_LIST = [
   {
     name: 'create_pull_request',
     description:
-      "Open a GitHub pull request for the branch the dev-server is currently on. FIRST summarize the branch's changes yourself — inspect the diff against the base branch (e.g. `git diff <base>...HEAD`) — then call this with a concise `title` and a GitHub-flavored-markdown `body`. The tool pushes the current branch and opens the PR via the developer's configured GitHub token, targeting the project's configured base branch. If no token is set it pushes and returns a compare URL to open the PR manually. Returns the PR URL (or compare URL) and push status.",
+      "Open a GitHub pull request for the branch the dev-server is currently on. FIRST summarize the branch's changes yourself — inspect the diff against the base branch (e.g. `git diff <base>...HEAD`) — then call this with a concise `title` and a GitHub-flavored-markdown `body`. If the working tree has UNCOMMITTED changes, also pass a `commit_message`: the tool will `git add -A` and commit them (so they land in the PR) before pushing. The tool pushes the current branch and opens the PR via the developer's configured GitHub token, targeting the project's configured base branch. If no token is set it pushes and returns a compare URL to open the PR manually. Returns the PR URL (or compare URL) and push status.",
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -112,6 +112,11 @@ const TOOL_LIST = [
       properties: {
         title: { type: 'string', description: 'PR title — concise, imperative mood.' },
         body: { type: 'string', description: 'PR description in GitHub-flavored markdown.' },
+        commit_message: {
+          type: 'string',
+          description:
+            'Commit message for uncommitted working changes. Required when the tree is dirty; the tool commits them (git add -A) before pushing. Omit when everything is already committed.',
+        },
       },
     },
   },
@@ -145,6 +150,7 @@ const TranscriptInput = z.object({
 const CreatePrInput = z.object({
   title: z.string().min(1),
   body: z.string(),
+  commit_message: z.string().optional(),
 });
 
 /**
@@ -362,7 +368,11 @@ export async function callTool(
 
       case 'create_pull_request': {
         const input = CreatePrInput.parse(args);
-        const result = await openHostBranchPr(root, { title: input.title, body: input.body });
+        const result = await openHostBranchPr(root, {
+          title: input.title,
+          body: input.body,
+          ...(input.commit_message ? { commitMessage: input.commit_message } : {}),
+        });
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
           ...(result.ok ? {} : { isError: true }),

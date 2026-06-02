@@ -7,7 +7,7 @@
  * The state machine the user asked for:
  *   - on base branch, changes present    → Start a branch
  *   - no PR yet, changes present         → Create PR
- *   - PR open/draft, local commits ahead → Push changes
+ *   - PR open/draft, ahead or uncommitted → Push changes (commits, then pushes)
  *   - PR open/draft, up to date          → View PR
  *   - PR merged                          → View PR (terminal)
  *   - nothing to do                      → disabled
@@ -41,7 +41,9 @@ export function deriveWorkingCopyAction(status: WorkingCopyStatus): WorkingCopyA
     if (status.pr.state === 'merged' || status.pr.state === 'closed') {
       return { kind: 'view', label: 'View PR', href: status.pr.url };
     }
-    if (status.ahead > 0) {
+    // Local commits not yet pushed, OR uncommitted edits (Push commits them
+    // first) — either way there's new work to ship to the open PR.
+    if (status.ahead > 0 || status.dirty) {
       return { kind: 'push', label: 'Push changes' };
     }
     return { kind: 'view', label: 'View PR', href: status.pr.url };

@@ -9,7 +9,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { nanoid } from 'nanoid';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 type Mod = typeof import('../src/host-branch-pr');
 let mod: Mod;
@@ -127,5 +127,60 @@ describe('startHostBranch', () => {
     const res = await mod.startHostBranch(NOT_REPO, { name: 'feat/x' });
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/not a git repository/);
+  });
+});
+
+describe('commitWorkingChanges + auto-commit on PR/push', () => {
+  function porcelain(): Promise<string> {
+    return new Promise((res, rej) => {
+      const child = spawn('git', ['status', '--porcelain'], {
+        cwd: ROOT,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      let out = '';
+      child.stdout?.on('data', (d: Buffer) => {
+        out += d.toString();
+      });
+      child.on('error', rej);
+      child.on('close', () => res(out.trim()));
+    });
+  }
+
+  beforeEach(async () => {
+    await git(ROOT, ['checkout', '-f', 'main']);
+    await git(ROOT, ['reset', '--hard', 'HEAD']);
+  });
+
+  it('commits a dirty tree and no-ops a clean one', async () => {
+    await writeFile(join(ROOT, 'README.md'), 'dirty\n', 'utf8');
+    const first = await mod.commitWorkingChanges(ROOT, 'test: tweak readme');
+    expect(first.ok).toBe(true);
+    expect(first.committed).toBe(true);
+    expect(await porcelain()).toBe('');
+
+    const second = await mod.commitWorkingChanges(ROOT, 'test: nothing');
+    expect(second.ok).toBe(true);
+    expect(second.committed).toBe(false);
+  });
+
+  it('openHostBranchPr requires a commit message when the tree is dirty', async () => {
+    await git(ROOT, ['checkout', '-b', 'feat/dirty-nomsg']);
+    await writeFile(join(ROOT, 'README.md'), 'uncommitted\n', 'utf8');
+    const res = await mod.openHostBranchPr(ROOT, { title: 't', body: 'b' });
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/commit message/);
+  });
+
+  it('openHostBranchPr commits the dirty tree before pushing', async () => {
+    await git(ROOT, ['checkout', '-b', 'feat/dirty-commit']);
+    await writeFile(join(ROOT, 'README.md'), 'will be committed\n', 'utf8');
+    // No remote → the push fails, but the commit must already have happened.
+    const res = await mod.openHostBranchPr(ROOT, {
+      title: 'feat: readme',
+      body: 'b',
+      commitMessage: 'feat: readme',
+    });
+    expect(await porcelain()).toBe(''); // committed → working tree clean
+    expect(res.error ?? '').not.toMatch(/commit message/);
   });
 });

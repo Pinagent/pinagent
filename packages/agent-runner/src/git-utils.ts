@@ -85,6 +85,12 @@ export async function isInsideWorkTree(cwd: string): Promise<boolean> {
   return res.code === 0 && res.stdout.trim() === 'true';
 }
 
+/** Whether `cwd`'s working tree has uncommitted changes (`git status --porcelain`). */
+export async function isWorkingTreeDirty(cwd: string): Promise<boolean> {
+  const res = await runGitCapture(cwd, ['status', '--porcelain']);
+  return res.code === 0 && res.stdout.trim().length > 0;
+}
+
 /** Append `text` to the file at `path`, creating it if needed. No-op on empty text. */
 export async function appendLog(path: string, text: string): Promise<void> {
   if (!text) return;

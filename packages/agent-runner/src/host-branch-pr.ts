@@ -13,11 +13,45 @@
  * the MCP binary can import `openHostBranchPr` without bundling the SDK.
  */
 import { nanoid } from 'nanoid';
-import { isInsideWorkTree, runGitCapture } from './git-utils';
+import { isInsideWorkTree, isWorkingTreeDirty, runGitCapture } from './git-utils';
 import { type GitHubPrResult, openPrOnGitHub, pushBranch } from './github-pr';
 import { SettingsStore } from './settings-store';
 
 const BRANCH_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9/_.-]{0,127}$/;
+
+export interface CommitResult {
+  ok: boolean;
+  /** True when a commit was actually made; false when the tree was clean. */
+  committed: boolean;
+  error?: string;
+}
+
+/**
+ * Stage everything (`git add -A`) and commit with `message`. No-op (ok,
+ * committed: false) when the tree is clean. SDK-free, so the dashboard's
+ * Create PR / Push flows (and the MCP tool) can fold the developer's
+ * uncommitted edits into the branch before pushing — otherwise the push
+ * would silently omit them.
+ */
+export async function commitWorkingChanges(
+  projectRoot: string,
+  message: string,
+): Promise<CommitResult> {
+  if (!(await isWorkingTreeDirty(projectRoot))) return { ok: true, committed: false };
+  const add = await runGitCapture(projectRoot, ['add', '-A']);
+  if (add.code !== 0) {
+    return { ok: false, committed: false, error: `git add failed: ${add.stderr.trim()}` };
+  }
+  const commit = await runGitCapture(projectRoot, ['commit', '-m', message]);
+  if (commit.code !== 0 && !/nothing to commit/.test(`${commit.stdout}\n${commit.stderr}`)) {
+    return {
+      ok: false,
+      committed: false,
+      error: `git commit failed: ${commit.stderr.trim() || commit.stdout.trim()}`,
+    };
+  }
+  return { ok: true, committed: true };
+}
 
 async function resolveCurrentBranch(projectRoot: string): Promise<string | null> {
   const sym = await runGitCapture(projectRoot, ['symbolic-ref', '--short', 'HEAD']);
@@ -29,6 +63,12 @@ async function resolveCurrentBranch(projectRoot: string): Promise<string | null>
 export interface OpenHostBranchPrOpts {
   title: string;
   body: string;
+  /**
+   * Commit message for any uncommitted working changes, committed (git add
+   * -A) before the push so they land in the PR. Required when the tree is
+   * dirty; ignored when clean.
+   */
+  commitMessage?: string;
 }
 
 /**
@@ -56,6 +96,22 @@ export async function openHostBranchPr(
     };
   }
 
+  // Fold uncommitted working changes into the branch so the PR contains
+  // them (the dock surfaces uncommitted edits; a bare push would omit them).
+  if (await isWorkingTreeDirty(projectRoot)) {
+    if (!opts.commitMessage) {
+      return {
+        ok: false,
+        branchPushed: false,
+        error: 'uncommitted changes present — provide a commit message',
+      };
+    }
+    const committed = await commitWorkingChanges(projectRoot, opts.commitMessage);
+    if (!committed.ok) {
+      return { ok: false, branchPushed: false, error: committed.error };
+    }
+  }
+
   const push = await pushBranch(projectRoot, branch);
   if (!push.ok) {
     return { ok: false, branchPushed: false, error: push.error ?? 'git push failed' };
@@ -81,13 +137,31 @@ export interface PushHostBranchResult {
  * changes" action when local commits are ahead of the remote (e.g. agents
  * landed more work after the PR was opened).
  */
-export async function pushHostBranch(projectRoot: string): Promise<PushHostBranchResult> {
+export async function pushHostBranch(
+  projectRoot: string,
+  opts: { commitMessage?: string } = {},
+): Promise<PushHostBranchResult> {
   if (!(await isInsideWorkTree(projectRoot))) {
     return { ok: false, pushed: false, error: 'project root is not a git repository' };
   }
   const branch = await resolveCurrentBranch(projectRoot);
   if (!branch) {
     return { ok: false, pushed: false, error: 'cannot push a detached HEAD' };
+  }
+  // Commit uncommitted edits first so "Push changes" ships everything the
+  // dashboard shows, not just already-committed work.
+  if (await isWorkingTreeDirty(projectRoot)) {
+    if (!opts.commitMessage) {
+      return {
+        ok: false,
+        pushed: false,
+        error: 'uncommitted changes present — provide a commit message',
+      };
+    }
+    const committed = await commitWorkingChanges(projectRoot, opts.commitMessage);
+    if (!committed.ok) {
+      return { ok: false, pushed: false, error: committed.error };
+    }
   }
   const push = await pushBranch(projectRoot, branch);
   if (!push.ok) {
