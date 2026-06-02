@@ -57,14 +57,18 @@ export async function handleRelayEvents(
       action: `relay.${event.type}`,
       targetId: event.sessionId,
     });
-    // Meter connection time from the relay-reported duration on disconnects.
-    if (deps.meter && event.durationMs !== undefined) {
+    // Meter connection time once per session, from the DEVICE disconnect only.
+    // Both device.disconnected and client.disconnected carry a duration, but a
+    // session's connection time is the device's lifetime (one device per
+    // session; clients are incidental browser tabs that come and go). Metering
+    // every side would roughly double-count — or worse with multiple clients.
+    if (deps.meter && event.type === 'device.disconnected' && event.durationMs !== undefined) {
       await deps.meter.record({
         occurredAt: event.occurredAt,
         organizationId: event.organizationId,
         kind: USAGE_KINDS.relayConnectionSeconds,
         quantity: Math.round(event.durationMs / 1000),
-        metadata: { sessionId: event.sessionId, side: event.type.split('.')[0] },
+        metadata: { sessionId: event.sessionId, side: 'device' },
       });
     }
     // Track live device sessions so a policy push can be targeted. Only
