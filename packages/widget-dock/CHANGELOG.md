@@ -1,5 +1,11 @@
 # @pinagent/widget-dock
 
+## 0.2.1
+
+### Patch Changes
+
+- c79f182: Replace the dock header's layout-mode dropdown and close control with a single X button that closes the dock.
+
 ## 0.2.0
 
 ### Minor Changes

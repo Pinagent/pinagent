@@ -1,5 +1,12 @@
 # @pinagent/next-plugin
 
+## 0.6.1
+
+### Patch Changes
+
+- Updated dependencies [c79f182]
+  - @pinagent/widget-dock@0.2.1
+
 ## 0.6.0
 
 ### Minor Changes
