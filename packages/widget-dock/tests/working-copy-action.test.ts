@@ -33,6 +33,12 @@ describe('deriveWorkingCopyAction', () => {
     expect(a.label).toBe('Start a branch');
   });
 
+  it('disables on a detached HEAD', () => {
+    const a = deriveWorkingCopyAction(status({ branch: 'HEAD', filesChanged: 2 }));
+    expect(a.kind).toBe('disabled');
+    expect(a.disabledReason).toBe('Detached HEAD');
+  });
+
   it('disables on the base branch with no changes', () => {
     const a = deriveWorkingCopyAction(
       status({ isDefaultBranch: true, filesChanged: 0, dirty: false }),

@@ -26,6 +26,12 @@ export interface WorkingCopyAction {
 }
 
 export function deriveWorkingCopyAction(status: WorkingCopyStatus): WorkingCopyAction {
+  // Detached HEAD (e.g. a `git worktree add --detach`) has no branch to push
+  // or PR — disable rather than offer a Create PR that errors on click.
+  if (status.branch === 'HEAD') {
+    return { kind: 'disabled', label: 'Create PR', disabledReason: 'Detached HEAD' };
+  }
+
   // Can't open a PR from the base branch onto itself — offer to move the
   // changes onto a fresh feature branch instead (then Create PR applies).
   if (status.isDefaultBranch) {

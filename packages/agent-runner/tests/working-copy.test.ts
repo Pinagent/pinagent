@@ -135,7 +135,8 @@ describe('getWorkingCopyStatus', () => {
     expect(row).toBeDefined();
     expect(row?.status).toBe('added');
     expect(row?.added).toBe(2);
-    // It also counts toward the totals.
-    expect(status.files.some((f) => f.path === 'brand-new.ts')).toBe(true);
+    // pinagent's own data dir (created by the getDb call above) must never
+    // surface as a user change.
+    expect(status.files.some((f) => f.path.startsWith('.pinagent'))).toBe(false);
   });
 });
