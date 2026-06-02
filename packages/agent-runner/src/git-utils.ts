@@ -21,8 +21,19 @@ export interface GitCapture {
  * for missing refs, etc).
  */
 export function runGitCapture(cwd: string, args: string[]): Promise<GitCapture> {
+  return runCapture('git', args, cwd);
+}
+
+/**
+ * Generic command-capture, same drain-safe shape as {@link runGitCapture}
+ * (resolves on 'close', never rejects on non-zero exit). Used for `gh` (PR
+ * creation fallback) as well as `git`. Rejects only if the binary can't be
+ * spawned (e.g. `gh` not installed → ENOENT) — callers catch that to treat
+ * the tool as unavailable.
+ */
+export function runCapture(file: string, args: string[], cwd: string): Promise<GitCapture> {
   return new Promise((resolve, reject) => {
-    const child = spawn('git', args, { cwd, stdio: 'pipe' });
+    const child = spawn(file, args, { cwd, stdio: 'pipe' });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (d: Buffer) => {
@@ -32,12 +43,9 @@ export function runGitCapture(cwd: string, args: string[]): Promise<GitCapture> 
       stderr += d.toString('utf8');
     });
     child.on('error', reject);
-    // Resolve on 'close', not 'exit'. 'exit' fires when the process ends but
-    // before its stdout/stderr streams are guaranteed drained — under load the
-    // final 'data' chunk can land after 'exit', so a reader that resolves there
-    // sees truncated/empty stdout. For `rev-list --count` an empty stdout reads
-    // as `Number('') === 0`, silently masking a behind-base worktree as clean.
-    // 'close' fires only once all stdio streams have closed, so stdout is whole.
+    // Resolve on 'close', not 'exit' — 'exit' can fire before stdout/stderr
+    // are drained, so a reader there sees truncated output. 'close' fires only
+    // after all stdio streams close. (See the rev-list-count behind-base flake.)
     child.on('close', (code) => resolve({ code: code ?? -1, stdout, stderr }));
   });
 }

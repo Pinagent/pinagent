@@ -177,6 +177,19 @@ function WorkingCopyCard({ status }: { status: WorkingCopyStatus }) {
   const result = createPr.data ?? pushBranch.data ?? startBranch.data;
   const mutating = createPr.isPending || pushBranch.isPending || startBranch.isPending;
 
+  // On Create PR, open the freshly-opened PR (or the compare page when no PR
+  // could be created) in the browser — then the refetched status flips the
+  // button to "View PR".
+  const handleCreate = async () => {
+    try {
+      const res = await createPr.mutateAsync();
+      const url = res.prUrl ?? res.manualCompareUrl;
+      if (url) openExternal(url);
+    } catch {
+      // Error surfaces via the result banner; nothing to open.
+    }
+  };
+
   return (
     <article className="rounded-lg border border-border bg-card p-3">
       <div className="flex items-center gap-2">
@@ -214,7 +227,7 @@ function WorkingCopyCard({ status }: { status: WorkingCopyStatus }) {
         <PrimaryAction
           action={action}
           mutating={mutating}
-          onCreate={() => createPr.mutate()}
+          onCreate={handleCreate}
           onPush={() => pushBranch.mutate()}
           onStart={() => startBranch.mutate(undefined)}
         />
