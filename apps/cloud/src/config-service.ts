@@ -160,7 +160,7 @@ async function propagateBranchRouting(
   };
   try {
     const sessions = await activeSessions.listByOrg(organizationId);
-    await Promise.all(sessions.map((s) => relay.pushToSession(s.sessionId, frame)));
+    await Promise.all(sessions.map((s) => relay.pushToSession(organizationId, s.sessionId, frame)));
   } catch {
     // Listing failed — non-fatal; the PUT already succeeded. (Per-session push
     // failures are already swallowed inside the client.)
