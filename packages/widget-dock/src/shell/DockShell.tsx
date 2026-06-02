@@ -116,8 +116,6 @@ export function DockShell() {
     <ExtensionLaunchProvider>
       <DockSurface open={dock.open} mode={dock.mode} embedded>
         <DockChrome
-          mode={dock.mode}
-          onModeChange={dock.setMode}
           onClose={() => dock.setOpen(false)}
           disconnected={disconnected}
           context={context}

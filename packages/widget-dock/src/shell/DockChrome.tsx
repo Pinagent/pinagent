@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Top bar that sits above every dock view. Hosts the brand mark, the
- * connection indicator, a layout-mode toggle, and a settings dropdown.
+ * connection indicator, and a close button.
  *
  * Kept thin — anything that's per-route lives in the route component,
  * not here.
@@ -9,21 +9,10 @@
 
 import { PinMark } from '@pinagent/ui/components/pin-mark';
 import { Button } from '@pinagent/ui/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@pinagent/ui/components/ui/dropdown-menu';
 import { cn } from '@pinagent/ui/lib/utils';
-import { Maximize2, Minimize2, MoreHorizontal, PanelRight, WifiOff } from 'lucide-react';
-import type { DockMode } from './useDockMode';
+import { WifiOff, X } from 'lucide-react';
 
 export interface DockChromeProps {
-  mode: DockMode;
-  onModeChange: (mode: DockMode) => void;
   onClose: () => void;
   /** When true, render a WifiOff indicator with a tooltip-y label. */
   disconnected?: boolean;
@@ -31,26 +20,7 @@ export interface DockChromeProps {
   context?: string;
 }
 
-const MODE_ORDER: readonly DockMode[] = ['panel', 'floating', 'fullscreen'];
-const MODE_LABEL: Record<DockMode, string> = {
-  panel: 'Panel',
-  floating: 'Floating',
-  fullscreen: 'Fullscreen',
-};
-const MODE_ICON = {
-  panel: PanelRight,
-  floating: MoreHorizontal,
-  fullscreen: Maximize2,
-} as const;
-
-export function DockChrome({
-  mode,
-  onModeChange,
-  onClose,
-  disconnected = false,
-  context,
-}: DockChromeProps) {
-  const NextIcon = mode === 'fullscreen' ? Minimize2 : Maximize2;
+export function DockChrome({ onClose, disconnected = false, context }: DockChromeProps) {
   return (
     <header
       className={cn(
@@ -85,42 +55,6 @@ export function DockChrome({
           </span>
         )}
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              aria-label="Dock layout"
-              title={`Layout: ${MODE_LABEL[mode]}`}
-            >
-              <NextIcon className="h-4 w-4" aria-hidden />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-              Layout
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {MODE_ORDER.map((m) => {
-              const Icon = MODE_ICON[m];
-              return (
-                <DropdownMenuItem
-                  key={m}
-                  onSelect={() => onModeChange(m)}
-                  className={cn(
-                    'gap-2 text-sm',
-                    m === mode && 'bg-secondary text-secondary-foreground',
-                  )}
-                >
-                  <Icon className="h-4 w-4" aria-hidden />
-                  {MODE_LABEL[m]}
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
         <Button
           variant="ghost"
           size="icon"
@@ -128,7 +62,7 @@ export function DockChrome({
           aria-label="Close dock"
           onClick={onClose}
         >
-          <Minimize2 className="h-4 w-4" aria-hidden />
+          <X className="h-4 w-4" aria-hidden />
         </Button>
       </div>
     </header>
