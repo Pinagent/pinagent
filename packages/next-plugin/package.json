@@ -1,6 +1,6 @@
 {
   "name": "@pinagent/next-plugin",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "license": "Apache-2.0",
   "description": "Next.js plugin for Pinagent — capture in-browser UI feedback with file:line and a screenshot, hand it to your coding agent over MCP.",
   "repository": {
