@@ -259,6 +259,14 @@ export interface DockTransport {
    */
   pushWorkingCopyBranch(): Promise<CreatePullRequestResult>;
 
+  /**
+   * Create + switch to a new branch carrying the working changes — the
+   * dashboard's "Start a branch" action, offered when the dev server is on
+   * the base branch (where a PR can't be opened). `name` is optional;
+   * auto-generated server-side when absent.
+   */
+  startWorkingCopyBranch(name?: string): Promise<StartBranchResult>;
+
   // ---------- Connections + settings (Phase 5) ----------
 
   /** Presentable connection state. Never includes raw tokens. */
@@ -508,6 +516,14 @@ export interface CreatePullRequestInput {
   title: string;
   description: string;
   baseBranch: string;
+}
+
+export interface StartBranchResult {
+  ok: boolean;
+  /** The branch that was created + switched to, on success. */
+  branch?: string;
+  /** Human-readable failure reason. Set when `ok` is false. */
+  error?: string;
 }
 
 export interface CreatePullRequestResult {

@@ -44,6 +44,7 @@ import {
   searchHistory,
   serveBranch,
   spawnAgent,
+  startHostBranch,
   startWsServer,
   stopWorktreeServer,
   summarizeChangesForPr,
@@ -443,6 +444,17 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
   if (slug.length === 2 && slug[0] === 'working-copy' && slug[1] === 'push') {
     const storage = getStorage();
     const result = await pushHostBranch(storage.root);
+    return json(result.ok ? 200 : 422, result);
+  }
+
+  // /__pinagent/working-copy/branch — create + switch to a new branch
+  // carrying the working changes (the "Start a branch" action). Optional
+  // `{ name }`. Mirror of the vite-plugin handler.
+  if (slug.length === 2 && slug[0] === 'working-copy' && slug[1] === 'branch') {
+    const raw = (await readJsonBody(req).catch(() => ({}))) as { name?: unknown };
+    const name = typeof raw.name === 'string' ? raw.name : undefined;
+    const storage = getStorage();
+    const result = await startHostBranch(storage.root, name ? { name } : {});
     return json(result.ok ? 200 : 422, result);
   }
 
