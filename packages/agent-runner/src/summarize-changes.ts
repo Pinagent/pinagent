@@ -23,12 +23,28 @@ export interface PrSummary {
 /** Cap the diff we feed the model so a huge churn doesn't blow the prompt. */
 const DIFF_CAP_BYTES = 60 * 1024;
 
+// Shared Conventional Commits spec for both PR titles and commit subjects so
+// they read consistently (e.g. `feat(dock): …`, `fix(widget): …`), matching
+// the repo's own commit convention.
+const CONVENTIONAL_SPEC = [
+  'Format the subject as a Conventional Commit: `type(scope): summary`.',
+  '- type is one of: feat, fix, chore, docs, refactor, test, perf, build, ci.',
+  '- scope is the main area changed, inferred from the file paths in the diff',
+  '  (e.g. dock, widget, agent-runner, mcp, vite-plugin, next-plugin, ui, db).',
+  '  Omit the parentheses only if the change is genuinely repo-wide.',
+  '- summary is concise, imperative, lowercase, no trailing period, <70 chars.',
+  'Examples: "fix(dock): commit working changes before opening the PR",',
+  '"feat(widget): add multi-element selection".',
+].join('\n');
+
 const SYSTEM_PROMPT = [
   'You write pull-request descriptions for Pinagent, a click-to-fix dev tool.',
   'You are given a git diff and commit log for a feature branch.',
   'Respond with ONLY a single JSON object, no prose, no code fences:',
-  '{ "title": "<concise PR title, <70 chars, imperative mood>",',
-  '  "body": "<GitHub-flavored markdown PR description>" }',
+  '{ "title": "<Conventional Commits PR title>", "body": "<markdown body>" }',
+  '',
+  CONVENTIONAL_SPEC,
+  '',
   'The body should open with a one-paragraph summary, then a "## Changes"',
   'section with bullet points of what changed and why. Keep it factual and',
   'grounded in the diff. End the body with the line:',
@@ -114,9 +130,10 @@ export async function summarizeChangesForPr(projectRoot: string): Promise<PrSumm
 
 const COMMIT_SYSTEM_PROMPT = [
   'You write git commit messages. You are given a diff of uncommitted changes.',
-  'Respond with ONLY the commit message — a concise, imperative subject line',
-  '(<72 chars, conventional-commits style when it fits, e.g. "fix: ..."), then',
-  'optionally a blank line and a short body. No prose, no code fences, no quotes.',
+  'Respond with ONLY the commit message: a subject line, then optionally a',
+  'blank line and a short body. No prose, no code fences, no quotes.',
+  '',
+  CONVENTIONAL_SPEC,
 ].join('\n');
 
 /**
