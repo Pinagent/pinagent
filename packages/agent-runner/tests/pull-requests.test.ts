@@ -124,6 +124,17 @@ describe('mapGithubPrState', () => {
   });
 });
 
+describe('mapGhPrState', () => {
+  it('maps `gh pr view` JSON (uppercase state + isDraft + mergedAt)', () => {
+    expect(pr.mapGhPrState({ state: 'MERGED' })).toBe('merged');
+    expect(pr.mapGhPrState({ state: 'CLOSED', mergedAt: '2026-06-01T00:00:00Z' })).toBe('merged');
+    expect(pr.mapGhPrState({ state: 'CLOSED', mergedAt: null })).toBe('closed');
+    expect(pr.mapGhPrState({ state: 'OPEN', isDraft: true })).toBe('draft');
+    expect(pr.mapGhPrState({ state: 'OPEN', isDraft: false })).toBe('open');
+    expect(pr.mapGhPrState({ state: 'OPEN' })).toBe('open');
+  });
+});
+
 describe('updatePullRequestBody', () => {
   it('updates the recorded body for the matching PR number', async () => {
     const root = await freshRoot();
