@@ -79,6 +79,7 @@ export {
   type OpenPrOpts,
   openPrOnGitHub,
   pushBranch,
+  updatePrDescription,
 } from './github-pr';
 export {
   type HistorySearchHit,

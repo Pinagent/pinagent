@@ -50,6 +50,7 @@ import {
   stopWorktreeServer,
   summarizeChangesForPr,
   summarizeCommitMessage,
+  updatePrDescription,
   validateAnthropicKey,
   validateGithubToken,
 } from '@pinagent/agent-runner';
@@ -450,6 +451,19 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
       ? await summarizeCommitMessage(storage.root)
       : undefined;
     const result = await pushHostBranch(storage.root, commitMessage ? { commitMessage } : {});
+    // Best-effort: refresh the open PR's description to reflect the newly
+    // pushed commits. Never fails the push. Mirror of the vite handler.
+    if (result.ok) {
+      try {
+        const wc = await getWorkingCopyStatus(storage.root);
+        if (wc.pr && (wc.pr.state === 'open' || wc.pr.state === 'draft')) {
+          const summary = await summarizeChangesForPr(storage.root);
+          await updatePrDescription(storage.root, { number: wc.pr.number, body: summary.body });
+        }
+      } catch {
+        // Description refresh is non-critical — the push already landed.
+      }
+    }
     return json(result.ok ? 200 : 422, result);
   }
 
