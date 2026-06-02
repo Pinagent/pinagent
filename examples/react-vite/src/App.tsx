@@ -44,7 +44,7 @@ function Sidebar() {
       style={{
         borderRight: '1px solid #e5e7eb',
         padding: '40px 20px',
-        background: '#f9fafb',
+        background: '#ffffff',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
