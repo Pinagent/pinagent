@@ -84,6 +84,24 @@ describe('PgUserStore', () => {
     });
   });
 
+  it('handles concurrent first logins for one identity without error or a double-mint', async () => {
+    // Every call's identity lookup misses before any claims, so they race the
+    // insert. The losers must resolve the winner, not throw a duplicate-key
+    // error (which previously surfaced as a failed login).
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        store.provisionFromProfile(profile(), { now: '2026-05-29T10:00:00.000Z' }),
+      ),
+    );
+    // All converge on one user; no loser mints a duplicate.
+    const ids = new Set(results.map((u) => u.id));
+    expect(ids.size).toBe(1);
+    expect(await db.select().from(users)).toHaveLength(1);
+    expect(await db.select().from(ssoIdentities)).toEqual([
+      { connectionId: 'conn-1', subject: 'idp-user-9', userId: results[0]?.id },
+    ]);
+  });
+
   it('mints distinct users for the same subject under a different connection', async () => {
     const a = await store.provisionFromProfile(profile());
     const b = await store.provisionFromProfile(profile({ connectionId: 'conn-2' }));
