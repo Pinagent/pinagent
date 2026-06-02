@@ -28,6 +28,7 @@ import { onProjectChange } from './project-events';
 import { maybeStartRelayClient } from './relay-client';
 import { type ProjectSettingsPatch, SettingsStore } from './settings-store';
 import { Storage } from './storage';
+import { createWorkingCopyWatcher } from './working-copy-watcher';
 import { clearWarning, isStale, sweepStaleWorktrees } from './worktree-ttl';
 
 const DEFAULT_PORT = 53636;
@@ -165,6 +166,9 @@ export async function startWsServer(): Promise<ServerHandle> {
     // bypass this poll loop entirely; it exists only to catch what the
     // in-process listener can't see.
     ensureCrossProcessProjectPoller();
+    // Watch the host tree so editor-side edits/reverts refresh the
+    // dashboard's working-copy status.
+    ensureWorkingCopyWatcher();
 
     // Cloud mode (opt-in): dial out to the hosted relay as this session's
     // device socket. No-op unless PINAGENT_RELAY_URL / _TOKEN are set.
@@ -209,6 +213,7 @@ export function createPinagentWsEndpoint(): WebSocketServer {
   void sweepStaleWorktrees(projectRoot());
   ensureProjectListener();
   ensureCrossProcessProjectPoller();
+  ensureWorkingCopyWatcher();
   maybeStartRelayClient();
 
   return wss;
@@ -364,6 +369,26 @@ function ensureCrossProcessProjectPoller(): void {
 function fanoutProjectEvent(event: ProjectEvent): void {
   const msg: ServerMessage = { type: 'project_event', event };
   for (const sock of projectSubs) send(sock, msg);
+}
+
+/**
+ * Watch the host project tree and fan out `working_copy_changed` when the
+ * developer edits/reverts files directly in their editor — so the dock's
+ * dashboard refetches the working-copy git status instead of going stale.
+ * Singleton-guarded (one watcher per dev process) and idempotent, matching
+ * the project poller above.
+ */
+const WORKING_COPY_WATCHER_SYMBOL = Symbol.for('pinagent.ws.workingCopyWatcher');
+
+function ensureWorkingCopyWatcher(): void {
+  const slot = globalThis as Record<symbol, unknown>;
+  if (slot[WORKING_COPY_WATCHER_SYMBOL]) return;
+  const watcher = createWorkingCopyWatcher(projectRoot(), () =>
+    fanoutProjectEvent({ type: 'working_copy_changed' }),
+  );
+  slot[WORKING_COPY_WATCHER_SYMBOL] = watcher;
+  process.once('SIGINT', () => void watcher.close());
+  process.once('SIGTERM', () => void watcher.close());
 }
 
 /**

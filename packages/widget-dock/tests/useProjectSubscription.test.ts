@@ -56,6 +56,14 @@ describe('createProjectEventListener', () => {
     expect(calls).toEqual([['worktreeServers']]);
   });
 
+  it('invalidates only the working-copy query on working_copy_changed', () => {
+    const queryClient = makeFakeQueryClient();
+    const listen = createProjectEventListener(queryClient);
+    listen({ type: 'working_copy_changed' });
+    const calls = queryClient.invalidateQueries.mock.calls.map((args) => args[0].queryKey);
+    expect(calls).toEqual([['workingCopy']]);
+  });
+
   it('invalidates exactly the documented set (no more, no less)', () => {
     // Belt-and-suspenders: catches both accidental drops AND accidental
     // additions, so the documented "what does conversations_changed
