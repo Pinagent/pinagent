@@ -124,6 +124,26 @@ describe('mapGithubPrState', () => {
   });
 });
 
+describe('updatePullRequestBody', () => {
+  it('updates the recorded body for the matching PR number', async () => {
+    const root = await freshRoot();
+    await pr.recordPullRequest(root, {
+      number: 9,
+      url: 'https://github.com/acme/widgets/pull/9',
+      branch: 'pinagent/nine',
+      baseBranch: 'main',
+      title: 'Nine',
+      body: 'original body',
+      conversationIds: [],
+    });
+
+    await pr.updatePullRequestBody(root, 9, '## Changes\n- pushed more work');
+
+    const [row] = await pr.listPullRequests(root);
+    expect(row?.body).toBe('## Changes\n- pushed more work');
+  });
+});
+
 describe('updatePullRequestState', () => {
   it('updates state + updatedAt for the matching PR number', async () => {
     const root = await freshRoot();

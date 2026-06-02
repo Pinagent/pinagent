@@ -116,6 +116,23 @@ export async function updatePullRequestState(
 }
 
 /**
+ * Update a recorded PR's `body` (and `updatedAt`) — written after the
+ * dashboard refreshes the PR description on a push so the dock's PRs view
+ * stays in sync with what's on GitHub.
+ */
+export async function updatePullRequestBody(
+  projectRoot: string,
+  number: number,
+  body: string,
+): Promise<void> {
+  const db = getDb(projectRoot);
+  await db
+    .update(pullRequests)
+    .set({ body, updatedAt: new Date() })
+    .where(eq(pullRequests.number, number));
+}
+
+/**
  * Reconcile every recorded PR's state against GitHub, then return the
  * refreshed list. Best-effort: a PR that 404s (deleted) or any per-PR
  * API error is skipped, leaving its last-known state in place. When no

@@ -18,7 +18,7 @@ import { recordAuditEvent } from './audit-log';
 import { resolveOriginRemote } from './git-remote';
 import { runCapture, runGitCapture } from './git-utils';
 import { resolveGithubToken } from './github-auth';
-import { recordPullRequest } from './pull-requests';
+import { recordPullRequest, updatePullRequestBody } from './pull-requests';
 
 /**
  * Outcome of a push + open-PR attempt. Mirrors the relevant subset of
@@ -140,6 +140,52 @@ export async function openPrOnGitHub(
       ? { error: apiError ?? `pushed ok, but couldn't open the PR: ${gh.error}` }
       : {}),
   };
+}
+
+/**
+ * Update an existing PR's description on GitHub (Octokit when a token is
+ * set, else the `gh` CLI) and mirror it into the recorded row. Backs the
+ * dashboard's "refresh the PR body on push" so the description reflects the
+ * newly-pushed commits. Best-effort — never throws.
+ */
+export async function updatePrDescription(
+  projectRoot: string,
+  opts: { number: number; body: string },
+): Promise<{ ok: boolean; error?: string }> {
+  const remote = await resolveOriginRemote(projectRoot);
+  if (!remote) return { ok: false, error: 'no GitHub remote' };
+
+  const token = await resolveGithubToken(projectRoot);
+  if (token) {
+    try {
+      const octokit = new Octokit({ auth: token });
+      await octokit.pulls.update({
+        owner: remote.owner,
+        repo: remote.repo,
+        pull_number: opts.number,
+        body: opts.body,
+      });
+      await updatePullRequestBody(projectRoot, opts.number, opts.body).catch(() => {});
+      return { ok: true };
+    } catch {
+      // Fall through to gh — it may be authed when the token isn't scoped.
+    }
+  }
+
+  try {
+    const res = await runCapture(
+      'gh',
+      ['pr', 'edit', String(opts.number), '--body', opts.body],
+      projectRoot,
+    );
+    if (res.code === 0) {
+      await updatePullRequestBody(projectRoot, opts.number, opts.body).catch(() => {});
+      return { ok: true };
+    }
+    return { ok: false, error: res.stderr.trim() || res.stdout.trim() || `gh exited ${res.code}` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 /** Record an opened PR for the dock's PRs view + audit log. Best-effort. */
