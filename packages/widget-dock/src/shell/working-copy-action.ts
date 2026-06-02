@@ -5,15 +5,16 @@
  * same pattern as `conversation-status.ts`.
  *
  * The state machine the user asked for:
- *   - no PR yet, changes present        → Create PR
+ *   - on base branch, changes present    → Start a branch
+ *   - no PR yet, changes present         → Create PR
  *   - PR open/draft, local commits ahead → Push changes
  *   - PR open/draft, up to date          → View PR
  *   - PR merged                          → View PR (terminal)
- *   - on base branch / nothing to do     → disabled
+ *   - nothing to do                      → disabled
  */
 import type { WorkingCopyStatus } from '@pinagent/shared';
 
-export type WorkingCopyActionKind = 'create' | 'push' | 'view' | 'disabled';
+export type WorkingCopyActionKind = 'create' | 'push' | 'view' | 'start' | 'disabled';
 
 export interface WorkingCopyAction {
   kind: WorkingCopyActionKind;
@@ -25,13 +26,13 @@ export interface WorkingCopyAction {
 }
 
 export function deriveWorkingCopyAction(status: WorkingCopyStatus): WorkingCopyAction {
-  // Can't open a PR from the base branch onto itself.
+  // Can't open a PR from the base branch onto itself — offer to move the
+  // changes onto a fresh feature branch instead (then Create PR applies).
   if (status.isDefaultBranch) {
-    return {
-      kind: 'disabled',
-      label: 'Create PR',
-      disabledReason: `On ${status.baseBranch}`,
-    };
+    if (status.filesChanged > 0) {
+      return { kind: 'start', label: 'Start a branch' };
+    }
+    return { kind: 'disabled', label: 'Create PR', disabledReason: `On ${status.baseBranch}` };
   }
 
   if (status.pr) {

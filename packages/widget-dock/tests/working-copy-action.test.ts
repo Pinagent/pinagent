@@ -27,8 +27,16 @@ function status(overrides: Partial<WorkingCopyStatus> = {}): WorkingCopyStatus {
 }
 
 describe('deriveWorkingCopyAction', () => {
-  it('disables on the base branch', () => {
-    const a = deriveWorkingCopyAction(status({ isDefaultBranch: true }));
+  it('offers Start a branch on the base branch when there are changes', () => {
+    const a = deriveWorkingCopyAction(status({ isDefaultBranch: true, filesChanged: 3 }));
+    expect(a.kind).toBe('start');
+    expect(a.label).toBe('Start a branch');
+  });
+
+  it('disables on the base branch with no changes', () => {
+    const a = deriveWorkingCopyAction(
+      status({ isDefaultBranch: true, filesChanged: 0, dirty: false }),
+    );
     expect(a.kind).toBe('disabled');
     expect(a.disabledReason).toContain('main');
   });

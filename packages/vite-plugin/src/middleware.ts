@@ -45,6 +45,7 @@ import {
   searchHistory,
   serveBranch,
   spawnAgent,
+  startHostBranch,
   stopWorktreeServer,
   summarizeChangesForPr,
   validateAnthropicKey,
@@ -408,6 +409,17 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       // to its upstream (the dashboard's "Push changes" action).
       if (req.method === 'POST' && url === '/__pinagent/working-copy/push') {
         const result = await pushHostBranch(storage.root);
+        return json(res, result.ok ? 200 : 422, result);
+      }
+
+      // POST /__pinagent/working-copy/branch — create + switch to a new
+      // branch carrying the working changes (the "Start a branch" action,
+      // offered when the dev server is on the base branch). Optional
+      // `{ name }`; auto-generated when absent.
+      if (req.method === 'POST' && url === '/__pinagent/working-copy/branch') {
+        const raw = (await readJsonBody(req).catch(() => ({}))) as { name?: unknown };
+        const name = typeof raw.name === 'string' ? raw.name : undefined;
+        const result = await startHostBranch(storage.root, name ? { name } : {});
         return json(res, result.ok ? 200 : 422, result);
       }
 
