@@ -44,6 +44,7 @@ import {
   Storage,
   searchHistory,
   serveBranch,
+  slugifyBranchName,
   spawnAgent,
   startHostBranch,
   startWsServer,
@@ -472,8 +473,17 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
   // `{ name }`. Mirror of the vite-plugin handler.
   if (slug.length === 2 && slug[0] === 'working-copy' && slug[1] === 'branch') {
     const raw = (await readJsonBody(req).catch(() => ({}))) as { name?: unknown };
-    const name = typeof raw.name === 'string' ? raw.name : undefined;
     const storage = getStorage();
+    let name = typeof raw.name === 'string' ? raw.name : undefined;
+    if (!name) {
+      // Derive a readable slug from a summary of the working changes; falls
+      // back to the auto-id inside startHostBranch on failure. Mirror of vite.
+      try {
+        name = slugifyBranchName(await summarizeCommitMessage(storage.root));
+      } catch {
+        // no key / model error — startHostBranch's nanoid id covers it.
+      }
+    }
     const result = await startHostBranch(storage.root, name ? { name } : {});
     return json(result.ok ? 200 : 422, result);
   }

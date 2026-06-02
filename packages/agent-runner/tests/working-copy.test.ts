@@ -120,4 +120,22 @@ describe('getWorkingCopyStatus', () => {
     expect(status.ahead).toBe(1);
     expect(status.behind).toBe(0);
   });
+
+  it('includes brand-new untracked files (which git diff omits)', async () => {
+    // `git diff` ignores untracked files, so a freshly-created file would be
+    // missing from the hero even though `git add -A` would commit it.
+    await writeFile(
+      join(ROOT, 'brand-new.ts'),
+      'export const a = 1;\nexport const b = 2;\n',
+      'utf8',
+    );
+
+    const status = await mod.getWorkingCopyStatus(ROOT);
+    const row = status.files.find((f) => f.path === 'brand-new.ts');
+    expect(row).toBeDefined();
+    expect(row?.status).toBe('added');
+    expect(row?.added).toBe(2);
+    // It also counts toward the totals.
+    expect(status.files.some((f) => f.path === 'brand-new.ts')).toBe(true);
+  });
 });

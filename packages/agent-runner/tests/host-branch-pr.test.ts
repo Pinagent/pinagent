@@ -208,3 +208,28 @@ describe('commitWorkingChanges + auto-commit on PR/push', () => {
     expect(tracked).not.toContain('nested-wt');
   });
 });
+
+describe('slugifyBranchName', () => {
+  it('drops the conventional-commits prefix and dash-joins the summary', () => {
+    expect(mod.slugifyBranchName('feat(dock): add pricing tiers')).toBe(
+      'pinagent/add-pricing-tiers',
+    );
+    expect(mod.slugifyBranchName('fix: handle empty state')).toBe('pinagent/handle-empty-state');
+  });
+
+  it('slugifies free-form text + punctuation', () => {
+    expect(mod.slugifyBranchName('Update stuff!!!')).toBe('pinagent/update-stuff');
+  });
+
+  it('caps length and trims trailing dashes', () => {
+    const out = mod.slugifyBranchName('a'.repeat(60));
+    expect(out?.startsWith('pinagent/')).toBe(true);
+    expect((out ?? '').length).toBeLessThanOrEqual('pinagent/'.length + 40);
+    expect(out?.endsWith('-')).toBe(false);
+  });
+
+  it('returns undefined when nothing usable remains', () => {
+    expect(mod.slugifyBranchName('   ')).toBeUndefined();
+    expect(mod.slugifyBranchName('feat(dock): ')).toBeUndefined();
+  });
+});

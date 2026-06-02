@@ -45,6 +45,7 @@ import {
   type Storage,
   searchHistory,
   serveBranch,
+  slugifyBranchName,
   spawnAgent,
   startHostBranch,
   stopWorktreeServer,
@@ -441,7 +442,17 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       // `{ name }`; auto-generated when absent.
       if (req.method === 'POST' && url === '/__pinagent/working-copy/branch') {
         const raw = (await readJsonBody(req).catch(() => ({}))) as { name?: unknown };
-        const name = typeof raw.name === 'string' ? raw.name : undefined;
+        let name = typeof raw.name === 'string' ? raw.name : undefined;
+        if (!name) {
+          // Derive a readable slug from a summary of the working changes
+          // (e.g. pinagent/add-pricing-tiers). Falls back to the auto-id
+          // inside startHostBranch when generation fails.
+          try {
+            name = slugifyBranchName(await summarizeCommitMessage(storage.root));
+          } catch {
+            // no key / model error — startHostBranch's nanoid id covers it.
+          }
+        }
         const result = await startHostBranch(storage.root, name ? { name } : {});
         return json(res, result.ok ? 200 : 422, result);
       }

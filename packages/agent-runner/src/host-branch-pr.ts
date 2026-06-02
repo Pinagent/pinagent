@@ -225,9 +225,14 @@ export async function startHostBranch(
   if (!(await isInsideWorkTree(projectRoot))) {
     return { ok: false, error: 'project root is not a git repository' };
   }
-  const name = opts.name?.trim() || `pinagent/${nanoid(8)}`;
+  let name = opts.name?.trim() || `pinagent/${nanoid(8)}`;
   if (!BRANCH_NAME_RE.test(name)) {
     return { ok: false, error: 'invalid branch name (alphanumeric + ./_- only)' };
+  }
+  // Derived slugs can repeat across similar changes — suffix to dodge a
+  // collision rather than failing the action.
+  if (await branchExists(projectRoot, name)) {
+    name = `${name}-${nanoid(4)}`;
   }
   // `git switch -c` keeps uncommitted changes in the working tree and moves
   // them onto the new branch; the base branch stays at its current commit.
@@ -236,4 +241,33 @@ export async function startHostBranch(
     return { ok: false, error: `git switch failed: ${res.stderr.trim() || res.stdout.trim()}` };
   }
   return { ok: true, branch: name };
+}
+
+async function branchExists(projectRoot: string, name: string): Promise<boolean> {
+  const res = await runGitCapture(projectRoot, [
+    'rev-parse',
+    '--verify',
+    '--quiet',
+    `refs/heads/${name}`,
+  ]);
+  return res.code === 0;
+}
+
+/**
+ * Turn a change summary (e.g. an agent-written commit subject like
+ * `feat(dock): add pricing tiers`) into a readable branch name —
+ * `pinagent/add-pricing-tiers`. Drops any Conventional-Commits prefix,
+ * lowercases, and dash-joins. Returns undefined when nothing usable remains
+ * (caller then falls back to the auto-generated id).
+ */
+export function slugifyBranchName(summary: string): string | undefined {
+  const withoutPrefix = summary.replace(/^\s*[a-z]+(\([^)]*\))?!?:\s*/i, '');
+  const firstLine = (withoutPrefix.split('\n')[0] ?? '').trim();
+  const slug = firstLine
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/, '');
+  return slug ? `pinagent/${slug}` : undefined;
 }
