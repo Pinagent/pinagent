@@ -119,6 +119,47 @@ export const PullRequestSchema = z
   .loose();
 export type PullRequest = z.infer<typeof PullRequestSchema>;
 
+// ---------- Working copy (host branch) ----------
+
+export const WorkingCopyFileSchema = z
+  .object({
+    path: z.string(),
+    added: z.number().int().nonnegative(),
+    deleted: z.number().int().nonnegative(),
+    status: z.enum(['modified', 'added', 'deleted', 'renamed']),
+  })
+  .loose();
+export type WorkingCopyFile = z.infer<typeof WorkingCopyFileSchema>;
+
+/**
+ * High-level git state of the branch the dev-server runs on — the data
+ * behind the dock dashboard's working-changes hero. Mirrors
+ * `@pinagent/agent-runner.WorkingCopyStatus`.
+ */
+export const WorkingCopyStatusSchema = z
+  .object({
+    branch: z.string(),
+    baseBranch: z.string(),
+    isDefaultBranch: z.boolean(),
+    filesChanged: z.number().int().nonnegative(),
+    additions: z.number().int().nonnegative(),
+    deletions: z.number().int().nonnegative(),
+    files: z.array(WorkingCopyFileSchema),
+    ahead: z.number().int().nonnegative(),
+    behind: z.number().int().nonnegative(),
+    hasUpstream: z.boolean(),
+    dirty: z.boolean(),
+    pr: z
+      .object({
+        number: z.number().int(),
+        url: z.string(),
+        state: z.enum(['open', 'merged', 'closed', 'draft']),
+      })
+      .nullable(),
+  })
+  .loose();
+export type WorkingCopyStatus = z.infer<typeof WorkingCopyStatusSchema>;
+
 // ---------- Connections ----------
 
 export const PresentableConnectionsSchema = z

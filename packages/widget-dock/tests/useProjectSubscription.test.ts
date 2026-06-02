@@ -71,6 +71,7 @@ describe('createProjectEventListener', () => {
       ['branches'],
       ['pullRequests'],
       ['auditLog'],
+      ['workingCopy'],
     ]);
   });
 });

@@ -74,12 +74,24 @@ export { type OpenInEditorResult, openInEditor } from './editor';
 export { type FileEntry, type ListFilesResult, listProjectFiles } from './files';
 export { listGitBranches, parseGitBranches } from './git-branches';
 export {
+  type GitHubPrResult,
+  type OpenPrOpts,
+  openPrOnGitHub,
+  pushBranch,
+} from './github-pr';
+export {
   type HistorySearchHit,
   type HistorySearchOpts,
   type HistoryStatusFilter,
   type MatchedField,
   searchHistory,
 } from './history';
+export {
+  type OpenHostBranchPrOpts,
+  openHostBranchPr,
+  type PushHostBranchResult,
+  pushHostBranch,
+} from './host-branch-pr';
 export {
   type ComposeOpts,
   ComposeOptsSchema,
@@ -142,6 +154,14 @@ export {
   type WorktreeState,
   WorktreeStateSchema,
 } from './storage';
+export { type PrSummary, parsePrSummary, summarizeChangesForPr } from './summarize-changes';
+export {
+  getWorkingCopyStatus,
+  type WorkingCopyFile,
+  type WorkingCopyFileStatus,
+  type WorkingCopyPrRef,
+  type WorkingCopyStatus,
+} from './working-copy';
 export {
   listWorktreeServers,
   resolveServeCommand,

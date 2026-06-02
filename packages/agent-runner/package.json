@@ -13,6 +13,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./pr": {
+      "types": "./dist/pr.d.ts",
+      "import": "./dist/pr.js",
+      "require": "./dist/pr.cjs"
     }
   },
   "files": [

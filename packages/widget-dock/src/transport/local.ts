@@ -21,6 +21,7 @@ import {
   PresentableConnectionsSchema,
   type ProjectEvent,
   PruneStaleResultSchema,
+  WorkingCopyStatusSchema,
 } from '@pinagent/shared';
 import { z } from 'zod';
 import type { Branch, Change, Conversation, PullRequest } from '../fixtures/types';
@@ -452,6 +453,19 @@ export class LocalTransport implements DockTransport {
     return wire.map(toPullRequest);
   }
 
+  async getWorkingCopyStatus() {
+    return this.jsonGetValidated('/__pinagent/working-copy', WorkingCopyStatusSchema);
+  }
+
+  async createWorkingCopyPr(): Promise<CreatePullRequestResult> {
+    // Empty body — the server summarizes the diff into a title/body itself.
+    return this.postPrResult('/__pinagent/working-copy/pr', {});
+  }
+
+  async pushWorkingCopyBranch(): Promise<CreatePullRequestResult> {
+    return this.postPrResult('/__pinagent/working-copy/push');
+  }
+
   async getConversation(id: string): Promise<ConversationDetail | null> {
     const response = await fetch(this.url(`/__pinagent/feedback/${encodeURIComponent(id)}`), {
       headers: { Accept: 'application/json' },
@@ -560,22 +574,31 @@ export class LocalTransport implements DockTransport {
   }
 
   async createPullRequest(input: CreatePullRequestInput): Promise<CreatePullRequestResult> {
-    const response = await fetch(this.url('/__pinagent/prs'), {
+    return this.postPrResult('/__pinagent/prs', input);
+  }
+
+  /**
+   * POST to a PR endpoint and normalize the response into a
+   * `CreatePullRequestResult`. The server returns that shape on both 200
+   * (ok) and 422 (composer/validation failure); 400 carries an `error`
+   * string; anything else is unexpected. Shared by the compose flow and
+   * the working-copy PR / push actions.
+   */
+  private async postPrResult(path: string, body?: unknown): Promise<CreatePullRequestResult> {
+    const response = await fetch(this.url(path), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(input),
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
-    // The server returns the ComposeResult shape on both 200 (ok) and
-    // 422 (validation / composer failure). Anything else is unexpected.
     if (response.status === 200 || response.status === 422) {
       return (await response.json()) as CreatePullRequestResult;
     }
     if (response.status === 400) {
-      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      const errBody = (await response.json().catch(() => ({}))) as { error?: string };
       return {
         ok: false,
         branchPushed: false,
-        error: body.error ?? `Bad request (${response.status})`,
+        error: errBody.error ?? `Bad request (${response.status})`,
       };
     }
     throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);

@@ -44,6 +44,9 @@ export const CONVERSATIONS_CHANGED_KEYS: readonly (readonly string[])[] = [
   ['branches'],
   ['pullRequests'],
   ['auditLog'],
+  // The dashboard hero — agents landing work shifts the host branch's
+  // ahead/behind + file stats, and the compose flow can open a PR.
+  ['workingCopy'],
 ];
 
 /**

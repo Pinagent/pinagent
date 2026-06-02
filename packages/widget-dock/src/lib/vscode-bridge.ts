@@ -44,6 +44,15 @@ export function buildOpenFileUri(path: string, line: number, col: number): strin
 }
 
 /**
+ * Build a vscode:// URI that focuses VSCode's Source Control view — the
+ * dashboard's "Open in VSCode" action, so the developer sees every changed
+ * file at once.
+ */
+export function buildViewChangesUri(): string {
+  return `vscode://${VSCODE_EXTENSION_ID}/view-changes`;
+}
+
+/**
  * Parse a `file:line:col` location string into its parts. Returns null
  * when the input isn't shaped like an anchor — callers can use that to
  * decide whether to render a jump affordance at all.
@@ -77,6 +86,16 @@ export function parseAnchorLoc(loc: string): { path: string; line: number; col: 
  */
 export function openInClaudeCode(prompt: string): void {
   fireVSCodeUri(buildOpenClaudeUri(prompt));
+}
+
+/** Open a project-relative file in VSCode at the top of the file. */
+export function openFileInVSCode(path: string): void {
+  fireVSCodeUri(buildOpenFileUri(path, 1, 1));
+}
+
+/** Focus VSCode's Source Control view (all changed files). */
+export function openSourceControl(): void {
+  fireVSCodeUri(buildViewChangesUri());
 }
 
 /**

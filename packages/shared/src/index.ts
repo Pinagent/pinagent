@@ -35,6 +35,10 @@ export {
   PullRequestSchema,
   type StatusKey,
   StatusKeySchema,
+  type WorkingCopyFile,
+  WorkingCopyFileSchema,
+  type WorkingCopyStatus,
+  WorkingCopyStatusSchema,
 } from './dock-api';
 export {
   type DockToHost,

@@ -6,7 +6,7 @@
  *
  * Enabled via `?fixtures=on` in the URL; see App.tsx for the gate.
  */
-import type { AgentEvent, ProjectEvent } from '@pinagent/shared';
+import type { AgentEvent, ProjectEvent, WorkingCopyStatus } from '@pinagent/shared';
 import {
   type Branch,
   type Change,
@@ -19,6 +19,7 @@ import {
   FIXTURE_PRS,
   FIXTURE_SETTINGS,
   FIXTURE_TRANSCRIPTS,
+  FIXTURE_WORKING_COPY,
   type PullRequest,
 } from '../fixtures';
 import type {
@@ -67,6 +68,10 @@ export class MockTransport implements DockTransport {
   // Mutable per-instance conversations list so rename / archive flows
   // have something observable to mutate. Resets on reload.
   private conversations: Conversation[] = FIXTURE_CONVERSATIONS.map((c) => ({ ...c }));
+
+  // Mutable working-copy snapshot so the dashboard's create-PR / push
+  // actions visibly flip the primary button between reads.
+  private workingCopy: WorkingCopyStatus = { ...FIXTURE_WORKING_COPY };
 
   // In-memory copies of the connection + settings fixtures so the
   // dock's set/clear/patch flows mutate something observable. Resets
@@ -370,6 +375,30 @@ export class MockTransport implements DockTransport {
       branchPushed: true,
       prUrl: `https://github.com/example/repo/pull/999?branch=${encodeURIComponent(input.branchName)}`,
     };
+  }
+
+  async getWorkingCopyStatus(): Promise<WorkingCopyStatus> {
+    await sleep(SIMULATED_LATENCY_MS);
+    return this.workingCopy;
+  }
+
+  async createWorkingCopyPr(): Promise<CreatePullRequestResult> {
+    await sleep(SIMULATED_LATENCY_MS * 4);
+    const prUrl = 'https://github.com/example/repo/pull/1001';
+    // Reflect the new PR in subsequent reads so the button flips to "View PR".
+    this.workingCopy = {
+      ...this.workingCopy,
+      hasUpstream: true,
+      ahead: 0,
+      pr: { number: 1001, url: prUrl, state: 'open' },
+    };
+    return { ok: true, branchPushed: true, prUrl };
+  }
+
+  async pushWorkingCopyBranch(): Promise<CreatePullRequestResult> {
+    await sleep(SIMULATED_LATENCY_MS * 3);
+    this.workingCopy = { ...this.workingCopy, ahead: 0 };
+    return { ok: true, branchPushed: true };
   }
 
   async getConnections(): Promise<PresentableConnections> {
