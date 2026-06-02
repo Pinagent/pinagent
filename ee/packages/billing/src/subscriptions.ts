@@ -19,10 +19,24 @@ export interface Subscription {
   currentPeriodStart: string;
 }
 
+/** A page of subscriptions, keyed by `organizationId` for {@link SubscriptionStore.listPage}. */
+export interface SubscriptionPageOptions {
+  /** Return only `organizationId > after` (exclusive); omit for the first page. */
+  after?: string;
+  /** Max rows to return. */
+  limit: number;
+}
+
 export interface SubscriptionStore {
   get(organizationId: string): Promise<Subscription | null>;
-  /** Every subscription — enumerated by the billing-period rollover pass. */
-  listAll(): Promise<Subscription[]>;
+  /**
+   * One keyset page of subscriptions ordered by `organizationId` (ascending),
+   * for `organizationId > after`. The billing-period rollover walks the whole
+   * table in bounded pages instead of loading every row at once. Keyset (not
+   * offset) is safe because rollover only mutates `currentPeriodStart`, never
+   * the `organizationId` it pages on — so no row is skipped or seen twice.
+   */
+  listPage(opts: SubscriptionPageOptions): Promise<Subscription[]>;
   upsert(subscription: Subscription): Promise<void>;
 }
 
@@ -70,8 +84,12 @@ export function createInMemorySubscriptionStore(seed: Subscription[] = []): Subs
     async get(organizationId: string): Promise<Subscription | null> {
       return byOrg.get(organizationId) ?? null;
     },
-    async listAll(): Promise<Subscription[]> {
-      return [...byOrg.values()];
+    async listPage({ after, limit }: SubscriptionPageOptions): Promise<Subscription[]> {
+      const ordered = [...byOrg.values()].sort((a, b) =>
+        a.organizationId < b.organizationId ? -1 : a.organizationId > b.organizationId ? 1 : 0,
+      );
+      const tail = after === undefined ? ordered : ordered.filter((s) => s.organizationId > after);
+      return tail.slice(0, limit);
     },
     async upsert(subscription: Subscription): Promise<void> {
       byOrg.set(subscription.organizationId, subscription);

@@ -61,12 +61,17 @@ describe('advanceElapsedPeriods', () => {
   });
 });
 
-describe('SubscriptionStore.listAll', () => {
-  it('enumerates every seeded subscription', async () => {
+describe('SubscriptionStore.listPage', () => {
+  it('walks every subscription across keyset pages, ordered by organizationId', async () => {
     const store = createInMemorySubscriptionStore([
+      sub({ organizationId: 'c' }),
       sub({ organizationId: 'a' }),
       sub({ organizationId: 'b' }),
     ]);
-    expect((await store.listAll()).map((s) => s.organizationId).sort()).toEqual(['a', 'b']);
+    const page1 = await store.listPage({ limit: 2 });
+    expect(page1.map((s) => s.organizationId)).toEqual(['a', 'b']); // sorted, capped at limit
+    const page2 = await store.listPage({ after: 'b', limit: 2 });
+    expect(page2.map((s) => s.organizationId)).toEqual(['c']);
+    expect(await store.listPage({ after: 'c', limit: 2 })).toEqual([]); // drained
   });
 });

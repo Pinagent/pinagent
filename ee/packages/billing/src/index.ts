@@ -31,5 +31,6 @@ export {
   DEFAULT_PLAN,
   type QuotaDecision,
   type Subscription,
+  type SubscriptionPageOptions,
   type SubscriptionStore,
 } from './subscriptions';

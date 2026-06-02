@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Elastic-2.0
-import type { Subscription, SubscriptionStore } from '@pinagent/ee-billing';
-import { eq } from 'drizzle-orm';
+import type {
+  Subscription,
+  SubscriptionPageOptions,
+  SubscriptionStore,
+} from '@pinagent/ee-billing';
+import { asc, eq, gt } from 'drizzle-orm';
 import type { MembershipDb } from './membership-store';
 import { subscriptions } from './schema';
 
@@ -20,8 +24,13 @@ export function createPgSubscriptionStore(db: MembershipDb): SubscriptionStore {
       return row ?? null;
     },
 
-    async listAll(): Promise<Subscription[]> {
-      return db.select().from(subscriptions);
+    async listPage({ after, limit }: SubscriptionPageOptions): Promise<Subscription[]> {
+      return db
+        .select()
+        .from(subscriptions)
+        .where(after !== undefined ? gt(subscriptions.organizationId, after) : undefined)
+        .orderBy(asc(subscriptions.organizationId))
+        .limit(limit);
     },
 
     async upsert(subscription: Subscription): Promise<void> {
