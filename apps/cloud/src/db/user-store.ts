@@ -37,6 +37,30 @@ export function createPgUserStore(db: UserDb, options: PgUserStoreOptions = {}):
       });
   }
 
+  /**
+   * Resolve an existing IdP identity `(connectionId, subject)` to its user and
+   * refresh the record. Returns null when the identity isn't mapped yet (a
+   * first login). Self-heals a missing user row (identity present, user absent
+   * — e.g. a crash between the two first-login inserts) by re-provisioning it.
+   */
+  async function resolveExisting(profile: SsoProfile, now: string): Promise<User | null> {
+    const [identity] = await db
+      .select()
+      .from(ssoIdentities)
+      .where(
+        and(
+          eq(ssoIdentities.connectionId, profile.connectionId),
+          eq(ssoIdentities.subject, profile.subject),
+        ),
+      )
+      .limit(1);
+    if (!identity) return null;
+    const [existing] = await db.select().from(users).where(eq(users.id, identity.userId)).limit(1);
+    const user = userFromProfile(identity.userId, profile, existing ?? null, now);
+    await upsertUser(user);
+    return user;
+  }
+
   return {
     async get(id: UserId): Promise<User | null> {
       const [row] = await db.select().from(users).where(eq(users.id, id)).limit(1);
@@ -54,41 +78,39 @@ export function createPgUserStore(db: UserDb, options: PgUserStoreOptions = {}):
     async provisionFromProfile(profile: SsoProfile, opts?: ProvisionOptions): Promise<User> {
       const now = opts?.now ?? new Date().toISOString();
 
-      // Resolve the internal user id from the IdP identity.
-      const [identity] = await db
-        .select()
-        .from(ssoIdentities)
-        .where(
-          and(
-            eq(ssoIdentities.connectionId, profile.connectionId),
-            eq(ssoIdentities.subject, profile.subject),
-          ),
-        )
-        .limit(1);
+      // Returning user: refresh and return.
+      const existing = await resolveExisting(profile, now);
+      if (existing) return existing;
 
-      if (identity) {
-        // Returning user: refresh the existing record, keep its id + createdAt.
-        const [existing] = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, identity.userId))
-          .limit(1);
-        const user = userFromProfile(identity.userId, profile, existing ?? null, now);
-        await upsertUser(user);
-        return user;
-      }
-
-      // First login for this identity: mint a synthetic id, then insert the
-      // user + the identity mapping atomically.
+      // First login. Atomically claim the identity → userId mapping: the
+      // `onConflictDoNothing` insert IS the race gate. Two concurrent first
+      // logins for the same (connectionId, subject) both see no identity above,
+      // but only one wins this insert. (No FK from sso_identities.user_id, so
+      // we can claim the identity before writing the user row.) Previously this
+      // was a SELECT-then-INSERT with no conflict handling, so the loser's
+      // transaction threw a duplicate-key error that surfaced as a failed login.
       const user = userFromProfile(generateId(), profile, null, now);
-      await db.transaction(async (tx) => {
-        await tx.insert(users).values(user);
-        await tx.insert(ssoIdentities).values({
+      const [claimed] = await db
+        .insert(ssoIdentities)
+        .values({
           connectionId: profile.connectionId,
           subject: profile.subject,
           userId: user.id,
-        });
-      });
+        })
+        .onConflictDoNothing()
+        .returning();
+
+      if (!claimed) {
+        // Lost the race: the winner already mapped this identity. Resolve and
+        // return their user instead of minting a duplicate.
+        const winner = await resolveExisting(profile, now);
+        if (winner) return winner;
+        // Identity present for the conflict but gone on re-resolve — only a
+        // racing deletion (none exists in this system) gets here; fall through
+        // so login still succeeds with the user we minted.
+      }
+
+      await upsertUser(user);
       return user;
     },
   };
