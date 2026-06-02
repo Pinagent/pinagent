@@ -102,6 +102,20 @@ describe('runBillingRollover', () => {
     expect(result).toEqual({ rolled: 1 });
     expect((await subscriptions.get('stale'))?.currentPeriodStart).toBe('2026-01-31T00:00:00.000Z');
   });
+
+  it('rolls subscriptions spanning multiple keyset pages', async () => {
+    // pageSize 2 over 3 elapsed orgs forces a second page; if the loop stopped
+    // after page one only 'a' and 'b' would roll.
+    const d = deps([
+      sub({ organizationId: 'a' }),
+      sub({ organizationId: 'b' }),
+      sub({ organizationId: 'c' }),
+    ]);
+    expect(await runBillingRollover({ ...d, pageSize: 2 })).toEqual({ rolled: 3 });
+    for (const org of ['a', 'b', 'c']) {
+      expect((await d.subscriptions.get(org))?.currentPeriodStart).toBe('2026-01-31T00:00:00.000Z');
+    }
+  });
 });
 
 describe('POST /internal/billing/roll', () => {

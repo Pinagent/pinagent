@@ -52,17 +52,18 @@ describe('PgSubscriptionStore', () => {
     });
   });
 
-  it('lists every subscription for the rollover pass', async () => {
-    await store.upsert({
-      organizationId: 'a',
-      planId: 'pro',
-      currentPeriodStart: '2026-05-01T00:00:00Z',
-    });
-    await store.upsert({
-      organizationId: 'b',
-      planId: 'free',
-      currentPeriodStart: '2026-05-01T00:00:00Z',
-    });
-    expect((await store.listAll()).map((s) => s.organizationId).sort()).toEqual(['a', 'b']);
+  it('pages subscriptions by organizationId keyset for the rollover pass', async () => {
+    for (const organizationId of ['c', 'a', 'b']) {
+      await store.upsert({
+        organizationId,
+        planId: 'pro',
+        currentPeriodStart: '2026-05-01T00:00:00Z',
+      });
+    }
+    const page1 = await store.listPage({ limit: 2 });
+    expect(page1.map((s) => s.organizationId)).toEqual(['a', 'b']); // ascending, capped
+    const page2 = await store.listPage({ after: 'b', limit: 2 });
+    expect(page2.map((s) => s.organizationId)).toEqual(['c']);
+    expect(await store.listPage({ after: 'c', limit: 2 })).toEqual([]);
   });
 });

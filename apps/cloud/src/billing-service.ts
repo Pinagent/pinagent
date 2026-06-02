@@ -30,7 +30,12 @@ export interface RolloverDeps {
   audit?: AuditSink;
   /** ISO-8601 clock — injected for deterministic tests. */
   now: () => string;
+  /** Subscriptions fetched per page (default {@link DEFAULT_ROLLOVER_PAGE_SIZE}). */
+  pageSize?: number;
 }
+
+/** Default subscriptions scanned per rollover page — bounds memory + DB load. */
+const DEFAULT_ROLLOVER_PAGE_SIZE = 500;
 
 export interface BillingServiceDeps extends RolloverDeps {
   /** Shared secret the trigger presents as a bearer token. */
@@ -41,39 +46,54 @@ export interface BillingServiceDeps extends RolloverDeps {
  * Advance the elapsed subscriptions: reset each window (`currentPeriodStart`),
  * report the rollover to the billing provider, and audit it. Idempotent —
  * re-running only moves periods that have since elapsed. Returns the count.
+ *
+ * Walks the table in keyset pages (by `organizationId`) so a large tenant base
+ * doesn't load every subscription into the Worker at once. Paging is stable
+ * under the in-loop `upsert`s because they change only `currentPeriodStart`,
+ * not the `organizationId` cursor.
  */
 export async function runBillingRollover(deps: RolloverDeps): Promise<{ rolled: number }> {
   const at = deps.now();
-  const all = await deps.subscriptions.listAll();
-  const rolls = advanceElapsedPeriods(all, at, planById);
+  const limit = deps.pageSize ?? DEFAULT_ROLLOVER_PAGE_SIZE;
+  let after: string | undefined;
+  let rolled = 0;
 
-  for (const roll of rolls) {
-    await deps.subscriptions.upsert({
-      ...roll.subscription,
-      currentPeriodStart: roll.newPeriodStart,
-    });
-    try {
-      await deps.reporter?.reportPeriodRollover({
-        organizationId: roll.subscription.organizationId,
-        planId: roll.subscription.planId,
-        previousPeriodStart: roll.previousPeriodStart,
-        newPeriodStart: roll.newPeriodStart,
+  for (;;) {
+    const page = await deps.subscriptions.listPage({ after, limit });
+    if (page.length === 0) break;
+    after = page[page.length - 1]?.organizationId;
+
+    const rolls = advanceElapsedPeriods(page, at, planById);
+    for (const roll of rolls) {
+      await deps.subscriptions.upsert({
+        ...roll.subscription,
+        currentPeriodStart: roll.newPeriodStart,
       });
-    } catch {
-      // Best-effort: a provider failure must not abort the rest of the batch.
+      try {
+        await deps.reporter?.reportPeriodRollover({
+          organizationId: roll.subscription.organizationId,
+          planId: roll.subscription.planId,
+          previousPeriodStart: roll.previousPeriodStart,
+          newPeriodStart: roll.newPeriodStart,
+        });
+      } catch {
+        // Best-effort: a provider failure must not abort the rest of the batch.
+      }
+      await deps.audit?.record({
+        occurredAt: at,
+        organizationId: roll.subscription.organizationId,
+        actorUserId: null,
+        action: AUDIT_ACTIONS.periodRolled,
+        metadata: {
+          previousPeriodStart: roll.previousPeriodStart,
+          newPeriodStart: roll.newPeriodStart,
+        },
+      });
     }
-    await deps.audit?.record({
-      occurredAt: at,
-      organizationId: roll.subscription.organizationId,
-      actorUserId: null,
-      action: AUDIT_ACTIONS.periodRolled,
-      metadata: {
-        previousPeriodStart: roll.previousPeriodStart,
-        newPeriodStart: roll.newPeriodStart,
-      },
-    });
+    rolled += rolls.length;
+    if (page.length < limit) break;
   }
-  return { rolled: rolls.length };
+  return { rolled };
 }
 
 /** POST /internal/billing/roll — secret-authed trigger for the rollover pass. */
