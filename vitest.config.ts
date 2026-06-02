@@ -26,6 +26,17 @@ export default defineConfig({
     ],
     exclude: ['**/node_modules/**', '**/dist/**', '**/.next/**'],
     isolate: true,
+    // Many agent-runner tests drive REAL `git` subprocesses (worktree add,
+    // merge, push to a bare remote, bulk prune). Run alone they finish in
+    // 3–5s, but under full-suite parallelism — dozens of worker threads
+    // contending for disk/CPU alongside this machine's 60+ linked worktrees
+    // — a single git op can drift past the 5s default and flake the run
+    // (agent-merge, bulk-prune, branches-list have all hit this). Bump the
+    // global timeouts so load variance doesn't turn green tests red; a
+    // genuinely hung test still fails, just later. See the "git ref
+    // resolution / capture under load" history in CLAUDE-adjacent notes.
+    testTimeout: 20_000,
+    hookTimeout: 30_000,
     // Coverage is opt-in via `pnpm test:coverage` (or `--coverage`). It is
     // reporting-only — no thresholds are enforced yet, so it never fails a
     // build; the goal is visibility into which modules the suite exercises.
