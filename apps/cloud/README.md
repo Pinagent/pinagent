@@ -40,7 +40,7 @@ framework-agnostic `(Request, deps) => Response`.
 | `/me/orgs` | GET | authenticated | the caller's own organizations |
 | `/subscriptions`, `/cost-controls`, `/branch-routing` | GET / PUT | `billing:*` / `org:settings` | read/set org config |
 | `/internal/relay/events` | POST | `RELAY_INTERNAL_SECRET` | relay lifecycle ingest (audit + connection metering) |
-| `/internal/billing/roll` | POST | `RELAY_INTERNAL_SECRET` | advance elapsed billing periods |
+| `/internal/billing/roll` | POST | `BILLING_INTERNAL_SECRET` | advance elapsed billing periods |
 | `/healthz` | GET | — | liveness |
 
 Org-scoped endpoints take `?organizationId=`; admin endpoints resolve the
@@ -108,7 +108,9 @@ fails the deploy rather than the first request.
 
 **Secrets** (`wrangler secret put`): `RELAY_AUTH_SECRET`, `DATABASE_URL`,
 `USER_TOKEN_SECRET`, `SSO_STATE_SECRET`, `OIDC_NONCE_SECRET`,
-`RELAY_INTERNAL_SECRET`, `OIDC_CLIENT_SECRET`, and optional `SSO_CONNECTION_KEK`
+`RELAY_INTERNAL_SECRET` (relay↔cloud service auth), `BILLING_INTERNAL_SECRET`
+(billing-rollover trigger — a separate trust domain from the relay),
+`OIDC_CLIENT_SECRET`, and optional `SSO_CONNECTION_KEK`
 (AES-256 key for per-connection OIDC client secrets at rest).
 
 **Vars**: `PINAGENT_RELAY_PUBLIC_URL`, `OIDC_CONNECTION_ID`, `OIDC_ORG_ID`,

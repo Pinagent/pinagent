@@ -118,7 +118,7 @@ async function buildApp(config: CloudConfig) {
     reporter: noopBillingReporter,
     audit,
     now: () => new Date().toISOString(),
-    internalSecret: config.relayInternalSecret,
+    internalSecret: config.billingInternalSecret,
   };
 
   const app = createCloudApp({
