@@ -12,9 +12,7 @@
  * Imports only git + `github-pr` (Octokit) — NOT the Claude Agent SDK — so
  * the MCP binary can import `openHostBranchPr` without bundling the SDK.
  */
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { runGitCapture } from './git-utils';
+import { isInsideWorkTree, runGitCapture } from './git-utils';
 import { type GitHubPrResult, openPrOnGitHub, pushBranch } from './github-pr';
 import { SettingsStore } from './settings-store';
 
@@ -39,7 +37,7 @@ export async function openHostBranchPr(
   projectRoot: string,
   opts: OpenHostBranchPrOpts,
 ): Promise<GitHubPrResult> {
-  if (!existsSync(join(projectRoot, '.git'))) {
+  if (!(await isInsideWorkTree(projectRoot))) {
     return { ok: false, branchPushed: false, error: 'project root is not a git repository' };
   }
   const branch = await resolveCurrentBranch(projectRoot);
@@ -81,7 +79,7 @@ export interface PushHostBranchResult {
  * landed more work after the PR was opened).
  */
 export async function pushHostBranch(projectRoot: string): Promise<PushHostBranchResult> {
-  if (!existsSync(join(projectRoot, '.git'))) {
+  if (!(await isInsideWorkTree(projectRoot))) {
     return { ok: false, pushed: false, error: 'project root is not a git repository' };
   }
   const branch = await resolveCurrentBranch(projectRoot);

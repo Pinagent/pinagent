@@ -72,6 +72,19 @@ export function runGit(cwd: string, args: string[], logPath: string): Promise<vo
   });
 }
 
+/**
+ * Whether `cwd` is inside a git work tree. Use this instead of
+ * `existsSync(join(cwd, '.git'))` — the dev server can run from a
+ * subdirectory of the repo (e.g. an example app), where there's no `.git`
+ * entry, or from a linked worktree, where `.git` is a *file* at the
+ * worktree root and absent in subdirs. `git rev-parse` walks up like git
+ * itself, so it's correct in all those cases. Never throws.
+ */
+export async function isInsideWorkTree(cwd: string): Promise<boolean> {
+  const res = await runGitCapture(cwd, ['rev-parse', '--is-inside-work-tree']);
+  return res.code === 0 && res.stdout.trim() === 'true';
+}
+
 /** Append `text` to the file at `path`, creating it if needed. No-op on empty text. */
 export async function appendLog(path: string, text: string): Promise<void> {
   if (!text) return;
