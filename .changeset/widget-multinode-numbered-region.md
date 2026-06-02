@@ -1,7 +1,6 @@
 ---
 '@pinagent/vite-plugin': minor
 '@pinagent/next-plugin': minor
-'@pinagent/widget': patch
 ---
 
 feat(widget): numbered multi-node badges + region snip selection
