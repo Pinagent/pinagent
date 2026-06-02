@@ -1,6 +1,6 @@
 {
   "name": "@pinagent/cloud-dashboard",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "description": "Pinagent cloud admin dashboard. Source-available under the Elastic License v2.",
   "license": "Elastic-2.0",

@@ -1,5 +1,71 @@
 # @pinagent/next-plugin
 
+## 0.6.0
+
+### Minor Changes
+
+- 53379b0: feat(widget): dark-mode redesign matching the dock
+
+  The in-page widget now renders in dark mode, matching the dock's dark theme —
+  deep ink surfaces (`#201B21` / `#2A2528`), cream text, gold accent. The
+  composer card, header pills, breadcrumb, quick-action chips, textarea, stream
+  log, @-mention menu, follow-up bar, minimized bubbles, drag handle, tray,
+  hint, and toast were all reskinned; primary buttons invert to cream-on-ink for
+  a strong CTA on dark. The shadow root and composer iframe now opt into
+  `color-scheme: dark`.
+
+  A dark-tuned status palette (`STATUS_DARK`) was added to `@pinagent/ui/tokens`
+  (mirroring the `.dark` status block in `globals.css`) so the widget's status
+  dots, bubbles, and lifecycle chips read on the dark surfaces without drifting
+  from the dock.
+
+- 02bc4f1: feat(widget): numbered multi-node badges + region snip selection
+
+  Multi-picking now stamps each selected element with a gold "1, 2, 3…" order
+  badge (on the page and in the "+N" hover popover). A new region-snip mode
+  (press `R` while picking) lets you drag out a rectangle to capture a specific
+  section of the page; `Enter` commits the selection (handy for region-only
+  snips). Regions are composable with element picks — the submitted screenshot
+  is cropped to the union of the drawn region(s) and any picked elements. The
+  crop is baked into the uploaded image, so nothing new is persisted server-side.
+
+### Patch Changes
+
+- 9f0be42: feat(widget): lay the composer footer shortcut hints out in a 2×2 grid
+
+  The keyboard-shortcut hints under the composer textarea now render as a 2×2
+  grid instead of a single inline row. The fourth cell surfaces the `c` comment
+  hotkey alongside the existing `↵ submit`, `⇧↵ newline`, and `esc cancel` hints.
+
+- 22259ed: fix(widget): make dock shortcuts work across iframe focus boundaries
+
+  Keyboard shortcuts are registered per JS realm (host document, dock iframe,
+  composer iframe) and iframe keystrokes never bubble to the host, so a shortcut
+  only fired when focus happened to sit in the realm that handled it. Two gaps
+  are closed:
+
+  - **Cmd/Ctrl+Shift+P now toggles the dock from a spawned agent.** The composer
+    iframe (a spawned agent's UI) handled `Esc` / `c` / `Shift+N` / `Ctrl+\`` but
+    not the dock toggle, so the shortcut was dead while focus was inside it. It
+    now relays to the dock like the other composer-iframe shortcuts.
+  - **Pressing the pick hotkey (`c`) while the dock is open now opens a usable
+    picker.** Entering the picker hides the dock iframe (rather than closing it,
+    so the dock's React tree and any unsaved reply draft survive) so a
+    fullscreen/floating dock no longer occludes the page being picked; it is
+    restored when picking ends.
+
+- 7f7c94f: Remove the quick-action suggestion chips from the composer
+
+  The per-element composer no longer renders the "Recolor / Resize / Make it a
+  link" quick-action chips above the textarea. The `quick-actions.ts` catalog,
+  its tests, the `chips` field on `ComposerMeta`, the chip rendering/wiring, and
+  the `.qa-chip` styles are all gone — the composer now opens straight to the
+  "Describe the change you want…" textarea. Bumps both consumer plugins so the
+  new widget IIFE ships.
+
+- Updated dependencies [e92e7fc]
+  - @pinagent/widget-dock@0.2.0
+
 ## 0.5.0
 
 ### Minor Changes
