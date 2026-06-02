@@ -130,6 +130,38 @@ describe('createCloudApiClient', () => {
     });
     await expect(client.getUsage('o')).rejects.toBeInstanceOf(CloudApiError);
   });
+
+  it("surfaces the server's { error } message on a failure", async () => {
+    const { fetchFn } = fakeFetch(() => ({
+      status: 409,
+      body: { error: 'cannot remove the last owner' },
+    }));
+    const client = createCloudApiClient({ fetch: fetchFn });
+
+    await expect(client.removeMember('o', 'u-1')).rejects.toMatchObject({
+      status: 409,
+      message: 'cannot remove the last owner',
+    });
+  });
+
+  it('falls back to the generic message when the body has no error field', async () => {
+    const { fetchFn } = fakeFetch(() => ({ status: 400, body: { notError: 'x' } }));
+    const client = createCloudApiClient({ fetch: fetchFn });
+
+    await expect(
+      client.putBranchRouting('o', { defaultBaseBranch: null, allowedBranchPatterns: [] }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringContaining('failed (400)'),
+    });
+  });
+
+  it('still throws UnauthorizedError on 401 even with an error body', async () => {
+    const { fetchFn } = fakeFetch(() => ({ status: 401, body: { error: 'nope' } }));
+    const client = createCloudApiClient({ fetch: fetchFn });
+
+    await expect(client.getUsage('o')).rejects.toBeInstanceOf(UnauthorizedError);
+  });
 });
 
 describe('createCloudApiClient PUT methods', () => {

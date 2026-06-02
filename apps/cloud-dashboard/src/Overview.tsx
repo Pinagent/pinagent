@@ -113,13 +113,16 @@ export function Overview({
       <MembersAdmin
         invitations={state.value.invitations}
         onInvite={async (input) => {
+          // InviteForm surfaces a thrown error in its own field, so let it propagate.
           await client.inviteMember(organizationId, input);
           reload();
         }}
-        onRevoke={async (email) => {
-          await client.revokeInvitation(organizationId, email);
-          reload();
-        }}
+        onRevoke={(email) =>
+          // Revoke is fire-and-forget from the list; route it through runAction so a
+          // failure (403/network) surfaces in the action banner instead of becoming
+          // a silent unhandled rejection.
+          runAction(() => client.revokeInvitation(organizationId, email))
+        }
       />
     </div>
   );

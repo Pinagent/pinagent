@@ -80,6 +80,26 @@ export class UnauthorizedError extends CloudApiError {
   }
 }
 
+/**
+ * Build a {@link CloudApiError} for a failed response, preferring the server's
+ * JSON `{ error }` message over the generic fallback. The control plane returns
+ * worded reasons ("cannot remove the last owner", "only an owner can invite an
+ * owner", validation messages); surfacing them lets forms show the real cause
+ * instead of "PUT … failed (409)".
+ */
+async function failure(res: Response, fallback: string): Promise<CloudApiError> {
+  return new CloudApiError(res.status, (await serverErrorMessage(res)) ?? fallback);
+}
+
+async function serverErrorMessage(res: Response): Promise<string | null> {
+  try {
+    const body = (await res.json()) as { error?: unknown };
+    return typeof body.error === 'string' && body.error.trim().length > 0 ? body.error : null;
+  } catch {
+    return null; // non-JSON or empty body — fall back to the generic message
+  }
+}
+
 export interface CloudApiClient {
   /** The caller's own organizations (not org-scoped). */
   getMyOrgs(): Promise<MyOrg[]>;
@@ -116,7 +136,7 @@ export function createCloudApiClient(options: CloudApiClientOptions = {}): Cloud
       headers: { accept: 'application/json' },
     });
     if (res.status === 401) throw new UnauthorizedError();
-    if (!res.ok) throw new CloudApiError(res.status, `GET ${path} failed (${res.status})`);
+    if (!res.ok) throw await failure(res, `GET ${path} failed (${res.status})`);
     const body = (await res.json()) as Record<string, unknown>;
     return pick(body);
   }
@@ -133,7 +153,7 @@ export function createCloudApiClient(options: CloudApiClientOptions = {}): Cloud
       body: JSON.stringify(body),
     });
     if (res.status === 401) throw new UnauthorizedError();
-    if (!res.ok) throw new CloudApiError(res.status, `PUT ${path} failed (${res.status})`);
+    if (!res.ok) throw await failure(res, `PUT ${path} failed (${res.status})`);
     const payload = (await res.json()) as Record<string, unknown>;
     return pick(payload);
   }
@@ -146,7 +166,7 @@ export function createCloudApiClient(options: CloudApiClientOptions = {}): Cloud
       body: JSON.stringify(body),
     });
     if (res.status === 401) throw new UnauthorizedError();
-    if (!res.ok) throw new CloudApiError(res.status, `POST ${path} failed (${res.status})`);
+    if (!res.ok) throw await failure(res, `POST ${path} failed (${res.status})`);
   }
 
   async function patch(path: string, body: unknown): Promise<void> {
@@ -157,13 +177,17 @@ export function createCloudApiClient(options: CloudApiClientOptions = {}): Cloud
       body: JSON.stringify(body),
     });
     if (res.status === 401) throw new UnauthorizedError();
-    if (!res.ok) throw new CloudApiError(res.status, `PATCH ${path} failed (${res.status})`);
+    if (!res.ok) throw await failure(res, `PATCH ${path} failed (${res.status})`);
   }
 
   async function del(path: string): Promise<void> {
-    const res = await fetchFn(`${base}${path}`, { method: 'DELETE', credentials: 'include' });
+    const res = await fetchFn(`${base}${path}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { accept: 'application/json' },
+    });
     if (res.status === 401) throw new UnauthorizedError();
-    if (!res.ok) throw new CloudApiError(res.status, `DELETE ${path} failed (${res.status})`);
+    if (!res.ok) throw await failure(res, `DELETE ${path} failed (${res.status})`);
   }
 
   const orgQuery = (organizationId: string) =>
