@@ -14,3 +14,4 @@ export type {
   ProjectSettings,
   PullRequest,
 } from './types';
+export { FIXTURE_WORKING_COPY } from './working-copy';

@@ -19,7 +19,7 @@
  * Methods are intentionally narrow: every dock view talks through one
  * of these, never `fetch` or `new WebSocket()` directly.
  */
-import type { AgentEvent, PermissionMode, ProjectEvent } from '@pinagent/shared';
+import type { AgentEvent, PermissionMode, ProjectEvent, WorkingCopyStatus } from '@pinagent/shared';
 import type { Branch, Change, Conversation, PullRequest } from '../fixtures/types';
 import type { ConnectionStatus, ConversationHandlers, ExtensionStatus } from './ws-client';
 
@@ -137,6 +137,14 @@ export interface DockTransport {
    */
   refreshPullRequests(): Promise<PullRequest[]>;
 
+  /**
+   * High-level git status of the branch the dev-server runs on (the
+   * developer's own checkout) vs the configured base branch — the data
+   * behind the dashboard's working-changes hero: changed files, +/−
+   * stats, ahead/behind the remote, and the PR (if one's been opened).
+   */
+  getWorkingCopyStatus(): Promise<WorkingCopyStatus>;
+
   // ---------- Live subscriptions ----------
 
   /**
@@ -234,6 +242,22 @@ export interface DockTransport {
    * was skipped or failed.
    */
   createPullRequest(input: CreatePullRequestInput): Promise<CreatePullRequestResult>;
+
+  /**
+   * Open a PR for the branch the dev-server is on. The server summarizes
+   * the diff into a title/body with an inline agent, pushes the branch,
+   * and opens the PR via Octokit. Reuses the {@link CreatePullRequestResult}
+   * shape (prUrl / manualCompareUrl / error). Drives the dashboard's
+   * primary "Create PR" action.
+   */
+  createWorkingCopyPr(): Promise<CreatePullRequestResult>;
+
+  /**
+   * Push the current host branch to its upstream — the dashboard's "Push
+   * changes" action when local commits are ahead of the remote (e.g. an
+   * agent landed more work after the PR opened).
+   */
+  pushWorkingCopyBranch(): Promise<CreatePullRequestResult>;
 
   // ---------- Connections + settings (Phase 5) ----------
 

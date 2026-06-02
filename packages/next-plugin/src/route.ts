@@ -16,6 +16,7 @@ import {
   composePullRequest,
   FeedbackInputSchema,
   getChangeDiff,
+  getWorkingCopyStatus,
   type HistoryStatusFilter,
   ID_RE,
   listAuditEvents,
@@ -25,12 +26,14 @@ import {
   listProjectFiles,
   listPullRequests,
   listWorktreeServers,
+  openHostBranchPr,
   openInEditor,
   PatchSchema,
   ProjectSettingsPatchSchema,
   pruneBranch,
   pruneBranches,
   pruneStaleBranches,
+  pushHostBranch,
   refreshPullRequests,
   reopenConversations,
   resolveAgentMode,
@@ -43,6 +46,7 @@ import {
   spawnAgent,
   startWsServer,
   stopWorktreeServer,
+  summarizeChangesForPr,
   validateAnthropicKey,
   validateGithubToken,
 } from '@pinagent/agent-runner';
@@ -172,6 +176,14 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
   if (slug.length === 1 && slug[0] === 'changes') {
     const changes = await listChanges(storage.root);
     return json(200, changes);
+  }
+
+  // /__pinagent/working-copy — high-level git status of the host branch
+  // the dev-server runs on. Backs the dock dashboard's working-changes
+  // hero. Mirror of the vite-plugin GET handler.
+  if (slug.length === 1 && slug[0] === 'working-copy') {
+    const status = await getWorkingCopyStatus(storage.root);
+    return json(200, status);
   }
 
   // /__pinagent/git-branches — the repo's real git branches, base-branch
@@ -399,6 +411,39 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
     const storage = getStorage();
     const prs = await refreshPullRequests(storage.root);
     return json(200, prs);
+  }
+
+  // /__pinagent/working-copy/pr — open a PR for the current host branch.
+  // When title/body are omitted, an inline agent summarizes the diff into
+  // a PR description first. Mirror of the vite-plugin POST handler.
+  if (slug.length === 2 && slug[0] === 'working-copy' && slug[1] === 'pr') {
+    const raw = (await readJsonBody(req).catch(() => ({}))) as { title?: unknown; body?: unknown };
+    const storage = getStorage();
+    let title = typeof raw.title === 'string' ? raw.title.trim() : '';
+    let body = typeof raw.body === 'string' ? raw.body.trim() : '';
+    if (!title || !body) {
+      try {
+        const summary = await summarizeChangesForPr(storage.root);
+        title = title || summary.title;
+        body = body || summary.body;
+      } catch (e) {
+        return json(422, {
+          ok: false,
+          branchPushed: false,
+          error: `couldn't summarize changes: ${e instanceof Error ? e.message : String(e)}`,
+        });
+      }
+    }
+    const result = await openHostBranchPr(storage.root, { title, body });
+    return json(result.ok ? 200 : 422, result);
+  }
+
+  // /__pinagent/working-copy/push — push the current host branch to its
+  // upstream (the dashboard's "Push changes" action). Mirror of vite.
+  if (slug.length === 2 && slug[0] === 'working-copy' && slug[1] === 'push') {
+    const storage = getStorage();
+    const result = await pushHostBranch(storage.root);
+    return json(result.ok ? 200 : 422, result);
   }
 
   // /__pinagent/feedback/bulk-update — multi-row archive flip. Mirror

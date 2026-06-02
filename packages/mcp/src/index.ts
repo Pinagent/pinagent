@@ -5,6 +5,10 @@ import { pathToFileURL } from 'node:url';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+// Import from the SDK-free `/pr` subpath, NOT the package root — the root
+// re-exports the agent providers, which would drag the Claude Agent SDK
+// into the published `pinagent-mcp` bin. See agent-runner's tsdown config.
+import { openHostBranchPr } from '@pinagent/agent-runner/pr';
 import { renderTranscript } from '@pinagent/shared';
 import { z } from 'zod';
 import { CHANNEL_INSTRUCTIONS, startFeedbackWatcher } from './channel';
@@ -97,6 +101,20 @@ const TOOL_LIST = [
       },
     },
   },
+  {
+    name: 'create_pull_request',
+    description:
+      "Open a GitHub pull request for the branch the dev-server is currently on. FIRST summarize the branch's changes yourself — inspect the diff against the base branch (e.g. `git diff <base>...HEAD`) — then call this with a concise `title` and a GitHub-flavored-markdown `body`. The tool pushes the current branch and opens the PR via the developer's configured GitHub token, targeting the project's configured base branch. If no token is set it pushes and returns a compare URL to open the PR manually. Returns the PR URL (or compare URL) and push status.",
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['title', 'body'],
+      properties: {
+        title: { type: 'string', description: 'PR title — concise, imperative mood.' },
+        body: { type: 'string', description: 'PR description in GitHub-flavored markdown.' },
+      },
+    },
+  },
 ] as const;
 
 const ListInput = z.object({
@@ -122,6 +140,11 @@ const SourceInput = z.object({
 const TranscriptInput = z.object({
   id: z.string(),
   format: z.enum(['text', 'json']).optional(),
+});
+
+const CreatePrInput = z.object({
+  title: z.string().min(1),
+  body: z.string(),
 });
 
 /**
@@ -335,6 +358,15 @@ export async function callTool(
         const format = input.format ?? 'text';
         const text = format === 'json' ? JSON.stringify(events, null, 2) : renderTranscript(events);
         return { content: [{ type: 'text', text }] };
+      }
+
+      case 'create_pull_request': {
+        const input = CreatePrInput.parse(args);
+        const result = await openHostBranchPr(root, { title: input.title, body: input.body });
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          ...(result.ok ? {} : { isError: true }),
+        };
       }
 
       default:

@@ -17,6 +17,7 @@ import {
   composePullRequest,
   FeedbackInputSchema,
   getChangeDiff,
+  getWorkingCopyStatus,
   type HistoryStatusFilter,
   ID_RE,
   listAuditEvents,
@@ -26,12 +27,14 @@ import {
   listProjectFiles,
   listPullRequests,
   listWorktreeServers,
+  openHostBranchPr,
   openInEditor,
   PatchSchema,
   ProjectSettingsPatchSchema,
   pruneBranch,
   pruneBranches,
   pruneStaleBranches,
+  pushHostBranch,
   refreshPullRequests,
   reopenConversations,
   resolvePermissionModeOverride,
@@ -43,6 +46,7 @@ import {
   serveBranch,
   spawnAgent,
   stopWorktreeServer,
+  summarizeChangesForPr,
   validateAnthropicKey,
   validateGithubToken,
 } from '@pinagent/agent-runner';
@@ -213,6 +217,15 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
         return json(res, 200, result);
       }
 
+      // GET /__pinagent/working-copy — high-level git status of the branch
+      // the dev-server runs on (host checkout) vs the configured base
+      // branch: file list, +/− stats, ahead/behind remote, and the PR (if
+      // any). Backs the dock dashboard's working-changes hero.
+      if (req.method === 'GET' && url === '/__pinagent/working-copy') {
+        const status = await getWorkingCopyStatus(storage.root);
+        return json(res, 200, status);
+      }
+
       // GET /__pinagent/branches — every conversation with an active or
       // landed worktree, plus its git cleanliness state + disk usage.
       // Drives the dock's Branches view.
@@ -361,6 +374,40 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
         const parsed = ComposeOptsSchema.safeParse(raw);
         if (!parsed.success) return badRequest(res, parsed.error.message);
         const result = await composePullRequest(storage.root, parsed.data);
+        return json(res, result.ok ? 200 : 422, result);
+      }
+
+      // POST /__pinagent/working-copy/pr — open a PR for the current host
+      // branch. When the body omits title/body, an inline agent summarizes
+      // the diff into a PR description first; then push + open via Octokit.
+      if (req.method === 'POST' && url === '/__pinagent/working-copy/pr') {
+        const raw = (await readJsonBody(req).catch(() => ({}))) as {
+          title?: unknown;
+          body?: unknown;
+        };
+        let title = typeof raw.title === 'string' ? raw.title.trim() : '';
+        let body = typeof raw.body === 'string' ? raw.body.trim() : '';
+        if (!title || !body) {
+          try {
+            const summary = await summarizeChangesForPr(storage.root);
+            title = title || summary.title;
+            body = body || summary.body;
+          } catch (e) {
+            return json(res, 422, {
+              ok: false,
+              branchPushed: false,
+              error: `couldn't summarize changes: ${e instanceof Error ? e.message : String(e)}`,
+            });
+          }
+        }
+        const result = await openHostBranchPr(storage.root, { title, body });
+        return json(res, result.ok ? 200 : 422, result);
+      }
+
+      // POST /__pinagent/working-copy/push — push the current host branch
+      // to its upstream (the dashboard's "Push changes" action).
+      if (req.method === 'POST' && url === '/__pinagent/working-copy/push') {
+        const result = await pushHostBranch(storage.root);
         return json(res, result.ok ? 200 : 422, result);
       }
 

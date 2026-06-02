@@ -44,6 +44,8 @@ export function activate(context: vscode.ExtensionContext): void {
             return handleOpenClaude(uri);
           case 'open-file':
             return handleOpenFile(uri);
+          case 'view-changes':
+            return handleViewChanges();
           default:
             void vscode.window.showWarningMessage(`Pinagent: unknown URI action "${action}"`);
         }
@@ -75,6 +77,16 @@ function handleOpenClaude(uri: vscode.Uri): void {
       term.sendText(prompt, false);
     }, PROMPT_DELAY_MS);
   }
+}
+
+/**
+ * Focus VSCode's Source Control view so the developer sees every changed
+ * file at once. Backs the dock dashboard's "Open in VSCode" action.
+ * `workbench.view.scm` is a built-in command — no SCM provider config
+ * needed, it reveals the panel git already populates.
+ */
+function handleViewChanges(): void {
+  void vscode.commands.executeCommand('workbench.view.scm');
 }
 
 async function handleOpenFile(uri: vscode.Uri): Promise<void> {

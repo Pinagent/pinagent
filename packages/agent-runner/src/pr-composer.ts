@@ -20,13 +20,10 @@
 import { existsSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Octokit } from '@octokit/rest';
 import { z } from 'zod';
 import { recordAuditEvent } from './audit-log';
-import { resolveOriginRemote } from './git-remote';
 import { runGitCapture } from './git-utils';
-import { resolveGithubToken } from './github-auth';
-import { recordPullRequest } from './pull-requests';
+import { openPrOnGitHub, pushBranch } from './github-pr';
 import { Storage } from './storage';
 
 export const ComposeOptsSchema = z.object({
@@ -233,18 +230,13 @@ export async function composePullRequest(
   // credentials (SSH keys, credential manager, etc.) — pinagent doesn't
   // need to manage them. If the push fails (no remote, auth issues), we
   // tear down the compose so the next attempt starts clean.
-  const push = await runGitCapture(projectRoot, [
-    'push',
-    '-u',
-    'origin',
-    `${opts.branchName}:${opts.branchName}`,
-  ]);
-  if (push.code !== 0) {
+  const push = await pushBranch(projectRoot, opts.branchName);
+  if (!push.ok) {
     await cleanupCompose();
     return {
       ok: false,
       branchPushed: false,
-      error: `git push failed: ${push.stderr.trim() || push.stdout.trim()}`,
+      error: push.error ?? 'git push failed',
     };
   }
 
@@ -277,70 +269,15 @@ export async function composePullRequest(
   await rm(composePath, { recursive: true, force: true }).catch(() => {});
   await runGitCapture(projectRoot, ['worktree', 'prune']);
 
-  // Open the PR if Octokit is configured + the remote is GitHub.
-  // Token precedence: dock-stored secret (set via Connections route) →
-  // GITHUB_TOKEN env → PINAGENT_GITHUB_TOKEN env. The Connections path
-  // is the new Phase 5 route; env vars stay for CI / scripting.
-  const token = await resolveGithubToken(projectRoot);
-  const remote = await resolveOriginRemote(projectRoot);
-  const manualCompareUrl = remote
-    ? `https://github.com/${remote.owner}/${remote.repo}/compare/${encodeURIComponent(
-        opts.baseBranch,
-      )}...${encodeURIComponent(opts.branchName)}?expand=1`
-    : undefined;
-
-  if (!token || !remote) {
-    return {
-      ok: true,
-      branchPushed: true,
-      ...(manualCompareUrl ? { manualCompareUrl } : {}),
-    };
-  }
-
-  try {
-    const octokit = new Octokit({ auth: token });
-    const created = await octokit.pulls.create({
-      owner: remote.owner,
-      repo: remote.repo,
-      title: opts.title,
-      body: opts.description,
-      head: opts.branchName,
-      base: opts.baseBranch,
-    });
-    // Best-effort: record the PR for the dock's PRs view. A failure
-    // here shouldn't mask the fact that the PR was opened — the user
-    // already has the URL.
-    await recordPullRequest(projectRoot, {
-      number: created.data.number,
-      url: created.data.html_url,
-      branch: opts.branchName,
-      baseBranch: opts.baseBranch,
-      title: opts.title,
-      body: opts.description,
-      conversationIds: opts.feedbackIds,
-    }).catch(() => {});
-    await recordAuditEvent(projectRoot, {
-      conversationId: null,
-      actor: 'user',
-      action: 'pr_created',
-      payload: {
-        number: created.data.number,
-        url: created.data.html_url,
-        branch: opts.branchName,
-        baseBranch: opts.baseBranch,
-        title: opts.title,
-        conversationIds: opts.feedbackIds,
-      },
-    });
-    return { ok: true, branchPushed: true, prUrl: created.data.html_url };
-  } catch (e) {
-    // Push succeeded; the PR API call failed (token scope, network,
-    // etc.). Fall back to the manual-create path with a clear hint.
-    return {
-      ok: true,
-      branchPushed: true,
-      ...(manualCompareUrl ? { manualCompareUrl } : {}),
-      error: `pushed ok, but GitHub PR API call failed: ${e instanceof Error ? e.message : String(e)}`,
-    };
-  }
+  // Open the PR (push already succeeded above). The shared core resolves
+  // the token (dock-stored secret → GITHUB_TOKEN → PINAGENT_GITHUB_TOKEN),
+  // calls Octokit, records the PR + audit event, and falls back to a
+  // manual-compare URL when no token / non-GitHub remote is configured.
+  return openPrOnGitHub(projectRoot, {
+    branchName: opts.branchName,
+    baseBranch: opts.baseBranch,
+    title: opts.title,
+    body: opts.description,
+    conversationIds: opts.feedbackIds,
+  });
 }
