@@ -226,3 +226,44 @@ describe('createOidcProvider.completeLogin', () => {
     ).rejects.toThrow(/missing id_token/);
   });
 });
+
+describe('createOidcProvider discovery', () => {
+  /** Provider whose discovery doc self-reports `metadataIssuer`. */
+  function providerWithDiscoveredIssuer(metadataIssuer: string) {
+    const fetchFn = async (url: string): Promise<Response> => {
+      if (url === `${ISSUER}/.well-known/openid-configuration`) {
+        return json({
+          issuer: metadataIssuer,
+          authorization_endpoint: `${metadataIssuer}/authorize`,
+          token_endpoint: `${metadataIssuer}/token`,
+          jwks_uri: `${metadataIssuer}/jwks`,
+        });
+      }
+      return new Response('not found', { status: 404 });
+    };
+    return createOidcProvider({
+      clientFor: () => ({
+        clientId: CLIENT_ID,
+        clientSecret: 'shh',
+        redirectUri: 'https://cloud.pinagent.test/sso/callback',
+      }),
+      nonceSecret: NONCE_SECRET,
+      fetch: fetchFn,
+      nowSeconds: () => NOW,
+    });
+  }
+
+  it('rejects when the discovered issuer differs from the configured issuer', async () => {
+    // The metadata's self-reported issuer is attacker-controlled here; if we
+    // trusted it, the swapped-in authorize/token/jwks endpoints would be used.
+    const provider = providerWithDiscoveredIssuer('https://evil.test');
+    await expect(provider.authorizationUrl(connection, STATE)).rejects.toThrow(/issuer mismatch/);
+  });
+
+  it('accepts a discovered issuer that differs only by a trailing slash', async () => {
+    const provider = providerWithDiscoveredIssuer(`${ISSUER}/`);
+    const url = await provider.authorizationUrl(connection, STATE);
+    expect(url).toContain('/authorize');
+    expect(url).toContain(`client_id=${CLIENT_ID}`);
+  });
+});
