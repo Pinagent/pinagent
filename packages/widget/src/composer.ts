@@ -609,6 +609,17 @@ export function createComposerController(ctx: WidgetContext): {
         composer.refitStream();
       },
       minimize() {
+        // A pre-submit composer has no conversation to preserve, and its
+        // mini bar lives inside the still-hidden stream pane — so collapsing
+        // it just shrinks the card to MINI_H with the pre-submit form clipped
+        // and no bar to show (the "bugged out" minimized state). Mirror the
+        // Esc semantics (composer-iframe.ts): an un-submitted draft is
+        // discarded rather than minimized. This covers every minimize path
+        // (opening another composer, swapping to a bubble, etc.).
+        if (!composer.feedbackId) {
+          composer.close();
+          return;
+        }
         // Minimized = the single-line minimal bar, NOT a hidden iframe.
         // The iframe stays visible at MINI_H with `body.mini` toggled on;
         // reposition() decides iframe-vs-dot visibility. Multiple minimal
@@ -621,6 +632,14 @@ export function createComposerController(ctx: WidgetContext): {
         if (ctx.expandedComposer === composer) ctx.expandedComposer = null;
       },
       toBubble() {
+        // Same guard as minimize(): a pre-submit draft has no live agent to
+        // collapse into a status dot (the dot only renders for a composer
+        // with a feedbackId), so minimize-all and friends discard it instead
+        // of leaving a stuck, empty bubble.
+        if (!composer.feedbackId) {
+          composer.close();
+          return;
+        }
         // Collapse to the floating status dot. The iframe stays in the DOM
         // (body.mini chrome applied) but reposition() hides it in favour of
         // the bubble while viewState is 'bubble'.

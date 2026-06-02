@@ -333,6 +333,10 @@ describe('composer view-state transitions', () => {
   it('moves between expanded, minimal, and bubble', () => {
     const ctx = makeCtx();
     const c = mountComposer(ctx);
+    // A composer only reaches the minimal/bubble states once it has a
+    // conversation (a submitted draft). Pre-submit composers are closed
+    // rather than minimized — covered by the dedicated test below.
+    c.feedbackId = 'fb-1';
 
     expect(c.viewState).toBe('expanded');
     expect(c.expanded).toBe(true);
@@ -348,6 +352,50 @@ describe('composer view-state transitions', () => {
     c.expand();
     expect(c.viewState).toBe('expanded');
     expect(c.expanded).toBe(true);
+  });
+
+  it('discards (closes) a pre-submit composer instead of minimizing it', () => {
+    // Regression: pressing the pick hotkey and picking a new element while an
+    // un-submitted composer was open minimized that draft. Its mini bar lives
+    // in the still-hidden stream pane, so it collapsed into a clipped, empty
+    // "bugged out" card. A pre-submit draft (no feedbackId) has nothing to
+    // preserve, so minimize/toBubble must close it — like Esc does.
+    const ctx = makeCtx();
+    const c = mountComposer(ctx);
+    expect(ctx.composers.has(c)).toBe(true);
+
+    c.minimize();
+    expect(ctx.composers.has(c)).toBe(false);
+    expect(c.viewState).toBe('expanded'); // never entered the minimal state
+    expect(ctx.expandedComposer).toBeNull();
+  });
+
+  it('discards a pre-submit composer asked to collapse to a bubble', () => {
+    const ctx = makeCtx();
+    const c = mountComposer(ctx);
+
+    c.toBubble();
+    expect(ctx.composers.has(c)).toBe(false);
+    expect(c.viewState).toBe('expanded');
+  });
+
+  it('opening a new composer discards an un-submitted previous one', () => {
+    // The real trigger: open() minimizes whatever was expanded. When that was
+    // a pre-submit draft it must be discarded, not left as a broken mini bar.
+    const ctx = makeCtx();
+    const controller = createComposerController(ctx);
+    const a = document.createElement('button');
+    const b = document.createElement('button');
+    document.body.append(a, b);
+
+    controller.open(a, { x: 1, y: 1 });
+    const first = Array.from(ctx.composers)[0] as Composer;
+
+    controller.open(b, { x: 2, y: 2 });
+    // The first (un-submitted) composer is gone; only the new one remains.
+    expect(ctx.composers.has(first)).toBe(false);
+    expect(ctx.composers.size).toBe(1);
+    expect(ctx.expandedComposer).not.toBe(first);
   });
 });
 
@@ -507,6 +555,7 @@ describe('composer auto-close timer', () => {
   it('expanding cancels a pending auto-close', () => {
     const ctx = makeCtx();
     const c = mountComposer(ctx);
+    c.feedbackId = 'fb-cancel';
     c.minimize();
     c.scheduleAutoClose();
     expect(c.autoCloseTimer).not.toBeNull();
