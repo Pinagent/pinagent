@@ -57,6 +57,21 @@ describe('openHostBranchPr', () => {
     expect(res.branchPushed).toBe(false);
     expect(res.error).toMatch(/base branch/);
   });
+
+  it('gets past the git-repo guard from a subdirectory of the repo', async () => {
+    // Regression: the dev server runs from a subdir (e.g. examples/app)
+    // where there's no `.git` entry. The old existsSync('.git') guard
+    // misfired here, surfacing "project root is not a git repository" when
+    // the user clicked Create PR. It must instead resolve the branch and
+    // fail later (no remote → push failure), NOT on the repo guard.
+    await git(ROOT, ['checkout', '-b', 'feat/x']);
+    const sub = join(ROOT, 'examples', 'app');
+    await mkdir(sub, { recursive: true });
+    const res = await mod.openHostBranchPr(sub, { title: 't', body: 'b' });
+    expect(res.error ?? '').not.toMatch(/not a git repository/);
+    expect(res.error ?? '').not.toMatch(/base branch/);
+    await git(ROOT, ['checkout', 'main']);
+  });
 });
 
 describe('pushHostBranch', () => {

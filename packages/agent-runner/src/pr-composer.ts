@@ -22,7 +22,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { recordAuditEvent } from './audit-log';
-import { runGitCapture } from './git-utils';
+import { isInsideWorkTree, runGitCapture } from './git-utils';
 import { openPrOnGitHub, pushBranch } from './github-pr';
 import { Storage } from './storage';
 
@@ -89,7 +89,7 @@ export async function composePullRequest(
       error: 'invalid branch name (alphanumeric + ./_- only)',
     };
   }
-  if (!existsSync(join(projectRoot, '.git'))) {
+  if (!(await isInsideWorkTree(projectRoot))) {
     return { ok: false, branchPushed: false, error: 'project root is not a git repository' };
   }
 

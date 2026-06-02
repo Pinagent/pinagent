@@ -14,7 +14,7 @@
  * from worktrees" note in branches.ts / changes.ts.
  */
 import { computeWorktreeStats } from './agent';
-import { runGitCapture } from './git-utils';
+import { isInsideWorkTree, runGitCapture } from './git-utils';
 import { listPullRequests } from './pull-requests';
 import { SettingsStore } from './settings-store';
 
@@ -178,15 +178,9 @@ export async function getWorkingCopyStatus(projectRoot: string): Promise<Working
   const mb = await runGitCapture(projectRoot, ['merge-base', baseBranch, 'HEAD']);
   const compareTo = mb.code === 0 ? mb.stdout.trim() : baseBranch;
 
-  // `git rev-parse --is-inside-work-tree`, not `existsSync('.git')` — the
-  // dev server can run from a subdirectory of the repo (e.g. an example
-  // app) or a linked worktree (where `.git` is a file at the worktree
-  // root, absent in subdirs). The existsSync check misfired in both,
-  // returning an all-zero "no changes" status from a dirty branch.
-  const insideRepo =
-    (await runGitCapture(projectRoot, ['rev-parse', '--is-inside-work-tree'])).stdout.trim() ===
-    'true';
-  const notGitRepo = !insideRepo;
+  // Detect the repo via `git rev-parse`, not `existsSync('.git')` — see
+  // isInsideWorkTree for why (subdirectories + linked worktrees).
+  const notGitRepo = !(await isInsideWorkTree(projectRoot));
 
   const [stats, files, divergence, dirtyStatus, prs] = await Promise.all([
     notGitRepo ? Promise.resolve(null) : computeWorktreeStats(projectRoot, baseBranch),
