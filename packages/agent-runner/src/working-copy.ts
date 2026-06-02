@@ -140,6 +140,11 @@ async function listUntrackedFiles(projectRoot: string): Promise<WorkingCopyFile[
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean)
+    // Defensive: never surface pinagent's own data dir as a user change,
+    // even on the first request before `.pinagent/.gitignore` is written
+    // (or in a repo that predates it). `--exclude-standard` handles the
+    // steady state; this covers the race.
+    .filter((p) => p !== '.pinagent' && !p.startsWith('.pinagent/'))
     .slice(0, UNTRACKED_CAP);
   return Promise.all(
     paths.map(async (path): Promise<WorkingCopyFile> => {

@@ -25,7 +25,7 @@
 }
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
@@ -224,7 +224,21 @@ export function getDb(projectRoot: string): Db {
   if (existing) return existing.db;
 
   const dbPath = join(root, '.pinagent', 'db.sqlite');
-  mkdirSync(dirname(dbPath), { recursive: true });
+  const pinagentDir = dirname(dbPath);
+  mkdirSync(pinagentDir, { recursive: true });
+  // Self-ignore the data dir so git never sees pinagent's SQLite DB,
+  // screenshots, or worktrees — regardless of whether the host project
+  // gitignored `.pinagent`. Without this, the dashboard listed them as
+  // changes and `git add -A` (Create PR / Push) committed them into the
+  // user's PR. Idempotent; best-effort.
+  const giPath = join(pinagentDir, '.gitignore');
+  if (!existsSync(giPath)) {
+    try {
+      writeFileSync(giPath, '*\n');
+    } catch {
+      // read-only FS, etc. — the host should gitignore `.pinagent` itself.
+    }
+  }
 
   const raw = new DatabaseSync(dbPath);
   // WAL gives concurrent readers (the eventual MCP server, the dev
