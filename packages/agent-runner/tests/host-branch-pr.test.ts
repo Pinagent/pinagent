@@ -131,12 +131,9 @@ describe('startHostBranch', () => {
 });
 
 describe('commitWorkingChanges + auto-commit on PR/push', () => {
-  function porcelain(): Promise<string> {
+  function gitText(args: string[]): Promise<string> {
     return new Promise((res, rej) => {
-      const child = spawn('git', ['status', '--porcelain'], {
-        cwd: ROOT,
-        stdio: ['ignore', 'pipe', 'ignore'],
-      });
+      const child = spawn('git', args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] });
       let out = '';
       child.stdout?.on('data', (d: Buffer) => {
         out += d.toString();
@@ -145,6 +142,7 @@ describe('commitWorkingChanges + auto-commit on PR/push', () => {
       child.on('close', () => res(out.trim()));
     });
   }
+  const porcelain = () => gitText(['status', '--porcelain']);
 
   beforeEach(async () => {
     await git(ROOT, ['checkout', '-f', 'main']);
@@ -182,5 +180,31 @@ describe('commitWorkingChanges + auto-commit on PR/push', () => {
     });
     expect(await porcelain()).toBe(''); // committed → working tree clean
     expect(res.error ?? '').not.toMatch(/commit message/);
+  });
+
+  it('never commits a nested git repo as a gitlink (the .claude/worktrees mess)', async () => {
+    await git(ROOT, ['checkout', '-b', 'feat/embedded']);
+    // A nested repo with its own commit — exactly what a linked worktree
+    // under `.claude/worktrees/<name>` looks like to `git add -A`.
+    const nested = join(ROOT, 'nested-wt');
+    await mkdir(nested, { recursive: true });
+    await git(nested, ['init', '-b', 'main']);
+    await git(nested, ['config', 'user.email', 'pinagent-test@example.com']);
+    await git(nested, ['config', 'user.name', 'Pinagent Test']);
+    await writeFile(join(nested, 'f.txt'), 'inner\n', 'utf8');
+    await git(nested, ['add', '-A']);
+    await git(nested, ['commit', '-m', 'inner']);
+    // A real edit in the host tree alongside the nested repo.
+    await writeFile(join(ROOT, 'real.txt'), 'real change\n', 'utf8');
+
+    const res = await mod.commitWorkingChanges(ROOT, 'feat: real change');
+    expect(res.ok).toBe(true);
+    expect(res.committed).toBe(true);
+
+    // The commit must contain the real file but NO gitlink (mode 160000).
+    const tracked = await gitText(['ls-files', '--stage']);
+    expect(tracked).toContain('real.txt');
+    expect(tracked).not.toMatch(/^160000/m);
+    expect(tracked).not.toContain('nested-wt');
   });
 });

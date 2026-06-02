@@ -42,15 +42,48 @@ export async function commitWorkingChanges(
   if (add.code !== 0) {
     return { ok: false, committed: false, error: `git add failed: ${add.stderr.trim()}` };
   }
+  // `git add -A` records any nested git repo (linked worktrees under
+  // `.claude/worktrees`, vendored repos, an un-init'd submodule) as a
+  // gitlink/"Subproject commit" — never what "commit my changes" means, and
+  // it spammed a PR with dozens of `.claude/worktrees/*` subproject entries.
+  // Unstage every newly-added gitlink before committing.
+  await unstageAddedGitlinks(projectRoot);
   const commit = await runGitCapture(projectRoot, ['commit', '-m', message]);
-  if (commit.code !== 0 && !/nothing to commit/.test(`${commit.stdout}\n${commit.stderr}`)) {
+  // After dropping the gitlinks there may be nothing real left to commit
+  // (the only "changes" were embedded repos) — that's a clean no-op, not an
+  // error.
+  const nothingToCommit = /nothing to commit/.test(`${commit.stdout}\n${commit.stderr}`);
+  if (commit.code !== 0 && !nothingToCommit) {
     return {
       ok: false,
       committed: false,
       error: `git commit failed: ${commit.stderr.trim() || commit.stdout.trim()}`,
     };
   }
-  return { ok: true, committed: true };
+  return { ok: true, committed: commit.code === 0 };
+}
+
+/**
+ * Unstage entries that `git add -A` recorded as gitlinks (mode 160000) —
+ * embedded git repositories it picked up. Only newly-added ones (status A),
+ * so an intentionally-tracked submodule's pointer update is left alone.
+ */
+async function unstageAddedGitlinks(projectRoot: string): Promise<void> {
+  const raw = await runGitCapture(projectRoot, ['diff', '--cached', '--raw']);
+  if (raw.code !== 0) return;
+  for (const line of raw.stdout.split('\n')) {
+    if (!line.startsWith(':')) continue;
+    const tab = line.indexOf('\t');
+    if (tab === -1) continue;
+    // ":<oldmode> <newmode> <oldsha> <newsha> <status>" before the tab.
+    const fields = line.slice(1, tab).split(' ');
+    const newMode = fields[1];
+    const status = fields[4] ?? '';
+    const path = line.slice(tab + 1);
+    if (newMode === '160000' && status.startsWith('A') && path) {
+      await runGitCapture(projectRoot, ['reset', '-q', '--', path]);
+    }
+  }
 }
 
 async function resolveCurrentBranch(projectRoot: string): Promise<string | null> {
