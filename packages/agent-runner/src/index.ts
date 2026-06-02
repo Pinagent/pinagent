@@ -96,6 +96,7 @@ export {
   type PushHostBranchResult,
   pushHostBranch,
   type StartHostBranchResult,
+  slugifyBranchName,
   startHostBranch,
 } from './host-branch-pr';
 export {

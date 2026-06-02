@@ -124,6 +124,46 @@ async function listFiles(projectRoot: string, compareTo: string): Promise<Workin
   return files;
 }
 
+/** Cap on untracked rows we count + list, so a stray huge dir can't stall the GET. */
+const UNTRACKED_CAP = 200;
+
+/**
+ * New (untracked) files, which `git diff` doesn't report. `--exclude-standard`
+ * honors .gitignore (so node_modules / .pinagent / .claude/worktrees are
+ * skipped). Added-line counts come from `git diff --no-index` against
+ * /dev/null — which reads the file without staging it (no index mutation).
+ */
+async function listUntrackedFiles(projectRoot: string): Promise<WorkingCopyFile[]> {
+  const res = await runGitCapture(projectRoot, ['ls-files', '--others', '--exclude-standard']);
+  if (res.code !== 0) return [];
+  const paths = res.stdout
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, UNTRACKED_CAP);
+  return Promise.all(
+    paths.map(async (path): Promise<WorkingCopyFile> => {
+      // `git diff --no-index` exits non-zero when there's a diff — expected;
+      // we read stdout regardless. Binary files report '-' → 0 added.
+      const ns = await runGitCapture(projectRoot, [
+        'diff',
+        '--no-index',
+        '--numstat',
+        '--',
+        '/dev/null',
+        path,
+      ]);
+      const firstField =
+        ns.stdout
+          .split('\n')
+          .find((l) => l.includes('\t'))
+          ?.split('\t')[0] ?? '-';
+      const added = firstField === '-' ? 0 : Number(firstField) || 0;
+      return { path, added, deleted: 0, status: 'added' };
+    }),
+  );
+}
+
 /**
  * Ahead/behind the remote tracking branch. Returns `hasUpstream: false`
  * with zero counts when the branch has no `@{upstream}` configured (never
@@ -182,9 +222,10 @@ export async function getWorkingCopyStatus(projectRoot: string): Promise<Working
   // isInsideWorkTree for why (subdirectories + linked worktrees).
   const notGitRepo = !(await isInsideWorkTree(projectRoot));
 
-  const [stats, files, divergence, dirtyStatus, prs] = await Promise.all([
+  const [stats, trackedFiles, untrackedFiles, divergence, dirtyStatus, prs] = await Promise.all([
     notGitRepo ? Promise.resolve(null) : computeWorktreeStats(projectRoot, baseBranch),
     notGitRepo ? Promise.resolve([]) : listFiles(projectRoot, compareTo),
+    notGitRepo ? Promise.resolve([]) : listUntrackedFiles(projectRoot),
     notGitRepo
       ? Promise.resolve({ ahead: 0, behind: 0, hasUpstream: false })
       : resolveRemoteDivergence(projectRoot),
@@ -194,12 +235,18 @@ export async function getWorkingCopyStatus(projectRoot: string): Promise<Working
     listPullRequests(projectRoot).catch(() => []),
   ]);
 
+  // `git diff` omits untracked (brand-new) files, so add them on top of the
+  // tracked diff stats — otherwise a freshly-created file the agent will
+  // commit wouldn't show in the hero at all.
+  const files = [...trackedFiles, ...untrackedFiles];
+  const untrackedAdditions = untrackedFiles.reduce((sum, f) => sum + f.added, 0);
+
   return {
     branch,
     baseBranch,
     isDefaultBranch,
-    filesChanged: stats?.filesChanged ?? files.length,
-    additions: stats?.additions ?? 0,
+    filesChanged: (stats?.filesChanged ?? trackedFiles.length) + untrackedFiles.length,
+    additions: (stats?.additions ?? 0) + untrackedAdditions,
     deletions: stats?.deletions ?? 0,
     files,
     ahead: divergence.ahead,
