@@ -87,6 +87,16 @@ describe('getWorkingCopyStatus', () => {
     expect(status.additions).toBeGreaterThan(0);
   });
 
+  it('works from a subdirectory of the repo (not just the repo root)', async () => {
+    // The dev server often runs from a subdir (e.g. an example app) where
+    // there's no `.git` entry — status must still reflect the branch diff.
+    const sub = join(ROOT, 'examples', 'app');
+    await mkdir(sub, { recursive: true });
+    const status = await mod.getWorkingCopyStatus(sub);
+    expect(status.branch).toBe('feat/work');
+    expect(status.filesChanged).toBeGreaterThanOrEqual(3);
+  });
+
   it('tracks ahead/behind once the branch has an upstream', async () => {
     // Stand up a bare remote and push the feature branch to establish
     // an upstream, then add a commit locally → ahead by 1.
