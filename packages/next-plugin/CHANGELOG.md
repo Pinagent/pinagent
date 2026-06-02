@@ -1,5 +1,77 @@
 # @pinagent/next-plugin
 
+## 0.7.0
+
+### Minor Changes
+
+- f5fa586: Auto-commit uncommitted changes when opening a PR or pushing from the dashboard.
+
+  Create PR / Push previously only ran `git push`, so a PR opened from a dirty
+  working tree silently omitted the uncommitted edits the dashboard was showing.
+  Both actions now `git add -A` and commit those changes first (with an
+  agent-generated message) so the PR actually contains them:
+
+  - **Create PR** commits the working changes using the generated PR title as
+    the commit message, then pushes + opens the PR.
+  - **Push changes** generates a commit message for the uncommitted batch
+    (inline agent), commits, then pushes. The button now also lights up on
+    uncommitted edits (not just commits-ahead-of-remote).
+  - The `create_pull_request` MCP tool gains an optional `commit_message`; when
+    the tree is dirty the connected agent supplies it and the tool commits
+    before pushing.
+
+  Staging is `git add -A` (everything the dashboard lists); committing is fully
+  automatic — no extra clicks.
+
+- 1ec0fac: Add a "Start a branch" action to the dashboard when you're on the base branch.
+
+  Previously the primary button was disabled (`Create PR · On main`) when the
+  dev server was on the base branch, since you can't open a PR from main onto
+  main. It now offers **Start a branch**: it creates a fresh feature branch and
+  switches to it, carrying your uncommitted working changes over (leaving the
+  base branch clean, via `git switch -c`). The hero then re-derives onto the new
+  branch and the button flips to **Create PR**. The auto-generated
+  `pinagent/<id>` name is fine — the eventual Create PR supplies the real,
+  agent-summarized title. Backed by `POST /__pinagent/working-copy/branch` in
+  both plugins.
+
+- dbb238d: Redesign the dock dashboard around the working branch's git changes.
+
+  The Overview now leads with a working-changes hero for the branch the
+  dev-server is on: changed files (with per-file open-in-VSCode links), +/−
+  stats, ahead/behind the remote, and a state-aware primary action — **Create
+  PR** (an inline agent summarizes the diff and opens a PR via the configured
+  GitHub token), which becomes **Push changes** when local commits are ahead
+  of the remote and **View PR** once it's up to date. An "Open in VSCode"
+  button focuses the Source Control view via a new `view-changes` extension
+  command. The same PR core is exposed as a `create_pull_request` MCP tool, so
+  a connected Claude Code session can open the PR after summarizing the diff
+  itself.
+
+  New dev-server endpoints back this: `GET /__pinagent/working-copy`,
+  `POST /__pinagent/working-copy/pr`, and `POST /__pinagent/working-copy/push`
+  (mirrored across the Vite and Next plugins).
+
+### Patch Changes
+
+- 98e0f61: Fix an un-submitted composer collapsing into a broken, clipped card. Pressing the pick hotkey (`c`) while a freshly spawned composer was open — and picking another element — minimized that draft. Its minimal bar lives inside the still-hidden stream pane, so it collapsed to a stuck, empty "bugged out" state. A pre-submit draft has no conversation to preserve, so it's now discarded (like Esc already does) instead of minimized.
+- 678bb53: Fix "project root is not a git repository" when opening a PR from a subdirectory or linked worktree.
+
+  `openHostBranchPr` / `pushHostBranch` (the dashboard's Create PR / Push
+  actions) and `composePullRequest` guarded on `existsSync(projectRoot/.git)`,
+  which is false when the dev server runs from a subdirectory of the repo (e.g.
+  an example app) or a linked worktree (where `.git` is a file at the worktree
+  root, absent in subdirs). They now detect the repo with
+  `git rev-parse --is-inside-work-tree` (a shared `isInsideWorkTree` helper),
+  matching the working-copy status reader. The same fix applies to the
+  `create_pull_request` MCP tool.
+
+- Updated dependencies [f5fa586]
+- Updated dependencies [1ec0fac]
+- Updated dependencies [dbb238d]
+- Updated dependencies [d3a8238]
+  - @pinagent/widget-dock@0.3.0
+
 ## 0.6.2
 
 ### Patch Changes

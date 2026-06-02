@@ -1,5 +1,14 @@
 # @pinagent/cli
 
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies [f5fa586]
+- Updated dependencies [678bb53]
+- Updated dependencies [dbb238d]
+  - @pinagent/mcp@0.3.0
+
 ## 0.2.2
 
 ### Patch Changes

@@ -2,7 +2,7 @@
   "name": "pinagent-vscode",
   "displayName": "Pinagent",
   "description": "VSCode bridge for the Pinagent dock — opens Claude Code terminals with conversation prompts piped in from clicks in the dock.",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "pinagent",
   "license": "Apache-2.0",
   "private": true,
