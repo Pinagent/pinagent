@@ -2,7 +2,6 @@
 '@pinagent/vite-plugin': minor
 '@pinagent/next-plugin': minor
 '@pinagent/ui': minor
-'@pinagent/widget': patch
 ---
 
 feat(widget): dark-mode redesign matching the dock
