@@ -50,6 +50,32 @@ function membershipStore(): MembershipStore & { upserts: OrganizationMembership[
   };
 }
 
+/** A membership store over an explicit member list (e.g. to seed an owner). */
+function membershipStoreWith(
+  members: OrganizationMembership[],
+): MembershipStore & { upserts: OrganizationMembership[] } {
+  const upserts: OrganizationMembership[] = [];
+  return {
+    upserts,
+    async getMembership(org, user) {
+      return org === 'acme' ? (members.find((m) => m.userId === user) ?? null) : null;
+    },
+    async getOrganization() {
+      return null;
+    },
+    async listMembers() {
+      return members;
+    },
+    async listMembershipsByUser() {
+      return [];
+    },
+    async upsertMembership(m) {
+      upserts.push(m);
+    },
+    async removeMembership() {},
+  };
+}
+
 function deps(
   asUserId: string | null,
   opts: {
@@ -138,6 +164,36 @@ describe('POST /invitations (invite)', () => {
       deps('u-viewer'),
     );
     expect(res.status).toBe(403);
+  });
+
+  it('403s when an admin tries to invite an owner (owner-gated) — no escalation', async () => {
+    // Staged path (unknown email) and immediate-grant path (known email) must
+    // both be gated; check both leave no side effects.
+    const staged = deps('u-admin');
+    const stagedRes = await handleInvitations(
+      req('POST', '/invitations?organizationId=acme', { email: 'new@acme.com', role: 'owner' }),
+      staged,
+    );
+    expect(stagedRes.status).toBe(403);
+    expect(await staged.invitations.get('acme', 'new@acme.com')).toBeNull();
+
+    const grant = deps('u-admin', { users: [user('usr_bob', 'bob@acme.com')] });
+    const grantRes = await handleInvitations(
+      req('POST', '/invitations?organizationId=acme', { email: 'bob@acme.com', role: 'owner' }),
+      grant,
+    );
+    expect(grantRes.status).toBe(403);
+    expect(grant.store.upserts).toHaveLength(0);
+  });
+
+  it('lets an owner invite an owner', async () => {
+    const d = deps('u-owner', { store: membershipStoreWith([member('u-owner', 'owner')]) });
+    const res = await handleInvitations(
+      req('POST', '/invitations?organizationId=acme', { email: 'new@acme.com', role: 'owner' }),
+      d,
+    );
+    expect(res.status).toBe(200);
+    expect(await d.invitations.get('acme', 'new@acme.com')).not.toBeNull();
   });
 
   it('400s on a bad role or missing email', async () => {

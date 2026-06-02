@@ -21,7 +21,7 @@ import type { Authenticator } from './session-service';
 /**
  * Member-management endpoints — growing + curating a team.
  *
- *   POST   /invitations  → member:invite  → invite an email (+ role)
+ *   POST   /invitations  → member:invite  → invite an email (+ role; owner-gated)
  *   GET    /invitations  → org:settings   → list pending invitations
  *   DELETE /invitations  → member:remove  → revoke a pending invitation
  *   PATCH  /members?userId → member:invite → change a member's role
@@ -64,6 +64,14 @@ export async function handleInvitations(
     if (body === undefined) return json({ error: 'invalid JSON body' }, 400);
     const parsed = parseInviteBody(body);
     if (!parsed) return json({ error: 'email and a valid role are required' }, 400);
+
+    // Granting the owner role — whether by an immediate membership or a staged
+    // invitation consumed at login — is owner-only, mirroring the PATCH/DELETE
+    // owner gates. Without this, a non-owner admin (who holds `member:invite`)
+    // could mint owners and escalate past the owner/last-owner model.
+    if (parsed.role === 'owner' && !can(ctx.actorRole, 'org:delete')) {
+      return json({ error: 'only an owner can invite an owner' }, 403);
+    }
 
     const now = (deps.now ?? defaultNow)();
     const email = normalizeEmail(parsed.email);
