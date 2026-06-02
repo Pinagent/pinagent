@@ -61,11 +61,19 @@ describe('deriveWorkingCopyAction', () => {
     expect(a.label).toBe('Push changes');
   });
 
+  it('offers Push changes when an open PR has uncommitted (dirty) work', () => {
+    const a = deriveWorkingCopyAction(
+      status({ pr: { number: 7, url: 'u', state: 'open' }, ahead: 0, dirty: true }),
+    );
+    expect(a.kind).toBe('push');
+  });
+
   it('offers View PR when an open PR is up to date', () => {
     const a = deriveWorkingCopyAction(
       status({
         pr: { number: 7, url: 'https://gh/pr/7', state: 'open' },
         ahead: 0,
+        dirty: false,
         hasUpstream: true,
       }),
     );

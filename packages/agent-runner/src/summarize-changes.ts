@@ -101,7 +101,64 @@ async function gatherContext(projectRoot: string): Promise<string> {
  */
 export async function summarizeChangesForPr(projectRoot: string): Promise<PrSummary> {
   const context = await gatherContext(projectRoot);
+  const text = await runOneShot(
+    projectRoot,
+    `Write a PR description for these changes.\n\n${context}`,
+    SYSTEM_PROMPT,
+  );
+  if (!text.trim()) {
+    throw new Error('summarizer returned no text — check the Anthropic API key in Connections');
+  }
+  return parsePrSummary(text);
+}
 
+const COMMIT_SYSTEM_PROMPT = [
+  'You write git commit messages. You are given a diff of uncommitted changes.',
+  'Respond with ONLY the commit message — a concise, imperative subject line',
+  '(<72 chars, conventional-commits style when it fits, e.g. "fix: ..."), then',
+  'optionally a blank line and a short body. No prose, no code fences, no quotes.',
+].join('\n');
+
+/**
+ * Generate a commit message for the *uncommitted* working changes (diff vs
+ * HEAD). Used by the dashboard's "Push changes" action to commit the latest
+ * batch before pushing. Falls back to a generic message if the model is
+ * unavailable, since a missing key shouldn't block shipping the work.
+ */
+export async function summarizeCommitMessage(projectRoot: string): Promise<string> {
+  const diff = await runGitCapture(projectRoot, ['diff', '--no-color', 'HEAD']);
+  let diffText = diff.code === 0 ? diff.stdout : '';
+  if (diffText.length > DIFF_CAP_BYTES) {
+    const cut = diffText.lastIndexOf('\n', DIFF_CAP_BYTES);
+    diffText = diffText.slice(0, cut >= 0 ? cut : DIFF_CAP_BYTES);
+  }
+  try {
+    const text = await runOneShot(
+      projectRoot,
+      `Write a commit message for these uncommitted changes.\n\n${diffText || '(no diff)'}`,
+      COMMIT_SYSTEM_PROMPT,
+    );
+    const msg = text
+      .trim()
+      .replace(/^["'`]|["'`]$/g, '')
+      .trim();
+    if (msg) return msg;
+  } catch {
+    // fall through to the generic message
+  }
+  return 'pinagent: update working changes';
+}
+
+/**
+ * Run a single read-only Claude Agent SDK query and return the concatenated
+ * assistant text. No tools / settings / MCP — a focused one-shot over the
+ * context we already gathered.
+ */
+async function runOneShot(
+  projectRoot: string,
+  prompt: string,
+  systemPrompt: string,
+): Promise<string> {
   const env: Record<string, string | undefined> = { ...process.env };
   // Dock-stored Anthropic key wins over an existing env var, matching the
   // spawned-agent path (providers/claude-code.ts).
@@ -110,16 +167,8 @@ export async function summarizeChangesForPr(projectRoot: string): Promise<PrSumm
 
   let text = '';
   for await (const message of query({
-    prompt: `Write a PR description for these changes.\n\n${context}`,
-    options: {
-      cwd: projectRoot,
-      env,
-      // No project/user settings, no MCP, no tools — a focused single-shot
-      // text generation over the context we already gathered.
-      settingSources: [],
-      allowedTools: [],
-      systemPrompt: SYSTEM_PROMPT,
-    },
+    prompt,
+    options: { cwd: projectRoot, env, settingSources: [], allowedTools: [], systemPrompt },
   }) as AsyncIterable<SDKMessage>) {
     if (message.type === 'assistant') {
       const blocks = message.message?.content;
@@ -130,9 +179,5 @@ export async function summarizeChangesForPr(projectRoot: string): Promise<PrSumm
       }
     }
   }
-
-  if (!text.trim()) {
-    throw new Error('summarizer returned no text — check the Anthropic API key in Connections');
-  }
-  return parsePrSummary(text);
+  return text;
 }

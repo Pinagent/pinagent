@@ -19,6 +19,7 @@ import {
   getWorkingCopyStatus,
   type HistoryStatusFilter,
   ID_RE,
+  isWorkingTreeDirty,
   listAuditEvents,
   listBranches,
   listChanges,
@@ -48,6 +49,7 @@ import {
   startWsServer,
   stopWorktreeServer,
   summarizeChangesForPr,
+  summarizeCommitMessage,
   validateAnthropicKey,
   validateGithubToken,
 } from '@pinagent/agent-runner';
@@ -435,15 +437,19 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
         });
       }
     }
-    const result = await openHostBranchPr(storage.root, { title, body });
+    const result = await openHostBranchPr(storage.root, { title, body, commitMessage: title });
     return json(result.ok ? 200 : 422, result);
   }
 
-  // /__pinagent/working-copy/push — push the current host branch to its
+  // /__pinagent/working-copy/push — commit any uncommitted changes
+  // (agent-generated message) then push the current host branch to its
   // upstream (the dashboard's "Push changes" action). Mirror of vite.
   if (slug.length === 2 && slug[0] === 'working-copy' && slug[1] === 'push') {
     const storage = getStorage();
-    const result = await pushHostBranch(storage.root);
+    const commitMessage = (await isWorkingTreeDirty(storage.root))
+      ? await summarizeCommitMessage(storage.root)
+      : undefined;
+    const result = await pushHostBranch(storage.root, commitMessage ? { commitMessage } : {});
     return json(result.ok ? 200 : 422, result);
   }
 
