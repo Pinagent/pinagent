@@ -110,7 +110,11 @@ const TOOL_LIST = [
       additionalProperties: false,
       required: ['title', 'body'],
       properties: {
-        title: { type: 'string', description: 'PR title — concise, imperative mood.' },
+        title: {
+          type: 'string',
+          description:
+            'PR title as a Conventional Commit: `type(scope): summary` (type ∈ feat|fix|chore|docs|refactor|test|perf; scope = main area changed, e.g. dock, widget, mcp). Imperative, lowercase, <70 chars. E.g. "feat(dock): add inline diff".',
+        },
         body: { type: 'string', description: 'PR description in GitHub-flavored markdown.' },
         commit_message: {
           type: 'string',
