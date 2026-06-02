@@ -110,13 +110,32 @@ describe('relay worker — Durable Object routing', () => {
     expect(names).toHaveLength(0);
   });
 
-  it('dev-fallback (no secret) keys the DO by the ?session= param', async () => {
-    const { env: e } = env({ RELAY_AUTH_SECRET: undefined });
+  it('dev-fallback keys the DO by ?session= ONLY when insecure is opted in', async () => {
+    const { env: e } = env({ RELAY_AUTH_SECRET: undefined, RELAY_ALLOW_INSECURE: 'true' });
     const req = new Request('https://relay.test/__pinagent/ws?session=local-1', {
       headers: { Upgrade: 'websocket', Authorization: 'Bearer any-nonempty' },
     });
     const res = await worker.fetch(req, e);
     expect(await res.text()).toBe(relayDoName('local-1', 'local-1'));
+  });
+
+  it('fails CLOSED (500) with no auth secret and no insecure opt-in', async () => {
+    const { env: e, names } = env({ RELAY_AUTH_SECRET: undefined });
+    const req = new Request('https://relay.test/__pinagent/ws?session=local-1', {
+      headers: { Upgrade: 'websocket', Authorization: 'Bearer any-nonempty' },
+    });
+    const res = await worker.fetch(req, e);
+    expect(res.status).toBe(500);
+    expect(names).toHaveLength(0); // never reaches a Durable Object
+  });
+
+  it('treats a non-truthy RELAY_ALLOW_INSECURE as off (still fails closed)', async () => {
+    const { env: e } = env({ RELAY_AUTH_SECRET: undefined, RELAY_ALLOW_INSECURE: 'false' });
+    const req = new Request('https://relay.test/__pinagent/ws?session=local-1', {
+      headers: { Upgrade: 'websocket', Authorization: 'Bearer any-nonempty' },
+    });
+    const res = await worker.fetch(req, e);
+    expect(res.status).toBe(500);
   });
 });
 

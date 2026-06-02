@@ -17,6 +17,13 @@ export interface Env {
   PINAGENT_CONTROL_PLANE_URL?: string;
   /** Shared secret presented to the control plane's relay-events ingest. */
   RELAY_INTERNAL_SECRET?: string;
+  /**
+   * Opt-in to the insecure dev-fallback (accept any token, no RBAC) when
+   * `RELAY_AUTH_SECRET` is unset. Must be explicitly truthy. Production never
+   * sets this, so a deploy that forgets the auth secret fails closed instead
+   * of silently accepting every connection. See {@link insecureDevAllowed}.
+   */
+  RELAY_ALLOW_INSECURE?: string;
 }
 
 interface RelayAuth {
@@ -61,6 +68,15 @@ export default {
     }
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('expected websocket upgrade', { status: 426 });
+    }
+
+    // Refuse to serve when neither a signed-token secret nor an explicit
+    // insecure opt-in is configured — an unset `RELAY_AUTH_SECRET` would
+    // otherwise drop into dev-fallback and accept any token. Fail closed
+    // (500 misconfiguration), never fall open. Production sets the secret;
+    // local relay testing sets `RELAY_ALLOW_INSECURE`.
+    if (!env.RELAY_AUTH_SECRET && !insecureDevAllowed(env)) {
+      return new Response('relay misconfigured: RELAY_AUTH_SECRET is required', { status: 500 });
     }
 
     const auth = await verifyToken(request, url, env);
@@ -148,8 +164,9 @@ async function handleInternalPush(request: Request, url: URL, env: Env): Promise
  *
  * When the secret is *unset* we fall back to dev mode: accept any
  * non-empty token and namespace the DO by the `?session=` query param.
- * This keeps local end-to-end testing frictionless; production deploys
- * must set the secret.
+ * This keeps local end-to-end testing frictionless. The caller (`fetch`)
+ * only reaches this branch when `RELAY_ALLOW_INSECURE` is set — otherwise it
+ * fails closed before we get here — so production never falls open.
  */
 async function verifyToken(request: Request, url: URL, env: Env): Promise<RelayAuth | null> {
   const token =
@@ -168,10 +185,22 @@ async function verifyToken(request: Request, url: URL, env: Env): Promise<RelayA
     };
   }
 
-  // Dev fallback — NOT for production (no secret configured).
+  // Dev fallback — NOT for production. Only reachable when the caller has
+  // confirmed `RELAY_ALLOW_INSECURE` is set (see `fetch`).
   const sessionId = url.searchParams.get('session') ?? '';
   if (!sessionId) return null;
   return { tenantId: sessionId, sessionId };
+}
+
+/**
+ * Whether the insecure dev-fallback is explicitly enabled. Only an explicit
+ * truthy `RELAY_ALLOW_INSECURE` (`1`/`true`/`yes`, case-insensitive) counts —
+ * an unset or empty value is treated as "no", so a production deploy that
+ * never sets it fails closed.
+ */
+function insecureDevAllowed(env: Env): boolean {
+  const flag = env.RELAY_ALLOW_INSECURE?.trim().toLowerCase();
+  return flag === '1' || flag === 'true' || flag === 'yes';
 }
 
 export { RelaySession };
