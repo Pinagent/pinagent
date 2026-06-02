@@ -16,7 +16,7 @@
 import { Octokit } from '@octokit/rest';
 import { recordAuditEvent } from './audit-log';
 import { resolveOriginRemote } from './git-remote';
-import { runGitCapture } from './git-utils';
+import { runCapture, runGitCapture } from './git-utils';
 import { resolveGithubToken } from './github-auth';
 import { recordPullRequest } from './pull-requests';
 
@@ -93,58 +93,131 @@ export async function openPrOnGitHub(
       )}...${encodeURIComponent(opts.branchName)}?expand=1`
     : undefined;
 
-  if (!token || !remote) {
-    return {
-      ok: true,
-      branchPushed: true,
-      ...(manualCompareUrl ? { manualCompareUrl } : {}),
-    };
+  if (!remote) {
+    // Non-GitHub remote (or none) — nothing to open against.
+    return { ok: true, branchPushed: true };
   }
 
-  try {
-    const octokit = new Octokit({ auth: token });
-    const created = await octokit.pulls.create({
-      owner: remote.owner,
-      repo: remote.repo,
-      title: opts.title,
-      body: opts.body,
-      head: opts.branchName,
-      base: opts.baseBranch,
-    });
-    // Best-effort: record the PR for the dock's PRs view. A failure here
-    // shouldn't mask the fact that the PR was opened — the user already
-    // has the URL.
-    await recordPullRequest(projectRoot, {
-      number: created.data.number,
-      url: created.data.html_url,
+  let apiError: string | undefined;
+
+  // 1) Octokit, when a token is configured (dock secret / GITHUB_TOKEN).
+  if (token) {
+    try {
+      const octokit = new Octokit({ auth: token });
+      const created = await octokit.pulls.create({
+        owner: remote.owner,
+        repo: remote.repo,
+        title: opts.title,
+        body: opts.body,
+        head: opts.branchName,
+        base: opts.baseBranch,
+      });
+      await recordOpenedPr(projectRoot, opts, created.data.number, created.data.html_url);
+      return { ok: true, branchPushed: true, prUrl: created.data.html_url };
+    } catch (e) {
+      // Token present but the API call failed (scope, network) — fall through
+      // to the gh CLI, which may be authed even when the token isn't scoped.
+      apiError = `GitHub API call failed: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+
+  // 2) gh CLI fallback — uses the developer's existing `gh auth` (no stored
+  //    token needed), the way Claude Code opens PRs. Skipped silently if gh
+  //    isn't installed / authed.
+  const gh = await createPrViaGh(projectRoot, opts);
+  if (gh.url) {
+    const number = parsePrNumberFromUrl(gh.url);
+    if (number !== null) await recordOpenedPr(projectRoot, opts, number, gh.url);
+    return { ok: true, branchPushed: true, prUrl: gh.url };
+  }
+
+  // 3) Couldn't open via API or gh — push succeeded, point at the compare URL.
+  return {
+    ok: true,
+    branchPushed: true,
+    ...(manualCompareUrl ? { manualCompareUrl } : {}),
+    ...(apiError || gh.error
+      ? { error: apiError ?? `pushed ok, but couldn't open the PR: ${gh.error}` }
+      : {}),
+  };
+}
+
+/** Record an opened PR for the dock's PRs view + audit log. Best-effort. */
+async function recordOpenedPr(
+  projectRoot: string,
+  opts: OpenPrOpts,
+  number: number,
+  url: string,
+): Promise<void> {
+  await recordPullRequest(projectRoot, {
+    number,
+    url,
+    branch: opts.branchName,
+    baseBranch: opts.baseBranch,
+    title: opts.title,
+    body: opts.body,
+    conversationIds: opts.conversationIds,
+  }).catch(() => {});
+  await recordAuditEvent(projectRoot, {
+    conversationId: null,
+    actor: 'user',
+    action: 'pr_created',
+    payload: {
+      number,
+      url,
       branch: opts.branchName,
       baseBranch: opts.baseBranch,
       title: opts.title,
-      body: opts.body,
       conversationIds: opts.conversationIds,
-    }).catch(() => {});
-    await recordAuditEvent(projectRoot, {
-      conversationId: null,
-      actor: 'user',
-      action: 'pr_created',
-      payload: {
-        number: created.data.number,
-        url: created.data.html_url,
-        branch: opts.branchName,
-        baseBranch: opts.baseBranch,
-        title: opts.title,
-        conversationIds: opts.conversationIds,
-      },
-    });
-    return { ok: true, branchPushed: true, prUrl: created.data.html_url };
+    },
+  });
+}
+
+/**
+ * Open a PR with the `gh` CLI (already-pushed branch). Returns the PR URL on
+ * success. If the branch already has a PR, gh exits non-zero but prints the
+ * existing URL — we surface that too so the dock can still flip to "View PR".
+ * Returns `{ url: undefined }` when gh is missing/unauthed/errors.
+ */
+async function createPrViaGh(
+  projectRoot: string,
+  opts: OpenPrOpts,
+): Promise<{ url?: string; error?: string }> {
+  try {
+    const res = await runCapture(
+      'gh',
+      [
+        'pr',
+        'create',
+        '--head',
+        opts.branchName,
+        '--base',
+        opts.baseBranch,
+        '--title',
+        opts.title,
+        '--body',
+        opts.body,
+      ],
+      projectRoot,
+    );
+    // gh prints the PR URL on stdout on success; on "already exists" it prints
+    // the existing PR URL on stderr. Scan both.
+    const url = extractPrUrl(`${res.stdout}\n${res.stderr}`);
+    if (url) return { url };
+    return { error: res.stderr.trim() || res.stdout.trim() || `gh exited ${res.code}` };
   } catch (e) {
-    // Push succeeded; the PR API call failed (token scope, network, etc.).
-    // Fall back to the manual-create path with a clear hint.
-    return {
-      ok: true,
-      branchPushed: true,
-      ...(manualCompareUrl ? { manualCompareUrl } : {}),
-      error: `pushed ok, but GitHub PR API call failed: ${e instanceof Error ? e.message : String(e)}`,
-    };
+    // ENOENT (gh not installed) or other spawn failure — treat as unavailable.
+    return { error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** First `https://github.com/<owner>/<repo>/pull/<n>` URL in `text`, if any. */
+export function extractPrUrl(text: string): string | undefined {
+  return /https?:\/\/github\.com\/[^\s/]+\/[^\s/]+\/pull\/\d+/.exec(text)?.[0];
+}
+
+/** Parse the numeric PR id from a GitHub PR URL. Null when it doesn't match. */
+export function parsePrNumberFromUrl(url: string): number | null {
+  const m = /\/pull\/(\d+)/.exec(url);
+  return m ? Number(m[1]) : null;
 }
