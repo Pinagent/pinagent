@@ -93,19 +93,19 @@ describe('POST /internal/relay/events', () => {
     ).toBe(405);
   });
 
-  it('meters connection seconds from a disconnect duration', async () => {
+  it('meters connection seconds from a device disconnect duration', async () => {
     const audit = createInMemoryAuditSink();
     const meter = createInMemoryMeterSink();
     const events = {
       events: [
         {
-          type: 'client.connected',
+          type: 'device.connected',
           organizationId: 'acme',
           sessionId: 'sess-1',
           occurredAt: '2026-05-29T00:00:00Z',
         },
         {
-          type: 'client.disconnected',
+          type: 'device.disconnected',
           organizationId: 'acme',
           sessionId: 'sess-1',
           occurredAt: '2026-05-29T00:02:30Z',
@@ -119,16 +119,52 @@ describe('POST /internal/relay/events', () => {
       relayInternalSecret: SECRET,
     });
     expect(res.status).toBe(200);
-    // Only the disconnect (with durationMs) meters; the connect does not.
+    // Only the device disconnect (with durationMs) meters; the connect does not.
     expect(meter.events).toEqual([
       {
         occurredAt: '2026-05-29T00:02:30Z',
         organizationId: 'acme',
         kind: USAGE_KINDS.relayConnectionSeconds,
         quantity: 150,
-        metadata: { sessionId: 'sess-1', side: 'client' },
+        metadata: { sessionId: 'sess-1', side: 'device' },
       },
     ]);
+    expect(await meter.summarize({ organizationId: 'acme' })).toEqual({
+      'relay.connection.seconds': 150,
+    });
+  });
+
+  it('does not double-count: client disconnects carry a duration but never meter', async () => {
+    const audit = createInMemoryAuditSink();
+    const meter = createInMemoryMeterSink();
+    // A device + a client both disconnect with a duration. Only the device's
+    // counts — metering the client too would roughly double the session's time.
+    const events = {
+      events: [
+        {
+          type: 'device.disconnected',
+          organizationId: 'acme',
+          sessionId: 'sess-1',
+          occurredAt: '2026-05-29T00:02:30Z',
+          durationMs: 150_000,
+        },
+        {
+          type: 'client.disconnected',
+          organizationId: 'acme',
+          sessionId: 'sess-1',
+          occurredAt: '2026-05-29T00:02:30Z',
+          durationMs: 140_000,
+        },
+      ],
+    };
+    const res = await handleRelayEvents(post(events, `Bearer ${SECRET}`), {
+      audit,
+      meter,
+      relayInternalSecret: SECRET,
+    });
+    expect(res.status).toBe(200);
+    expect(meter.events).toHaveLength(1);
+    expect(meter.events[0]?.metadata).toEqual({ sessionId: 'sess-1', side: 'device' });
     expect(await meter.summarize({ organizationId: 'acme' })).toEqual({
       'relay.connection.seconds': 150,
     });
