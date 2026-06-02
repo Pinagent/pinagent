@@ -43,6 +43,7 @@ import type {
   PresentableConnections,
   PruneStaleResult,
   ServeBranchResult,
+  StartBranchResult,
   WorktreeServer,
 } from './types';
 import type { ConnectionStatus, ConversationHandlers, ExtensionStatus } from './ws-client';
@@ -399,6 +400,14 @@ export class MockTransport implements DockTransport {
     await sleep(SIMULATED_LATENCY_MS * 3);
     this.workingCopy = { ...this.workingCopy, ahead: 0 };
     return { ok: true, branchPushed: true };
+  }
+
+  async startWorkingCopyBranch(name?: string): Promise<StartBranchResult> {
+    await sleep(SIMULATED_LATENCY_MS * 2);
+    const branch = name?.trim() || 'pinagent/mock-1a2b3c4d';
+    // Move off the base branch so the button flips to "Create PR".
+    this.workingCopy = { ...this.workingCopy, branch, isDefaultBranch: false };
+    return { ok: true, branch };
   }
 
   async getConnections(): Promise<PresentableConnections> {

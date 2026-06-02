@@ -91,6 +91,8 @@ export {
   openHostBranchPr,
   type PushHostBranchResult,
   pushHostBranch,
+  type StartHostBranchResult,
+  startHostBranch,
 } from './host-branch-pr';
 export {
   type ComposeOpts,

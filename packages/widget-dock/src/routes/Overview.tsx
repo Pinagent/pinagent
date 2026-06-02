@@ -13,6 +13,7 @@ import { useExtensionStatus } from '../hooks/useExtensionStatus';
 import {
   useCreateWorkingCopyPr,
   usePushWorkingCopyBranch,
+  useStartWorkingCopyBranch,
   useWorkingCopy,
 } from '../hooks/useWorkingCopy';
 import { openFileInVSCode, openSourceControl } from '../lib/vscode-bridge';
@@ -166,13 +167,15 @@ function WorkingCopyCard({ status }: { status: WorkingCopyStatus }) {
   const ext = useExtensionStatus();
   const createPr = useCreateWorkingCopyPr();
   const pushBranch = usePushWorkingCopyBranch();
+  const startBranch = useStartWorkingCopyBranch();
   const action = deriveWorkingCopyAction(status);
   const editorReady = ext.present;
 
-  // Surface the latest mutation outcome (whichever ran). The result shape
-  // is shared between create + push (prUrl / manualCompareUrl / error).
-  const result = createPr.data ?? pushBranch.data;
-  const mutating = createPr.isPending || pushBranch.isPending;
+  // Surface the latest mutation outcome (whichever ran). The PR shape is
+  // shared between create + push (prUrl / manualCompareUrl / error);
+  // start-a-branch only surfaces an error here (success flips the hero).
+  const result = createPr.data ?? pushBranch.data ?? startBranch.data;
+  const mutating = createPr.isPending || pushBranch.isPending || startBranch.isPending;
 
   return (
     <article className="rounded-lg border border-border bg-card p-3">
@@ -213,6 +216,7 @@ function WorkingCopyCard({ status }: { status: WorkingCopyStatus }) {
           mutating={mutating}
           onCreate={() => createPr.mutate()}
           onPush={() => pushBranch.mutate()}
+          onStart={() => startBranch.mutate(undefined)}
         />
         {editorReady && (
           <Button
@@ -251,11 +255,13 @@ function PrimaryAction({
   mutating,
   onCreate,
   onPush,
+  onStart,
 }: {
   action: WorkingCopyAction;
   mutating: boolean;
   onCreate: () => void;
   onPush: () => void;
+  onStart: () => void;
 }) {
   if (action.kind === 'view') {
     return (
@@ -281,6 +287,24 @@ function PrimaryAction({
       >
         <GitPullRequest className="h-3.5 w-3.5" />
         {action.disabledReason ? `${action.label} · ${action.disabledReason}` : action.label}
+      </Button>
+    );
+  }
+  if (action.kind === 'start') {
+    return (
+      <Button
+        size="sm"
+        variant="accent"
+        className="h-7 gap-1.5"
+        disabled={mutating}
+        onClick={onStart}
+      >
+        {mutating ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <GitBranch className="h-3.5 w-3.5" />
+        )}
+        {mutating ? 'Starting branch…' : action.label}
       </Button>
     );
   }

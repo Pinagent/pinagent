@@ -81,3 +81,51 @@ describe('pushHostBranch', () => {
     expect(res.pushed).toBe(false);
   });
 });
+
+describe('startHostBranch', () => {
+  function gitOut(args: string[]): Promise<string> {
+    return new Promise((res, rej) => {
+      const child = spawn('git', args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] });
+      let out = '';
+      child.stdout?.on('data', (d: Buffer) => {
+        out += d.toString();
+      });
+      child.on('error', rej);
+      child.on('close', () => res(out.trim()));
+    });
+  }
+
+  it('creates a branch carrying uncommitted changes, off the base branch', async () => {
+    await git(ROOT, ['checkout', 'main']);
+    await writeFile(join(ROOT, 'README.md'), 'edited but not committed\n', 'utf8');
+
+    const res = await mod.startHostBranch(ROOT, { name: 'feat/carry' });
+    expect(res.ok).toBe(true);
+    expect(res.branch).toBe('feat/carry');
+    expect(await gitOut(['symbolic-ref', '--short', 'HEAD'])).toBe('feat/carry');
+    // The uncommitted edit travels onto the new branch (git switch -c).
+    expect(await gitOut(['status', '--porcelain'])).toContain('README.md');
+    await git(ROOT, ['checkout', '--', 'README.md']);
+    await git(ROOT, ['checkout', 'main']);
+  });
+
+  it('auto-generates a pinagent/<id> name when none is given', async () => {
+    await git(ROOT, ['checkout', 'main']);
+    const res = await mod.startHostBranch(ROOT);
+    expect(res.ok).toBe(true);
+    expect(res.branch).toMatch(/^pinagent\//);
+    await git(ROOT, ['checkout', 'main']);
+  });
+
+  it('rejects an invalid branch name', async () => {
+    const res = await mod.startHostBranch(ROOT, { name: 'bad name!!' });
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/invalid branch name/);
+  });
+
+  it('bails when the path is not a git repo', async () => {
+    const res = await mod.startHostBranch(NOT_REPO, { name: 'feat/x' });
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/not a git repository/);
+  });
+});
