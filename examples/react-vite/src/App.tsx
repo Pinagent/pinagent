@@ -14,9 +14,9 @@ export function App() {
     >
       <Sidebar />
       <main style={{ padding: '40px', maxWidth: 720, margin: '0 auto' }}>
-        <h1>Pinagent demo</h1>
+        <h1 style={{ fontSize: '3rem', fontWeight: 800 }}>Pinagent demo</h1>
         <p>
-          Open the <Logo size={16} style={{ verticalAlign: '-3px', borderRadius: 3 }} /> button in
+          Open the <Logo size={24} style={{ verticalAlign: '-6px', borderRadius: 4 }} /> button in
           the bottom-right, pick an element, and leave a comment.
         </p>
         <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
@@ -42,9 +42,10 @@ function Sidebar() {
   return (
     <aside
       style={{
-        borderRight: '1px solid #e5e7eb',
+        borderRight: '1px solid #374151',
         padding: '40px 20px',
-        background: '#f9fafb',
+        background: '#111827',
+        color: '#f9fafb',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
@@ -61,8 +62,8 @@ function Sidebar() {
               borderRadius: 6,
               textDecoration: 'none',
               fontSize: 14,
-              color: i === 0 ? '#111827' : '#4b5563',
-              background: i === 0 ? '#e5e7eb' : 'transparent',
+              color: i === 0 ? '#f9fafb' : '#9ca3af',
+              background: i === 0 ? '#374151' : 'transparent',
             }}
           >
             {item}
@@ -83,6 +84,10 @@ function Footer() {
     >
       Built as a Pinagent smoke-test playground — a minimal Vite + React app for exercising the
       click-to-comment flow end to end, from widget selection through agent fixes in the editor.
+      Every element on this page carries a source location, so clicking one and leaving a comment
+      hands the coding agent the exact file, line, and a screenshot of what you selected. Use it to
+      try the loop on anything here — tweak the counters, restyle the navigation, or rewrite this
+      very paragraph — and watch the change land back in your editor moments later.
     </footer>
   );
 }
