@@ -15,18 +15,29 @@ Feedback records (a local SQLite DB + PNG screenshots) are user-local and should
 
 ## 2. Register the MCP server
 
+> **In a monorepo, register at the repo ROOT — not the individual app.** This is
+> the recommended default. Run `claude` from the monorepo root so one
+> project-scoped `.mcp.json` (and one agent session) covers the whole workspace:
+> the agent can edit the app *and* the shared packages a fix usually touches
+> (`packages/ui`, design tokens, etc.), which live outside any single app dir.
+> Per-app configs fragment this — N configs to maintain, and each session is
+> blind to code outside its app. Point `PINAGENT_PROJECT_ROOT` at the specific
+> app whose dev server writes `.pinagent/` (see the worked example below). Only
+> drop to a per-app `.mcp.json` if the apps are genuinely independent repos that
+> happen to share a folder.
+
 Two scopes:
 
 | Scope | When | Command |
 | ----- | ---- | ------- |
-| **Project** | Tied to one repo. Recommended for testing. Writes `.mcp.json` in the project root. | `claude mcp add pinagent -s project -- pnpm dlx @pinagent/cli mcp` |
+| **Project** | Tied to one repo. Recommended — and in a monorepo, run it from the repo ROOT (writes `.mcp.json` there). | `claude mcp add pinagent -s project -- pnpm dlx @pinagent/cli mcp` |
 | **User**    | Global — available in any project. | `claude mcp add pinagent -s user -- pnpm dlx @pinagent/cli mcp` |
 
 `@pinagent/cli` is the published entrypoint; `pnpm dlx @pinagent/cli mcp` fetches it and starts the stdio MCP server without a global install. Equivalent lower-level forms: `pnpm dlx @pinagent/mcp` (the server package directly), or `claude mcp add pinagent pinagent-mcp` if `@pinagent/mcp` is already a project dependency.
 
-> **Shortcut:** `pnpm dlx @pinagent/cli init` scaffolds most of this for you — it adds `.pinagent` to `.gitignore`, registers the MCP server in `.mcp.json`, and (on Next) writes the route handler. You still wire the plugin into your config and mount `<Pinagent />` by hand.
+> **Shortcut:** `pnpm dlx @pinagent/cli init` scaffolds most of this for you — it adds `.pinagent` to `.gitignore`, registers the MCP server in `.mcp.json`, and (on Next) writes the route handler. Run it from the monorepo root so `.mcp.json` lands there. You still wire the plugin into your config and mount `<Pinagent />` by hand.
 
-In a monorepo, the MCP server's project root resolution (walks up looking for `.pinagent/` then `package.json`) may land at the wrong directory. **Pin it explicitly** by editing `.mcp.json`:
+Registering at the root means the MCP server's project-root resolution (it walks up looking for `.pinagent/` then `package.json`) won't reliably land on the app that runs the dev server. **Pin it explicitly** by editing `.mcp.json`:
 
 ```json
 {
@@ -45,7 +56,7 @@ In a monorepo, the MCP server's project root resolution (walks up looking for `.
 
 `PINAGENT_PROJECT_ROOT` must match where Next/Vite runs from — both processes read/write the same `.pinagent/` directory.
 
-**Worked example — the common monorepo case.** You launch `claude` from the repo root (so it loads one project-scoped config) but run `pnpm dev` from `apps/web`. Put `.mcp.json` at the **repo root** and point `PINAGENT_PROJECT_ROOT` at the **app** — the two paths are different on purpose:
+**Worked example — the recommended monorepo layout.** You launch `claude` from the repo root (so it loads one project-scoped config covering every app and shared package) but run `pnpm dev` from `apps/web`. Put `.mcp.json` at the **repo root** and point `PINAGENT_PROJECT_ROOT` at the **app** — the two paths are different on purpose:
 
 ```
 my-monorepo/
