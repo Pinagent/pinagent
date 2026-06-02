@@ -16,7 +16,8 @@
  *   - the route handler exists with inline `dynamic`/`runtime` (Next),
  *   - `.pinagent` is gitignored,
  *   - `.mcp.json` registers the server and any `PINAGENT_PROJECT_ROOT` it
- *     pins points at a directory that exists,
+ *     pins points at a directory that exists — and, in a monorepo, that it
+ *     lives at the repo root rather than buried inside one app,
  *   - no dangling `@pinagent/*` symlinks linger in node_modules from an
  *     earlier, abandoned install attempt.
  *
@@ -26,7 +27,7 @@
  */
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { detectRuntime, findAppDir, pluginPackage, type Runtime } from './init';
 
 // Reference the plugin package through a constant rather than a contiguous
@@ -252,8 +253,40 @@ export function checkGitignore(root: string): Check {
   };
 }
 
+/**
+ * The outermost ancestor of `root` (inclusive) that looks like a pnpm/npm/yarn
+ * workspace root — a `pnpm-workspace.yaml`, a `package.json` with a
+ * `workspaces` field, or a `lerna.json`. Returns the highest such directory so
+ * the answer is the monorepo root, not an intermediate nested workspace; `null`
+ * for a single-package repo. Used to recommend registering the MCP server at
+ * the repo root rather than inside one app.
+ */
+export function findWorkspaceRoot(root: string): string | null {
+  let dir = resolve(root);
+  let outermost: string | null = null;
+  for (;;) {
+    const hasPnpmWs = existsSync(join(dir, 'pnpm-workspace.yaml'));
+    const hasLerna = existsSync(join(dir, 'lerna.json'));
+    let hasNpmWs = false;
+    const pkg = read(join(dir, 'package.json'));
+    if (pkg) {
+      try {
+        hasNpmWs = (JSON.parse(pkg) as { workspaces?: unknown }).workspaces !== undefined;
+      } catch {
+        // ignore a malformed package.json — treat as no workspaces marker
+      }
+    }
+    if (hasPnpmWs || hasLerna || hasNpmWs) outermost = dir;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return outermost;
+}
+
 /** `.mcp.json` registers a pinagent server; a pinned PINAGENT_PROJECT_ROOT exists. */
 export function checkMcpJson(root: string): Check[] {
+  const workspaceRoot = findWorkspaceRoot(root);
   let dir = resolve(root);
   let found: { path: string; content: string } | null = null;
   for (;;) {
@@ -271,8 +304,9 @@ export function checkMcpJson(root: string): Check[] {
       {
         status: 'warn',
         label: 'No .mcp.json found',
-        detail:
-          'Register the server: claude mcp add pinagent -s project -- pnpm dlx @pinagent/cli mcp',
+        detail: workspaceRoot
+          ? `Register at the monorepo root (${workspaceRoot}) so one agent session covers the whole workspace: cd ${workspaceRoot} && claude mcp add pinagent -s project -- pnpm dlx @pinagent/cli mcp (then pin PINAGENT_PROJECT_ROOT to this app).`
+          : 'Register the server: claude mcp add pinagent -s project -- pnpm dlx @pinagent/cli mcp',
       },
     ];
   }
@@ -293,6 +327,20 @@ export function checkMcpJson(root: string): Check[] {
     ];
   }
   const checks: Check[] = [{ status: 'ok', label: `pinagent registered in ${found.path}` }];
+  // In a monorepo, prefer one `.mcp.json` at the repo root over a per-app one:
+  // a single agent session can then edit the app AND the shared packages a fix
+  // usually touches. Warn (not fail) when it sits below the detected root — it
+  // still works, but only covers that app.
+  if (workspaceRoot) {
+    const foundDir = resolve(dirname(found.path));
+    if (foundDir.startsWith(resolve(workspaceRoot) + sep)) {
+      checks.push({
+        status: 'warn',
+        label: '.mcp.json is inside an app, not the monorepo root',
+        detail: `Prefer registering at the monorepo root (${workspaceRoot}) so one agent session covers the whole workspace; keep PINAGENT_PROJECT_ROOT pointed at this app.`,
+      });
+    }
+  }
   const pinned = server.env?.PINAGENT_PROJECT_ROOT;
   if (pinned !== undefined) {
     checks.push(

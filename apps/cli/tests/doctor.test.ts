@@ -19,6 +19,7 @@ import {
   checkPluginInstalled,
   checkRouteHandler,
   checkRuntime,
+  findWorkspaceRoot,
   parseDoctorArgs,
   runDoctor,
 } from '../src/doctor';
@@ -175,6 +176,45 @@ describe('checkMcpJson', () => {
     );
     const checks = checkMcpJson(dir);
     expect(checks.some((c) => c.status === 'fail')).toBe(true);
+  });
+  it('warns when .mcp.json sits inside an app in a monorepo', () => {
+    write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\n");
+    write('apps/web/.mcp.json', JSON.stringify({ mcpServers: { pinagent: { command: 'pnpm' } } }));
+    const checks = checkMcpJson(join(dir, 'apps', 'web'));
+    expect(checks.some((c) => c.status === 'warn' && /monorepo root/.test(c.detail ?? ''))).toBe(
+      true,
+    );
+  });
+  it('does not warn when .mcp.json is at the monorepo root', () => {
+    write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\n");
+    write('.mcp.json', JSON.stringify({ mcpServers: { pinagent: { command: 'pnpm' } } }));
+    mkdirSync(join(dir, 'apps', 'web'), { recursive: true });
+    const checks = checkMcpJson(join(dir, 'apps', 'web'));
+    expect(checks.every((c) => c.status !== 'warn')).toBe(true);
+  });
+  it('points a missing-config warning at the monorepo root', () => {
+    write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\n");
+    mkdirSync(join(dir, 'apps', 'web'), { recursive: true });
+    const checks = checkMcpJson(join(dir, 'apps', 'web'));
+    expect(checks[0].status).toBe('warn');
+    expect(checks[0].detail).toMatch(/monorepo root/);
+  });
+});
+
+describe('findWorkspaceRoot', () => {
+  it('returns null for a single-package repo', () => {
+    write('package.json', JSON.stringify({ name: 'solo' }));
+    expect(findWorkspaceRoot(dir)).toBeNull();
+  });
+  it('finds a pnpm-workspace.yaml from a nested app', () => {
+    write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\n");
+    mkdirSync(join(dir, 'apps', 'web'), { recursive: true });
+    expect(findWorkspaceRoot(join(dir, 'apps', 'web'))).toBe(dir);
+  });
+  it('finds a package.json with a workspaces field', () => {
+    write('package.json', JSON.stringify({ name: 'mono', workspaces: ['apps/*'] }));
+    mkdirSync(join(dir, 'apps', 'web'), { recursive: true });
+    expect(findWorkspaceRoot(join(dir, 'apps', 'web'))).toBe(dir);
   });
 });
 
