@@ -163,11 +163,6 @@ export {
   type WorkingCopyStatus,
 } from './working-copy';
 export {
-  createWorkingCopyWatcher,
-  type WorkingCopyWatcher,
-  type WorkingCopyWatcherOptions,
-} from './working-copy-watcher';
-export {
   listWorktreeServers,
   resolveServeCommand,
   type ServeResult,

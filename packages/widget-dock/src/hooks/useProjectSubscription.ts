@@ -66,10 +66,6 @@ export function createProjectEventListener(
       // A worktree dev server started, exited, or was stopped — refresh
       // the switcher's running-server list (Preview view + Branches dots).
       void queryClient.invalidateQueries({ queryKey: ['worktreeServers'] });
-    } else if (event.type === 'working_copy_changed') {
-      // The developer edited / reverted files in their editor — refresh
-      // the dashboard's working-copy hero so it doesn't go stale.
-      void queryClient.invalidateQueries({ queryKey: ['workingCopy'] });
     }
   };
 }

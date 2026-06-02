@@ -85,7 +85,7 @@ describe('getWorkingCopyStatus', () => {
     expect(byPath.get('README.md')?.status).toBe('modified');
     expect(byPath.get('README.md')?.added ?? 0).toBeGreaterThan(0);
     expect(status.additions).toBeGreaterThan(0);
-  });
+  }, 20_000);
 
   it('works from a subdirectory of the repo (not just the repo root)', async () => {
     // The dev server often runs from a subdir (e.g. an example app) where
@@ -119,5 +119,7 @@ describe('getWorkingCopyStatus', () => {
     status = await mod.getWorkingCopyStatus(ROOT);
     expect(status.ahead).toBe(1);
     expect(status.behind).toBe(0);
-  });
+    // Several real git subprocesses (bare init, remote add, two pushes,
+    // commits) — slow enough to blow the 5s default under full-suite load.
+  }, 20_000);
 });
