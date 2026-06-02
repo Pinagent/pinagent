@@ -16,7 +16,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { useTransport } from '../transport';
-import type { CreatePullRequestResult } from '../transport/types';
+import type { CreatePullRequestResult, StartBranchResult } from '../transport/types';
 
 const KEY = 'workingCopy';
 
@@ -81,6 +81,26 @@ export function usePushWorkingCopyBranch(): UseMutationResult<
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => transport.pushWorkingCopyBranch(),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: [KEY, transport.kind] });
+    },
+  });
+}
+
+/**
+ * Move the working changes onto a fresh feature branch (the "Start a branch"
+ * action on the base branch). On success the host branch changes, so the
+ * hero re-derives and the primary button flips to "Create PR".
+ */
+export function useStartWorkingCopyBranch(): UseMutationResult<
+  StartBranchResult,
+  Error,
+  string | undefined
+> {
+  const transport = useTransport();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name?: string) => transport.startWorkingCopyBranch(name),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: [KEY, transport.kind] });
     },

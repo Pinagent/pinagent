@@ -12,9 +12,12 @@
  * Imports only git + `github-pr` (Octokit) — NOT the Claude Agent SDK — so
  * the MCP binary can import `openHostBranchPr` without bundling the SDK.
  */
+import { nanoid } from 'nanoid';
 import { isInsideWorkTree, runGitCapture } from './git-utils';
 import { type GitHubPrResult, openPrOnGitHub, pushBranch } from './github-pr';
 import { SettingsStore } from './settings-store';
+
+const BRANCH_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9/_.-]{0,127}$/;
 
 async function resolveCurrentBranch(projectRoot: string): Promise<string | null> {
   const sym = await runGitCapture(projectRoot, ['symbolic-ref', '--short', 'HEAD']);
@@ -91,4 +94,39 @@ export async function pushHostBranch(projectRoot: string): Promise<PushHostBranc
     return { ok: false, pushed: false, error: push.error };
   }
   return { ok: true, pushed: true };
+}
+
+export interface StartHostBranchResult {
+  ok: boolean;
+  /** The branch that was created + switched to. */
+  branch?: string;
+  error?: string;
+}
+
+/**
+ * Create a new branch from the current HEAD and switch to it, carrying any
+ * uncommitted working changes over (leaving the base branch clean). Backs
+ * the dashboard's "Start a branch" action — the helpful next step when the
+ * dev server is on the base branch, where a PR can't be opened (main→main).
+ * The auto-generated `pinagent/<id>` name is fine; the eventual Create PR
+ * supplies the real, agent-summarized title.
+ */
+export async function startHostBranch(
+  projectRoot: string,
+  opts: { name?: string } = {},
+): Promise<StartHostBranchResult> {
+  if (!(await isInsideWorkTree(projectRoot))) {
+    return { ok: false, error: 'project root is not a git repository' };
+  }
+  const name = opts.name?.trim() || `pinagent/${nanoid(8)}`;
+  if (!BRANCH_NAME_RE.test(name)) {
+    return { ok: false, error: 'invalid branch name (alphanumeric + ./_- only)' };
+  }
+  // `git switch -c` keeps uncommitted changes in the working tree and moves
+  // them onto the new branch; the base branch stays at its current commit.
+  const res = await runGitCapture(projectRoot, ['switch', '-c', name]);
+  if (res.code !== 0) {
+    return { ok: false, error: `git switch failed: ${res.stderr.trim() || res.stdout.trim()}` };
+  }
+  return { ok: true, branch: name };
 }

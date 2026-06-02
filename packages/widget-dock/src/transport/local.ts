@@ -47,6 +47,7 @@ import type {
   PresentableConnections,
   PruneStaleResult,
   ServeBranchResult,
+  StartBranchResult,
   WorktreeServer,
 } from './types';
 import {
@@ -464,6 +465,18 @@ export class LocalTransport implements DockTransport {
 
   async pushWorkingCopyBranch(): Promise<CreatePullRequestResult> {
     return this.postPrResult('/__pinagent/working-copy/push');
+  }
+
+  async startWorkingCopyBranch(name?: string): Promise<StartBranchResult> {
+    const response = await fetch(this.url('/__pinagent/working-copy/branch'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(name ? { name } : {}),
+    });
+    if (response.status === 200 || response.status === 422) {
+      return (await response.json()) as StartBranchResult;
+    }
+    throw new Error(`Pinagent dev-server returned ${response.status} ${response.statusText}`);
   }
 
   async getConversation(id: string): Promise<ConversationDetail | null> {
