@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { type Role, verifySessionToken } from '@pinagent/ee-auth';
+import { relayDoName } from './do-name';
 import { isAuthorizedInternal } from './internal-auth';
 import { RelaySession } from './relay-do';
 
@@ -66,7 +67,9 @@ export default {
     if (!auth) return new Response('unauthorized', { status: 401 });
 
     const side = url.pathname === DEVICE_PATH ? 'device' : 'client';
-    const id = env.RELAY.idFromName(auth.sessionId);
+    // Key the DO by tenant + session (never session alone) so a caller-chosen
+    // sessionId can't collide across tenants. See `relayDoName`.
+    const id = env.RELAY.idFromName(relayDoName(auth.tenantId, auth.sessionId));
     const stub = env.RELAY.get(id);
 
     // Forward the upgrade to the session's Durable Object, tagging which
@@ -95,10 +98,13 @@ export default {
  * with the shared `RELAY_INTERNAL_SECRET` and forward it to that session's
  * Durable Object, which sends it down the connected device socket.
  *
- *   POST /__pinagent/internal/push?session=<sessionId>
+ *   POST /__pinagent/internal/push?tenant=<tenantId>&session=<sessionId>
  *     Authorization: Bearer <RELAY_INTERNAL_SECRET>
  *     body: the raw frame to deliver
  *   → 200 { delivered: true } | 404 { delivered: false } (no device connected)
+ *
+ * `tenant` is required so the push resolves to the same tenant-scoped Durable
+ * Object the device connected to (see `relayDoName`).
  *
  * Fails closed when the secret is unset (the endpoint is disabled, not open).
  */
@@ -112,11 +118,14 @@ async function handleInternalPush(request: Request, url: URL, env: Env): Promise
   if (!isAuthorizedInternal(request.headers.get('Authorization'), env.RELAY_INTERNAL_SECRET)) {
     return new Response('unauthorized', { status: 401 });
   }
+  const tenantId = url.searchParams.get('tenant') ?? '';
   const sessionId = url.searchParams.get('session') ?? '';
-  if (!sessionId) return new Response('missing session', { status: 400 });
+  if (!tenantId || !sessionId) {
+    return new Response('missing tenant or session', { status: 400 });
+  }
 
   const body = await request.text();
-  const stub = env.RELAY.get(env.RELAY.idFromName(sessionId));
+  const stub = env.RELAY.get(env.RELAY.idFromName(relayDoName(tenantId, sessionId)));
   // Re-issue as a plain (non-upgrade) POST the DO recognizes via the marker
   // header; the DO forwards the body to its device socket.
   const forwarded = new Request('https://relay-do/internal/push', {

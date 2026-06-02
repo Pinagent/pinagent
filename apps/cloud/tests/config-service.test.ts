@@ -226,15 +226,15 @@ describe('/branch-routing', () => {
 });
 
 describe('/branch-routing live propagation', () => {
-  type Push = { sessionId: string; frame: unknown };
+  type Push = { organizationId: string; sessionId: string; frame: unknown };
 
   function recordingRelay(result = true): { relay: RelayPushClient; pushes: Push[] } {
     const pushes: Push[] = [];
     return {
       pushes,
       relay: {
-        async pushToSession(sessionId, frame) {
-          pushes.push({ sessionId, frame });
+        async pushToSession(organizationId, sessionId, frame) {
+          pushes.push({ organizationId, sessionId, frame });
           return result;
         },
       },
@@ -266,6 +266,8 @@ describe('/branch-routing live propagation', () => {
 
     expect(res.status).toBe(200);
     expect(pushes.map((p) => p.sessionId).sort()).toEqual(['s-1', 's-2']);
+    // Every push carries the org so it targets the tenant-scoped DO.
+    expect(pushes.every((p) => p.organizationId === 'acme')).toBe(true);
     expect(pushes[0]?.frame).toEqual({
       type: 'set_branch_routing',
       defaultBaseBranch: 'develop',
