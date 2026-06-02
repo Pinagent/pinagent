@@ -466,6 +466,30 @@ export const COMPOSER_STYLES = `
   .chip-status { margin-left: auto; opacity: 0.6; }
   .chip-status.ok { color: ${STATUS.landed.fg}; opacity: 1; }
   .chip-status.err { color: ${STATUS.error.fg}; opacity: 1; }
+  /* Tool calls are collapsed into a quiet, opt-in group so the stream
+     reads like a chat with the agent. The header is the click target;
+     the chips stay hidden until the group is opened. */
+  .tool-group { display: flex; flex-direction: column; gap: 6px; align-self: stretch; }
+  .tool-group-head {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: ${FONT_MONO};
+    font-size: 11px;
+    color: ${THEME.textMuted};
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 2px 5px;
+    margin: 0;
+    cursor: pointer;
+  }
+  .tool-group-head:hover { background: ${THEME.hover}; color: ${THEME.text}; }
+  .tool-group-chevron { display: inline-block; transition: transform 0.15s ease; }
+  .tool-group.open .tool-group-chevron { transform: rotate(90deg); }
+  .tool-group-items { display: none; flex-direction: column; gap: 6px; padding-left: 8px; }
+  .tool-group.open .tool-group-items { display: flex; }
   .err-line { color: ${STATUS.error.fg}; font-size: 12px; white-space: pre-wrap; }
   .footer-note { font-size: 11px; color: ${THEME.textMuted}; font-family: ${FONT_MONO}; }
 

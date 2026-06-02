@@ -4,7 +4,7 @@ import { type AgentEvent, isNotionalCost, isUntrackedCost } from '@pinagent/shar
 import { Button } from '@pinagent/ui/components/ui/button';
 import { Textarea } from '@pinagent/ui/components/ui/textarea';
 import { cn } from '@pinagent/ui/lib/utils';
-import { Check } from 'lucide-react';
+import { Check, ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TimestampDot } from '../components/TimestampDot';
 import type { ConversationStream, StreamItem } from '../hooks/useConversationStream';
@@ -34,6 +34,21 @@ interface StreamViewProps {
 type DisplayItem =
   | { kind: 'stream'; key: string; receivedAt: string; item: StreamItem }
   | { kind: 'optimistic'; key: string; receivedAt: string; item: OptimisticItem };
+
+/**
+ * A render unit in the transcript: either a single chat row, or a
+ * collapsed group of consecutive tool calls (hidden behind a tap).
+ */
+type RenderBlock =
+  | { kind: 'single'; key: string; item: DisplayItem }
+  | { kind: 'tools'; key: string; items: StreamItem[] };
+
+/** A stream item that's a tool_use / tool_result agent event. */
+function isToolItem(item: StreamItem): boolean {
+  return (
+    item.kind === 'event' && (item.event.type === 'tool_use' || item.event.type === 'tool_result')
+  );
+}
 
 export function StreamView({
   stream,
@@ -70,6 +85,33 @@ export function StreamView({
     return all.sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
   }, [stream.items, optimistic]);
 
+  // Coalesce consecutive tool events (`tool_use` / `tool_result`) into a
+  // single collapsed block so the transcript reads like a chat with the
+  // agent — prose, questions, and your replies — rather than a stream of
+  // machine activity. The tool detail is opt-in: a tap on the block
+  // reveals the individual calls. Anything that isn't a tool event breaks
+  // the run, so prose and tool work stay in chronological order.
+  const blocks = useMemo<RenderBlock[]>(() => {
+    const out: RenderBlock[] = [];
+    let bucket: StreamItem[] = [];
+    const flush = (): void => {
+      const first = bucket[0];
+      if (!first) return;
+      out.push({ kind: 'tools', key: `tg-${first.id}`, items: bucket });
+      bucket = [];
+    };
+    for (const d of merged) {
+      if (d.kind === 'stream' && isToolItem(d.item)) {
+        bucket.push(d.item);
+      } else {
+        flush();
+        out.push({ kind: 'single', key: d.key, item: d });
+      }
+    }
+    flush();
+    return out;
+  }, [merged]);
+
   // Pin scroll to the bottom whenever new items arrive so live updates
   // stay in view without the user having to scroll. `scrollRef` points
   // at the inner row wrapper, not at a scrollable element — setting
@@ -98,19 +140,86 @@ export function StreamView({
 
   return (
     <div ref={scrollRef} className="space-y-2">
-      {merged.map((d) =>
-        d.kind === 'stream' ? (
+      {blocks.map((b) =>
+        b.kind === 'tools' ? (
+          <ToolGroup
+            key={b.key}
+            items={b.items}
+            answeredAskIds={answeredAskIds}
+            onAnswerAsk={onAnswerAsk}
+            askDisabled={askDisabled}
+            apiKeySource={apiKeySource}
+          />
+        ) : b.item.kind === 'stream' ? (
           <StreamRow
-            key={d.key}
-            item={d.item}
+            key={b.key}
+            item={b.item.item}
             answeredAskIds={answeredAskIds}
             onAnswerAsk={onAnswerAsk}
             askDisabled={askDisabled}
             apiKeySource={apiKeySource}
           />
         ) : (
-          <OptimisticRow key={d.key} item={d.item} />
+          <OptimisticRow key={b.key} item={b.item.item} />
         ),
+      )}
+    </div>
+  );
+}
+
+interface ToolGroupProps {
+  items: StreamItem[];
+  answeredAskIds: ReadonlySet<string>;
+  onAnswerAsk: (askId: string, answer: string) => void;
+  askDisabled: boolean;
+  apiKeySource?: string | null;
+}
+
+/**
+ * Collapsed run of tool calls. Default state is a single quiet line
+ * (`▸ N tool calls`) so the transcript stays conversational; tapping it
+ * expands the individual `tool_use` / `tool_result` rows for the curious.
+ * Surfacing the detail is opt-in, per the "chat, not activity log" intent.
+ */
+function ToolGroup({
+  items,
+  answeredAskIds,
+  onAnswerAsk,
+  askDisabled,
+  apiKeySource,
+}: ToolGroupProps) {
+  const [open, setOpen] = useState(false);
+  const callCount = items.filter(
+    (it) => it.kind === 'event' && it.event.type === 'tool_use',
+  ).length;
+  const n = callCount || items.length;
+  return (
+    <div className="space-y-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground"
+      >
+        <ChevronRight className={cn('h-3 w-3 transition-transform', open && 'rotate-90')} />
+        <span className="font-mono">
+          {n} tool call{n === 1 ? '' : 's'}
+        </span>
+        {!open && <span className="text-muted-foreground/60">· tap to view</span>}
+      </button>
+      {open && (
+        <div className="space-y-1.5 border-l border-dashed border-border pl-2.5">
+          {items.map((it) => (
+            <StreamRow
+              key={it.id}
+              item={it}
+              answeredAskIds={answeredAskIds}
+              onAnswerAsk={onAnswerAsk}
+              askDisabled={askDisabled}
+              apiKeySource={apiKeySource}
+            />
+          ))}
+        </div>
       )}
     </div>
   );

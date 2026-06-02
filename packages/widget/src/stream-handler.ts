@@ -51,6 +51,13 @@ export function attachStreamHandler(
   }
   let activeTextBlock: HTMLElement | null = null;
   let lastToolChip: HTMLElement | null = null;
+  // The open run of consecutive tool calls. Tool chips are tucked inside
+  // a collapsed group so the transcript reads like a chat with the agent
+  // rather than a scroll of machine activity — revealing the chips is
+  // opt-in (a click on the group header). Any non-tool event (prose, a
+  // question, the result) closes the group so the next tool run starts a
+  // fresh one and chronological order with the prose is preserved.
+  let activeToolGroup: { items: HTMLElement; label: HTMLElement; count: number } | null = null;
   // Human-readable label of the most recent tool call, reused for the
   // mini-card tooltip on both tool_use (running) and tool_result (done).
   let lastToolLabel: string | null = null;
@@ -155,6 +162,36 @@ export function attachStreamHandler(
   function noteActivity(label: string) {
     if (card) card.title = label;
     if (!composer.expanded) idoc.body.classList.add('activity');
+  }
+
+  // Append a tool chip into the current collapsed group, opening a new
+  // group if none is active. The group header is a click target that
+  // toggles `.open` to reveal/hide the chips; CSS keeps them hidden by
+  // default. The caller keeps the chip ref (lastToolChip) so the paired
+  // tool_result can update its status in place.
+  function appendToolChip(chip: HTMLElement) {
+    if (!activeToolGroup) {
+      const root = el('div', 'tool-group');
+      const head = el('button', 'tool-group-head') as HTMLButtonElement;
+      head.type = 'button';
+      head.appendChild(el('span', 'tool-group-chevron', '▸'));
+      const label = el('span', 'tool-group-label');
+      head.appendChild(label);
+      const items = el('div', 'tool-group-items');
+      head.addEventListener('click', () => {
+        const open = root.classList.toggle('open');
+        head.setAttribute('aria-expanded', String(open));
+      });
+      head.setAttribute('aria-expanded', 'false');
+      root.appendChild(head);
+      root.appendChild(items);
+      activeToolGroup = { items, label, count: 0 };
+      append(root);
+    }
+    activeToolGroup.items.appendChild(chip);
+    activeToolGroup.count += 1;
+    const n = activeToolGroup.count;
+    activeToolGroup.label.textContent = `${n} tool call${n === 1 ? '' : 's'}`;
   }
 
   // Enclosing-component + loop-instance context (from #166), surfaced in
@@ -467,6 +504,7 @@ export function attachStreamHandler(
         const model = String(event.model ?? 'claude');
         apiKeySource = typeof event.apiKeySource === 'string' ? event.apiKeySource : null;
         setStatus(`Working · ${model}${session ? ` · ${session}` : ''}`);
+        activeToolGroup = null;
         turnRunning = true;
         liveTurns = 0;
         setHeaderRunning(true);
@@ -497,6 +535,7 @@ export function attachStreamHandler(
           log.scrollTop = log.scrollHeight;
         }
         lastToolChip = null;
+        activeToolGroup = null;
         break;
       }
       case 'tool_use': {
@@ -510,7 +549,7 @@ export function attachStreamHandler(
         chip.appendChild(status);
         lastToolChip = chip;
         lastToolLabel = summary ? `${name} · ${summary}` : name;
-        append(chip);
+        appendToolChip(chip);
         noteActivity(lastToolLabel);
         break;
       }
@@ -523,7 +562,8 @@ export function attachStreamHandler(
             (status as HTMLElement).classList.add(ok ? 'ok' : 'err');
           }
         } else {
-          append(el('div', `chip ${ok ? '' : 'err'}`, ok ? '✓ tool result' : '✗ tool result'));
+          const chip = el('div', `chip ${ok ? '' : 'err'}`, ok ? '✓ tool result' : '✗ tool result');
+          appendToolChip(chip);
         }
         if (lastToolLabel && card) card.title = `${lastToolLabel} ${ok ? '✓' : '✗'}`;
         lastToolChip = null;
@@ -532,6 +572,7 @@ export function attachStreamHandler(
       case 'ask_user': {
         activeTextBlock = null;
         lastToolChip = null;
+        activeToolGroup = null;
         const askId = String(event.askId ?? '');
         const question = String(event.question ?? '');
         const options = Array.isArray(event.options) ? (event.options as string[]) : undefined;
@@ -551,6 +592,7 @@ export function attachStreamHandler(
       case 'error': {
         activeTextBlock = null;
         lastToolChip = null;
+        activeToolGroup = null;
         append(el('div', 'err-line', String(event.message ?? 'error')));
         setAgentState('error');
         turnRunning = false;
@@ -571,6 +613,7 @@ export function attachStreamHandler(
         // resolve_feedback (or similar) and the server's Storage
         // wrote the new status. Mirror that into the browser cache
         // so this conversation stops showing as pending on reload.
+        activeToolGroup = null;
         const status = String(event.status ?? '');
         if (status === 'fixed' || status === 'wontfix' || status === 'deferred') {
           const db = getBrowserDb();
@@ -593,6 +636,7 @@ export function attachStreamHandler(
       case 'result': {
         activeTextBlock = null;
         lastToolChip = null;
+        activeToolGroup = null;
         const subtype = String(event.subtype ?? '');
         const cost = typeof event.totalCostUsd === 'number' ? event.totalCostUsd : 0;
         const turns = typeof event.numTurns === 'number' ? event.numTurns : 0;
@@ -817,6 +861,7 @@ export function attachStreamHandler(
       activeTextBlock = null;
       lastToolChip = null;
       lastToolLabel = null;
+      activeToolGroup = null;
       pendingAskId = null;
       pendingAskFormRoot = null;
       composer.needsInput = false;
