@@ -9,6 +9,12 @@
 # control-plane URL + internal secret are set, the Durable Object reports
 # connect/disconnect lifecycle events to POST {url}/internal/relay/events;
 # unset → reporting is a no-op.
+#
+# Production MUST set RELAY_AUTH_SECRET. With no auth secret the worker fails
+# closed (500) unless RELAY_ALLOW_INSECURE is explicitly truthy — the insecure
+# "accept any token" dev-fallback is opt-in only, never the default. `dev:worker`
+# passes RELAY_ALLOW_INSECURE for frictionless local relay testing; never set it
+# on a real deploy.
 name = "pinagent-relay"
 main = "src/worker.ts"
 compatibility_date = "2026-05-01"
