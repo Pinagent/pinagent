@@ -20,11 +20,34 @@ import type { CreatePullRequestResult } from '../transport/types';
 
 const KEY = 'workingCopy';
 
+/**
+ * How often to re-read the host branch's git status while the dashboard is
+ * on screen. The endpoint just shells out to `git diff` (~ms), so a short
+ * interval is cheap, and TanStack Query pauses it automatically when the
+ * query has no mounted observer (dock on another route / closed) AND when
+ * the tab is backgrounded (`refetchIntervalInBackground` defaults false).
+ */
+const POLL_MS = 5_000;
+
 export function useWorkingCopy(): UseQueryResult<WorkingCopyStatus> {
   const transport = useTransport();
   return useQuery({
     queryKey: [KEY, transport.kind],
     queryFn: () => transport.getWorkingCopyStatus(),
+    // Visibility-scoped polling keeps the hero fresh when the developer
+    // edits or reverts files directly in their editor — those changes emit
+    // no pinagent lifecycle event, so without this the hero would only
+    // refresh on mount / window-focus (gated by the 60s global staleTime).
+    //
+    // Tradeoff vs a server-side fs watcher (chokidar/@parcel/watcher): a
+    // watcher gives instant, focus-independent updates (and catches the
+    // side-by-side case where the browser never blurs), but holds OS watch
+    // handles on the whole tree for the entire session even when nobody's
+    // looking. Polling does a little redundant work while the dashboard is
+    // visible but costs nothing otherwise and needs no native dep — the
+    // better fit for a lightweight localhost tool. Worst-case staleness is
+    // one interval (~5s) while viewing.
+    refetchInterval: POLL_MS,
   });
 }
 
