@@ -47,8 +47,8 @@ const SYSTEM_PROMPT = [
   '',
   'The body should open with a one-paragraph summary, then a "## Changes"',
   'section with bullet points of what changed and why. Keep it factual and',
-  'grounded in the diff. End the body with the line:',
-  '🤖 Generated with Pinagent',
+  'grounded in the diff. End the body with this exact line (keep the link):',
+  '🤖 Generated with [Pinagent](https://pinagent.dev)',
 ].join('\n');
 
 /**
