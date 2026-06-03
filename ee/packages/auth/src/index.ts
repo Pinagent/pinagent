@@ -72,6 +72,8 @@ export {
   issueRelaySessionToken,
 } from './session-issuer';
 export {
+  isSessionAudience,
+  type SessionAudience,
   type SessionClaims,
   type SignOptions,
   signSessionToken,

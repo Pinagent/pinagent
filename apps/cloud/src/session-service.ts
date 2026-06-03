@@ -132,6 +132,9 @@ export async function handleSessionRequest(
       userId: user.userId,
       organizationId: body.organizationId,
       sessionId: body.sessionId,
+      // `/sessions` issues client-side tokens (browsers/docks joining a session).
+      // The dev machine's device token is provisioned out of band as `device`.
+      audience: 'client',
       secret: deps.secret,
       ttlSeconds: deps.ttlSeconds,
       requirePermission: deps.requirePermission ?? DEFAULT_REQUIRED_PERMISSION,

@@ -144,7 +144,9 @@ const RELAY_CLIENT_SYMBOL = Symbol.for('pinagent.relayClient');
 /**
  * Start the dial-out client iff cloud mode is configured. Reads:
  *   - `PINAGENT_RELAY_URL`     (required to enable; e.g. wss://relay.pinagent.dev)
- *   - `PINAGENT_RELAY_TOKEN`   (required; bearer token for the relay)
+ *   - `PINAGENT_RELAY_TOKEN`   (required; bearer token for the relay — must be a
+ *      `device`-scoped session token; the relay rejects a `client` token on the
+ *      device endpoint)
  *   - `PINAGENT_RELAY_SESSION` (optional; defaults to a hash of the project root)
  *
  * Singleton-guarded via globalThis for the same Next-16 / HMR re-eval

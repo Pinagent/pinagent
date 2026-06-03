@@ -50,17 +50,22 @@ async function wsRequest(token: string, query = '') {
 }
 
 describe('relay worker — Durable Object routing', () => {
-  let tokenA: string;
-  let tokenB: string;
+  let tokenA: string; // client token, org-a/sess-1
+  let tokenB: string; // client token, org-b/sess-1
+  let deviceA: string; // device token, org-a/sess-1
 
   beforeEach(async () => {
     // Same sessionId, two different tenants — the cross-tenant collision case.
     tokenA = await signSessionToken(
-      { tenantId: 'org-a', sessionId: 'sess-1', role: 'member' },
+      { tenantId: 'org-a', sessionId: 'sess-1', role: 'member', audience: 'client' },
       SECRET,
     );
     tokenB = await signSessionToken(
-      { tenantId: 'org-b', sessionId: 'sess-1', role: 'member' },
+      { tenantId: 'org-b', sessionId: 'sess-1', role: 'member', audience: 'client' },
+      SECRET,
+    );
+    deviceA = await signSessionToken(
+      { tenantId: 'org-a', sessionId: 'sess-1', role: 'member', audience: 'device' },
       SECRET,
     );
   });
@@ -78,12 +83,29 @@ describe('relay worker — Durable Object routing', () => {
   it('co-locates the same tenant + session (device + client share a DO)', async () => {
     const { env: e } = env();
     const device = new Request('https://relay.test/__pinagent/device', {
-      headers: { Upgrade: 'websocket', Authorization: `Bearer ${tokenA}` },
+      headers: { Upgrade: 'websocket', Authorization: `Bearer ${deviceA}` },
     });
     const client = await wsRequest(tokenA);
     const dRes = await worker.fetch(device, e);
     const cRes = await worker.fetch(client, e);
     expect(await dRes.text()).toBe(await cRes.text());
+  });
+
+  it('rejects a CLIENT token presented at the device endpoint (no impersonation)', async () => {
+    const { env: e, names } = env();
+    const req = new Request('https://relay.test/__pinagent/device', {
+      headers: { Upgrade: 'websocket', Authorization: `Bearer ${tokenA}` },
+    });
+    const res = await worker.fetch(req, e);
+    expect(res.status).toBe(401);
+    expect(names).toHaveLength(0); // never reaches a Durable Object
+  });
+
+  it('rejects a DEVICE token presented at the client endpoint', async () => {
+    const { env: e, names } = env();
+    const res = await worker.fetch(await wsRequest(deviceA), e);
+    expect(res.status).toBe(401);
+    expect(names).toHaveLength(0);
   });
 
   it('uses the token claims, not a spoofed header or ?session= query', async () => {

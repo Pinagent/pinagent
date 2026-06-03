@@ -7,7 +7,7 @@ const SECRET = 'test-secret-do-not-use-in-prod';
 describe('session token round-trip', () => {
   it('signs and verifies, preserving claims', async () => {
     const token = await signSessionToken(
-      { tenantId: 'acme', sessionId: 'sess-1', role: 'member' },
+      { tenantId: 'acme', sessionId: 'sess-1', role: 'member', audience: 'client' },
       SECRET,
       {
         nowSeconds: 1000,
@@ -21,6 +21,7 @@ describe('session token round-trip', () => {
         tenantId: 'acme',
         sessionId: 'sess-1',
         role: 'member',
+        aud: 'client',
         iat: 1000,
         exp: 4600,
       });
@@ -29,7 +30,7 @@ describe('session token round-trip', () => {
 
   it('round-trips values needing base64url-safe encoding', async () => {
     const token = await signSessionToken(
-      { tenantId: 'org/with+slash', sessionId: 'sömé-üñïçødé', role: 'admin' },
+      { tenantId: 'org/with+slash', sessionId: 'sömé-üñïçødé', role: 'admin', audience: 'device' },
       SECRET,
     );
     const result = await verifySessionToken(token, SECRET);
@@ -44,7 +45,7 @@ describe('session token round-trip', () => {
 describe('session token rejection', () => {
   it('rejects a tampered signature', async () => {
     const token = await signSessionToken(
-      { tenantId: 'acme', sessionId: 'sess-1', role: 'member' },
+      { tenantId: 'acme', sessionId: 'sess-1', role: 'member', audience: 'client' },
       SECRET,
     );
     const [payload, sig] = token.split('.');
@@ -57,11 +58,11 @@ describe('session token rejection', () => {
     // The security-critical case: a valid, decodable payload that was never
     // signed with this secret. "evil" claims + a real-but-unrelated sig.
     const honest = await signSessionToken(
-      { tenantId: 'acme', sessionId: 'sess-1', role: 'member' },
+      { tenantId: 'acme', sessionId: 'sess-1', role: 'member', audience: 'client' },
       SECRET,
     );
     const evil = await signSessionToken(
-      { tenantId: 'evil', sessionId: 'sess-1', role: 'owner' },
+      { tenantId: 'evil', sessionId: 'sess-1', role: 'owner', audience: 'client' },
       SECRET,
     );
     const forged = `${evil.split('.')[0]}.${honest.split('.')[1]}`;
@@ -71,7 +72,7 @@ describe('session token rejection', () => {
 
   it('rejects a token signed with a different secret', async () => {
     const token = await signSessionToken(
-      { tenantId: 'acme', sessionId: 'sess-1', role: 'member' },
+      { tenantId: 'acme', sessionId: 'sess-1', role: 'member', audience: 'client' },
       SECRET,
     );
     const result = await verifySessionToken(token, 'a-different-secret');
@@ -80,7 +81,7 @@ describe('session token rejection', () => {
 
   it('rejects an expired token', async () => {
     const token = await signSessionToken(
-      { tenantId: 'acme', sessionId: 'sess-1', role: 'member' },
+      { tenantId: 'acme', sessionId: 'sess-1', role: 'member', audience: 'client' },
       SECRET,
       {
         nowSeconds: 1000,
@@ -93,7 +94,7 @@ describe('session token rejection', () => {
 
   it('treats the expiry boundary as expired', async () => {
     const token = await signSessionToken(
-      { tenantId: 'acme', sessionId: 'sess-1', role: 'member' },
+      { tenantId: 'acme', sessionId: 'sess-1', role: 'member', audience: 'client' },
       SECRET,
       {
         nowSeconds: 1000,
@@ -121,7 +122,19 @@ describe('session token rejection', () => {
     // claims validation must reject it before it reaches authorization.
     const forged = await signSessionToken(
       // biome-ignore lint/suspicious/noExplicitAny: deliberately bypassing the Role type.
-      { tenantId: 'acme', sessionId: 'sess-1', role: 'superadmin' as any },
+      { tenantId: 'acme', sessionId: 'sess-1', role: 'superadmin' as any, audience: 'client' },
+      SECRET,
+    );
+    const result = await verifySessionToken(forged, SECRET);
+    expect(result).toEqual({ ok: false, reason: 'malformed' });
+  });
+
+  it('rejects a well-signed token with a missing or unknown audience', async () => {
+    // An `aud` outside {device, client} (or absent) must fail claims validation
+    // so it can never satisfy the relay's path↔audience binding.
+    const forged = await signSessionToken(
+      // biome-ignore lint/suspicious/noExplicitAny: deliberately bypassing the audience type.
+      { tenantId: 'acme', sessionId: 'sess-1', role: 'member', audience: 'both' as any },
       SECRET,
     );
     const result = await verifySessionToken(forged, SECRET);
