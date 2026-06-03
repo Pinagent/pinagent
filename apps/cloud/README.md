@@ -89,8 +89,14 @@ subscriptions), **`relay`** (active_sessions). Schema is
 actions/states need no migration).
 
 ```bash
-pnpm --filter @pinagent/cloud drizzle:gen     # generate a migration after a schema edit
-pnpm --filter @pinagent/cloud drizzle:check   # lint the generated files
+pnpm --filter @pinagent/cloud drizzle:gen     # generate a migration after a schema edit (offline)
+pnpm --filter @pinagent/cloud drizzle:check   # lint the generated files (offline)
+
+# Apply pending migrations. The Worker does NOT migrate on boot, so this is the
+# only thing that advances the schema. Needs DATABASE_URL — run via Doppler so
+# the value matches the target environment:
+doppler run --config dev -- pnpm --filter @pinagent/cloud drizzle:migrate   # dev DB
+doppler run --config prd -- pnpm --filter @pinagent/cloud drizzle:migrate   # production
 ```
 
 ### Billing rollover + the Stripe seam
