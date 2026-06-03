@@ -237,6 +237,69 @@ describe('findReanchorTarget', () => {
     const found = findReanchorTarget('B.tsx:2:2', 'body > button');
     expect((found as HTMLElement | null)?.id).toBe('second');
   });
+
+  // The same JSX literal rendered N times via `.map()` shares one data-pa-loc.
+  // Without instance info we take the first; with it we pin the picked row.
+  it('returns the first match when several share a data-pa-loc and no instance is given', () => {
+    document.body.innerHTML =
+      '<li data-pa-loc="List.tsx:5:3" id="row0">Alice</li>' +
+      '<li data-pa-loc="List.tsx:5:3" id="row1">Bob</li>' +
+      '<li data-pa-loc="List.tsx:5:3" id="row2">Carol</li>';
+    const found = findReanchorTarget('List.tsx:5:3', 'li');
+    expect((found as HTMLElement | null)?.id).toBe('row0');
+  });
+
+  it('pins the picked instance by fingerprint when rows share a data-pa-loc', () => {
+    document.body.innerHTML =
+      '<li data-pa-loc="List.tsx:5:3" id="row0">Alice</li>' +
+      '<li data-pa-loc="List.tsx:5:3" id="row1">Bob</li>' +
+      '<li data-pa-loc="List.tsx:5:3" id="row2">Carol</li>';
+    const bob = document.getElementById('row1') as Element;
+    const found = findReanchorTarget('List.tsx:5:3', 'li', {
+      index: 1,
+      fingerprint: elementFingerprint(bob),
+    });
+    expect((found as HTMLElement | null)?.id).toBe('row1');
+  });
+
+  it('survives row reordering: fingerprint beats the stale positional index', () => {
+    // Picked Bob at index 1, but the list reordered so Bob is now last.
+    document.body.innerHTML =
+      '<li data-pa-loc="List.tsx:5:3" id="row0">Alice</li>' +
+      '<li data-pa-loc="List.tsx:5:3" id="row2">Carol</li>' +
+      '<li data-pa-loc="List.tsx:5:3" id="row1">Bob</li>';
+    const bob = document.getElementById('row1') as Element;
+    const found = findReanchorTarget('List.tsx:5:3', 'li', {
+      index: 1,
+      fingerprint: elementFingerprint(bob),
+    });
+    expect((found as HTMLElement | null)?.id).toBe('row1');
+  });
+
+  it('falls back to the captured index when no fingerprint matches', () => {
+    // Bob's text changed, so the fingerprint no longer matches any row;
+    // the captured position is the next-best guess.
+    document.body.innerHTML =
+      '<li data-pa-loc="List.tsx:5:3" id="row0">Alice</li>' +
+      '<li data-pa-loc="List.tsx:5:3" id="row1">Bobby</li>' +
+      '<li data-pa-loc="List.tsx:5:3" id="row2">Carol</li>';
+    const found = findReanchorTarget('List.tsx:5:3', 'li', {
+      index: 1,
+      fingerprint: 'li "Bob"',
+    });
+    expect((found as HTMLElement | null)?.id).toBe('row1');
+  });
+
+  it('falls back to the first match when the captured index is out of range', () => {
+    document.body.innerHTML =
+      '<li data-pa-loc="List.tsx:5:3" id="row0">Alice</li>' +
+      '<li data-pa-loc="List.tsx:5:3" id="row1">Bob</li>';
+    const found = findReanchorTarget('List.tsx:5:3', 'li', {
+      index: 9,
+      fingerprint: 'li "Nobody"',
+    });
+    expect((found as HTMLElement | null)?.id).toBe('row0');
+  });
 });
 
 describe('findLocEl', () => {
