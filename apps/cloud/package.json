@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "drizzle:gen": "drizzle-kit generate",
     "drizzle:check": "drizzle-kit check",
+    "drizzle:migrate": "drizzle-kit migrate",
     "dev:worker": "wrangler dev",
     "deploy": "wrangler deploy"
   },
