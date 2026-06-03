@@ -106,9 +106,9 @@ export {
   composePullRequest,
 } from './pr-composer';
 export {
+  type FeedbackForScreenshot,
   type PrScreenshot,
-  type ScreenshotCandidate,
-  toScreenshotCandidates,
+  selectUnshippedScreenshots,
 } from './pr-screenshots';
 export {
   type AgentPermissionMode,

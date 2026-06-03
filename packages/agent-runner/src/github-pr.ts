@@ -38,6 +38,17 @@ export interface GitHubPrResult {
   manualCompareUrl?: string;
   /** Human-readable failure reason. Set when `ok` is false. */
   error?: string;
+  /**
+   * The commit the shipped feedback now sits on (host-branch flow only). The
+   * caller stamps this onto `shippedScreenshotIds` to mark them shipped.
+   */
+  shippedCommit?: string;
+  /**
+   * Conversation ids whose screenshots were attached to this PR (host-branch
+   * flow only). The caller stamps `shippedCommit` onto these so a later PR
+   * won't re-attach them.
+   */
+  shippedScreenshotIds?: string[];
 }
 
 /**

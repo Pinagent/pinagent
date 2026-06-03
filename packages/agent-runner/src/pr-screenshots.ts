@@ -14,9 +14,20 @@
  * the explicitly-added asset becomes tracked; the rest of `.pinagent/` stays
  * ignored.
  *
+ * Which screenshots belong to a host-branch ("working copy") PR? Inline
+ * feedback leaves no per-conversation git trail and is marked resolved the
+ * moment the agent finishes — so a branch/commit can't be matched back to it.
+ * Instead we use `commitSha` as a "shipped" marker: resolved feedback with a
+ * screenshot and a null `commitSha` is sitting in the working copy unshipped;
+ * the PR attaches it and the caller stamps the shipped commit onto it, so the
+ * next PR won't re-attach it. (Worktree-mode feedback carries a `branch` and
+ * its own merge commit, so it's excluded — its changes aren't in the host
+ * working copy.)
+ *
  * SDK-free and DB-free (git + fs only) so it can be imported from the
  * `@pinagent/agent-runner/pr` entry without bloating the `@pinagent/mcp` bin
- * — the caller supplies the candidate records from whatever storage it holds.
+ * — the caller supplies the records (and does the stamping) via its own
+ * storage.
  */
 import { access, copyFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -33,19 +44,23 @@ export interface PrScreenshot {
   caption?: string;
 }
 
-/**
- * A resolved-feedback record that *might* belong to the PR branch. The
- * host-branch flow has no explicit conversation list, so it matches these
- * against the commits on the branch via `commitSha`.
- */
-export interface ScreenshotCandidate {
+/** The subset of a feedback record `selectUnshippedScreenshots` needs. */
+export interface FeedbackForScreenshot {
   id: string;
-  /** Screenshot path relative to `.pinagent/`. */
-  screenshot: string;
-  /** Resolution commit recorded by `resolve_feedback`, or null if none. */
-  commitSha: string | null;
-  /** The developer's original comment — used as the image caption. */
   comment: string;
+  /** 'fixed' | 'wontfix' | 'deferred' | 'pending'. */
+  status: string;
+  /**
+   * Worktree branch — non-null for worktree-mode runs, null/absent for inline.
+   * Optional because some storage facades (the MCP one) don't surface it; when
+   * absent the record is treated as inline (worktree-landed feedback is still
+   * excluded by its stamped `commitSha`).
+   */
+  branch?: string | null;
+  /** The commit that shipped this feedback's fix. Null until shipped. */
+  commitSha: string | null;
+  /** Screenshot path relative to `.pinagent/`, or null/absent if none. */
+  screenshot?: string | null;
 }
 
 // POSIX-style path for git pathspecs + URL building (NOT path.join, which
@@ -77,46 +92,38 @@ function encodePath(p: string): string {
 }
 
 /**
- * Select which candidate screenshots belong to the PR branch by matching
- * each candidate's resolution `commitSha` against the commits unique to the
- * branch (`<baseBranch>..HEAD`). Best-effort: only finds feedback that was
- * resolved with a recorded commit sha. Returns [] when nothing matches or
- * the rev-list fails.
+ * Pick the resolved, inline, not-yet-shipped feedback with a screenshot — the
+ * conversations whose work is sitting in the current host working copy. These
+ * are what a "working copy" / dock PR should show. The caller stamps the
+ * shipped commit onto the returned `ids` after the PR succeeds, so a later PR
+ * won't re-attach them.
+ *
+ * Excludes: unresolved feedback, worktree-mode feedback (carries a `branch`;
+ * its changes live in a separate worktree, not the host working copy), and
+ * already-shipped feedback (non-null `commitSha`).
  */
-export async function selectBranchScreenshots(
-  commitCwd: string,
-  baseBranch: string,
-  candidates: ScreenshotCandidate[],
-): Promise<PrScreenshot[]> {
-  const withSha = candidates.filter((c) => c.commitSha && c.commitSha.length >= 7);
-  if (withSha.length === 0) return [];
-
-  const revList = await runGitCapture(commitCwd, ['rev-list', `${baseBranch}..HEAD`]);
-  if (revList.code !== 0) return [];
-  const branchShas = revList.stdout
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (branchShas.length === 0) return [];
-
+export function selectUnshippedScreenshots(records: FeedbackForScreenshot[]): {
+  shots: PrScreenshot[];
+  ids: string[];
+} {
   const shots: PrScreenshot[] = [];
-  const seen = new Set<string>();
-  for (const c of withSha) {
-    // commitSha may be short or full; rev-list emits full shas. Match by
-    // prefix so either form resolves.
-    const prefix = c.commitSha!;
-    if (!branchShas.some((s) => s.startsWith(prefix))) continue;
-    if (seen.has(c.id)) continue;
-    seen.add(c.id);
-    shots.push({ id: c.id, screenshot: c.screenshot, caption: captionFor(c.comment) });
+  const ids: string[] = [];
+  for (const r of records) {
+    if (r.status !== 'fixed') continue;
+    if (r.branch) continue; // worktree-mode — not in the host working copy
+    if (r.commitSha) continue; // already shipped in a prior PR
+    if (!r.screenshot) continue;
+    shots.push({ id: r.id, screenshot: r.screenshot, caption: captionFor(r.comment) });
+    ids.push(r.id);
   }
-  return shots;
+  return { shots, ids };
 }
 
 /**
  * Copy each screenshot into `<commitCwd>/.pinagent/pr-assets/`, force-add +
  * commit them onto the current branch, and return a markdown block of
- * `?raw=true` blob URLs (referencing `branch`) to append to the PR body.
+ * `?raw=true` blob URLs (referencing `branch`) to append to the PR body, plus
+ * the ids that were actually committed (so the caller can mark them shipped).
  *
  * Returns empty markdown and commits nothing when there are no usable
  * screenshots or the origin isn't GitHub (the blob URL only resolves on
@@ -130,8 +137,8 @@ export async function stageScreenshotAssets(
   commitCwd: string,
   branch: string,
   shots: PrScreenshot[],
-): Promise<{ markdown: string; committed: number }> {
-  const empty = { markdown: '', committed: 0 };
+): Promise<{ markdown: string; committed: number; ids: string[] }> {
+  const empty = { markdown: '', committed: 0, ids: [] as string[] };
   if (shots.length === 0) return empty;
 
   // Blob URLs only resolve on GitHub — skip silently on other/no remotes.
@@ -178,22 +185,5 @@ export async function stageScreenshotAssets(
   });
 
   const markdown = `\n\n---\n\n### Screenshots\n\n${lines.join('\n\n')}\n`;
-  return { markdown, committed: staged.length };
-}
-
-/** Map storage feedback records to screenshot candidates (drops empties). */
-export function toScreenshotCandidates(
-  records: Array<{
-    id: string;
-    screenshot?: string | null;
-    commitSha: string | null;
-    comment: string;
-  }>,
-): ScreenshotCandidate[] {
-  const out: ScreenshotCandidate[] = [];
-  for (const r of records) {
-    if (!r.screenshot || !r.commitSha) continue;
-    out.push({ id: r.id, screenshot: r.screenshot, commitSha: r.commitSha, comment: r.comment });
-  }
-  return out;
+  return { markdown, committed: staged.length, ids: staged.map((s) => s.id) };
 }

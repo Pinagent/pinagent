@@ -44,6 +44,7 @@ import {
   type SpawnAgentMode,
   type Storage,
   searchHistory,
+  selectUnshippedScreenshots,
   serveBranch,
   slugifyBranchName,
   spawnAgent,
@@ -51,7 +52,6 @@ import {
   stopWorktreeServer,
   summarizeChangesForPr,
   summarizeCommitMessage,
-  toScreenshotCandidates,
   updatePrDescription,
   validateAnthropicKey,
   validateGithubToken,
@@ -409,12 +409,20 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
         // Commit uncommitted edits (git add -A) with the generated title as
         // the message so the PR contains them; openHostBranchPr no-ops the
         // commit when the tree is clean.
+        const { shots } = selectUnshippedScreenshots(await storage.list());
         const result = await openHostBranchPr(storage.root, {
           title,
           body,
           commitMessage: title,
-          screenshotCandidates: toScreenshotCandidates(await storage.list()),
+          screenshots: shots,
         });
+        // Mark the attached feedback shipped (stamp the commit it landed on)
+        // so a later working-copy PR won't re-attach the same screenshots.
+        if (result.ok && result.shippedCommit && result.shippedScreenshotIds?.length) {
+          for (const id of result.shippedScreenshotIds) {
+            await storage.patch(id, { commitSha: result.shippedCommit }).catch(() => {});
+          }
+        }
         return json(res, result.ok ? 200 : 422, result);
       }
 

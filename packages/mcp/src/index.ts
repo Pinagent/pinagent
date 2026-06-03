@@ -8,7 +8,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 // Import from the SDK-free `/pr` subpath, NOT the package root — the root
 // re-exports the agent providers, which would drag the Claude Agent SDK
 // into the published `pinagent-mcp` bin. See agent-runner's tsdown config.
-import { openHostBranchPr, toScreenshotCandidates } from '@pinagent/agent-runner/pr';
+import { openHostBranchPr, selectUnshippedScreenshots } from '@pinagent/agent-runner/pr';
 import { renderTranscript } from '@pinagent/shared';
 import { z } from 'zod';
 import { CHANNEL_INSTRUCTIONS, startFeedbackWatcher } from './channel';
@@ -372,15 +372,23 @@ export async function callTool(
 
       case 'create_pull_request': {
         const input = CreatePrInput.parse(args);
-        // Hand over resolved feedback as screenshot candidates — the PR core
-        // matches each against the branch's commits and embeds the screenshots.
-        const candidates = toScreenshotCandidates(await storage.list());
+        // Attach the working copy's unshipped feedback screenshots, then stamp
+        // the shipped commit onto them so a later PR won't re-attach them.
+        const records = await storage.list();
+        const { shots } = selectUnshippedScreenshots(records);
         const result = await openHostBranchPr(root, {
           title: input.title,
           body: input.body,
           ...(input.commit_message ? { commitMessage: input.commit_message } : {}),
-          screenshotCandidates: candidates,
+          screenshots: shots,
         });
+        if (result.ok && result.shippedCommit && result.shippedScreenshotIds?.length) {
+          const shipped = new Set(result.shippedScreenshotIds);
+          for (const rec of records) {
+            if (!shipped.has(rec.id)) continue;
+            await storage.write({ ...rec, commitSha: result.shippedCommit }).catch(() => {});
+          }
+        }
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
           ...(result.ok ? {} : { isError: true }),

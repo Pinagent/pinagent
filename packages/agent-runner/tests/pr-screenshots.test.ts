@@ -74,6 +74,7 @@ describe('stageScreenshotAssets', () => {
     ]);
 
     expect(res.committed).toBe(1);
+    expect(res.ids).toEqual(['a']);
     expect(res.markdown).toContain('### Screenshots');
     expect(res.markdown).toContain('**make it blue**');
     expect(res.markdown).toContain(
@@ -95,7 +96,7 @@ describe('stageScreenshotAssets', () => {
       { id: 'a', screenshot: 'screenshots/a.png' },
     ]);
 
-    expect(res).toEqual({ markdown: '', committed: 0 });
+    expect(res).toEqual({ markdown: '', committed: 0, ids: [] });
     const tracked = await git(NO_REMOTE, ['ls-files', '--', '.pinagent/pr-assets/a.png']);
     expect(tracked.stdout.trim()).toBe('');
     await git(NO_REMOTE, ['checkout', 'main']);
@@ -106,58 +107,45 @@ describe('stageScreenshotAssets', () => {
     const res = await mod.stageScreenshotAssets(ROOT, ROOT, 'feat/missing', [
       { id: 'gone', screenshot: 'screenshots/gone.png' },
     ]);
-    expect(res).toEqual({ markdown: '', committed: 0 });
+    expect(res).toEqual({ markdown: '', committed: 0, ids: [] });
     await git(ROOT, ['checkout', 'main']);
   });
 
   it('does nothing for an empty screenshot list', async () => {
     const res = await mod.stageScreenshotAssets(ROOT, ROOT, 'main', []);
-    expect(res).toEqual({ markdown: '', committed: 0 });
+    expect(res).toEqual({ markdown: '', committed: 0, ids: [] });
   });
 });
 
-describe('selectBranchScreenshots', () => {
-  it('matches candidates whose commitSha is in base..HEAD (full or short sha)', async () => {
-    await git(ROOT, ['checkout', '-b', 'feat/sel']);
-    await writeFile(join(ROOT, 'change.txt'), 'x\n', 'utf8');
-    await git(ROOT, ['add', '-A']);
-    await git(ROOT, ['commit', '-m', 'a change']);
-    const head = (await git(ROOT, ['rev-parse', 'HEAD'])).stdout.trim();
+describe('selectUnshippedScreenshots', () => {
+  // status=fixed, inline (no branch), unshipped (no commitSha), has screenshot.
+  const fixed = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    comment: `${id} comment\nsecond line`,
+    status: 'fixed',
+    branch: null,
+    commitSha: null,
+    screenshot: `screenshots/${id}.png`,
+    ...over,
+  });
 
-    const shots = await mod.selectBranchScreenshots(ROOT, 'main', [
-      { id: 'full', screenshot: 'screenshots/f.png', commitSha: head, comment: 'full sha\nsecond' },
-      {
-        id: 'short',
-        screenshot: 'screenshots/s.png',
-        commitSha: head.slice(0, 8),
-        comment: 'short',
-      },
-      { id: 'miss', screenshot: 'screenshots/m.png', commitSha: 'deadbeefdeadbeef', comment: 'no' },
-      { id: 'nosha', screenshot: 'screenshots/n.png', commitSha: null, comment: 'no sha' },
-    ]);
-
-    expect(shots.map((s) => s.id).sort()).toEqual(['full', 'short']);
+  it('keeps resolved inline feedback that has a screenshot and is not yet shipped', () => {
+    const { shots, ids } = mod.selectUnshippedScreenshots([fixed('a'), fixed('b')]);
+    expect(ids).toEqual(['a', 'b']);
+    expect(shots.map((s) => s.id)).toEqual(['a', 'b']);
     // Caption is the first non-empty line of the comment.
-    expect(shots.find((s) => s.id === 'full')?.caption).toBe('full sha');
-
-    await git(ROOT, ['checkout', 'main']);
+    expect(shots[0]?.caption).toBe('a comment');
   });
 
-  it('returns nothing when no candidate carries a commit sha', async () => {
-    const shots = await mod.selectBranchScreenshots(ROOT, 'main', [
-      { id: 'x', screenshot: 'screenshots/x.png', commitSha: null, comment: 'c' },
+  it('excludes unresolved, already-shipped, worktree-mode, and screenshot-less feedback', () => {
+    const { ids } = mod.selectUnshippedScreenshots([
+      fixed('keep'),
+      fixed('pending', { status: 'pending' }),
+      fixed('wontfix', { status: 'wontfix' }),
+      fixed('shipped', { commitSha: 'abc1234' }),
+      fixed('worktree', { branch: 'pinagent/x' }),
+      fixed('noshot', { screenshot: null }),
     ]);
-    expect(shots).toEqual([]);
-  });
-});
-
-describe('toScreenshotCandidates', () => {
-  it('keeps only records with both a screenshot and a commit sha', () => {
-    const out = mod.toScreenshotCandidates([
-      { id: 'a', screenshot: 'screenshots/a.png', commitSha: 'abc1234', comment: 'a' },
-      { id: 'b', screenshot: null, commitSha: 'abc1234', comment: 'b' },
-      { id: 'c', screenshot: 'screenshots/c.png', commitSha: null, comment: 'c' },
-    ]);
-    expect(out.map((c) => c.id)).toEqual(['a']);
+    expect(ids).toEqual(['keep']);
   });
 });

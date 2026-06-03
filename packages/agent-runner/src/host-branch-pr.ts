@@ -15,11 +15,7 @@
 import { nanoid } from 'nanoid';
 import { isInsideWorkTree, isWorkingTreeDirty, runGitCapture } from './git-utils';
 import { type GitHubPrResult, openPrOnGitHub, pushBranch } from './github-pr';
-import {
-  type ScreenshotCandidate,
-  selectBranchScreenshots,
-  stageScreenshotAssets,
-} from './pr-screenshots';
+import { type PrScreenshot, stageScreenshotAssets } from './pr-screenshots';
 import { SettingsStore } from './settings-store';
 
 const BRANCH_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9/_.-]{0,127}$/;
@@ -108,13 +104,14 @@ export interface OpenHostBranchPrOpts {
    */
   commitMessage?: string;
   /**
-   * Resolved-feedback records whose screenshots may belong to this branch.
-   * The host branch carries no explicit conversation list, so any candidate
-   * whose resolution `commitSha` lands in `<base>..HEAD` gets its screenshot
-   * committed onto the branch and embedded in the PR body. Best-effort: only
-   * feedback resolved with a recorded commit sha is matched. Omit to skip.
+   * Screenshots to attach to the PR — the unshipped resolved feedback sitting
+   * in the working copy (the caller selects these via `selectUnshippedScreenshots`).
+   * Each PNG is committed onto the branch and embedded in the PR body. On
+   * success the result reports `shippedScreenshotIds` + `shippedCommit` so the
+   * caller can stamp the commit onto those records (marking them shipped, so a
+   * later PR won't re-attach them). Omit to skip.
    */
-  screenshotCandidates?: ScreenshotCandidate[];
+  screenshots?: PrScreenshot[];
 }
 
 /**
@@ -158,19 +155,19 @@ export async function openHostBranchPr(
     }
   }
 
-  // Attach screenshots of any feedback resolved on this branch: commit the
-  // PNGs onto the branch (before the push below carries them to the remote)
-  // and fold a markdown block of their blob URLs into the PR body.
-  const shots = await selectBranchScreenshots(
-    projectRoot,
-    baseBranch,
-    opts.screenshotCandidates ?? [],
-  );
-  const { markdown: screenshotMd } = await stageScreenshotAssets(
+  // The commit the working-copy changes now sit on — stamped onto the
+  // shipped feedback by the caller so a later PR won't re-attach them.
+  const headSha = await runGitCapture(projectRoot, ['rev-parse', 'HEAD']);
+  const shippedCommit = headSha.code === 0 ? headSha.stdout.trim() : undefined;
+
+  // Attach the working copy's unshipped feedback screenshots: commit the PNGs
+  // onto the branch (before the push below carries them to the remote) and
+  // fold a markdown block of their blob URLs into the PR body.
+  const { markdown: screenshotMd, ids: shippedScreenshotIds } = await stageScreenshotAssets(
     projectRoot,
     projectRoot,
     branch,
-    shots,
+    opts.screenshots ?? [],
   );
 
   const push = await pushBranch(projectRoot, branch);
@@ -178,13 +175,14 @@ export async function openHostBranchPr(
     return { ok: false, branchPushed: false, error: push.error ?? 'git push failed' };
   }
 
-  return openPrOnGitHub(projectRoot, {
+  const result = await openPrOnGitHub(projectRoot, {
     branchName: branch,
     baseBranch,
     title: opts.title,
     body: opts.body + screenshotMd,
     conversationIds: [],
   });
+  return { ...result, shippedCommit, shippedScreenshotIds };
 }
 
 export interface PushHostBranchResult {
@@ -301,5 +299,10 @@ export function slugifyBranchName(summary: string): string | undefined {
 }
 
 // Re-exported through the SDK-free `@pinagent/agent-runner/pr` entry so the
-// `@pinagent/mcp` bin can build screenshot candidates for `create_pull_request`.
-export { type ScreenshotCandidate, toScreenshotCandidates } from './pr-screenshots';
+// `@pinagent/mcp` bin can select the working copy's unshipped screenshots for
+// `create_pull_request`.
+export {
+  type FeedbackForScreenshot,
+  type PrScreenshot,
+  selectUnshippedScreenshots,
+} from './pr-screenshots';
