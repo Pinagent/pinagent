@@ -4,7 +4,11 @@
  * conversation detail header.
  */
 import { describe, expect, it } from 'vitest';
-import { permissionModeDisplay } from '../src/lib/permissionMode';
+import {
+  overrideProjectMode,
+  permissionModeDisplay,
+  permissionRowBadge,
+} from '../src/lib/permissionMode';
 
 describe('permissionModeDisplay', () => {
   it('maps acceptEdits to the Auto-accept chip', () => {
@@ -38,5 +42,47 @@ describe('permissionModeDisplay', () => {
     const out = permissionModeDisplay('something-novel');
     expect(out.label).toBe('something-novel');
     expect(out.title).toMatch(/something-novel/);
+  });
+});
+
+describe('overrideProjectMode', () => {
+  it('maps an SDK override mode back to its picker project mode', () => {
+    expect(overrideProjectMode('plan')).toBe('dry-run');
+    expect(overrideProjectMode('acceptEdits')).toBe('auto');
+    expect(overrideProjectMode('default')).toBe('approve');
+  });
+
+  it('returns null for no override or an SDK-only mode', () => {
+    expect(overrideProjectMode(null)).toBeNull();
+    expect(overrideProjectMode('bypassPermissions')).toBeNull();
+  });
+});
+
+describe('permissionRowBadge', () => {
+  it('marks the selected row "current" when no override is active', () => {
+    expect(permissionRowBadge({ rowMode: 'auto', savedMode: 'auto', overrideMode: null })).toBe(
+      'current',
+    );
+    expect(
+      permissionRowBadge({ rowMode: 'approve', savedMode: 'auto', overrideMode: null }),
+    ).toBeNull();
+  });
+
+  it('marks "In force" and "Saved" rows separately under an override', () => {
+    expect(
+      permissionRowBadge({ rowMode: 'dry-run', savedMode: 'auto', overrideMode: 'dry-run' }),
+    ).toBe('In force');
+    expect(
+      permissionRowBadge({ rowMode: 'auto', savedMode: 'auto', overrideMode: 'dry-run' }),
+    ).toBe('Saved');
+    expect(
+      permissionRowBadge({ rowMode: 'approve', savedMode: 'auto', overrideMode: 'dry-run' }),
+    ).toBeNull();
+  });
+
+  it('shows a single "In force" when the override equals the saved mode', () => {
+    expect(permissionRowBadge({ rowMode: 'auto', savedMode: 'auto', overrideMode: 'auto' })).toBe(
+      'In force',
+    );
   });
 });
