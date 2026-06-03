@@ -66,6 +66,13 @@ describe('runGitCapture', () => {
     expect(stdout).toBe(big);
   });
 
+  it('caps stdout at maxBytes and flags `capped` (stopping the producer early)', async () => {
+    // big.txt (~1.4MB) was committed above; a small cap stops the read early.
+    const res = await runGitCapture(repo, ['show', 'HEAD:big.txt'], { maxBytes: 1000 });
+    expect(res.capped).toBe(true);
+    expect(res.stdout.length).toBe(1000);
+  });
+
   it('returns the right count for rev-list --count (the bug scenario)', async () => {
     // Two commits on main so far (init + big). An empty/truncated stdout here
     // would read as 0 and mask a behind-base worktree as clean.

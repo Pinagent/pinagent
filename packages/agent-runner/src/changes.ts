@@ -17,8 +17,12 @@ import {
   computeWorktreeStats,
   type WorktreeDiff,
 } from './agent';
+import { mapLimit } from './concurrency';
 import { runGitCapture } from './git-utils';
 import { Storage } from './storage';
+
+/** Max worktrees whose git stats are computed in parallel per dock refresh. */
+const GIT_FANOUT_LIMIT = 8;
 
 export interface ChangeRecord {
   id: string;
@@ -92,12 +96,14 @@ export async function listChanges(projectRoot: string): Promise<ChangeRecord[]> 
   if (candidates.length === 0) return [];
 
   const baseRef = await resolveBaseRef(projectRoot);
-  // Run the per-row stats in parallel — each is independent git work
-  // bounded by I/O. Bound concurrency only if we see many rows; for
-  // typical projects (<100 active conversations) the parallel cost is
-  // fine and matters less than the round-trip latency to the dock.
-  const rows = await Promise.all(
-    candidates.map(async (rec): Promise<ChangeRecord | null> => {
+  // Run the per-row stats in parallel — each is independent git work bounded by
+  // I/O — but cap concurrency: every active row spawns several `git` processes,
+  // so an unbounded fan-out over many retained worktrees would launch hundreds
+  // at once and exhaust FDs/PIDs on the dev box.
+  const rows = await mapLimit(
+    candidates,
+    GIT_FANOUT_LIMIT,
+    async (rec): Promise<ChangeRecord | null> => {
       if (!rec.worktreePath) return null;
       const isActive = rec.worktreeState === 'active';
       const stats = isActive
@@ -135,7 +141,7 @@ export async function listChanges(projectRoot: string): Promise<ChangeRecord[]> 
         preview,
         updatedAt: rec.updatedAt,
       };
-    }),
+    },
   );
   return rows
     .filter((r): r is ChangeRecord => r !== null)

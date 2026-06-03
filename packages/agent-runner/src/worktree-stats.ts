@@ -56,6 +56,8 @@ export async function computeWorktreeStats(
  * `+`/`-` content line to surface).
  */
 const PREVIEW_MAX_CHARS = 140;
+/** Stop reading the preview diff after this many bytes — the first changed line. */
+const PREVIEW_CAP_BYTES = 64 * 1024;
 export async function computeWorktreePreview(
   worktreePath: string,
   baseRef: string,
@@ -63,18 +65,16 @@ export async function computeWorktreePreview(
   if (!existsSync(worktreePath)) return '';
   const mb = await runGitCapture(worktreePath, ['merge-base', baseRef, 'HEAD']);
   const compareTo = mb.code === 0 ? mb.stdout.trim() : baseRef;
-  // `--unified=0` strips context lines so the first content line we see
-  // is an actual change. Capped via `--stat-count` equivalents — we don't
-  // need the whole diff, just enough to find the first `+`/`-` line.
-  // `git diff` doesn't have a head-style flag, so we rely on the early
-  // return below to stop scanning once we have a hit.
-  const result = await runGitCapture(worktreePath, [
-    'diff',
-    '--no-color',
-    '--unified=0',
-    compareTo,
-  ]);
-  if (result.code !== 0) return '';
+  // `--unified=0` strips context lines so the first content line we see is an
+  // actual change. We only need enough to find the first `+`/`-` line, and
+  // `git diff` has no head-style flag, so cap the read at a small budget (the
+  // first content line is within the first few hundred bytes in practice).
+  const result = await runGitCapture(
+    worktreePath,
+    ['diff', '--no-color', '--unified=0', compareTo],
+    { maxBytes: PREVIEW_CAP_BYTES },
+  );
+  if (result.code !== 0 && !result.capped) return '';
   for (const line of result.stdout.split('\n')) {
     // Skip diff headers (--- a/x, +++ b/x) and metadata. Real content
     // lines are exactly one `+` or `-` followed by the source.
@@ -112,15 +112,21 @@ export async function computeWorktreeDiff(
   if (!existsSync(worktreePath)) return null;
   const mb = await runGitCapture(worktreePath, ['merge-base', baseRef, 'HEAD']);
   const compareTo = mb.code === 0 ? mb.stdout.trim() : baseRef;
-  const result = await runGitCapture(worktreePath, ['diff', '--no-color', compareTo]);
-  if (result.code !== 0) return null;
-  if (result.stdout.length <= DIFF_CAP_BYTES) {
+  // Cap at the source so a multi-hundred-MB diff (lockfile churn, vendored
+  // bundles, generated assets) isn't buffered whole just to be truncated for
+  // display. A capped read kills git, so the close code is non-zero — `capped`
+  // is the success-with-truncation signal.
+  const result = await runGitCapture(worktreePath, ['diff', '--no-color', compareTo], {
+    maxBytes: DIFF_CAP_BYTES,
+  });
+  if (result.code !== 0 && !result.capped) return null;
+  if (!result.capped) {
     return { diff: result.stdout, truncated: false };
   }
   // Truncate on a line boundary so the renderer never sees a half-hunk.
-  const cut = result.stdout.lastIndexOf('\n', DIFF_CAP_BYTES);
+  const cut = result.stdout.lastIndexOf('\n');
   return {
-    diff: result.stdout.slice(0, cut >= 0 ? cut : DIFF_CAP_BYTES),
+    diff: cut >= 0 ? result.stdout.slice(0, cut) : result.stdout,
     truncated: true,
   };
 }

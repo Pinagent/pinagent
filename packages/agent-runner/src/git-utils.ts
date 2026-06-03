@@ -11,6 +11,18 @@ export interface GitCapture {
   code: number;
   stdout: string;
   stderr: string;
+  /** True when stdout hit `opts.maxBytes` and the process was stopped early. */
+  capped?: boolean;
+}
+
+export interface CaptureOptions {
+  /**
+   * Cap stdout at this many bytes. Once reached, stdout is truncated and the
+   * child is killed — bounds memory (and the work git does) for commands whose
+   * output the caller only needs a bounded prefix of (e.g. a worktree diff that
+   * gets truncated for display anyway). Omit for unbounded capture.
+   */
+  maxBytes?: number;
 }
 
 /**
@@ -20,8 +32,12 @@ export interface GitCapture {
  * (`git merge` returns 1 on conflict, `git rev-parse` returns non-zero
  * for missing refs, etc).
  */
-export function runGitCapture(cwd: string, args: string[]): Promise<GitCapture> {
-  return runCapture('git', args, cwd);
+export function runGitCapture(
+  cwd: string,
+  args: string[],
+  opts: CaptureOptions = {},
+): Promise<GitCapture> {
+  return runCapture('git', args, cwd, opts);
 }
 
 /**
@@ -31,13 +47,29 @@ export function runGitCapture(cwd: string, args: string[]): Promise<GitCapture> 
  * spawned (e.g. `gh` not installed → ENOENT) — callers catch that to treat
  * the tool as unavailable.
  */
-export function runCapture(file: string, args: string[], cwd: string): Promise<GitCapture> {
+export function runCapture(
+  file: string,
+  args: string[],
+  cwd: string,
+  opts: CaptureOptions = {},
+): Promise<GitCapture> {
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, { cwd, stdio: 'pipe' });
     let stdout = '';
     let stderr = '';
+    let capped = false;
+    const max = opts.maxBytes;
     child.stdout.on('data', (d: Buffer) => {
+      if (capped) return;
       stdout += d.toString('utf8');
+      if (max !== undefined && stdout.length >= max) {
+        stdout = stdout.slice(0, max);
+        capped = true;
+        // Stop the producer — no point generating (and buffering) megabytes of
+        // output we'll discard. A kill makes the close code non-zero, so
+        // callers must treat `capped` as a success-with-truncation signal.
+        child.kill();
+      }
     });
     child.stderr.on('data', (d: Buffer) => {
       stderr += d.toString('utf8');
@@ -46,7 +78,7 @@ export function runCapture(file: string, args: string[], cwd: string): Promise<G
     // Resolve on 'close', not 'exit' — 'exit' can fire before stdout/stderr
     // are drained, so a reader there sees truncated output. 'close' fires only
     // after all stdio streams close. (See the rev-list-count behind-base flake.)
-    child.on('close', (code) => resolve({ code: code ?? -1, stdout, stderr }));
+    child.on('close', (code) => resolve({ code: code ?? -1, stdout, stderr, capped }));
   });
 }
 
