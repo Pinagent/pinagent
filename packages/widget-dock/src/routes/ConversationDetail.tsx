@@ -52,6 +52,7 @@ import {
   reduceLifecycleOnWorktreeState,
 } from './conversation-lifecycle';
 import { deriveEffectiveStatus } from './conversation-status';
+import { createFollowupQueue, isTurnBusyError } from './followup-queue';
 
 /**
  * Detail view. Pulls the full record via `GET /__pinagent/feedback/:id`,
@@ -93,11 +94,26 @@ export function ConversationDetailView({ id, onBack }: { id: string; onBack: () 
   const [intent, setIntent] = useState<LifecycleIntent>(null);
   const [lifecycleError, setLifecycleError] = useState<LifecycleError>(null);
   const optimisticIdRef = useRef(0);
+  // Follow-up queue (mirrors the widget): a reply typed during a running turn
+  // is parked and flushed at turn-end instead of being bounced + dropped.
+  const followupRef = useRef(createFollowupQueue());
+  // Content of the last message we sent immediately — the re-queue candidate if
+  // the server bounces it ("turn already in progress") in the narrow race where
+  // the client believed the turn was idle.
+  const lastImmediateSendRef = useRef<string | null>(null);
+  const handledErrorIdRef = useRef(-1);
+  const [suppressedErrorIds, setSuppressedErrorIds] = useState<ReadonlySet<number>>(
+    () => new Set(),
+  );
 
   const handleSend = (): void => {
     const trimmed = reply.trim();
     if (!trimmed) return;
-    transport.sendUserMessage(id, trimmed);
+    // Park while a turn runs; send now (and remember it) when idle.
+    if (followupRef.current.submit(trimmed, stream.turnRunning)) {
+      transport.sendUserMessage(id, trimmed);
+      lastImmediateSendRef.current = trimmed;
+    }
     const optimisticId = ++optimisticIdRef.current;
     setOptimisticItems((prev) => [
       ...prev,
@@ -130,6 +146,57 @@ export function ConversationDetailView({ id, onBack }: { id: string; onBack: () 
       },
     ]);
   };
+
+  // Reset the follow-up queue state when switching conversations.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset is keyed on id only.
+  useEffect(() => {
+    followupRef.current = createFollowupQueue();
+    lastImmediateSendRef.current = null;
+    handledErrorIdRef.current = -1;
+    setSuppressedErrorIds(new Set());
+  }, [id]);
+
+  // Flush one parked follow-up each time a turn ends (the server accepts the
+  // next message only when idle). Sending it starts a new turn, so the next
+  // turnRunning→false transition drains the following item.
+  useEffect(() => {
+    if (stream.turnRunning) return;
+    const next = followupRef.current.nextOnTurnEnd();
+    if (next === null) return;
+    transport.sendUserMessage(id, next);
+    lastImmediateSendRef.current = next;
+  }, [stream.turnRunning, id, transport]);
+
+  // If the server bounced our last immediate send ("turn already in progress")
+  // in the narrow client-thought-idle race, re-queue it (so nothing is dropped)
+  // and hide the transient error row.
+  useEffect(() => {
+    for (const item of stream.items) {
+      if (item.kind !== 'error' || item.id <= handledErrorIdRef.current) continue;
+      handledErrorIdRef.current = item.id;
+      if (!isTurnBusyError(item.message)) continue;
+      const content = lastImmediateSendRef.current;
+      if (content !== null) {
+        followupRef.current.requeue(content);
+        lastImmediateSendRef.current = null;
+      }
+      setSuppressedErrorIds((prev) => new Set(prev).add(item.id));
+    }
+  }, [stream.items]);
+
+  // Hide errors we've handled (re-queued) so the transient bounce never shows.
+  const displayStream = useMemo(
+    () =>
+      suppressedErrorIds.size === 0
+        ? stream
+        : {
+            ...stream,
+            items: stream.items.filter(
+              (it) => !(it.kind === 'error' && suppressedErrorIds.has(it.id)),
+            ),
+          },
+    [stream, suppressedErrorIds],
+  );
 
   // Watch worktree-state transitions and apply the reducer — decision
   // logic lives in `reduceLifecycleOnWorktreeState` so it's testable
@@ -267,7 +334,7 @@ export function ConversationDetailView({ id, onBack }: { id: string; onBack: () 
       <div className="flex-1 overflow-auto p-3 space-y-2">
         <OriginalComment comment={detail.comment} createdAt={detail.updatedAt} />
         <StreamView
-          stream={stream}
+          stream={displayStream}
           isMock={isMock}
           optimistic={optimisticItems}
           answeredAskIds={answeredAskIds}
