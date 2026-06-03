@@ -9,8 +9,26 @@
 // themselves live in Doppler). This guards them from rotting: if code starts
 // reading a new env var, or stops reading a documented one, CI fails until the
 // example file matches.
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+
+/**
+ * Read and concatenate every `.ts` file under `dir` (recursively). Used so a
+ * target scans an entire source tree for env reads, not just one file — a var
+ * read outside the "main" file would otherwise pass undocumented.
+ */
+async function readTree(dir) {
+  const out = [];
+  for (const entry of await readdir(join(ROOT, dir), { withFileTypes: true, recursive: true })) {
+    if (entry.isFile() && entry.name.endsWith('.ts')) {
+      out.push(await readFile(join(entry.parentPath ?? entry.path, entry.name), 'utf8'));
+    }
+  }
+  return out.join('\n');
+}
+
+/** Match `env.X` and `env['X']` / `env["X"]` reads of UPPER_SNAKE var names. */
+const ENV_READ_PATTERNS = [/\benv\.([A-Z][A-Z0-9_]*)/g, /\benv\[['"]([A-Z][A-Z0-9_]*)['"]\]/g];
 
 const ROOT = new URL('..', import.meta.url).pathname;
 
@@ -21,26 +39,36 @@ const ROOT = new URL('..', import.meta.url).pathname;
 const TARGETS = [
   {
     name: '@pinagent/cloud',
-    source: 'apps/cloud/src/config.ts',
+    dir: 'apps/cloud/src',
     example: 'apps/cloud/.dev.vars.example',
-    // loadCloudConfig pulls everything via required()/positiveInt()/env.X.
+    // loadCloudConfig pulls everything via required()/positiveInt()/env.X. Scan
+    // the whole src tree so a stray `env.X` read outside config.ts is caught.
     extract: (src) =>
       collect(src, [
         /\brequired\(env,\s*'([A-Z][A-Z0-9_]*)'\)/g,
         /\bpositiveInt\(env,\s*'([A-Z][A-Z0-9_]*)'\)/g,
-        /\benv\.([A-Z][A-Z0-9_]*)/g,
+        ...ENV_READ_PATTERNS,
       ]),
   },
   {
     name: '@pinagent/ee-relay',
-    source: 'ee/packages/relay/src/worker.ts',
+    dir: 'ee/packages/relay/src',
     example: 'ee/packages/relay/.dev.vars.example',
-    // The `Env` interface lists bindings; keep only the string-typed ones
-    // (RELAY is a DurableObjectNamespace binding, not an env var).
+    // String-typed `Env` bindings + every `env.X`/`env['X']` read across ALL
+    // relay source files (so a var read outside worker.ts — e.g. in
+    // relay-reporter.ts — is caught), MINUS the non-string `Env` bindings
+    // (RELAY is a DurableObjectNamespace, accessed as `env.RELAY` but not an
+    // env var that belongs in .dev.vars).
     extract: (src) => {
-      const body = src.match(/export interface Env \{([\s\S]*?)\n\}/);
-      if (!body) throw new Error('could not find `export interface Env` in worker.ts');
-      return collect(body[1], [/^\s*([A-Z][A-Z0-9_]*)\??:\s*string/gm]);
+      const ifaceBody = src.match(/export interface Env \{([\s\S]*?)\n\}/)?.[1];
+      if (ifaceBody === undefined) {
+        throw new Error('could not find `export interface Env` in the relay src');
+      }
+      const stringMembers = collect(ifaceBody, [/^\s*([A-Z][A-Z0-9_]*)\??:\s*string/gm]);
+      const allMembers = collect(ifaceBody, [/^\s*([A-Z][A-Z0-9_]*)\??:/gm]);
+      const bindings = new Set([...allMembers].filter((m) => !stringMembers.has(m)));
+      const reads = collect(src, ENV_READ_PATTERNS);
+      return new Set([...stringMembers, ...reads].filter((v) => !bindings.has(v)));
     },
   },
   {
@@ -72,7 +100,9 @@ function parseExample(text) {
 let failures = 0;
 
 for (const target of TARGETS) {
-  const code = await readFile(join(ROOT, target.source), 'utf8');
+  const code = target.dir
+    ? await readTree(target.dir)
+    : await readFile(join(ROOT, target.source), 'utf8');
   const example = await readFile(join(ROOT, target.example), 'utf8');
 
   const read = target.extract(code);
@@ -84,7 +114,7 @@ for (const target of TARGETS) {
   if (undocumented.length || stale.length) {
     failures++;
     console.error(`\n✗ ${target.name}`);
-    console.error(`  source:  ${target.source}`);
+    console.error(`  source:  ${target.dir ?? target.source}`);
     console.error(`  example: ${target.example}`);
     if (undocumented.length) {
       console.error(`  read in code but missing from the example file: ${undocumented.join(', ')}`);
