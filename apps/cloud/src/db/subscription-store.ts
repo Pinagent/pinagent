@@ -36,12 +36,18 @@ export function createPgSubscriptionStore(db: MembershipDb): SubscriptionStore {
     async upsert(subscription: Subscription): Promise<void> {
       await db
         .insert(subscriptions)
-        .values(subscription)
+        .values({
+          organizationId: subscription.organizationId,
+          planId: subscription.planId,
+          currentPeriodStart: subscription.currentPeriodStart,
+          stripeCustomerId: subscription.stripeCustomerId ?? null,
+        })
         .onConflictDoUpdate({
           target: subscriptions.organizationId,
           set: {
             planId: subscription.planId,
             currentPeriodStart: subscription.currentPeriodStart,
+            stripeCustomerId: subscription.stripeCustomerId ?? null,
           },
         });
     },

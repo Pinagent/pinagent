@@ -1,0 +1,1 @@
+ALTER TABLE "billing"."subscriptions" ADD COLUMN "stripe_customer_id" text;

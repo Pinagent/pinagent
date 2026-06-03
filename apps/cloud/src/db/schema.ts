@@ -182,6 +182,8 @@ export const subscriptions = billingSchema.table('subscriptions', {
   organizationId: text('organization_id').primaryKey(),
   planId: text('plan_id').notNull(),
   currentPeriodStart: text('current_period_start').notNull(),
+  /** Stripe customer id, set by provisioning; the billing reporter keys off it. */
+  stripeCustomerId: text('stripe_customer_id'),
 });
 
 /**

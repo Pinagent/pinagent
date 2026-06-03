@@ -48,6 +48,14 @@ export interface CloudConfig {
    * connection can authenticate; stored per-connection credentials need it.
    */
   ssoConnectionKek?: string;
+  /**
+   * Stripe secret key for the billing reporter. Optional — with both this and
+   * {@link stripeMeterEventName} set, period rollover reports usage to Stripe;
+   * otherwise rollover uses the no-op reporter.
+   */
+  stripeSecretKey?: string;
+  /** Stripe Billing Meter `event_name` the reporter posts usage against. */
+  stripeMeterEventName?: string;
   /** The configured OIDC connection. */
   oidc: OidcConnectionConfig;
   /** Where to send the browser after a successful login (default `/`). */
@@ -82,6 +90,8 @@ export function loadCloudConfig(env: Record<string, string | undefined>): CloudC
     relayInternalSecret: required(env, 'RELAY_INTERNAL_SECRET'),
     billingInternalSecret: required(env, 'BILLING_INTERNAL_SECRET'),
     ssoConnectionKek: env.SSO_CONNECTION_KEK,
+    stripeSecretKey: env.STRIPE_SECRET_KEY,
+    stripeMeterEventName: env.STRIPE_METER_EVENT_NAME,
     oidc: {
       connectionId: required(env, 'OIDC_CONNECTION_ID'),
       organizationId: required(env, 'OIDC_ORG_ID'),
