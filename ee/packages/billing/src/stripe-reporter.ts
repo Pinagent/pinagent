@@ -48,16 +48,15 @@ export interface StripeReporterDeps {
 /**
  * Build a Stripe-backed reporter.
  *
- * Per rollover it reads the org's Stripe customer and the usage accumulated
- * `since` the previous period start (the just-closed period), then posts one
- * meter event. Skips silently when the org has no Stripe customer (not billed
- * via Stripe) or recorded zero usage (nothing to report). The `identifier`
- * makes a retried rollover idempotent on Stripe's side.
+ * Per rollover it reads the org's Stripe customer and the usage in the closed
+ * window `[previousPeriodStart, newPeriodStart)`, then posts one meter event.
+ * Skips silently when the org has no Stripe customer (not billed via Stripe) or
+ * recorded zero usage (nothing to report). The `identifier` makes a retried
+ * rollover idempotent on Stripe's side.
  *
- * Usage is summed from the previous period start with no upper bound — at
- * rollover that is the closed period's total; events in the brief gap before
- * the reporter runs are negligible (rollover reports synchronously right after
- * advancing the period).
+ * The half-open `until` bound means usage already accruing in the new period is
+ * never attributed to the closed one, even though the rollover service reports
+ * before advancing the subscription's period.
  */
 export function createStripeReporter(deps: StripeReporterDeps): BillingReporter {
   return {
@@ -66,9 +65,12 @@ export function createStripeReporter(deps: StripeReporterDeps): BillingReporter 
       const customerId = subscription?.stripeCustomerId;
       if (!customerId) return; // org isn't billed through Stripe
 
+      // Bill exactly the closed period `[previousPeriodStart, newPeriodStart)`,
+      // so usage already accruing in the new period isn't attributed here.
       const usage = await deps.meter.summarize({
         organizationId: event.organizationId,
         since: event.previousPeriodStart,
+        until: event.newPeriodStart,
       });
       const value = usage[deps.usageKind] ?? 0;
       if (value <= 0) return; // nothing to bill

@@ -53,6 +53,19 @@ describe('PgMeterSink', () => {
     ).toEqual({ 'relay.session': 2 });
   });
 
+  it('honours the half-open `[since, until)` window', async () => {
+    await meter.record(usage({ occurredAt: '2026-04-10T00:00:00.000Z', quantity: 3 })); // inside
+    await meter.record(usage({ occurredAt: '2026-05-01T00:00:00.000Z', quantity: 4 })); // at until → excluded
+    await meter.record(usage({ occurredAt: '2026-05-09T00:00:00.000Z', quantity: 5 })); // after
+    expect(
+      await meter.summarize({
+        organizationId: 'acme',
+        since: '2026-04-01T00:00:00.000Z',
+        until: '2026-05-01T00:00:00.000Z',
+      }),
+    ).toEqual({ 'relay.session': 3 });
+  });
+
   it('returns an empty summary for an org with no usage', async () => {
     expect(await meter.summarize({ organizationId: 'nobody' })).toEqual({});
   });

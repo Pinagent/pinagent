@@ -57,4 +57,23 @@ describe('in-memory meter sink', () => {
       'relay.session': 1,
     });
   });
+
+  it('honours the half-open `[since, until)` window', async () => {
+    const meter = createInMemoryMeterSink();
+    for (const [occurredAt, quantity] of [
+      ['2026-03-31T00:00:00Z', 2], // before the window
+      ['2026-04-10T00:00:00Z', 3], // inside
+      ['2026-05-01T00:00:00Z', 4], // at `until` → excluded (exclusive)
+      ['2026-05-09T00:00:00Z', 5], // after
+    ] as const) {
+      await meter.record({ occurredAt, organizationId: 'acme', kind: 'relay.session', quantity });
+    }
+    expect(
+      await meter.summarize({
+        organizationId: 'acme',
+        since: '2026-04-01T00:00:00Z',
+        until: '2026-05-01T00:00:00Z',
+      }),
+    ).toEqual({ 'relay.session': 3 });
+  });
 });
