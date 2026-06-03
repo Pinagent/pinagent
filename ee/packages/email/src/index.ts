@@ -8,14 +8,28 @@
  */
 
 export { InvitationEmail, type InvitationEmailProps } from '../emails/InvitationEmail';
+export { MemberRemovedEmail, type MemberRemovedEmailProps } from '../emails/MemberRemovedEmail';
+export { RoleChangedEmail, type RoleChangedEmailProps } from '../emails/RoleChangedEmail';
+export { UsageAlertEmail, type UsageAlertEmailProps } from '../emails/UsageAlertEmail';
+export { WelcomeEmail, type WelcomeEmailProps } from '../emails/WelcomeEmail';
 export { BRAND, Layout } from './components/Layout';
 export {
-  createInvitationMailer,
+  createMailer,
   type InvitationInput,
-  type InvitationMailer,
-  type InvitationMailerOptions,
-} from './invitation-mailer';
-export { type RenderedEmail, renderInvitationEmail } from './render';
+  type Mailer,
+  type MailerOptions,
+  type MemberRemovedInput,
+  type RoleChangedInput,
+  type WelcomeInput,
+} from './mailer';
+export {
+  type RenderedEmail,
+  renderInvitationEmail,
+  renderMemberRemovedEmail,
+  renderRoleChangedEmail,
+  renderUsageAlertEmail,
+  renderWelcomeEmail,
+} from './render';
 export {
   createResendEmailSender,
   type EmailMessage,

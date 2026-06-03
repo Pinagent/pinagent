@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Elastic-2.0
-import { Button, Link, Text } from '@react-email/components';
+import { Link, Text } from '@react-email/components';
 import { BRAND, Layout } from '../src/components/Layout';
+import { CtaButton, styles } from '../src/components/ui';
 
 export interface InvitationEmailProps {
   /** Display name of the organization the recipient is invited to. */
@@ -13,12 +14,6 @@ export interface InvitationEmailProps {
   acceptUrl: string;
 }
 
-const fontFamily =
-  '"Geist", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif';
-
-const heading = { color: BRAND.ink, fontFamily, fontSize: 22, fontWeight: 700, margin: '0 0 16px' };
-const body = { color: BRAND.ink, fontFamily, fontSize: 15, lineHeight: '24px', margin: '0 0 16px' };
-
 /** Member-invitation email — sent when an org admin invites an address. */
 export function InvitationEmail({
   organizationName,
@@ -29,27 +24,13 @@ export function InvitationEmail({
   const inviter = inviterName ? `${inviterName} invited you` : 'You’ve been invited';
   return (
     <Layout preview={`You're invited to ${organizationName} on ${BRAND.name}`}>
-      <Text style={heading}>Join {organizationName}</Text>
-      <Text style={body}>
+      <Text style={styles.heading}>Join {organizationName}</Text>
+      <Text style={styles.paragraph}>
         {inviter} to join <strong>{organizationName}</strong> on {BRAND.name} as a{' '}
         <strong>{role}</strong>. Sign in to accept the invitation and get started.
       </Text>
-      <Button
-        href={acceptUrl}
-        style={{
-          backgroundColor: BRAND.ink,
-          color: BRAND.cream,
-          fontFamily,
-          fontSize: 15,
-          fontWeight: 600,
-          borderRadius: 8,
-          padding: '12px 20px',
-          textDecoration: 'none',
-        }}
-      >
-        Accept invitation
-      </Button>
-      <Text style={{ ...body, color: BRAND.muted, fontSize: 13, margin: '20px 0 0' }}>
+      <CtaButton href={acceptUrl}>Accept invitation</CtaButton>
+      <Text style={styles.muted}>
         Or paste this link into your browser:{' '}
         <Link href={acceptUrl} style={{ color: BRAND.ink }}>
           {acceptUrl}

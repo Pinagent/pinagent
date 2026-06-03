@@ -36,16 +36,27 @@ import type { Authenticator } from './session-service';
  * Org-scoped (`?organizationId=`), RBAC-gated, fully injected for testing.
  */
 /**
- * Optional invite-notification port (satisfied by `@pinagent/ee-email`'s
- * `InvitationMailer`). Like {@link AuditSink} it's opt-in: absent in dev/tests
- * and when no email provider is configured, so invites work unchanged without it.
+ * Optional member-notification port (satisfied by `@pinagent/ee-email`'s
+ * `Mailer`). Like {@link AuditSink} it's opt-in: absent in dev/tests and when no
+ * email provider is configured, so member changes work unchanged without it.
  */
-export interface InvitationNotifier {
+export interface MemberMailer {
   sendInvitation(input: {
     to: string;
     organizationName: string;
     role: Role;
     inviterName: string | null;
+  }): Promise<void>;
+  sendMemberRemoved(input: {
+    to: string;
+    organizationName: string;
+    removedByName: string | null;
+  }): Promise<void>;
+  sendRoleChanged(input: {
+    to: string;
+    organizationName: string;
+    role: Role;
+    changedByName: string | null;
   }): Promise<void>;
 }
 
@@ -55,8 +66,8 @@ export interface MemberServiceDeps {
   invitations: InvitationStore;
   authenticate: Authenticator;
   audit?: AuditSink;
-  /** Notifies the invitee by email (best-effort, opt-in). */
-  email?: InvitationNotifier;
+  /** Notifies affected members by email (best-effort, opt-in). */
+  email?: MemberMailer;
   /** ISO-8601 clock — injected for deterministic tests. */
   now?: () => string;
 }
@@ -174,6 +185,13 @@ async function removeMember(request: Request, deps: MemberServiceDeps): Promise<
     action: AUDIT_ACTIONS.memberRemoved,
     targetId: userId,
   });
+  await notifyMemberChange(deps, ctx, userId, (email, notice) =>
+    email.sendMemberRemoved({
+      to: notice.to,
+      organizationName: notice.organizationName,
+      removedByName: notice.actorName,
+    }),
+  );
   return json({ organizationId: ctx.organizationId, userId }, 200);
 }
 
@@ -215,6 +233,14 @@ async function changeRole(request: Request, deps: MemberServiceDeps): Promise<Re
     targetId: userId,
     metadata: { role },
   });
+  await notifyMemberChange(deps, ctx, userId, (email, notice) =>
+    email.sendRoleChanged({
+      to: notice.to,
+      organizationName: notice.organizationName,
+      role,
+      changedByName: notice.actorName,
+    }),
+  );
   return json({ organizationId: ctx.organizationId, membership }, 200);
 }
 
@@ -272,6 +298,45 @@ async function notifyInvitee(
     });
   } catch {
     // Best-effort: never fail the invite on a notification problem.
+  }
+}
+
+/** Resolved display strings for a member-change notification email. */
+interface MemberNotice {
+  to: string;
+  organizationName: string;
+  actorName: string | null;
+}
+
+/**
+ * Best-effort notify the *target* member of a change to their membership
+ * (removed / role changed). Resolves their email + the org and actor display
+ * names, then hands off to `send`. Opt-in (`deps.email` absent → no-op),
+ * fully swallowed, and skipped when the target has no email on record — the
+ * membership change is already persisted, so this can never fail it.
+ */
+async function notifyMemberChange(
+  deps: MemberServiceDeps,
+  ctx: { organizationId: string; actorUserId: string },
+  targetUserId: string,
+  send: (email: NonNullable<MemberServiceDeps['email']>, notice: MemberNotice) => Promise<void>,
+): Promise<void> {
+  const email = deps.email;
+  if (!email) return;
+  try {
+    const [org, target, actor] = await Promise.all([
+      deps.store.getOrganization(ctx.organizationId),
+      deps.users.get(targetUserId),
+      deps.users.get(ctx.actorUserId),
+    ]);
+    if (!target?.email) return;
+    await send(email, {
+      to: target.email,
+      organizationName: org?.displayName ?? ctx.organizationId,
+      actorName: actor?.displayName ?? actor?.email ?? null,
+    });
+  } catch {
+    // Best-effort: never fail the member change on a notification problem.
   }
 }
 
