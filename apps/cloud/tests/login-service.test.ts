@@ -67,6 +67,28 @@ function getCookieToken(res: Response, name = 'pa_session'): string | null {
   return m ? (m[1] ?? null) : null;
 }
 
+/** A MembershipStore that records every upsert into `sink` (else no-ops). */
+function collectingMemberships(sink: OrganizationMembership[]): MembershipStore {
+  return {
+    async getMembership() {
+      return null;
+    },
+    async getOrganization() {
+      return null;
+    },
+    async listMembers() {
+      return [];
+    },
+    async listMembershipsByUser() {
+      return [];
+    },
+    async upsertMembership(m) {
+      sink.push(m);
+    },
+    async removeMembership() {},
+  };
+}
+
 describe('GET /sso/start', () => {
   it('redirects to the IdP with a signed state', async () => {
     const provider = fakeProvider();
@@ -233,6 +255,54 @@ describe('GET /sso/callback', () => {
       }),
     ]);
     expect(await invitations.get('acme', 'bob@acme.com')).toBeNull();
+  });
+
+  it('does NOT consume an invite when the connection is not authoritative for the email domain', async () => {
+    // A second org connection whose IdP owns evil.com — NOT acme.com. A verified
+    // bob@acme.com logging in through it must not claim acme.com's invite.
+    const upserts: OrganizationMembership[] = [];
+    const memberships = collectingMemberships(upserts);
+    const invitations = createInMemoryInvitationStore([
+      {
+        organizationId: 'acme',
+        email: 'bob@acme.com',
+        role: 'admin',
+        invitedAt: 'i',
+        invitedByUserId: null,
+      },
+    ]);
+    const evilConn: SsoConnection = { ...connection, id: 'conn-evil', domains: ['evil.com'] };
+    const connections = createInMemorySsoConnectionStore([evilConn]);
+    const state = await signLoginState({ connectionId: 'conn-evil', returnTo: '/' }, STATE_SECRET);
+    const res = await handleSsoCallback(
+      new Request(`https://cloud.test/sso/callback?code=abc&state=${state}`),
+      { ...deps(fakeProvider(), connections), invitations, memberships },
+    );
+    expect(res.status).toBe(302); // login still succeeds
+    expect(upserts).toHaveLength(0); // invite NOT consumed (domain mismatch)
+    expect(await invitations.get('acme', 'bob@acme.com')).not.toBeNull();
+  });
+
+  it('consumes an invite when the connection declares no domains (env default, no restriction)', async () => {
+    const upserts: OrganizationMembership[] = [];
+    const memberships = collectingMemberships(upserts);
+    const invitations = createInMemoryInvitationStore([
+      {
+        organizationId: 'acme',
+        email: 'bob@acme.com',
+        role: 'admin',
+        invitedAt: 'i',
+        invitedByUserId: null,
+      },
+    ]);
+    const noDomainConn: SsoConnection = { ...connection, domains: [] };
+    const connections = createInMemorySsoConnectionStore([noDomainConn]);
+    const res = await handleSsoCallback(
+      new Request(`https://cloud.test/sso/callback?code=abc&state=${await startedState('/')}`),
+      { ...deps(fakeProvider(), connections), invitations, memberships },
+    );
+    expect(res.status).toBe(302);
+    expect(upserts).toHaveLength(1); // consumed — no domain restriction
   });
 
   it('does NOT consume an invitation when the profile email is empty (unverified)', async () => {

@@ -197,6 +197,13 @@ async function consumeInvitation(
   // unverified email to '', so this also blocks claiming an invite with an
   // unverified address. (An invite is never stored under an empty email.)
   if (!email) return;
+  // Bind consumption to a connection that is authoritative for the email's
+  // domain. When the connection declares domains, the invited email must fall
+  // under one — otherwise a login through a *different* org connection (or a
+  // federated IdP) could claim an invite addressed via another. A connection
+  // with no declared domains (e.g. the env-seeded default) imposes no such
+  // restriction. Matched case-insensitively, like `?email=` domain discovery.
+  if (connection.domains.length > 0 && !emailDomainMatches(email, connection.domains)) return;
   try {
     const invite = await invitations.get(connection.organizationId, email);
     if (!invite) return;
@@ -220,6 +227,13 @@ async function consumeInvitation(
   } catch {
     // Non-fatal — login proceeds; the invitation is consumed on a later login.
   }
+}
+
+/** Whether `email`'s domain is one the connection is authoritative for. */
+function emailDomainMatches(email: string, domains: readonly string[]): boolean {
+  const domain = email.split('@')[1]?.toLowerCase();
+  if (!domain) return false;
+  return domains.some((d) => d.toLowerCase() === domain);
 }
 
 /**
