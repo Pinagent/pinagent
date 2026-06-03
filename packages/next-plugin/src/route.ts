@@ -109,7 +109,22 @@ async function readSlug(ctx: RouteCtx): Promise<string[]> {
   return p.slug ?? [];
 }
 
+/**
+ * Runtime production kill-switch. In production these handlers should be
+ * unreachable — `package.json`'s `"production"` export condition resolves
+ * `./route` to the inert `route-noop`. But that condition is non-standard, so a
+ * custom server / bundler that doesn't honour it would otherwise run the full
+ * dev route (spawnAgent, Storage, editor-spawning, secrets) in production. This
+ * is the runtime belt to that suspenders, mirroring the config wrapper's own
+ * `NODE_ENV` short-circuit. Cheap in dev (one env read), fail-safe in prod.
+ */
+function prodDisabled(): Response | null {
+  return process.env.NODE_ENV === 'production' ? json(404, { error: 'not found' }) : null;
+}
+
 export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
+  const off = prodDisabled();
+  if (off) return off;
   const slug = await readSlug(ctx);
 
   // /__pinagent/widget.js
@@ -344,6 +359,8 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
 }
 
 export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
+  const off = prodDisabled();
+  if (off) return off;
   const slug = await readSlug(ctx);
 
   // /__pinagent/open — spawn the developer's editor at file:line:col.
@@ -551,6 +568,8 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
 }
 
 export async function PATCH(req: Request, ctx: RouteCtx): Promise<Response> {
+  const off = prodDisabled();
+  if (off) return off;
   const slug = await readSlug(ctx);
 
   // /__pinagent/settings — partial update.
@@ -585,6 +604,8 @@ export async function PATCH(req: Request, ctx: RouteCtx): Promise<Response> {
  * persist on success, surface the upstream error on failure.
  */
 export async function PUT(req: Request, ctx: RouteCtx): Promise<Response> {
+  const off = prodDisabled();
+  if (off) return off;
   const slug = await readSlug(ctx);
   if (slug.length !== 2 || slug[0] !== 'connections') {
     return json(404, { error: 'not found' });
@@ -618,6 +639,8 @@ export async function PUT(req: Request, ctx: RouteCtx): Promise<Response> {
 
 /** DELETE — connection clear + branch prune. */
 export async function DELETE(_req: Request, ctx: RouteCtx): Promise<Response> {
+  const off = prodDisabled();
+  if (off) return off;
   const slug = await readSlug(ctx);
   const storage = getStorage();
 
