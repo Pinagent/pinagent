@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "@pinagent/next-plugin": "workspace:*",
-    "@types/node": "^22.10.1",
+    "@types/node": "^25.9.1",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "typescript": "^6.0.3"

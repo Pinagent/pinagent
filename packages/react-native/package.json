@@ -33,7 +33,7 @@
   },
   "//peers": "react (>=18), react-native (>=0.74), and react-native-view-shot (>=3) are required by src/native/ but intentionally NOT declared as peerDependencies: doing so drags the full React Native toolchain into this otherwise web-only monorepo's lockfile. The native client ships as source, so the consumer app provides these. See README + docs/architecture/react-native.md. Re-add them before publishing to npm.",
   "devDependencies": {
-    "@types/node": "^22.10.1",
+    "@types/node": "^25.9.1",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3"
   }

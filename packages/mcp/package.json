@@ -35,7 +35,7 @@
     "@pinagent/agent-runner": "workspace:*",
     "@pinagent/db": "workspace:*",
     "@pinagent/shared": "workspace:*",
-    "@types/node": "^22.10.1",
+    "@types/node": "^25.9.1",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3"
   }
