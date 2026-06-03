@@ -1,6 +1,7 @@
 import { Logo } from '@pinagent/widget/logo';
 import { useState } from 'react';
 import { Counter } from './Counter';
+import { SidebarFooter } from './SidebarFooter';
 
 export function App() {
   return (
@@ -31,6 +32,7 @@ export function App() {
           <Counter label="Mangoes" />
           <Counter label="Blueberries" />
         </section>
+        <Activity />
         <Footer />
       </main>
     </div>
@@ -45,6 +47,8 @@ function Sidebar() {
         borderRight: '1px solid #e5e7eb',
         padding: '40px 20px',
         background: '#f9fafb',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
@@ -69,7 +73,41 @@ function Sidebar() {
           </a>
         ))}
       </nav>
+      <SidebarFooter />
     </aside>
+  );
+}
+
+function Activity() {
+  const events = [
+    { who: 'Pineapple', what: 'incremented to 3', when: '2m ago' },
+    { who: 'Grapes', what: 'reset to 0', when: '14m ago' },
+    { who: 'Oranges', what: 'incremented to 7', when: '1h ago' },
+  ];
+  return (
+    <section id="activity" style={{ marginTop: 40 }}>
+      <h2 style={{ fontSize: 18, marginBottom: 12 }}>Activity</h2>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {events.map((event) => (
+          <li
+            key={`${event.who}-${event.when}`}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              border: '1px solid #e5e7eb',
+              borderRadius: 8,
+              fontSize: 14,
+            }}
+          >
+            <span>
+              <strong>{event.who}</strong> {event.what}
+            </span>
+            <span style={{ color: '#9ca3af' }}>{event.when}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
