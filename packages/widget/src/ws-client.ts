@@ -207,6 +207,11 @@ export class WidgetWsClient {
         if (id) {
           const h = this.handlers.get(id);
           if (h) h.onError(message);
+        } else {
+          // A connection-/project-level error with no conversation to route
+          // to. The protocol allows `feedbackId` to be absent; surface it
+          // instead of silently dropping it so a global failure isn't invisible.
+          console.warn('[pinagent] server error:', message);
         }
         return;
       }

@@ -168,4 +168,20 @@ describe('DockWsClient reconnect', () => {
     expect(timeline.indexOf('reset')).toBeGreaterThanOrEqual(0);
     expect(timeline.indexOf('reset')).toBeLessThan(timeline.indexOf('subscribe'));
   });
+
+  it('surfaces a connection-level error (no feedbackId) instead of dropping it', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const onError = vi.fn();
+    const client = new DockWsClient('ws://test/__pinagent/ws');
+    client.subscribeConversation('cv1', makeHandlers({ onError }));
+    const sock = FakeWebSocket.last();
+    sock.open();
+
+    sock.deliver({ type: 'error', message: 'relay disconnected' });
+
+    expect(warn).toHaveBeenCalledWith('[pinagent] server error:', 'relay disconnected');
+    // Not routed to a specific conversation handler (there's no feedbackId).
+    expect(onError).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
 });

@@ -360,6 +360,11 @@ export class DockWsClient {
               // Ignore.
             }
           }
+        } else {
+          // Connection-/project-level error with no conversation to route to
+          // (the protocol allows an absent `feedbackId`) — surface it instead
+          // of silently dropping it.
+          console.warn('[pinagent] server error:', m.message);
         }
         return;
       }
