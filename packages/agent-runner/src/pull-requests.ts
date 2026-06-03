@@ -12,6 +12,7 @@ import { Octokit } from '@octokit/rest';
 import { desc, eq, pullRequests } from '@pinagent/db';
 import { getDb } from './db/client';
 import { resolveOriginRemote } from './git-remote';
+import { runCapture } from './git-utils';
 import { resolveGithubToken } from './github-auth';
 
 export interface PullRequestRecord {
@@ -133,20 +134,62 @@ export async function updatePullRequestBody(
 }
 
 /**
+ * Map the JSON `gh pr view` reports into our `state` enum. gh uses uppercase
+ * `state` (OPEN | CLOSED | MERGED) and a separate `isDraft` flag.
+ */
+export function mapGhPrState(gh: {
+  state?: string;
+  isDraft?: boolean | null;
+  mergedAt?: string | null;
+}): PullRequestState {
+  if (gh.state === 'MERGED' || gh.mergedAt) return 'merged';
+  if (gh.state === 'CLOSED') return 'closed';
+  if (gh.isDraft) return 'draft';
+  return 'open';
+}
+
+/** Read one PR's current state via the `gh` CLI. Null when gh is unavailable. */
+async function fetchPrStateViaGh(
+  projectRoot: string,
+  number: number,
+): Promise<{ state: PullRequestState; updatedAt?: string } | null> {
+  try {
+    const res = await runCapture(
+      'gh',
+      ['pr', 'view', String(number), '--json', 'state,isDraft,mergedAt,updatedAt'],
+      projectRoot,
+    );
+    if (res.code !== 0) return null;
+    const j = JSON.parse(res.stdout) as {
+      state?: string;
+      isDraft?: boolean;
+      mergedAt?: string | null;
+      updatedAt?: string;
+    };
+    return { state: mapGhPrState(j), updatedAt: j.updatedAt };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Reconcile every recorded PR's state against GitHub, then return the
- * refreshed list. Best-effort: a PR that 404s (deleted) or any per-PR
- * API error is skipped, leaving its last-known state in place. When no
- * token / non-GitHub remote is configured, this is a no-op that just
- * re-reads the local list — the dock's Refresh button stays harmless.
+ * refreshed list. Uses Octokit when a token is configured, otherwise the
+ * `gh` CLI (so `gh`-only auth — no stored token — still reconciles; without
+ * this the Refresh button did nothing for those users and a closed/merged PR
+ * stayed "open" in the dock). Best-effort per PR: a deleted PR / network blip
+ * keeps the prior state.
  */
 export async function refreshPullRequests(projectRoot: string): Promise<PullRequestRecord[]> {
-  const token = await resolveGithubToken(projectRoot);
   const remote = await resolveOriginRemote(projectRoot);
-  if (token && remote) {
-    const octokit = new Octokit({ auth: token });
-    const current = await listPullRequests(projectRoot);
-    for (const pr of current) {
-      try {
+  if (!remote) return listPullRequests(projectRoot);
+
+  const token = await resolveGithubToken(projectRoot);
+  const octokit = token ? new Octokit({ auth: token }) : null;
+  const current = await listPullRequests(projectRoot);
+  for (const pr of current) {
+    try {
+      if (octokit) {
         const { data } = await octokit.pulls.get({
           owner: remote.owner,
           repo: remote.repo,
@@ -158,9 +201,12 @@ export async function refreshPullRequests(projectRoot: string): Promise<PullRequ
           mapGithubPrState(data),
           data.updated_at,
         );
-      } catch {
-        // Deleted PR, network blip, scope issue — keep the prior state.
+      } else {
+        const gh = await fetchPrStateViaGh(projectRoot, pr.number);
+        if (gh) await updatePullRequestState(projectRoot, pr.number, gh.state, gh.updatedAt);
       }
+    } catch {
+      // Deleted PR, network blip, scope issue — keep the prior state.
     }
   }
   return listPullRequests(projectRoot);
