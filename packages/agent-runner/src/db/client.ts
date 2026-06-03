@@ -246,6 +246,13 @@ export function getDb(projectRoot: string): Db {
   // (rollback journal) blocks all readers while the writer holds the
   // file. Cheap to enable, expensive to wish for later.
   raw.exec('PRAGMA journal_mode = WAL');
+  // Two processes write this file — the dev server (event bus) and the MCP
+  // server (resolve_feedback). WAL allows concurrent readers but only ONE
+  // writer; with node:sqlite's default busy handler (0ms) the loser of a write
+  // contention throws SQLITE_BUSY immediately, which most call sites swallow —
+  // a silently dropped event/state write on the click→agent loop's hot path.
+  // Wait (and retry) for up to 5s instead.
+  raw.exec('PRAGMA busy_timeout = 5000');
   raw.exec('PRAGMA foreign_keys = ON');
 
   runMigrations(raw, MIGRATIONS_DIR);
