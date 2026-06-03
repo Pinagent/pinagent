@@ -222,4 +222,39 @@ describe('POST /internal/relay/events', () => {
     expect(live.map((s) => s.sessionId)).toEqual(['dev-2']);
     expect(live[0]?.connectedAt).toBe('2026-05-29T00:00:05Z');
   });
+
+  it('ignores a stale device disconnect for a superseded connection', async () => {
+    const activeSessions = createInMemoryActiveSessionRegistry();
+    const events = {
+      events: [
+        // The current (live) connection generation: connectedAt 00:00:05.
+        {
+          type: 'device.connected',
+          organizationId: 'acme',
+          sessionId: 'dev-1',
+          occurredAt: '2026-05-29T00:00:05Z',
+          connectedAt: '2026-05-29T00:00:05Z',
+        },
+        // A late disconnect for the OLD generation (connectedAt 00:00:00) —
+        // must NOT drop the live row.
+        {
+          type: 'device.disconnected',
+          organizationId: 'acme',
+          sessionId: 'dev-1',
+          occurredAt: '2026-05-29T00:00:06Z',
+          connectedAt: '2026-05-29T00:00:00Z',
+          durationMs: 6_000,
+        },
+      ],
+    };
+    const res = await handleRelayEvents(post(events, `Bearer ${SECRET}`), {
+      audit: createInMemoryAuditSink(),
+      activeSessions,
+      relayInternalSecret: SECRET,
+    });
+    expect(res.status).toBe(200);
+    const live = await activeSessions.listByOrg('acme');
+    expect(live.map((s) => s.sessionId)).toEqual(['dev-1']); // survived the stale disconnect
+    expect(live[0]?.connectedAt).toBe('2026-05-29T00:00:05Z');
+  });
 });

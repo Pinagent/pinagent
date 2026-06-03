@@ -58,4 +58,11 @@ describe('parseRelayEventBatch', () => {
     expect(parseRelayEventBatch({ events: [{ ...valid, durationMs: -1 }] })).toBeNull();
     expect(parseRelayEventBatch({ events: [{ ...valid, durationMs: 'soon' }] })).toBeNull();
   });
+
+  it('round-trips an optional connectedAt (the connection generation id)', () => {
+    const connect = { ...valid, connectedAt: '2026-05-29T00:00:00Z' };
+    expect(parseRelayEventBatch({ events: [connect] })?.[0]).toEqual(connect);
+    // an empty connectedAt is rejected
+    expect(parseRelayEventBatch({ events: [{ ...valid, connectedAt: '' }] })).toBeNull();
+  });
 });

@@ -74,14 +74,23 @@ export async function handleRelayEvents(
     // Track live device sessions so a policy push can be targeted. Only
     // device events matter — pushes go to the agent-runner, not browsers.
     if (deps.activeSessions) {
+      // Key the registry row on the connection's `connectedAt` (a stable
+      // per-generation identity) so a disconnect only drops its own connection,
+      // not a newer one that superseded it. Fall back to `occurredAt` for events
+      // that predate the field.
+      const connectedAt = event.connectedAt ?? event.occurredAt;
       if (event.type === 'device.connected') {
         await deps.activeSessions.recordConnected({
           organizationId: event.organizationId,
           sessionId: event.sessionId,
-          connectedAt: event.occurredAt,
+          connectedAt,
         });
       } else if (event.type === 'device.disconnected') {
-        await deps.activeSessions.recordDisconnected(event.organizationId, event.sessionId);
+        await deps.activeSessions.recordDisconnected(
+          event.organizationId,
+          event.sessionId,
+          event.connectedAt,
+        );
       }
     }
   }

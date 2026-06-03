@@ -108,7 +108,7 @@ export class RelaySession {
       hub.attachClient(sock, role);
     }
 
-    this.report(`${side}.connected`, { tenantId, sessionId });
+    this.report(`${side}.connected`, { tenantId, sessionId, connectedAtMs });
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -159,6 +159,7 @@ export class RelaySession {
     this.report(`${att.side}.disconnected`, {
       tenantId: att.tenantId,
       sessionId: att.sessionId,
+      connectedAtMs: att.connectedAtMs,
       durationMs,
     });
   }
@@ -167,18 +168,25 @@ export class RelaySession {
    * Fire-and-forget a lifecycle event to the control plane. Skipped when the
    * tenant/session aren't known (e.g. dev-fallback with no forwarded headers);
    * `waitUntil` keeps the DO alive until the best-effort POST settles.
+   *
+   * `connectedAtMs` (when known) is stamped as the event's `connectedAt` — the
+   * same value on a connection's `connected` and `disconnected` events — so the
+   * control plane can match disconnects to the exact connection generation.
    */
   private report(
     type: RelayEventType,
-    info: { tenantId?: string; sessionId?: string; durationMs?: number },
+    info: { tenantId?: string; sessionId?: string; connectedAtMs?: number; durationMs?: number },
   ): void {
     if (!info.tenantId || !info.sessionId) return;
+    const connectedAt =
+      info.connectedAtMs !== undefined ? new Date(info.connectedAtMs).toISOString() : undefined;
     this.ctx.waitUntil(
       this.reporter.report({
         type,
         organizationId: info.tenantId,
         sessionId: info.sessionId,
         occurredAt: new Date().toISOString(),
+        ...(connectedAt !== undefined ? { connectedAt } : {}),
         ...(info.durationMs !== undefined ? { durationMs: info.durationMs } : {}),
       }),
     );
