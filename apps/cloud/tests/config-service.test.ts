@@ -131,6 +131,30 @@ describe('/subscriptions', () => {
     expect(res.status).toBe(400);
   });
 
+  it('PUT preserves the provisioning-set Stripe customer id across a plan edit', async () => {
+    const d = deps('u-admin');
+    // Provisioning set the customer + an internal plan directly on the store.
+    await d.subscriptions.upsert({
+      organizationId: 'acme',
+      planId: 'enterprise',
+      currentPeriodStart: '2026-05-01T00:00:00Z',
+      stripeCustomerId: 'cus_123',
+    });
+    const res = await handleSubscriptionConfig(
+      req('PUT', '/subscriptions?organizationId=acme', {
+        planId: 'pro',
+        currentPeriodStart: '2026-06-01T00:00:00Z',
+      }),
+      d,
+    );
+    expect(res.status).toBe(200);
+    // Plan changed, but the Stripe mapping survived the org-facing edit.
+    expect(await d.subscriptions.get('acme')).toMatchObject({
+      planId: 'pro',
+      stripeCustomerId: 'cus_123',
+    });
+  });
+
   it('401s unauthenticated, 400s without org', async () => {
     expect(
       (await handleSubscriptionConfig(req('GET', '/subscriptions?organizationId=acme'), deps(null)))

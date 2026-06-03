@@ -31,6 +31,8 @@ OIDC_REDIRECT_URI=          # registered callback URL (our /sso/callback)
 
 # --- Optional (defaults applied if unset) ----------------------------------
 # SSO_CONNECTION_KEK=       # base64url AES-256 key to encrypt stored per-connection client secrets
+# STRIPE_SECRET_KEY=        # Stripe secret key; with STRIPE_METER_EVENT_NAME, rollover reports usage to Stripe
+# STRIPE_METER_EVENT_NAME=  # Stripe Billing Meter event_name the reporter posts usage against
 # LOGIN_RETURN_TO=/         # where to send the browser after login (default /)
 # SESSION_COOKIE_NAME=pa_session   # user-token cookie name (default pa_session)
 # SESSION_TTL_SECONDS=      # relay-session-token lifetime override (positive int)

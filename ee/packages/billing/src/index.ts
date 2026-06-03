@@ -28,6 +28,12 @@ export {
   type PeriodRolloverEvent,
 } from './reporter';
 export {
+  createStripeReporter,
+  type StripeBillingClient,
+  type StripeMeterEvent,
+  type StripeReporterDeps,
+} from './stripe-reporter';
+export {
   checkQuota,
   createInMemorySubscriptionStore,
   DEFAULT_PLAN,

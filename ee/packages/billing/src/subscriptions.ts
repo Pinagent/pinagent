@@ -17,6 +17,12 @@ export interface Subscription {
   planId: string;
   /** ISO-8601 start of the current billing period — usage is counted from here. */
   currentPeriodStart: string;
+  /**
+   * The org's Stripe customer id, when billed through Stripe. Set by
+   * provisioning (not by the org-facing config endpoint); the billing reporter
+   * keys meter events off it. `null`/absent → the org isn't reported to Stripe.
+   */
+  stripeCustomerId?: string | null;
 }
 
 /** A page of subscriptions, keyed by `organizationId` for {@link SubscriptionStore.listPage}. */

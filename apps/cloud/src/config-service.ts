@@ -73,7 +73,14 @@ export async function handleSubscriptionConfig(
     if (!isSelfServiceablePlan(parsed.planId)) {
       return json({ error: `plan "${parsed.planId}" is not self-serviceable` }, 403);
     }
-    const subscription = { organizationId: ctx.organizationId, ...parsed };
+    // Preserve the provisioning-set Stripe customer mapping — this org-facing
+    // endpoint changes only plan + period, never the billing identity.
+    const existing = await deps.subscriptions.get(ctx.organizationId);
+    const subscription = {
+      organizationId: ctx.organizationId,
+      ...parsed,
+      stripeCustomerId: existing?.stripeCustomerId ?? null,
+    };
     await deps.subscriptions.upsert(subscription);
     return json({ organizationId: ctx.organizationId, subscription }, 200);
   }

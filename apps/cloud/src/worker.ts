@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { createOidcProvider, type SsoConnection } from '@pinagent/ee-auth';
-import { noopBillingReporter } from '@pinagent/ee-billing';
+import {
+  type BillingReporter,
+  createStripeReporter,
+  noopBillingReporter,
+  USAGE_KINDS,
+} from '@pinagent/ee-billing';
 import { createInvitationMailer, createResendEmailSender } from '@pinagent/ee-email';
 import { createCloudApp } from './app';
 import { createBearerAuthenticator } from './authenticators';
@@ -21,6 +26,7 @@ import { createPgSubscriptionStore } from './db/subscription-store';
 import { createPgUserStore } from './db/user-store';
 import { createOidcClientResolver } from './oidc-client';
 import { createRelayClient } from './relay-client';
+import { createStripeMeterClient } from './stripe-client';
 
 /**
  * Cloudflare Worker entry / composition root for the Pinagent cloud control
@@ -125,12 +131,22 @@ async function buildApp(config: CloudConfig) {
         )
       : undefined;
 
-  // Billing-period rollover. `noopBillingReporter` is the Stripe seam — a
-  // `createStripeReporter` (needs API keys) replaces it later. Triggered by the
-  // `scheduled()` Cron handler and the `/internal/billing/roll` endpoint.
+  // Billing-period rollover. When Stripe is configured (secret key + meter
+  // event name), report the closed period's usage to Stripe; otherwise no-op.
+  // Triggered by the `scheduled()` Cron handler and `/internal/billing/roll`.
+  const reporter: BillingReporter =
+    config.stripeSecretKey && config.stripeMeterEventName
+      ? createStripeReporter({
+          client: createStripeMeterClient(config.stripeSecretKey),
+          subscriptions,
+          meter,
+          usageKind: USAGE_KINDS.relaySession,
+          eventName: config.stripeMeterEventName,
+        })
+      : noopBillingReporter;
   const billing: BillingServiceDeps = {
     subscriptions,
-    reporter: noopBillingReporter,
+    reporter,
     audit,
     now: () => new Date().toISOString(),
     internalSecret: config.billingInternalSecret,

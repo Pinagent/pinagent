@@ -32,7 +32,26 @@ describe('PgSubscriptionStore', () => {
       organizationId: 'acme',
       planId: 'pro',
       currentPeriodStart: '2026-05-01T00:00:00Z',
+      stripeCustomerId: null, // unset → null
     });
+  });
+
+  it('persists and reads back the Stripe customer id', async () => {
+    await store.upsert({
+      organizationId: 'acme',
+      planId: 'pro',
+      currentPeriodStart: '2026-05-01T00:00:00Z',
+      stripeCustomerId: 'cus_123',
+    });
+    expect(await store.get('acme')).toMatchObject({ stripeCustomerId: 'cus_123' });
+    // An update that omits it clears it — the store persists exactly what it's
+    // given; the config endpoint is responsible for preserving the mapping.
+    await store.upsert({
+      organizationId: 'acme',
+      planId: 'pro',
+      currentPeriodStart: '2026-06-01T00:00:00Z',
+    });
+    expect(await store.get('acme')).toMatchObject({ stripeCustomerId: null });
   });
 
   it('updates the plan in place on conflict', async () => {
