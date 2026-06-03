@@ -135,6 +135,14 @@ jobs:
       - name: Lint undeclared imports
         run: pnpm lint:undeclared-imports
 
+      # Env contract drift: the .dev.vars.example / .env.example files are the
+      # documented contract a developer copies before running the cloud
+      # control plane / relay / dashboard locally (values live in Doppler).
+      # This fails if code starts reading a new env var, or stops reading a
+      # documented one, until the example file is updated to match.
+      - name: Lint env example
+        run: pnpm lint:env-example
+
       # Peer-dep drift check: fail on any unmet peer dependency. Without
       # this, an upstream SDK bumping its peer (e.g. claude-agent-sdk
       # going zod ^3 → ^4) only surfaced as an install-time warning a

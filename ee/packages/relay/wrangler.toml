@@ -4,11 +4,16 @@
 # Deploy:  pnpm --filter @pinagent/ee-relay deploy
 # Local:   pnpm --filter @pinagent/ee-relay dev:worker
 #
-# Secrets (wrangler secret put): RELAY_AUTH_SECRET, RELAY_INTERNAL_SECRET.
-# Plain var: PINAGENT_CONTROL_PLANE_URL (the cloud app base URL). When the
-# control-plane URL + internal secret are set, the Durable Object reports
-# connect/disconnect lifecycle events to POST {url}/internal/relay/events;
-# unset → reporting is a no-op.
+# Env vars are sourced from Doppler (the source of truth), NOT committed here.
+# The full key list lives in `.dev.vars.example`.
+#   Local:  doppler secrets download --no-file --format env --config dev > .dev.vars
+#           (wrangler dev reads .dev.vars; it does NOT read process.env)
+#   Prod:   doppler secrets download --no-file --format env --config prd \
+#             | wrangler secret bulk --name pinagent-relay
+#
+# RELAY_INTERNAL_SECRET + PINAGENT_CONTROL_PLANE_URL (the cloud app base URL)
+# gate lifecycle reporting: when both are set the Durable Object POSTs
+# connect/disconnect to {url}/internal/relay/events; unset → reporting is a no-op.
 #
 # Production MUST set RELAY_AUTH_SECRET. With no auth secret the worker fails
 # closed (500) unless RELAY_ALLOW_INSECURE is explicitly truthy — the insecure

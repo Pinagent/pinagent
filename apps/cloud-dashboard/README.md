@@ -49,6 +49,10 @@ CLOUD_API_ORIGIN=http://127.0.0.1:8787 pnpm --filter @pinagent/cloud-dashboard d
 Open with an org selected, e.g. `http://localhost:3031/?org=acme` (or just `/`
 and let the gate redirect once you're signed in).
 
+Env keys are documented in [`.env.example`](.env.example) (only `CLOUD_API_ORIGIN`
+today; kept in sync by `pnpm lint:env-example`). Next reads `.env.local`, or run
+through Doppler — `doppler run --config dev -- pnpm --filter @pinagent/cloud-dashboard dev`.
+
 ## Structure
 
 - `app/` — App Router routes (`page.tsx` server components) + `_components/`

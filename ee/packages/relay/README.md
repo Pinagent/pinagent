@@ -49,3 +49,18 @@ pnpm --filter @pinagent/ee-relay typecheck    # tsc against workers-types
 pnpm --filter @pinagent/ee-relay dev:worker   # wrangler dev (local workerd)
 pnpm --filter @pinagent/ee-relay deploy       # wrangler deploy
 ```
+
+## Configuration
+
+Env keys are the `Env` interface in [`src/worker.ts`](src/worker.ts), documented
+in [`.dev.vars.example`](.dev.vars.example) (kept in sync by
+`pnpm lint:env-example`). Values come from Doppler (project `pinagent`):
+
+```sh
+# Local — wrangler dev reads .dev.vars, not process.env:
+doppler secrets download --no-file --format env --config dev > .dev.vars
+
+# Production:
+doppler secrets download --no-file --format env --config prd \
+  | wrangler secret bulk --name pinagent-relay
+```

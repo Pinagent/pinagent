@@ -104,19 +104,27 @@ through the `BillingReporter` port — currently `noopBillingReporter`; a
 ## Configuration
 
 Read once at boot in [`src/config.ts`](src/config.ts); a missing required value
-fails the deploy rather than the first request.
+fails the deploy rather than the first request. The complete key list — the
+required/optional split and which are secrets — is the contract in
+[`.dev.vars.example`](.dev.vars.example) (kept in sync with `config.ts` by
+`pnpm lint:env-example`).
 
-**Secrets** (`wrangler secret put`): `RELAY_AUTH_SECRET`, `DATABASE_URL`,
-`USER_TOKEN_SECRET`, `SSO_STATE_SECRET`, `OIDC_NONCE_SECRET`,
-`RELAY_INTERNAL_SECRET` (relay↔cloud service auth), `BILLING_INTERNAL_SECRET`
-(billing-rollover trigger — a separate trust domain from the relay),
-`OIDC_CLIENT_SECRET`, and optional `SSO_CONNECTION_KEK`
-(AES-256 key for per-connection OIDC client secrets at rest).
+**Values live in Doppler**, the org source of truth (project `pinagent`,
+configs `dev` + `prd`) — never committed here. The two planes:
 
-**Vars**: `PINAGENT_RELAY_PUBLIC_URL`, `OIDC_CONNECTION_ID`, `OIDC_ORG_ID`,
-`OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_REDIRECT_URI`, and optional
-`LOGIN_RETURN_TO`, `SESSION_COOKIE_NAME`, `SESSION_TTL_SECONDS`,
-`USER_TOKEN_TTL_SECONDS`.
+```bash
+# Local — wrangler dev reads .dev.vars (NOT process.env), so generate it:
+doppler secrets download --no-file --format env --config dev > .dev.vars
+
+# Production — sync the prd config into the Worker secret store:
+doppler secrets download --no-file --format env --config prd \
+  | wrangler secret bulk --name pinagent-cloud
+```
+
+The handful of non-secret config vars (`PINAGENT_RELAY_PUBLIC_URL`, the `OIDC_*`
+ids/urls, `LOGIN_RETURN_TO`, `SESSION_*`) flow through the same path — keeping a
+single source of truth rather than splitting them into a committed `[vars]`
+block.
 
 ## Develop / deploy / test
 
