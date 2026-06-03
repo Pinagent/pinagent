@@ -1,5 +1,50 @@
 # @pinagent/widget-dock
 
+## 0.4.0
+
+### Minor Changes
+
+- 13e2636: Actually open the remote PR on "Create PR" via the `gh` CLI, and open it in the browser.
+
+  Previously Create PR only opened a real GitHub PR when a token was configured
+  (a dock-stored secret or `GITHUB_TOKEN`); developers authed only through the
+  `gh` CLI just got a "branch pushed, open the PR yourself" compare link, and the
+  button never flipped to **View PR** (no PR was recorded).
+
+  `openPrOnGitHub` now falls back to **`gh pr create`** when no Octokit token is
+  present (or the API call fails) — using the developer's existing `gh auth`, the
+  way Claude Code opens PRs. The opened PR is recorded, so the dashboard's button
+  switches to **View PR** (which opens the GitHub URL). Create PR also now opens
+  the new PR in the browser on success. The `create_pull_request` MCP tool gets
+  the same `gh` fallback.
+
+### Patch Changes
+
+- a57be06: Reconcile PR state via the `gh` CLI, and auto-refresh the PRs tab.
+
+  The PRs view's "Refresh" reconciled state through Octokit only, so for
+  developers authed via the `gh` CLI (no stored token) it did nothing — a PR
+  closed or merged on GitHub lingered as "open" in the dock. `refreshPullRequests`
+  now falls back to `gh pr view --json` when there's no token. The PRs tab also
+  reconciles once automatically when opened (the cached list renders immediately;
+  the row updates when the reconcile lands), so state no longer silently lags.
+
+- 2989bbb: Stop leaking pinagent's data dir into the dashboard/PRs, and handle detached HEAD.
+
+  - **Self-ignore `.pinagent/`.** `getDb` now writes `.pinagent/.gitignore` (`*`)
+    on first open, so git never sees the SQLite DB / screenshots / worktrees —
+    regardless of whether the host project gitignored `.pinagent`. Without it,
+    a project that hadn't gitignored `.pinagent` showed `db.sqlite` (+ `-wal`/`-shm`)
+    as untracked changes in the dashboard and `git add -A` (Create PR / Push)
+    committed them into the user's PR. `getWorkingCopyStatus` also defensively
+    drops `.pinagent/*` from its untracked list (covers the first-request race).
+  - **Detached HEAD.** The dashboard now shows a disabled "Create PR · Detached
+    HEAD" instead of an enabled button that errored on click (e.g. a
+    `git worktree add --detach`).
+
+  Found via a worktree audit; the core worktree flows (branch resolution,
+  commit-before-push, slug-collision suffix) were already correct.
+
 ## 0.3.0
 
 ### Minor Changes

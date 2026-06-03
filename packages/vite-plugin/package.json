@@ -1,6 +1,6 @@
 {
   "name": "@pinagent/vite-plugin",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "license": "Apache-2.0",
   "description": "Vite plugin for Pinagent — capture in-browser UI feedback with file:line and a screenshot, hand it to your coding agent over MCP.",
   "repository": {
