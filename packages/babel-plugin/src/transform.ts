@@ -87,15 +87,19 @@ export function transformJsx(code: string, opts: TransformOptions): string | nul
 
       const loc = node.loc?.start;
       if (!loc) return;
-      const nameEnd = name.end;
-      if (typeof nameEnd !== 'number') return;
+      // Insert after the element name AND any TS type arguments. For a generic
+      // component (`<Foo<T> a={1} />`) Babel stores the type args as
+      // `node.typeParameters`, positioned BETWEEN the name and the attributes,
+      // so splicing at `name.end` would inject inside the `<...>` and produce
+      // unparseable output (`<Foo data-pa-loc="…"<T> a={1} />`).
+      const insertPos = node.typeParameters?.end ?? name.end;
+      if (typeof insertPos !== 'number') return;
 
       const value = `${opts.relPath}:${loc.line}:${loc.column + 1}`;
       let insertion = ` ${ATTR}="${escapeAttr(value)}"`;
       const comp = enclosingComponentName(path);
       if (comp) insertion += ` ${COMP_ATTR}="${escapeAttr(comp)}"`;
-      // Insert immediately after the element name.
-      points.push({ pos: nameEnd, insertion });
+      points.push({ pos: insertPos, insertion });
     },
   });
 
