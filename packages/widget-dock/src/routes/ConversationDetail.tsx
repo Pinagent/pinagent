@@ -219,18 +219,24 @@ export function ConversationDetailView({ id, onBack }: { id: string; onBack: () 
   }
 
   const detail = detailQuery.data;
+  // Inline-mode submissions never get a worktree — the agent edits the
+  // working tree directly — so `worktreeState` stays 'none' (or null
+  // before the first worktree event). Land / Discard / Create-PR are
+  // meaningless there: there's no branch to merge, discard, or open a PR
+  // from. Gate the whole lifecycle cluster on actually having a worktree
+  // so those controls don't render (previously they showed up disabled
+  // next to Stop during an inline run).
+  const hasWorktree = worktreeState !== null && worktreeState !== 'none';
   const canLand = worktreeState === 'active' || worktreeState === 'ttl_warning';
   const canDiscard = canLand;
   const canReopen = worktreeState === 'landed' || worktreeState === 'discarded';
   const wsBusy = worktreeState === 'landing' || worktreeState === 'discarding';
   const showLifecycleBusy = wsBusy || intent !== null;
-  // The Stop button is the only control surfaced for inline-mode runs
-  // (no worktree → no Land/Discard), so include it in the action-row
-  // gate. Visible whenever an agent turn is in flight, on top of the
-  // existing land/discard/reopen controls.
+  // Stop is the one control that applies to inline-mode runs (no
+  // worktree → no Land/Discard), surfaced whenever an agent turn is in
+  // flight independently of the worktree lifecycle cluster below.
   const canStop = stream.turnRunning;
-  const showActionRow =
-    canLand || canDiscard || canReopen || canStop || showLifecycleBusy || lifecycleError !== null;
+  const showActionRow = canStop || hasWorktree || showLifecycleBusy || lifecycleError !== null;
 
   // The server's `status` field only flips on a terminal `resolve_feedback`
   // call — it doesn't track "agent started working" or "ask_user paused".
@@ -320,49 +326,52 @@ export function ConversationDetailView({ id, onBack }: { id: string; onBack: () 
                 {stopPending ? 'Stopping…' : 'Stop'}
               </Button>
             )}
-            {canReopen ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-                disabled={showLifecycleBusy}
-                onClick={performReopen}
-              >
-                Re-open
-              </Button>
-            ) : (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 gap-1.5 text-xs"
-                  disabled={!canLand || showLifecycleBusy}
-                  onClick={() => void navigate({ to: ROUTE_PATHS.prsNew, search: { ids: id } })}
-                  title="Open a PR for this conversation"
-                >
-                  <GitPullRequest className="h-3.5 w-3.5" />
-                  Create PR
-                </Button>
+            {/* Worktree lifecycle controls — only for worktree-mode
+                conversations. Inline runs show Stop alone (above). */}
+            {hasWorktree &&
+              (canReopen ? (
                 <Button
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs"
-                  disabled={!canDiscard || showLifecycleBusy}
-                  onClick={performDiscard}
+                  disabled={showLifecycleBusy}
+                  onClick={performReopen}
                 >
-                  Discard
+                  Re-open
                 </Button>
-                <Button
-                  size="sm"
-                  variant="accent"
-                  className="h-7 text-xs"
-                  disabled={!canLand || showLifecycleBusy}
-                  onClick={performLand}
-                >
-                  Land
-                </Button>
-              </>
-            )}
+              ) : (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5 text-xs"
+                    disabled={!canLand || showLifecycleBusy}
+                    onClick={() => void navigate({ to: ROUTE_PATHS.prsNew, search: { ids: id } })}
+                    title="Open a PR for this conversation"
+                  >
+                    <GitPullRequest className="h-3.5 w-3.5" />
+                    Create PR
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    disabled={!canDiscard || showLifecycleBusy}
+                    onClick={performDiscard}
+                  >
+                    Discard
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="accent"
+                    className="h-7 text-xs"
+                    disabled={!canLand || showLifecycleBusy}
+                    onClick={performLand}
+                  >
+                    Land
+                  </Button>
+                </>
+              ))}
           </div>
         </div>
       )}
