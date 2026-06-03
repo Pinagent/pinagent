@@ -105,6 +105,10 @@ export class Storage {
     // Same SQLite engine and on-disk format as the dev server.
     const raw = new DatabaseSync(dbPath);
     raw.exec('PRAGMA journal_mode = WAL');
+    // Wait (up to 5s) instead of throwing SQLITE_BUSY when the dev server is
+    // mid-write — `resolve_feedback` is a write that races the dev server's
+    // event-bus inserts. Mirrors the dev server's pragma (db/client.ts).
+    raw.exec('PRAGMA busy_timeout = 5000');
     raw.exec('PRAGMA foreign_keys = ON');
     // The route process owns migrations. MCP may start before the
     // route, in which case the DB file might not have the schema yet.
