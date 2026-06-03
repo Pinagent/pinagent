@@ -21,15 +21,20 @@ export function createPgActiveSessionStore(db: MembershipDb): ActiveSessionRegis
         });
     },
 
-    async recordDisconnected(organizationId: string, sessionId: string): Promise<void> {
-      await db
-        .delete(activeSessions)
-        .where(
-          and(
-            eq(activeSessions.organizationId, organizationId),
-            eq(activeSessions.sessionId, sessionId),
-          ),
-        );
+    async recordDisconnected(
+      organizationId: string,
+      sessionId: string,
+      connectedAt?: string,
+    ): Promise<void> {
+      // Generation guard (see the port): with `connectedAt`, only the matching
+      // connection generation is deleted, so a stale disconnect for a
+      // superseded connection can't drop the live row.
+      const match = [
+        eq(activeSessions.organizationId, organizationId),
+        eq(activeSessions.sessionId, sessionId),
+      ];
+      if (connectedAt !== undefined) match.push(eq(activeSessions.connectedAt, connectedAt));
+      await db.delete(activeSessions).where(and(...match));
     },
 
     async listByOrg(organizationId: string): Promise<ActiveSession[]> {

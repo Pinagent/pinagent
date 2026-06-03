@@ -40,4 +40,18 @@ describe('createInMemoryActiveSessionRegistry', () => {
     // no-op for an untracked session
     await expect(reg.recordDisconnected('acme', 'ghost')).resolves.toBeUndefined();
   });
+
+  it('ignores a stale disconnect for a superseded connection (generation guard)', async () => {
+    const reg = createInMemoryActiveSessionRegistry();
+    const c1 = '2026-05-29T00:00:00.000Z';
+    const c2 = '2026-05-29T00:00:05.000Z';
+    // A reconnect: the row now belongs to the NEW connection (connectedAt c2).
+    await reg.recordConnected({ organizationId: 'acme', sessionId: 's1', connectedAt: c2 });
+    // The OLD connection's disconnect (c1) lands late — must NOT drop the live row.
+    await reg.recordDisconnected('acme', 's1', c1);
+    expect(await reg.listByOrg('acme')).toHaveLength(1);
+    // The matching disconnect (c2) does drop it.
+    await reg.recordDisconnected('acme', 's1', c2);
+    expect(await reg.listByOrg('acme')).toEqual([]);
+  });
 });

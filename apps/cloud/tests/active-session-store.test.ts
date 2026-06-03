@@ -47,4 +47,16 @@ describe('PgActiveSessionStore', () => {
     expect(await store.listByOrg('acme')).toEqual([]);
     await expect(store.recordDisconnected('acme', 'ghost')).resolves.toBeUndefined();
   });
+
+  it('only deletes the matching connection generation (stale disconnect ignored)', async () => {
+    const c2 = '2026-05-29T00:00:05.000Z';
+    // The row belongs to the new connection (c2) after a reconnect.
+    await store.recordConnected({ organizationId: 'acme', sessionId: 's1', connectedAt: c2 });
+    // A stale disconnect carrying the OLD connectedAt must not delete it.
+    await store.recordDisconnected('acme', 's1', at);
+    expect(await store.listByOrg('acme')).toHaveLength(1);
+    // The matching connectedAt deletes it.
+    await store.recordDisconnected('acme', 's1', c2);
+    expect(await store.listByOrg('acme')).toEqual([]);
+  });
 });

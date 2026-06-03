@@ -21,6 +21,14 @@ export interface RelayLifecycleEvent {
   sessionId: string;
   /** ISO-8601 time the event occurred (stamped by the relay). */
   occurredAt: string;
+  /**
+   * ISO-8601 time the *connection* opened — a stable identity for this socket
+   * generation, carried on both the `connected` and the matching
+   * `disconnected` event. The control plane uses it to ignore a stale
+   * disconnect for a connection that has since been superseded by a reconnect
+   * (so the active-session row for the live connection isn't dropped).
+   */
+  connectedAt?: string;
   /** The member, for client-side events; absent for device events. */
   userId?: string;
   /**
@@ -62,6 +70,7 @@ export function parseRelayEventBatch(value: unknown): RelayLifecycleEvent[] | nu
     if (!nonEmptyString(e.organizationId)) return null;
     if (!nonEmptyString(e.sessionId)) return null;
     if (!nonEmptyString(e.occurredAt)) return null;
+    if (e.connectedAt !== undefined && !nonEmptyString(e.connectedAt)) return null;
     if (e.userId !== undefined && typeof e.userId !== 'string') return null;
     if (e.durationMs !== undefined && !nonNegativeNumber(e.durationMs)) return null;
     parsed.push({
@@ -69,6 +78,7 @@ export function parseRelayEventBatch(value: unknown): RelayLifecycleEvent[] | nu
       organizationId: e.organizationId,
       sessionId: e.sessionId,
       occurredAt: e.occurredAt,
+      ...(typeof e.connectedAt === 'string' ? { connectedAt: e.connectedAt } : {}),
       ...(typeof e.userId === 'string' ? { userId: e.userId } : {}),
       ...(typeof e.durationMs === 'number' ? { durationMs: e.durationMs } : {}),
     });
