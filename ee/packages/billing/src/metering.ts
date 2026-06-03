@@ -52,12 +52,25 @@ export interface MeterSink {
   summarize(query: UsageQuery): Promise<UsageSummary>;
 }
 
+/**
+ * Enforce the {@link UsageEvent.quantity} contract: a non-negative integer.
+ * Both sinks call this before recording so a malformed event can't silently
+ * corrupt totals (a negative quantity would under-bill usage and inflate
+ * remaining quota; a fractional one breaks the summed `::int`).
+ */
+export function assertValidUsageQuantity(quantity: number): void {
+  if (!Number.isInteger(quantity) || quantity < 0) {
+    throw new Error(`usage quantity must be a non-negative integer, got ${quantity}`);
+  }
+}
+
 /** In-memory sink for tests and local dev. Not durable. */
 export function createInMemoryMeterSink(): MeterSink & { readonly events: readonly UsageEvent[] } {
   const events: UsageEvent[] = [];
   return {
     events,
     async record(event: UsageEvent): Promise<void> {
+      assertValidUsageQuantity(event.quantity);
       events.push(event);
     },
     async summarize(query: UsageQuery): Promise<UsageSummary> {

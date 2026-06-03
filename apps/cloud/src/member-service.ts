@@ -366,10 +366,19 @@ async function authorize(
   return { organizationId, actorUserId: user.userId, actorRole };
 }
 
+/**
+ * A pragmatic email shape: a single `@`, with a non-empty local part and a
+ * dotted domain, no whitespace. Stricter than `includes('@')` so a malformed
+ * address isn't persisted as an invite / junk audit row (the address is only
+ * ever sent to the admin-specified recipient, so this is hygiene, not a
+ * security boundary). Full RFC 5322 validation is deliberately out of scope.
+ */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function parseInviteBody(value: unknown): { email: string; role: Role } | null {
   if (typeof value !== 'object' || value === null) return null;
   const { email, role } = value as Record<string, unknown>;
-  if (typeof email !== 'string' || !email.includes('@') || email.trim().length === 0) return null;
+  if (typeof email !== 'string' || !EMAIL_RE.test(email.trim())) return null;
   if (!isRole(role)) return null;
   return { email, role };
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Elastic-2.0
-import type { MeterSink, UsageSummary } from '@pinagent/ee-billing';
+import { assertValidUsageQuantity, type MeterSink, type UsageSummary } from '@pinagent/ee-billing';
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
 import type { MembershipDb } from './membership-store';
 import { usageEvents } from './schema';
@@ -12,6 +12,7 @@ import { usageEvents } from './schema';
 export function createPgMeterSink(db: MembershipDb): MeterSink {
   return {
     async record(event): Promise<void> {
+      assertValidUsageQuantity(event.quantity);
       await db.insert(usageEvents).values({
         id: crypto.randomUUID(),
         occurredAt: event.occurredAt,

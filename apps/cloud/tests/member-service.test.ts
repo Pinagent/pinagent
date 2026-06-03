@@ -216,6 +216,23 @@ describe('POST /invitations (invite)', () => {
       ).status,
     ).toBe(400);
   });
+
+  it('400s on a malformed email (stricter than just containing @)', async () => {
+    for (const email of [
+      'a@b',
+      'x@y@z.com',
+      'no-at.com',
+      '@acme.com',
+      'bob@acme',
+      'a b@acme.com',
+    ]) {
+      const res = await handleInvitations(
+        req('POST', '/invitations?organizationId=acme', { email, role: 'member' }),
+        deps('u-admin'),
+      );
+      expect(res.status, `should reject "${email}"`).toBe(400);
+    }
+  });
 });
 
 describe('POST /invitations — invitee notification (best-effort, opt-in)', () => {

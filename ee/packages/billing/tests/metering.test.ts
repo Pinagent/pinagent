@@ -1,6 +1,32 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { describe, expect, it } from 'vitest';
-import { createInMemoryMeterSink, USAGE_KINDS } from '../src/metering';
+import { assertValidUsageQuantity, createInMemoryMeterSink, USAGE_KINDS } from '../src/metering';
+
+describe('assertValidUsageQuantity', () => {
+  it('accepts non-negative integers', () => {
+    expect(() => assertValidUsageQuantity(0)).not.toThrow();
+    expect(() => assertValidUsageQuantity(5)).not.toThrow();
+  });
+
+  it('rejects negative or fractional quantities', () => {
+    expect(() => assertValidUsageQuantity(-1)).toThrow(/non-negative integer/);
+    expect(() => assertValidUsageQuantity(1.5)).toThrow(/non-negative integer/);
+    expect(() => assertValidUsageQuantity(Number.NaN)).toThrow(/non-negative integer/);
+  });
+
+  it('the in-memory sink rejects a malformed quantity on record', async () => {
+    const meter = createInMemoryMeterSink();
+    await expect(
+      meter.record({
+        occurredAt: 't',
+        organizationId: 'acme',
+        kind: 'relay.session',
+        quantity: -2,
+      }),
+    ).rejects.toThrow(/non-negative integer/);
+    expect(meter.events).toHaveLength(0); // not recorded
+  });
+});
 
 describe('in-memory meter sink', () => {
   it('sums recorded usage by kind for an organization', async () => {
