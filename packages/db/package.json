@@ -33,7 +33,7 @@
     "drizzle-orm": "*"
   },
   "devDependencies": {
-    "@types/node": "^22.10.1",
+    "@types/node": "^25.9.1",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "tsdown": "^0.22.0",
