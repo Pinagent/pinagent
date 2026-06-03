@@ -9,6 +9,7 @@ import {
 } from '@pinagent/ee-auth';
 import {
   checkQuota,
+  type IssuanceLock,
   type MeterSink,
   type SubscriptionStore,
   USAGE_KINDS,
@@ -83,6 +84,13 @@ export interface SessionServiceDeps {
    * independent of the plan quota.
    */
   costControls?: CostControlStore;
+  /**
+   * Optional per-org issuance lock. When present, the quota + cost-cap gate and
+   * the metered write run under an exclusive per-org lock so concurrent
+   * issuances for the same org can't both pass the cap (a read-modify-write
+   * race). No-op effect on correctness when absent — just unserialized.
+   */
+  issuanceLock?: IssuanceLock;
   /** Override the issued-at clock (epoch seconds) — for tests. */
   nowSeconds?: number;
 }
@@ -131,73 +139,19 @@ export async function handleSessionRequest(
     });
     const occurredAt = isoFromSeconds(deps.nowSeconds);
 
-    // Enforce plan quota (membership + RBAC already passed inside `issue`).
-    // The token was signed above but isn't delivered when over quota.
-    if (deps.subscriptions && deps.meter) {
-      const decision = await checkQuota(
-        { subscriptions: deps.subscriptions, meter: deps.meter },
-        { organizationId: body.organizationId, kind: USAGE_KINDS.relaySession },
-      );
-      if (!decision.allowed) {
-        await deps.audit?.record({
-          occurredAt,
-          organizationId: body.organizationId,
-          actorUserId: user.userId,
-          action: AUDIT_ACTIONS.sessionDenied,
-          targetId: body.sessionId,
-          metadata: {
-            reason: 'quota',
-            plan: decision.plan.id,
-            used: decision.used,
-            limit: decision.limit,
-          },
-        });
-        return json({ error: 'plan quota exceeded' }, 402);
-      }
-    }
+    // The quota + cost-cap gate is a read-modify-write over usage (read totals →
+    // decide → record one unit). Run it — and the metered write — under an
+    // exclusive per-org lock when one is configured, so two concurrent
+    // issuances for the same org can't both read the same total, both pass the
+    // cap, and both record (overshooting the limit). Without a lock it's
+    // unserialized (the prior behaviour); the gate logic is unchanged.
+    const critical = () =>
+      enforceQuotaAndMeter(deps, body, user.userId, principal.role, occurredAt);
+    const denial = deps.issuanceLock
+      ? await deps.issuanceLock.withLock(body.organizationId, critical)
+      : await critical();
+    if (denial) return denial;
 
-    // Org-set cost control: a self-imposed cap, independent of the plan quota.
-    // `block` rejects over-cap; `warn` allows but records a warning.
-    if (deps.costControls && deps.meter) {
-      const control = await deps.costControls.get(body.organizationId);
-      if (control) {
-        const periodStart = deps.subscriptions
-          ? (await deps.subscriptions.get(body.organizationId))?.currentPeriodStart
-          : undefined;
-        const usage = await deps.meter.summarize({
-          organizationId: body.organizationId,
-          since: periodStart,
-        });
-        const decision = evaluateCostControl(control, usage[USAGE_KINDS.relaySession] ?? 0);
-        if (decision.overCap) {
-          await deps.audit?.record({
-            occurredAt,
-            organizationId: body.organizationId,
-            actorUserId: user.userId,
-            action: decision.allowed ? AUDIT_ACTIONS.costCapWarning : AUDIT_ACTIONS.costCapBlocked,
-            targetId: body.sessionId,
-            metadata: { cap: decision.cap, used: decision.used, enforcement: decision.enforcement },
-          });
-          if (!decision.allowed) return json({ error: 'cost cap reached' }, 402);
-        }
-      }
-    }
-
-    await deps.audit?.record({
-      occurredAt,
-      organizationId: body.organizationId,
-      actorUserId: user.userId,
-      action: AUDIT_ACTIONS.sessionIssued,
-      targetId: body.sessionId,
-      metadata: { role: principal.role },
-    });
-    await deps.meter?.record({
-      occurredAt,
-      organizationId: body.organizationId,
-      kind: USAGE_KINDS.relaySession,
-      quantity: 1,
-      metadata: { sessionId: body.sessionId, role: principal.role },
-    });
     return json({ token, sessionId: body.sessionId, relayUrl: deps.relayUrl }, 200);
   } catch (err) {
     // Authorization failures are the expected non-2xx outcomes; collapse both
@@ -215,6 +169,91 @@ export async function handleSessionRequest(
     }
     throw err;
   }
+}
+
+/**
+ * The quota + cost-cap enforcement and the metered write, as one unit so an
+ * {@link IssuanceLock} can serialize it per org. Returns a denial `Response` to
+ * send back (402), or `null` when issuance is allowed — in which case the
+ * session has been audited and one unit metered. Reads usage, decides, then
+ * records: keep this whole sequence inside the lock so the read and the write
+ * are atomic with respect to other issuances for the same org.
+ */
+async function enforceQuotaAndMeter(
+  deps: SessionServiceDeps,
+  body: SessionRequestBody,
+  actorUserId: UserId,
+  role: string,
+  occurredAt: string,
+): Promise<Response | null> {
+  // Enforce plan quota (membership + RBAC already passed inside `issue`).
+  // The token was signed already but isn't delivered when over quota.
+  if (deps.subscriptions && deps.meter) {
+    const decision = await checkQuota(
+      { subscriptions: deps.subscriptions, meter: deps.meter },
+      { organizationId: body.organizationId, kind: USAGE_KINDS.relaySession },
+    );
+    if (!decision.allowed) {
+      await deps.audit?.record({
+        occurredAt,
+        organizationId: body.organizationId,
+        actorUserId,
+        action: AUDIT_ACTIONS.sessionDenied,
+        targetId: body.sessionId,
+        metadata: {
+          reason: 'quota',
+          plan: decision.plan.id,
+          used: decision.used,
+          limit: decision.limit,
+        },
+      });
+      return json({ error: 'plan quota exceeded' }, 402);
+    }
+  }
+
+  // Org-set cost control: a self-imposed cap, independent of the plan quota.
+  // `block` rejects over-cap; `warn` allows but records a warning.
+  if (deps.costControls && deps.meter) {
+    const control = await deps.costControls.get(body.organizationId);
+    if (control) {
+      const periodStart = deps.subscriptions
+        ? (await deps.subscriptions.get(body.organizationId))?.currentPeriodStart
+        : undefined;
+      const usage = await deps.meter.summarize({
+        organizationId: body.organizationId,
+        since: periodStart,
+      });
+      const decision = evaluateCostControl(control, usage[USAGE_KINDS.relaySession] ?? 0);
+      if (decision.overCap) {
+        await deps.audit?.record({
+          occurredAt,
+          organizationId: body.organizationId,
+          actorUserId,
+          action: decision.allowed ? AUDIT_ACTIONS.costCapWarning : AUDIT_ACTIONS.costCapBlocked,
+          targetId: body.sessionId,
+          metadata: { cap: decision.cap, used: decision.used, enforcement: decision.enforcement },
+        });
+        if (!decision.allowed) return json({ error: 'cost cap reached' }, 402);
+      }
+    }
+  }
+
+  await deps.audit?.record({
+    occurredAt,
+    organizationId: body.organizationId,
+    actorUserId,
+    action: AUDIT_ACTIONS.sessionIssued,
+    targetId: body.sessionId,
+    metadata: { role },
+  });
+  await deps.meter?.record({
+    occurredAt,
+    organizationId: body.organizationId,
+    kind: USAGE_KINDS.relaySession,
+    quantity: 1,
+    metadata: { sessionId: body.sessionId, role },
+  });
+  return null;
 }
 
 /** Route cloud HTTP requests. Currently just the session endpoint. */
