@@ -11,6 +11,7 @@ import { createPgBranchRoutingStore } from './db/branch-routing-store';
 import { createNeonDb } from './db/client';
 import { createPgCostControlStore } from './db/cost-control-store';
 import { createPgInvitationStore } from './db/invitation-store';
+import { createPgIssuanceLock } from './db/issuance-lock';
 import { createPgMembershipStore } from './db/membership-store';
 import { createPgMeterSink } from './db/meter-sink';
 import { createPgOidcCredentialStore } from './db/oidc-credential-store';
@@ -64,6 +65,8 @@ async function buildApp(config: CloudConfig) {
   const invitations = createPgInvitationStore(db);
   const branchRouting = createPgBranchRoutingStore(db);
   const activeSessions = createPgActiveSessionStore(db);
+  // Serializes the quota/cost gate per org across isolates (advisory lock).
+  const issuanceLock = createPgIssuanceLock(db);
   // Control-plane → device push, reusing the relay's internal secret. Lets a
   // branch-routing PUT reach the org's live sessions (see config-service).
   const relay = createRelayClient({
@@ -132,6 +135,7 @@ async function buildApp(config: CloudConfig) {
       meter,
       subscriptions,
       costControls,
+      issuanceLock,
     },
     login: {
       provider,
