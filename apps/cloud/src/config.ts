@@ -58,6 +58,12 @@ export interface CloudConfig {
   sessionTtlSeconds?: number;
   /** User-token lifetime, seconds (optional override). */
   userTokenTtlSeconds?: number;
+  /** Resend API key. Email sending is a no-op when unset (dev/self-host). */
+  resendApiKey?: string;
+  /** From header for outbound email, e.g. `Pinagent <noreply@pinagent.dev>`. */
+  emailFrom?: string;
+  /** Absolute dashboard base URL, used to build email links (e.g. the invite CTA). */
+  appBaseUrl?: string;
 }
 
 /**
@@ -88,6 +94,9 @@ export function loadCloudConfig(env: Record<string, string | undefined>): CloudC
     sessionCookieName: env.SESSION_COOKIE_NAME ?? 'pa_session',
     sessionTtlSeconds: positiveInt(env, 'SESSION_TTL_SECONDS'),
     userTokenTtlSeconds: positiveInt(env, 'USER_TOKEN_TTL_SECONDS'),
+    resendApiKey: env.RESEND_API_KEY,
+    emailFrom: env.EMAIL_FROM,
+    appBaseUrl: env.APP_BASE_URL,
   };
 }
 

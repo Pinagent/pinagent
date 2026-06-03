@@ -82,6 +82,7 @@ function deps(
     users?: User[];
     invitations?: InvitationStore;
     store?: ReturnType<typeof membershipStore>;
+    email?: MemberServiceDeps['email'];
   } = {},
 ): MemberServiceDeps & { store: ReturnType<typeof membershipStore>; invitations: InvitationStore } {
   const store = opts.store ?? membershipStore();
@@ -91,6 +92,7 @@ function deps(
     users: createInMemoryUserStore(opts.users ?? []),
     invitations,
     authenticate: async () => (asUserId ? { userId: asUserId } : null),
+    email: opts.email,
     now: () => NOW,
   };
 }
@@ -213,6 +215,62 @@ describe('POST /invitations (invite)', () => {
         )
       ).status,
     ).toBe(400);
+  });
+});
+
+describe('POST /invitations — invitee notification (best-effort, opt-in)', () => {
+  type Sent = { to: string; organizationName: string; role: string; inviterName: string | null };
+
+  function recordingEmail(impl?: () => Promise<void>): {
+    email: NonNullable<MemberServiceDeps['email']>;
+    sent: Sent[];
+  } {
+    const sent: Sent[] = [];
+    return {
+      sent,
+      email: {
+        async sendInvitation(input) {
+          sent.push(input);
+          if (impl) await impl();
+        },
+      },
+    };
+  }
+
+  it('notifies the invitee when staging a pending invitation', async () => {
+    const { email, sent } = recordingEmail();
+    const res = await handleInvitations(
+      req('POST', '/invitations?organizationId=acme', { email: 'New@Acme.com', role: 'member' }),
+      deps('u-admin', { email }),
+    );
+    expect(res.status).toBe(200);
+    expect(sent).toEqual([
+      // org display name falls back to the id (stub getOrganization → null);
+      // inviter name is null (no user record for u-admin).
+      { to: 'new@acme.com', organizationName: 'acme', role: 'member', inviterName: null },
+    ]);
+  });
+
+  it('notifies the invitee on an immediate grant too', async () => {
+    const { email, sent } = recordingEmail();
+    const res = await handleInvitations(
+      req('POST', '/invitations?organizationId=acme', { email: 'bob@acme.com', role: 'admin' }),
+      deps('u-admin', { email, users: [user('usr_bob', 'bob@acme.com')] }),
+    );
+    expect(res.status).toBe(200);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ to: 'bob@acme.com', role: 'admin' });
+  });
+
+  it('still succeeds when the notifier throws (best-effort)', async () => {
+    const { email } = recordingEmail(async () => {
+      throw new Error('resend down');
+    });
+    const res = await handleInvitations(
+      req('POST', '/invitations?organizationId=acme', { email: 'x@acme.com', role: 'member' }),
+      deps('u-admin', { email }),
+    );
+    expect(res.status).toBe(200);
   });
 });
 

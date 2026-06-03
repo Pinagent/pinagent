@@ -20,6 +20,7 @@
     "@neondatabase/serverless": "^1.1.0",
     "@pinagent/ee-auth": "workspace:*",
     "@pinagent/ee-billing": "workspace:*",
+    "@pinagent/ee-email": "workspace:*",
     "@pinagent/ee-infra": "workspace:*",
     "@pinagent/ee-relay": "workspace:*",
     "@pinagent/ee-team-features": "workspace:*",

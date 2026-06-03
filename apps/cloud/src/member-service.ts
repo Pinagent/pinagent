@@ -35,12 +35,28 @@ import type { Authenticator } from './session-service';
  * SSO callback consumes on the invitee's next login (see `login-service`).
  * Org-scoped (`?organizationId=`), RBAC-gated, fully injected for testing.
  */
+/**
+ * Optional invite-notification port (satisfied by `@pinagent/ee-email`'s
+ * `InvitationMailer`). Like {@link AuditSink} it's opt-in: absent in dev/tests
+ * and when no email provider is configured, so invites work unchanged without it.
+ */
+export interface InvitationNotifier {
+  sendInvitation(input: {
+    to: string;
+    organizationName: string;
+    role: Role;
+    inviterName: string | null;
+  }): Promise<void>;
+}
+
 export interface MemberServiceDeps {
   store: MembershipStore;
   users: UserStore;
   invitations: InvitationStore;
   authenticate: Authenticator;
   audit?: AuditSink;
+  /** Notifies the invitee by email (best-effort, opt-in). */
+  email?: InvitationNotifier;
   /** ISO-8601 clock — injected for deterministic tests. */
   now?: () => string;
 }
@@ -92,6 +108,7 @@ export async function handleInvitations(
       };
       await deps.store.upsertMembership(membership);
       await recordInvite(deps, ctx, email, now);
+      await notifyInvitee(deps, ctx, email, parsed.role);
       return json({ organizationId: ctx.organizationId, membership }, 200);
     }
 
@@ -104,6 +121,7 @@ export async function handleInvitations(
     };
     await deps.invitations.upsert(invitation);
     await recordInvite(deps, ctx, email, now);
+    await notifyInvitee(deps, ctx, email, parsed.role);
     return json({ organizationId: ctx.organizationId, invitation }, 200);
   }
 
@@ -225,6 +243,36 @@ function recordInvite(
     action: AUDIT_ACTIONS.memberInvited,
     metadata: { email },
   });
+}
+
+/**
+ * Best-effort invite email. Resolves the org + inviter display names (so the
+ * email reads "Alice invited you to Acme" rather than raw ids) and hands them
+ * to the notifier. Opt-in (`deps.email` absent → no-op) and fully swallowed:
+ * the invite is already persisted, so a name lookup or send failure must never
+ * turn a successful invite into an error.
+ */
+async function notifyInvitee(
+  deps: MemberServiceDeps,
+  ctx: { organizationId: string; actorUserId: string },
+  to: string,
+  role: Role,
+): Promise<void> {
+  if (!deps.email) return;
+  try {
+    const [org, inviter] = await Promise.all([
+      deps.store.getOrganization(ctx.organizationId),
+      deps.users.get(ctx.actorUserId),
+    ]);
+    await deps.email.sendInvitation({
+      to,
+      organizationName: org?.displayName ?? ctx.organizationId,
+      role,
+      inviterName: inviter?.displayName ?? inviter?.email ?? null,
+    });
+  } catch {
+    // Best-effort: never fail the invite on a notification problem.
+  }
 }
 
 type AuthorizeResult =
