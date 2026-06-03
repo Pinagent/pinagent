@@ -13,7 +13,7 @@ import { Input } from '@pinagent/ui/components/ui/input';
 import { cn } from '@pinagent/ui/lib/utils';
 import type { StatusKey } from '@pinagent/ui/tokens';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { Archive, ArchiveRestore, Check, Filter, Search, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Check, Filter, GitMerge, Search, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnchorChip } from '../components/AnchorChip';
 import { AnchorContext } from '../components/AnchorContext';
@@ -476,7 +476,12 @@ export function Conversations() {
                 selected={selected.has(c.id)}
                 onSelectChange={(next) => toggleSelected(c.id, next)}
                 selectLabel={`Select ${c.title}`}
-                actions={<RowArchiveButton id={c.id} title={c.title} archived={c.archived} />}
+                actions={
+                  <>
+                    {c.worktreeState === 'active' && <RowLandButton id={c.id} title={c.title} />}
+                    <RowArchiveButton id={c.id} title={c.title} archived={c.archived} />
+                  </>
+                }
                 meta={
                   <>
                     {c.archived && <span className="text-[10px]">archived</span>}
@@ -548,6 +553,60 @@ export function Conversations() {
         </section>
       )}
     </div>
+  );
+}
+
+/**
+ * Per-row quick Land. Only rendered for worktree conversations whose
+ * worktree is `active` (the caller gates on that) — landing merges the
+ * agent's branch into the branch you're on. Non-destructive, so no
+ * confirm; the live `conversations_changed` subscription flips the row to
+ * `landed` on success (and this button unmounts, since it only shows for
+ * `active`). `landConversation` is fire-and-forget, so the pending state
+ * is cleared on a watchdog timer — covering the merge-conflict case,
+ * where the worktree stays `active` and the row never transitions (open
+ * the detail view to resolve a conflict).
+ */
+function RowLandButton({ id, title }: { id: string; title: string }) {
+  const transport = useTransport();
+  const isMock = transport.kind === 'mock';
+  const [landing, setLanding] = useState(false);
+  useEffect(() => {
+    if (!landing) return;
+    const t = setTimeout(() => setLanding(false), 10_000);
+    return () => clearTimeout(t);
+  }, [landing]);
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      disabled={landing || isMock}
+      onClick={() => {
+        setLanding(true);
+        transport.landConversation(id);
+      }}
+      aria-label={`Land ${title}`}
+      title={
+        isMock
+          ? 'Mock mode — landing is disabled'
+          : "Land — merge this agent's work into the branch you're on"
+      }
+      className={cn(
+        'h-7 gap-1 px-2 text-xs text-status-landed-fg hover:text-status-landed-fg',
+        // Reveal on row hover / keyboard focus; stay put while landing.
+        'opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
+        landing && 'opacity-100',
+      )}
+    >
+      {landing ? (
+        '…'
+      ) : (
+        <>
+          <GitMerge className="h-3.5 w-3.5" aria-hidden />
+          Land
+        </>
+      )}
+    </Button>
   );
 }
 

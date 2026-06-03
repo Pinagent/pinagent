@@ -331,6 +331,7 @@ function toConversation(rec: FeedbackRecord): Conversation {
     },
     branch: rec.branch ?? '',
     archived: rec.archived,
+    worktreeState: rec.worktreeState,
     updatedAt: rec.updatedAt,
     // Without a separate "latest agent message" query, the human's
     // original comment is the best preview we have for the list row.
