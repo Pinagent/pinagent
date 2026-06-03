@@ -12,6 +12,7 @@ import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
 import { useNavigate } from '@tanstack/react-router';
 import { ExternalLink, GitPullRequest, Plus, RotateCw } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { TimestampDot } from '../components/TimestampDot';
 import type { PullRequest } from '../fixtures';
 import { usePullRequests, useRefreshPullRequests } from '../hooks/usePullRequests';
@@ -41,6 +42,16 @@ export function PRs() {
   const refresh = useRefreshPullRequests();
   const navigate = useNavigate();
   const isMock = transport.kind === 'mock';
+
+  // Reconcile against GitHub once when the tab opens so a PR that was
+  // closed/merged upstream doesn't linger as "open". Background: the cached
+  // list renders immediately; the mutation patches it on success.
+  const didAutoRefresh = useRef(false);
+  useEffect(() => {
+    if (isMock || didAutoRefresh.current) return;
+    didAutoRefresh.current = true;
+    refresh.mutate();
+  }, [isMock, refresh]);
 
   const newPr = () => void navigate({ to: ROUTE_PATHS.prsNew });
 
