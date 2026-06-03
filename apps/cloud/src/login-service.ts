@@ -64,6 +64,18 @@ export interface LoginServiceDeps {
   memberships?: MembershipStore;
   /** Optional audit sink — records successful logins when present. */
   audit?: AuditSink;
+  /**
+   * Optional welcome-email notifier (best-effort, opt-in). Sent only on a
+   * user's FIRST sign-in. Absent in dev/tests and when no email provider is
+   * configured — login works unchanged without it.
+   */
+  email?: {
+    sendWelcome(input: {
+      to: string;
+      name: string | null;
+      organizationName: string | null;
+    }): Promise<void>;
+  };
   /** Override the clock (epoch seconds) — for tests. */
   nowSeconds?: number;
 }
@@ -152,6 +164,7 @@ export async function handleSsoCallback(
       metadata: { connectionId: connection.id },
     });
     await consumeInvitation(deps, connection, profile.email, userId);
+    await maybeSendWelcome(deps, connection, user);
   } catch {
     // Generic — never leak why the IdP handshake failed to the browser.
     return text('login failed', 401);
@@ -202,6 +215,31 @@ async function consumeInvitation(
     });
   } catch {
     // Non-fatal — login proceeds; the invitation is consumed on a later login.
+  }
+}
+
+/**
+ * Send a welcome email on a user's FIRST sign-in only. First login is when the
+ * record was just created — `createdAt === lastLoginAt` (the Pg adapter sets
+ * both to `now` on insert and only bumps `lastLoginAt` on re-login). Best-effort
+ * and opt-in: no email dep, no recipient address, or not-first-login → no-op;
+ * any failure is swallowed so login still succeeds.
+ */
+async function maybeSendWelcome(
+  deps: LoginServiceDeps,
+  connection: SsoConnection,
+  user: { email: string; displayName: string | null; createdAt: string; lastLoginAt: string },
+): Promise<void> {
+  if (!deps.email || !user.email || user.createdAt !== user.lastLoginAt) return;
+  try {
+    const org = await deps.memberships?.getOrganization(connection.organizationId);
+    await deps.email.sendWelcome({
+      to: user.email,
+      name: user.displayName,
+      organizationName: org?.displayName ?? null,
+    });
+  } catch {
+    // Best-effort: a welcome email must never fail the login.
   }
 }
 

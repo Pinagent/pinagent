@@ -6,7 +6,7 @@ import {
   noopBillingReporter,
   USAGE_KINDS,
 } from '@pinagent/ee-billing';
-import { createInvitationMailer, createResendEmailSender } from '@pinagent/ee-email';
+import { createMailer, createResendEmailSender } from '@pinagent/ee-email';
 import { createCloudApp } from './app';
 import { createBearerAuthenticator } from './authenticators';
 import { type BillingServiceDeps, runBillingRollover } from './billing-service';
@@ -120,12 +120,12 @@ async function buildApp(config: CloudConfig) {
     cookieName: config.sessionCookieName,
   });
 
-  // Transactional email. Off (undefined → member-service no-ops) unless a
-  // Resend key, From header, and dashboard base URL are all configured —
-  // keeps local/self-host invites working without an email provider.
-  const invitationMailer =
+  // Transactional email. Off (undefined → services no-op) unless a Resend key,
+  // From header, and dashboard base URL are all configured — keeps
+  // local/self-host flows working without an email provider.
+  const mailer =
     config.resendApiKey && config.emailFrom && config.appBaseUrl
-      ? createInvitationMailer(
+      ? createMailer(
           createResendEmailSender({ apiKey: config.resendApiKey, from: config.emailFrom }),
           { appBaseUrl: config.appBaseUrl },
         )
@@ -178,9 +178,10 @@ async function buildApp(config: CloudConfig) {
       invitations,
       memberships: store,
       audit,
+      email: mailer,
     },
     read: { store, users, authenticate, audit, meter },
-    members: { store, users, invitations, authenticate, audit, email: invitationMailer },
+    members: { store, users, invitations, authenticate, audit, email: mailer },
     config: {
       store,
       authenticate,

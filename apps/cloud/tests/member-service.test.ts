@@ -362,6 +362,7 @@ function roster(members: OrganizationMembership[]) {
 function mgmtDeps(
   asUserId: string,
   members: OrganizationMembership[],
+  opts: { email?: MemberServiceDeps['email']; users?: User[] } = {},
 ): MemberServiceDeps & {
   upserts: OrganizationMembership[];
   removes: Array<[string, string]>;
@@ -369,9 +370,10 @@ function mgmtDeps(
   const { store, upserts, removes } = roster(members);
   return {
     store,
-    users: createInMemoryUserStore(),
+    users: createInMemoryUserStore(opts.users ?? []),
     invitations: createInMemoryInvitationStore(),
     authenticate: async () => ({ userId: asUserId }),
+    email: opts.email,
     now: () => NOW,
     upserts,
     removes,
@@ -519,5 +521,103 @@ describe('PATCH /members (change role)', () => {
     expect((await handleMemberWrite(req('POST', '/members?organizationId=acme'), d)).status).toBe(
       405,
     );
+  });
+});
+
+describe('member-change notifications (best-effort, opt-in)', () => {
+  type Removed = { to: string; organizationName: string; removedByName: string | null };
+  type RoleChanged = {
+    to: string;
+    organizationName: string;
+    role: string;
+    changedByName: string | null;
+  };
+
+  function recordingEmail(): {
+    email: NonNullable<MemberServiceDeps['email']>;
+    removed: Removed[];
+    roleChanged: RoleChanged[];
+  } {
+    const removed: Removed[] = [];
+    const roleChanged: RoleChanged[] = [];
+    return {
+      removed,
+      roleChanged,
+      email: {
+        async sendInvitation() {},
+        async sendMemberRemoved(input) {
+          removed.push(input);
+        },
+        async sendRoleChanged(input) {
+          roleChanged.push(input);
+        },
+      },
+    };
+  }
+
+  const PEOPLE = [user('u-admin', 'admin@acme.com'), user('u-member', 'member@acme.com')];
+
+  it('emails the removed member (resolving their address + the remover)', async () => {
+    const rec = recordingEmail();
+    const d = mgmtDeps('u-admin', TEAM(), { email: rec.email, users: PEOPLE });
+    const res = await handleMemberWrite(
+      req('DELETE', '/members?organizationId=acme&userId=u-member'),
+      d,
+    );
+    expect(res.status).toBe(200);
+    expect(rec.removed).toEqual([
+      // org name falls back to the id (roster getOrganization → null); remover
+      // has no displayName, so it uses their email.
+      { to: 'member@acme.com', organizationName: 'acme', removedByName: 'admin@acme.com' },
+    ]);
+  });
+
+  it('emails the member whose role changed, with the new role', async () => {
+    const rec = recordingEmail();
+    const d = mgmtDeps('u-admin', TEAM(), { email: rec.email, users: PEOPLE });
+    const res = await handleMemberWrite(
+      req('PATCH', '/members?organizationId=acme&userId=u-member', { role: 'admin' }),
+      d,
+    );
+    expect(res.status).toBe(200);
+    expect(rec.roleChanged).toEqual([
+      {
+        to: 'member@acme.com',
+        organizationName: 'acme',
+        role: 'admin',
+        changedByName: 'admin@acme.com',
+      },
+    ]);
+  });
+
+  it('skips the email when the target has no address on record', async () => {
+    const rec = recordingEmail();
+    // only the actor is seeded; the target (u-member) has no user row → no email
+    const d = mgmtDeps('u-admin', TEAM(), {
+      email: rec.email,
+      users: [user('u-admin', 'a@acme.com')],
+    });
+    const res = await handleMemberWrite(
+      req('DELETE', '/members?organizationId=acme&userId=u-member'),
+      d,
+    );
+    expect(res.status).toBe(200);
+    expect(rec.removed).toHaveLength(0);
+  });
+
+  it('still succeeds (200) when the notifier throws', async () => {
+    const email: NonNullable<MemberServiceDeps['email']> = {
+      async sendInvitation() {},
+      async sendMemberRemoved() {
+        throw new Error('resend down');
+      },
+      async sendRoleChanged() {},
+    };
+    const d = mgmtDeps('u-admin', TEAM(), { email, users: PEOPLE });
+    const res = await handleMemberWrite(
+      req('DELETE', '/members?organizationId=acme&userId=u-member'),
+      d,
+    );
+    expect(res.status).toBe(200);
   });
 });

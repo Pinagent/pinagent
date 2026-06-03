@@ -300,3 +300,50 @@ describe('GET /sso/callback', () => {
     expect(await res.text()).not.toMatch(/signature/); // no detail leak
   });
 });
+
+describe('welcome email on first login (best-effort, opt-in)', () => {
+  type Welcome = { to: string; name: string | null; organizationName: string | null };
+  function recordingWelcome(): {
+    email: NonNullable<LoginServiceDeps['email']>;
+    sent: Welcome[];
+  } {
+    const sent: Welcome[] = [];
+    return {
+      sent,
+      email: {
+        async sendWelcome(input) {
+          sent.push(input);
+        },
+      },
+    };
+  }
+
+  it('sends a welcome on a first sign-in', async () => {
+    const rec = recordingWelcome();
+    const state = await signLoginState({ connectionId: 'conn-1', returnTo: '/' }, STATE_SECRET);
+    const res = await handleSsoCallback(
+      new Request(`https://cloud.test/sso/callback?code=abc&state=${state}`),
+      { ...deps(fakeProvider()), email: rec.email },
+    );
+    expect(res.status).toBe(302);
+    // No memberships store wired here, so the org name is unresolved (null).
+    expect(rec.sent).toEqual([{ to: 'bob@acme.com', name: 'Bob', organizationName: null }]);
+  });
+
+  it('does not send on a returning sign-in', async () => {
+    const rec = recordingWelcome();
+    // Pre-provision so the user already exists; this login is therefore not the
+    // first (createdAt stays earlier than the bumped lastLoginAt).
+    const users = createInMemoryUserStore([], { generateId: () => 'usr_bob' });
+    await users.provisionFromProfile(profile, { now: '2020-01-01T00:00:00.000Z' });
+    const state = await signLoginState({ connectionId: 'conn-1', returnTo: '/' }, STATE_SECRET);
+    const res = await handleSsoCallback(
+      new Request(`https://cloud.test/sso/callback?code=abc&state=${state}`),
+      // Default clock (matches the other callback tests so `state` isn't expired);
+      // re-login bumps lastLoginAt past the pre-provisioned 2020 createdAt.
+      { ...deps(fakeProvider()), users, email: rec.email },
+    );
+    expect(res.status).toBe(302);
+    expect(rec.sent).toHaveLength(0);
+  });
+});

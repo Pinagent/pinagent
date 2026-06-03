@@ -16,7 +16,7 @@ export const BRAND = {
   name: 'Pinagent',
 } as const;
 
-const fontFamily =
+export const fontFamily =
   '"Geist", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif';
 
 /**
