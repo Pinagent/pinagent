@@ -11,14 +11,15 @@
  * user actually saves a change.
  */
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import {
   type PermissionMode,
   PermissionModeSchema,
   PROJECT_PERMISSION_MODES,
 } from '@pinagent/shared';
 import { z } from 'zod';
+import { atomicWriteFile, withFileLock } from './atomic-file';
 
 // Re-export so existing consumers of `@pinagent/agent-runner` keep
 // resolving `PermissionMode` / `PermissionModeSchema` against the same
@@ -76,11 +77,15 @@ export class SettingsStore {
   }
 
   async patch(patch: ProjectSettingsPatch): Promise<ProjectSettings> {
-    const current = await this.read();
-    const next = ProjectSettingsSchema.parse({ ...current, ...patch });
     const path = this.path();
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, JSON.stringify(next, null, 2), 'utf8');
-    return next;
+    // Serialize the read-modify-write (so concurrent PATCHes don't clobber) and
+    // write atomically (so a crash mid-write doesn't truncate config.json into
+    // a parse error that silently resets every setting to its default).
+    return withFileLock(path, async () => {
+      const current = await this.read();
+      const next = ProjectSettingsSchema.parse({ ...current, ...patch });
+      await atomicWriteFile(path, JSON.stringify(next, null, 2));
+      return next;
+    });
   }
 }

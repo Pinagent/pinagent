@@ -16,9 +16,10 @@
  * presentable shape via `presentable()`.
  */
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { z } from 'zod';
+import { atomicWriteFile, withFileLock } from './atomic-file';
 
 export const SecretsFileSchema = z
   .object({
@@ -68,16 +69,18 @@ export class SecretsStore {
   }
 
   async patch(patch: Partial<SecretsFile>): Promise<SecretsFile> {
-    const current = await this.read();
-    const next: SecretsFile = { ...current, ...patch };
     const path = this.path();
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, JSON.stringify(next, null, 2), 'utf8');
-    // 0600: owner-only read/write. Best-effort; on Windows this is a no-op.
-    try {
-      await chmod(path, 0o600);
-    } catch {}
-    return next;
+    // Serialize the whole read-modify-write so concurrent patches (e.g. saving
+    // the GitHub token and the Anthropic key at once) don't read the same base
+    // and clobber each other. Write atomically with 0600 from creation, so the
+    // token file is never momentarily world-readable nor left half-written (a
+    // torn write would make `read()` return {} and silently forget the token).
+    return withFileLock(path, async () => {
+      const current = await this.read();
+      const next: SecretsFile = { ...current, ...patch };
+      await atomicWriteFile(path, JSON.stringify(next, null, 2), 0o600);
+      return next;
+    });
   }
 
   async setGithub(token: string, login: string): Promise<void> {

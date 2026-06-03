@@ -92,4 +92,15 @@ describe('SettingsStore.patch', () => {
       'fix/*',
     ]);
   });
+
+  it('serializes concurrent patches so neither field is lost', async () => {
+    const store = new SettingsStore(root);
+    await Promise.all([
+      store.patch({ baseBranch: 'develop' }),
+      store.patch({ worktreeRetentionDays: 14 }),
+    ]);
+    const settings = await new SettingsStore(root).read();
+    expect(settings.baseBranch).toBe('develop');
+    expect(settings.worktreeRetentionDays).toBe(14);
+  });
 });
