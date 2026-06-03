@@ -42,3 +42,34 @@ export function permissionModeDisplay(mode: string): PermissionModeDisplay {
   // Unknown SDK mode — surface the raw value rather than swallowing it.
   return { label: mode, title: `Permission mode: ${mode}` };
 }
+
+/**
+ * The picker projectMode an active env override resolves to. The override is
+ * an SDK mode (e.g. `plan`); map it back to a canonical project mode so the
+ * Settings picker can mark which row is actually in force. `null` when there's
+ * no override, or it's an SDK-only mode with no picker row.
+ */
+export function overrideProjectMode(overrideSdkMode: string | null): string | null {
+  if (!overrideSdkMode) return null;
+  return PROJECT_PERMISSION_MODES.find((m) => m.sdkMode === overrideSdkMode)?.projectMode ?? null;
+}
+
+/**
+ * Which badge a permission-mode picker row should show. When an env override
+ * is in force, the in-force row is marked "In force" and the persisted
+ * selection "Saved" (it applies once the env is unset); with no override the
+ * selected row is simply the "current" one.
+ */
+export function permissionRowBadge(args: {
+  rowMode: string;
+  savedMode: string;
+  overrideMode: string | null;
+}): 'In force' | 'Saved' | 'current' | null {
+  const { rowMode, savedMode, overrideMode } = args;
+  if (overrideMode) {
+    if (rowMode === overrideMode) return 'In force';
+    if (rowMode === savedMode) return 'Saved';
+    return null;
+  }
+  return rowMode === savedMode ? 'current' : null;
+}

@@ -21,6 +21,12 @@ export function useSettings(): UseQueryResult<DockProjectSettings> {
   return useQuery({
     queryKey: [...KEY, transport.kind],
     queryFn: () => transport.getSettings(),
+    // Visibility-scoped live refresh: surfaces an external `config.json` edit
+    // and — more usefully — an env-override change (a dev-server restart with
+    // a different PINAGENT_AGENT_PERMISSION_MODE) without a manual refetch.
+    // Paused when the dock isn't visible; structural sharing keeps an
+    // unchanged poll from disturbing an in-progress Settings edit.
+    refetchInterval: 10_000,
   });
 }
 

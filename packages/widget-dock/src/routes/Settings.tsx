@@ -14,7 +14,11 @@ import { cn } from '@pinagent/ui/lib/utils';
 import { AlertTriangle } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useSettings, useUpdateSettings } from '../hooks/useSettings';
-import { permissionModeDisplay } from '../lib/permissionMode';
+import {
+  overrideProjectMode,
+  permissionModeDisplay,
+  permissionRowBadge,
+} from '../lib/permissionMode';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
 import type { DockProjectSettings } from '../transport';
@@ -66,6 +70,9 @@ function SettingsForm({ initial }: { initial: DockProjectSettings }) {
     setDraft(initial);
   }, [initial]);
 
+  // The picker row an active env override resolves to (null = no override),
+  // so we can mark "In force" vs the merely "Saved" selection.
+  const overrideMode = overrideProjectMode(initial.permissionModeOverride);
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
   const valid =
     draft.baseBranch.trim().length > 0 &&
@@ -171,6 +178,11 @@ function SettingsForm({ initial }: { initial: DockProjectSettings }) {
           <div className="space-y-1.5 p-2">
             {PROJECT_PERMISSION_MODES.map((meta) => {
               const active = meta.projectMode === draft.permissionMode;
+              const badge = permissionRowBadge({
+                rowMode: meta.projectMode,
+                savedMode: draft.permissionMode,
+                overrideMode,
+              });
               return (
                 <button
                   key={meta.projectMode}
@@ -188,9 +200,12 @@ function SettingsForm({ initial }: { initial: DockProjectSettings }) {
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-foreground">{meta.label}</span>
-                    {active && (
-                      <Badge variant="outline" className="text-[10px]">
-                        current
+                    {badge && (
+                      <Badge
+                        variant={badge === 'In force' ? 'default' : 'outline'}
+                        className="text-[10px]"
+                      >
+                        {badge}
                       </Badge>
                     )}
                   </div>
