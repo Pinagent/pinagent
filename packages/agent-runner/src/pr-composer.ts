@@ -24,6 +24,7 @@ import { z } from 'zod';
 import { recordAuditEvent } from './audit-log';
 import { isInsideWorkTree, runGitCapture } from './git-utils';
 import { openPrOnGitHub, pushBranch } from './github-pr';
+import { type PrScreenshot, stageScreenshotAssets } from './pr-screenshots';
 import { Storage } from './storage';
 
 export const ComposeOptsSchema = z.object({
@@ -226,6 +227,28 @@ export async function composePullRequest(
     }
   }
 
+  // Attach each selected conversation's screenshot to the PR: commit the
+  // PNGs onto the compose branch (before the push below carries them to the
+  // remote) and collect a markdown block of their blob URLs to fold into the
+  // PR body. Best-effort — a failure here just leaves the body screenshot-less.
+  const shots: PrScreenshot[] = recs.map((rec) => ({
+    id: rec.id,
+    screenshot: rec.screenshot,
+    caption:
+      (rec.comment
+        .split(/\r?\n/)
+        .find((l) => l.trim())
+        ?.trim() ??
+        '') ||
+      undefined,
+  }));
+  const { markdown: screenshotMd } = await stageScreenshotAssets(
+    projectRoot,
+    composePath,
+    opts.branchName,
+    shots,
+  );
+
   // Push the compose branch. `git push` uses the user's local git
   // credentials (SSH keys, credential manager, etc.) — pinagent doesn't
   // need to manage them. If the push fails (no remote, auth issues), we
@@ -277,7 +300,7 @@ export async function composePullRequest(
     branchName: opts.branchName,
     baseBranch: opts.baseBranch,
     title: opts.title,
-    body: opts.description,
+    body: opts.description + screenshotMd,
     conversationIds: opts.feedbackIds,
   });
 }

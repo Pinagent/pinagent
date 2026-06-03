@@ -106,6 +106,11 @@ export {
   composePullRequest,
 } from './pr-composer';
 export {
+  type PrScreenshot,
+  type ScreenshotCandidate,
+  toScreenshotCandidates,
+} from './pr-screenshots';
+export {
   type AgentPermissionMode,
   type AgentProvider,
   type AgentRunRequest,
