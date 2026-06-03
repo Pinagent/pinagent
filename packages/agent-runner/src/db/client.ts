@@ -257,6 +257,14 @@ export function getDb(projectRoot: string): Db {
 
   runMigrations(raw, MIGRATIONS_DIR);
 
+  // Orphan sweep, once per process at first open. No agent run survives a
+  // process restart, so any `active_runs` row present now is stale — left by a
+  // prior process that crashed or lost its teardown delete (e.g. a swallowed
+  // SQLITE_BUSY). Leaving it makes `interruptRun` report success against a dead
+  // listener forever and pins the conversation `isRunning`. This runs before
+  // any run in THIS process can insert its row, so it can't drop a live run.
+  raw.exec('DELETE FROM active_runs');
+
   const db = makeDrizzle(raw);
   cache.set(root, { db, raw });
   return db;
