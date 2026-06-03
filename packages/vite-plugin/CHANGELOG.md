@@ -1,5 +1,98 @@
 # @pinagent/vite-plugin
 
+## 0.9.0
+
+### Minor Changes
+
+- 13e2636: Actually open the remote PR on "Create PR" via the `gh` CLI, and open it in the browser.
+
+  Previously Create PR only opened a real GitHub PR when a token was configured
+  (a dock-stored secret or `GITHUB_TOKEN`); developers authed only through the
+  `gh` CLI just got a "branch pushed, open the PR yourself" compare link, and the
+  button never flipped to **View PR** (no PR was recorded).
+
+  `openPrOnGitHub` now falls back to **`gh pr create`** when no Octokit token is
+  present (or the API call fails) — using the developer's existing `gh auth`, the
+  way Claude Code opens PRs. The opened PR is recorded, so the dashboard's button
+  switches to **View PR** (which opens the GitHub URL). Create PR also now opens
+  the new PR in the browser on success. The `create_pull_request` MCP tool gets
+  the same `gh` fallback.
+
+- 0628a6a: Dashboard: show new (untracked) files, and name "Start a branch" from the changes.
+
+  - `getWorkingCopyStatus` now includes **untracked files** in the file list and
+    totals. `git diff` omits them, so a freshly-created file that Create PR would
+    commit no longer goes missing from the hero. Counts respect `.gitignore` and
+    read line counts without staging.
+  - **"Start a branch"** now derives a readable slug from a summary of the working
+    changes (e.g. `pinagent/add-pricing-tiers`) instead of `pinagent/<id>`, with a
+    collision suffix when a name already exists. Falls back to the auto-id when no
+    model/key is available.
+
+- eaedf83: Refresh the PR description when pushing follow-up commits.
+
+  "Push changes" previously committed + pushed but left the PR body frozen at
+  whatever Create PR wrote. After a successful push, the dashboard now
+  regenerates the description from the full branch diff (the same inline
+  summarizer) and updates the open PR on GitHub — via Octokit when a token is
+  set, otherwise `gh pr edit` — and mirrors it into the recorded PR row. The
+  update is best-effort and never fails the push.
+
+### Patch Changes
+
+- ec33fdd: Standardize generated PR titles + commit messages as Conventional Commits.
+
+  The dashboard's "Create PR" summarizer now produces titles in
+  `type(scope): summary` form (e.g. `feat(dock): …`, `fix(widget): …`),
+  choosing the scope from the changed file paths — matching the repo's commit
+  convention. The same spec drives the inline commit-message generator (so the
+  auto-commit subject is consistent) and the `create_pull_request` MCP tool's
+  title guidance for the connected agent.
+
+- a57be06: Reconcile PR state via the `gh` CLI, and auto-refresh the PRs tab.
+
+  The PRs view's "Refresh" reconciled state through Octokit only, so for
+  developers authed via the `gh` CLI (no stored token) it did nothing — a PR
+  closed or merged on GitHub lingered as "open" in the dock. `refreshPullRequests`
+  now falls back to `gh pr view --json` when there's no token. The PRs tab also
+  reconciles once automatically when opened (the cached list renders immediately;
+  the row updates when the reconcile lands), so state no longer silently lags.
+
+- 2989bbb: Stop leaking pinagent's data dir into the dashboard/PRs, and handle detached HEAD.
+
+  - **Self-ignore `.pinagent/`.** `getDb` now writes `.pinagent/.gitignore` (`*`)
+    on first open, so git never sees the SQLite DB / screenshots / worktrees —
+    regardless of whether the host project gitignored `.pinagent`. Without it,
+    a project that hadn't gitignored `.pinagent` showed `db.sqlite` (+ `-wal`/`-shm`)
+    as untracked changes in the dashboard and `git add -A` (Create PR / Push)
+    committed them into the user's PR. `getWorkingCopyStatus` also defensively
+    drops `.pinagent/*` from its untracked list (covers the first-request race).
+  - **Detached HEAD.** The dashboard now shows a disabled "Create PR · Detached
+    HEAD" instead of an enabled button that errored on click (e.g. a
+    `git worktree add --detach`).
+
+  Found via a worktree audit; the core worktree flows (branch resolution,
+  commit-before-push, slug-collision suffix) were already correct.
+
+- 8ba03fc: Fix Create PR / Push committing nested git repos as submodule gitlinks.
+
+  The auto-commit step ran `git add -A`, which records any nested git repository
+  in the tree — linked worktrees under `.claude/worktrees/`, vendored repos, an
+  un-init'd submodule — as a gitlink ("Subproject commit …"). Opening a PR from
+  a repo that contained other git checkouts spammed it with dozens of bogus
+  `.claude/worktrees/*` subproject entries.
+
+  `commitWorkingChanges` now unstages every newly-added gitlink (mode 160000,
+  status A) after `git add -A` and before committing, so only real file changes
+  land in the commit. Intentionally-tracked submodule pointer updates are left
+  alone, and a commit whose only "changes" were embedded repos cleanly no-ops.
+
+- de6ecbf: Link "Generated with Pinagent" in generated PR bodies to https://pinagent.dev.
+- Updated dependencies [13e2636]
+- Updated dependencies [a57be06]
+- Updated dependencies [2989bbb]
+  - @pinagent/widget-dock@0.4.0
+
 ## 0.8.0
 
 ### Minor Changes
