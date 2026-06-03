@@ -235,6 +235,49 @@ describe('GET /sso/callback', () => {
     expect(await invitations.get('acme', 'bob@acme.com')).toBeNull();
   });
 
+  it('does NOT consume an invitation when the profile email is empty (unverified)', async () => {
+    // The OIDC provider drops an unverified email to '' — that must not be able
+    // to claim a pending invite addressed to the real (verified) owner.
+    const upserts: OrganizationMembership[] = [];
+    const memberships: MembershipStore = {
+      async getMembership() {
+        return null;
+      },
+      async getOrganization() {
+        return null;
+      },
+      async listMembers() {
+        return [];
+      },
+      async listMembershipsByUser() {
+        return [];
+      },
+      async upsertMembership(m) {
+        upserts.push(m);
+      },
+      async removeMembership() {},
+    };
+    const invitations = createInMemoryInvitationStore([
+      {
+        organizationId: 'acme',
+        email: 'bob@acme.com',
+        role: 'admin',
+        invitedAt: 'i',
+        invitedByUserId: null,
+      },
+    ]);
+    const unverified = fakeProvider({
+      completeLogin: vi.fn(async () => ({ ...profile, email: '' })),
+    });
+    const res = await handleSsoCallback(
+      new Request(`https://cloud.test/sso/callback?code=abc&state=${await startedState('/')}`),
+      { ...deps(unverified), invitations, memberships },
+    );
+    expect(res.status).toBe(302); // login still succeeds
+    expect(upserts).toHaveLength(0); // no membership granted
+    expect(await invitations.get('acme', 'bob@acme.com')).not.toBeNull(); // invite untouched
+  });
+
   it('login still succeeds when there is no pending invitation (no membership created)', async () => {
     const upserts: OrganizationMembership[] = [];
     const memberships = {

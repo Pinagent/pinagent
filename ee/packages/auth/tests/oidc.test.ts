@@ -78,6 +78,7 @@ async function defaultIdToken(overrides: Record<string, unknown> = {}): Promise<
     aud: CLIENT_ID,
     sub: 'idp-user-1',
     email: 'alice@acme.com',
+    email_verified: true,
     name: 'Alice',
     groups: ['eng', 'admins'],
     nonce: await deriveOidcNonce(NONCE_SECRET, STATE),
@@ -153,6 +154,29 @@ describe('createOidcProvider.completeLogin', () => {
       displayName: 'Alice',
       groups: ['eng', 'admins'],
     });
+  });
+
+  it('drops the email when email_verified is false (no invite takeover)', async () => {
+    const provider = await providerForIdToken(
+      await defaultIdToken({ email: 'victim@acme.com', email_verified: false }),
+    );
+    const profile = await provider.completeLogin(connection, {
+      payload: 'auth-code',
+      state: STATE,
+    });
+    expect(profile.email).toBe(''); // unverified → not trusted
+    expect(profile.subject).toBe('idp-user-1'); // identity still resolved
+  });
+
+  it('drops the email when email_verified is absent', async () => {
+    const provider = await providerForIdToken(
+      await defaultIdToken({ email: 'victim@acme.com', email_verified: undefined }),
+    );
+    const profile = await provider.completeLogin(connection, {
+      payload: 'auth-code',
+      state: STATE,
+    });
+    expect(profile.email).toBe('');
   });
 
   it('rejects an id_token whose nonce does not match the state', async () => {

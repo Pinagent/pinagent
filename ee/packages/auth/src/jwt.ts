@@ -39,6 +39,13 @@ export interface IdTokenClaims {
   aud: string | string[];
   exp: number;
   email?: string;
+  /**
+   * Whether the IdP asserts the user controls `email`. Only a literal `true`
+   * counts as verified — an absent or `false` value means the email is NOT
+   * trusted (see `completeLogin`, which drops an unverified email so it can't
+   * be used to claim another user's invitation).
+   */
+  email_verified?: boolean;
   name?: string;
   nonce?: string;
   groups?: unknown;

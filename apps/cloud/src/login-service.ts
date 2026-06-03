@@ -193,6 +193,10 @@ async function consumeInvitation(
 ): Promise<void> {
   const { invitations, memberships } = deps;
   if (!invitations || !memberships) return;
+  // No (verified) email → nothing to consume. The OIDC provider drops an
+  // unverified email to '', so this also blocks claiming an invite with an
+  // unverified address. (An invite is never stored under an empty email.)
+  if (!email) return;
   try {
     const invite = await invitations.get(connection.organizationId, email);
     if (!invite) return;

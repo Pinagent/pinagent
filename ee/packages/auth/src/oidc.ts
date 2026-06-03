@@ -113,10 +113,17 @@ export function createOidcProvider(config: OidcProviderConfig): SsoProvider {
         nowSeconds: now(),
       });
 
+      // Only trust the email when the IdP asserts `email_verified === true`.
+      // An unverified (or unasserted) email is dropped to '' so it can't be
+      // used to claim another user's pending invitation or be matched for an
+      // immediate membership grant. Identity is keyed on (connectionId, sub),
+      // not email, so login still succeeds — only email-dependent features
+      // (invite consumption, the members roster) degrade for that user.
+      const emailVerified = claims.email_verified === true;
       return {
         connectionId: connection.id,
         subject: claims.sub,
-        email: typeof claims.email === 'string' ? claims.email : '',
+        email: emailVerified && typeof claims.email === 'string' ? claims.email : '',
         displayName: typeof claims.name === 'string' ? claims.name : null,
         groups: Array.isArray(claims.groups) ? claims.groups.map(String) : [],
       };
