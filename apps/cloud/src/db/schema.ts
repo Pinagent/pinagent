@@ -177,6 +177,23 @@ export const usageEvents = billingSchema.table('usage_events', {
   metadata: jsonb('metadata').$type<Record<string, unknown>>(),
 });
 
+/**
+ * Throttle for usage-cap alert emails: one row per `(org, period, severity)`
+ * marks that admins were already emailed that alert this period, so the cost
+ * cap (which re-fires on every over-cap issuance) notifies at most once per
+ * period. `period_start` is `''` for orgs with no billing period.
+ */
+export const usageAlerts = billingSchema.table(
+  'usage_alerts',
+  {
+    organizationId: text('organization_id').notNull(),
+    periodStart: text('period_start').notNull(),
+    severity: text('severity').notNull(),
+    alertedAt: text('alerted_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.periodStart, t.severity] })],
+);
+
 /** One row per org: which plan it's on and the current billing period start. */
 export const subscriptions = billingSchema.table('subscriptions', {
   organizationId: text('organization_id').primaryKey(),
@@ -216,6 +233,7 @@ export const schema = {
   costControls,
   branchRouting,
   usageEvents,
+  usageAlerts,
   subscriptions,
   activeSessions,
 };

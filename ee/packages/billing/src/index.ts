@@ -4,6 +4,12 @@ export const PACKAGE_NAME = '@pinagent/ee-billing';
 export { advanceElapsedPeriods, nextPeriodStart, type PeriodRoll } from './billing-period';
 export { createInMemoryIssuanceLock, type IssuanceLock } from './issuance-lock';
 export {
+  createInMemoryUsageAlertStore,
+  type UsageAlertClaim,
+  type UsageAlertSeverity,
+  type UsageAlertStore,
+} from './usage-alerts';
+export {
   assertValidUsageQuantity,
   createInMemoryMeterSink,
   type MeterSink,

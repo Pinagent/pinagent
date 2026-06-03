@@ -48,9 +48,11 @@ export interface CloudAppDeps {
   internal: InternalServiceDeps;
 }
 
-export function createCloudApp(deps: CloudAppDeps): { fetch(request: Request): Promise<Response> } {
+export function createCloudApp(deps: CloudAppDeps): {
+  fetch(request: Request, waitUntil?: (promise: Promise<unknown>) => void): Promise<Response>;
+} {
   return {
-    fetch(request: Request): Promise<Response> {
+    fetch(request: Request, waitUntil?: (promise: Promise<unknown>) => void): Promise<Response> {
       const { pathname } = new URL(request.url);
       switch (pathname) {
         case '/sso/start':
@@ -58,7 +60,9 @@ export function createCloudApp(deps: CloudAppDeps): { fetch(request: Request): P
         case '/sso/callback':
           return handleSsoCallback(request, deps.login);
         case '/sessions':
-          return handleSessionRequest(request, deps.session);
+          // `waitUntil` lets the session handler fire a usage-cap alert email
+          // after the response, off the per-org issuance lock.
+          return handleSessionRequest(request, deps.session, waitUntil);
         case '/usage':
           return handleUsage(request, deps.read);
         case '/audit':

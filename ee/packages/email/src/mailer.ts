@@ -4,6 +4,7 @@ import {
   renderInvitationEmail,
   renderMemberRemovedEmail,
   renderRoleChangedEmail,
+  renderUsageAlertEmail,
   renderWelcomeEmail,
 } from './render';
 import type { EmailSender } from './sender';
@@ -38,6 +39,17 @@ export interface WelcomeInput {
   organizationName?: string | null;
 }
 
+/** An org hit (blocked) or is approaching (warning) a usage cap. */
+export interface UsageAlertInput {
+  to: string;
+  organizationName: string;
+  /** Human label for the metered resource, e.g. "relay sessions". */
+  resource: string;
+  used: number;
+  limit: number | null;
+  severity: 'blocked' | 'warning';
+}
+
 /**
  * High-level transactional mailer: renders the right template and sends it over
  * an {@link EmailSender}. Every method is **best-effort** — a render or
@@ -51,6 +63,7 @@ export interface Mailer {
   sendMemberRemoved(input: MemberRemovedInput): Promise<void>;
   sendRoleChanged(input: RoleChangedInput): Promise<void>;
   sendWelcome(input: WelcomeInput): Promise<void>;
+  sendUsageAlert(input: UsageAlertInput): Promise<void>;
 }
 
 export interface MailerOptions {
@@ -66,6 +79,7 @@ export function createMailer(sender: EmailSender, options: MailerOptions): Maile
   // The invite CTA lands on the dashboard, which kicks off SSO sign-in.
   const acceptUrl = `${base}/sso/start?returnTo=${encodeURIComponent('/')}`;
   const dashboardUrl = `${base}/`;
+  const billingUrl = `${base}/billing`;
 
   /** Render + send, swallowing any failure. */
   async function dispatch(to: string, render: () => Promise<RenderedEmail>): Promise<void> {
@@ -111,6 +125,18 @@ export function createMailer(sender: EmailSender, options: MailerOptions): Maile
           name: input.name ?? null,
           organizationName: input.organizationName ?? null,
           dashboardUrl,
+        }),
+      );
+    },
+    sendUsageAlert(input) {
+      return dispatch(input.to, () =>
+        renderUsageAlertEmail({
+          organizationName: input.organizationName,
+          resource: input.resource,
+          used: input.used,
+          limit: input.limit,
+          severity: input.severity,
+          billingUrl,
         }),
       );
     },

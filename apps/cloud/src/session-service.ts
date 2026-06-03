@@ -6,6 +6,7 @@ import {
   type MembershipStore,
   type Permission,
   type UserId,
+  type UserStore,
 } from '@pinagent/ee-auth';
 import {
   checkQuota,
@@ -13,6 +14,8 @@ import {
   type MeterSink,
   type SubscriptionStore,
   USAGE_KINDS,
+  type UsageAlertSeverity,
+  type UsageAlertStore,
 } from '@pinagent/ee-billing';
 import {
   AUDIT_ACTIONS,
@@ -91,6 +94,25 @@ export interface SessionServiceDeps {
    * race). No-op effect on correctness when absent — just unserialized.
    */
   issuanceLock?: IssuanceLock;
+  /**
+   * Optional usage-cap alerting. All three together enable a best-effort email
+   * to the org's admins/owners when a cost cap is hit (`blocked`) or approached
+   * (`warning`): `users` resolves their addresses, `usageAlerts` throttles to
+   * once per period, and `email` sends. The send runs OUTSIDE the issuance lock
+   * (see {@link handleSessionRequest}); absent any of them, it's a no-op.
+   */
+  users?: UserStore;
+  usageAlerts?: UsageAlertStore;
+  email?: {
+    sendUsageAlert(input: {
+      to: string;
+      organizationName: string;
+      resource: string;
+      used: number;
+      limit: number | null;
+      severity: UsageAlertSeverity;
+    }): Promise<void>;
+  };
   /** Override the issued-at clock (epoch seconds) — for tests. */
   nowSeconds?: number;
 }
@@ -107,6 +129,12 @@ const DEFAULT_REQUIRED_PERMISSION: Permission = 'conversation:read';
 export async function handleSessionRequest(
   request: Request,
   deps: SessionServiceDeps,
+  /**
+   * Worker `ctx.waitUntil`, when available — used to fire a usage-cap alert
+   * email AFTER the response, off the issuance lock. Absent (tests / non-Worker
+   * hosts) → the alert is awaited inline instead (still off-lock).
+   */
+  waitUntil?: (promise: Promise<unknown>) => void,
 ): Promise<Response> {
   if (request.method !== 'POST') {
     return json({ error: 'method not allowed' }, 405);
@@ -150,11 +178,19 @@ export async function handleSessionRequest(
     // unserialized (the prior behaviour); the gate logic is unchanged.
     const critical = () =>
       enforceQuotaAndMeter(deps, body, user.userId, principal.role, occurredAt);
-    const denial = deps.issuanceLock
+    const { denial, alert } = deps.issuanceLock
       ? await deps.issuanceLock.withLock(body.organizationId, critical)
       : await critical();
-    if (denial) return denial;
 
+    // Fire the usage-cap alert (if any) OFF the lock: in the background via
+    // `waitUntil` so the response isn't delayed by email I/O, or awaited inline
+    // when no `waitUntil` is available. The closure is best-effort + throttled.
+    if (alert) {
+      if (waitUntil) waitUntil(alert());
+      else await alert();
+    }
+
+    if (denial) return denial;
     return json({ token, sessionId: body.sessionId, relayUrl: deps.relayUrl }, 200);
   } catch (err) {
     // Authorization failures are the expected non-2xx outcomes; collapse both
@@ -182,13 +218,24 @@ export async function handleSessionRequest(
  * records: keep this whole sequence inside the lock so the read and the write
  * are atomic with respect to other issuances for the same org.
  */
+/**
+ * Result of the gate: a `denial` Response to return (402) when blocked, or null
+ * to proceed; plus an optional `alert` — a best-effort usage-cap email task to
+ * run OUTSIDE the lock (set on a cost-cap block OR warning). Building the task
+ * here (under the lock) captures the decision; the I/O happens off-lock.
+ */
+interface GateResult {
+  denial: Response | null;
+  alert: (() => Promise<void>) | null;
+}
+
 async function enforceQuotaAndMeter(
   deps: SessionServiceDeps,
   body: SessionRequestBody,
   actorUserId: UserId,
   role: string,
   occurredAt: string,
-): Promise<Response | null> {
+): Promise<GateResult> {
   // Enforce plan quota (membership + RBAC already passed inside `issue`).
   // The token was signed already but isn't delivered when over quota.
   if (deps.subscriptions && deps.meter) {
@@ -210,7 +257,7 @@ async function enforceQuotaAndMeter(
           limit: decision.limit,
         },
       });
-      return json({ error: 'plan quota exceeded' }, 402);
+      return { denial: json({ error: 'plan quota exceeded' }, 402), alert: null };
     }
   }
 
@@ -236,11 +283,32 @@ async function enforceQuotaAndMeter(
           targetId: body.sessionId,
           metadata: { cap: decision.cap, used: decision.used, enforcement: decision.enforcement },
         });
-        if (!decision.allowed) return json({ error: 'cost cap reached' }, 402);
+        const alert = makeUsageAlert(deps, {
+          organizationId: body.organizationId,
+          severity: decision.allowed ? 'warning' : 'blocked',
+          used: decision.used,
+          limit: decision.cap,
+          periodStart: periodStart ?? '',
+        });
+        // Blocked: reject (token not delivered). Warning: allow + fall through
+        // to meter, carrying the alert.
+        if (!decision.allowed) return { denial: json({ error: 'cost cap reached' }, 402), alert };
+        return { ...(await meterAndIssue(deps, body, actorUserId, role, occurredAt)), alert };
       }
     }
   }
 
+  return meterAndIssue(deps, body, actorUserId, role, occurredAt);
+}
+
+/** Audit the grant + meter one relay-session unit. Always allows (denial null). */
+async function meterAndIssue(
+  deps: SessionServiceDeps,
+  body: SessionRequestBody,
+  actorUserId: UserId,
+  role: string,
+  occurredAt: string,
+): Promise<GateResult> {
   await deps.audit?.record({
     occurredAt,
     organizationId: body.organizationId,
@@ -256,7 +324,60 @@ async function enforceQuotaAndMeter(
     quantity: 1,
     metadata: { sessionId: body.sessionId, role },
   });
-  return null;
+  return { denial: null, alert: null };
+}
+
+/**
+ * Build a best-effort usage-cap alert task, or null when alerting isn't fully
+ * wired. The returned closure (run off the lock) throttles via `usageAlerts`
+ * (≤ one email per org/period/severity), resolves the org's active
+ * admins/owners + their addresses, and emails each. All failures swallowed —
+ * an alert must never affect issuance.
+ */
+function makeUsageAlert(
+  deps: SessionServiceDeps,
+  input: {
+    organizationId: string;
+    severity: UsageAlertSeverity;
+    used: number;
+    limit: number | null;
+    periodStart: string;
+  },
+): (() => Promise<void>) | null {
+  const { email, users, usageAlerts, store } = deps;
+  if (!email || !users || !usageAlerts) return null;
+  const { organizationId, severity, used, limit, periodStart } = input;
+  return async () => {
+    try {
+      // Throttle: only the first claim of (org, period, severity) sends.
+      if (!(await usageAlerts.claim({ organizationId, periodStart, severity }))) return;
+      const [org, members] = await Promise.all([
+        store.getOrganization(organizationId),
+        store.listMembers(organizationId),
+      ]);
+      const admins = members.filter(
+        (m) => m.status === 'active' && (m.role === 'admin' || m.role === 'owner'),
+      );
+      const addresses = await Promise.all(
+        admins.map(async (m) => (await users.get(m.userId))?.email),
+      );
+      const recipients = [...new Set(addresses.filter((e): e is string => Boolean(e)))];
+      await Promise.all(
+        recipients.map((to) =>
+          email.sendUsageAlert({
+            to,
+            organizationName: org?.displayName ?? organizationId,
+            resource: 'relay sessions',
+            used,
+            limit,
+            severity,
+          }),
+        ),
+      );
+    } catch {
+      // Best-effort: a usage alert must never affect issuance.
+    }
+  };
 }
 
 /** Route cloud HTTP requests. Currently just the session endpoint. */

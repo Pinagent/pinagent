@@ -23,6 +23,7 @@ import { createPgMeterSink } from './db/meter-sink';
 import { createPgOidcCredentialStore } from './db/oidc-credential-store';
 import { createPgSsoConnectionStore } from './db/sso-connection-store';
 import { createPgSubscriptionStore } from './db/subscription-store';
+import { createPgUsageAlertStore } from './db/usage-alert-store';
 import { createPgUserStore } from './db/user-store';
 import { createOidcClientResolver } from './oidc-client';
 import { createRelayClient } from './relay-client';
@@ -38,8 +39,13 @@ import { createStripeMeterClient } from './stripe-client';
 type CloudEnv = Record<string, string | undefined>;
 
 interface BuiltApp {
-  fetch(request: Request): Promise<Response>;
+  fetch(request: Request, waitUntil?: (promise: Promise<unknown>) => void): Promise<Response>;
   runRollover(): Promise<{ rolled: number }>;
+}
+
+/** Cloudflare `ExecutionContext` (loosely typed to avoid a workers-types dep). */
+interface ExecutionCtx {
+  waitUntil(promise: Promise<unknown>): void;
 }
 
 let appPromise: Promise<BuiltApp> | null = null;
@@ -50,8 +56,11 @@ function built(env: CloudEnv): Promise<BuiltApp> {
 }
 
 export default {
-  fetch(request: Request, env: CloudEnv): Promise<Response> {
-    return built(env).then((app) => app.fetch(request));
+  fetch(request: Request, env: CloudEnv, ctx?: ExecutionCtx): Promise<Response> {
+    // Pass `ctx.waitUntil` so the session handler can send a usage-cap alert
+    // email in the background, after the response and off the issuance lock.
+    const waitUntil = ctx ? (p: Promise<unknown>) => ctx.waitUntil(p) : undefined;
+    return built(env).then((app) => app.fetch(request, waitUntil));
   },
   // Cloudflare Cron Trigger (see wrangler.toml) — advance elapsed billing
   // periods. Loosely typed to avoid a hard dependency on @cloudflare/workers-types.
@@ -74,6 +83,8 @@ async function buildApp(config: CloudConfig) {
   const activeSessions = createPgActiveSessionStore(db);
   // Serializes the quota/cost gate per org across isolates (advisory lock).
   const issuanceLock = createPgIssuanceLock(db);
+  // Throttles usage-cap alert emails to once per org/period/severity.
+  const usageAlerts = createPgUsageAlertStore(db);
   // Control-plane → device push, reusing the relay's internal secret. Lets a
   // branch-routing PUT reach the org's live sessions (see config-service).
   const relay = createRelayClient({
@@ -164,6 +175,9 @@ async function buildApp(config: CloudConfig) {
       subscriptions,
       costControls,
       issuanceLock,
+      users,
+      usageAlerts,
+      email: mailer,
     },
     login: {
       provider,
