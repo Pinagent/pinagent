@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Elastic-2.0
 import type { MeterSink, UsageSummary } from '@pinagent/ee-billing';
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, sql } from 'drizzle-orm';
 import type { MembershipDb } from './membership-store';
 import { usageEvents } from './schema';
 
@@ -23,12 +23,11 @@ export function createPgMeterSink(db: MembershipDb): MeterSink {
     },
 
     async summarize(query): Promise<UsageSummary> {
-      const scope = query.since
-        ? and(
-            eq(usageEvents.organizationId, query.organizationId),
-            gte(usageEvents.occurredAt, query.since),
-          )
-        : eq(usageEvents.organizationId, query.organizationId);
+      // Half-open window `[since, until)` — `since` inclusive, `until` exclusive.
+      const conditions = [eq(usageEvents.organizationId, query.organizationId)];
+      if (query.since !== undefined) conditions.push(gte(usageEvents.occurredAt, query.since));
+      if (query.until !== undefined) conditions.push(lt(usageEvents.occurredAt, query.until));
+      const scope = conditions.length === 1 ? conditions[0] : and(...conditions);
       const rows = await db
         .select({ kind: usageEvents.kind, total: sql<number>`sum(${usageEvents.quantity})::int` })
         .from(usageEvents)

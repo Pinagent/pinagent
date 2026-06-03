@@ -72,6 +72,43 @@ describe('createStripeReporter', () => {
     ]);
   });
 
+  it('bills only the closed window, excluding usage already in the new period', async () => {
+    const client = recordingClient();
+    const subscriptions = createInMemorySubscriptionStore([
+      {
+        organizationId: 'acme',
+        planId: 'pro',
+        currentPeriodStart: '2026-05-01T00:00:00.000Z',
+        stripeCustomerId: 'cus_123',
+      },
+    ]);
+    const meter = createInMemoryMeterSink();
+    // 3 in the closed window [2026-04-01, 2026-05-01)…
+    for (let i = 0; i < 3; i++) {
+      await meter.record({
+        occurredAt: '2026-04-20T00:00:00.000Z',
+        organizationId: 'acme',
+        kind: USAGE_KIND,
+        quantity: 1,
+      });
+    }
+    // …and 2 already in the new period (at/after newPeriodStart) — must NOT bill.
+    for (const occurredAt of ['2026-05-01T00:00:00.000Z', '2026-05-02T00:00:00.000Z']) {
+      await meter.record({ occurredAt, organizationId: 'acme', kind: USAGE_KIND, quantity: 1 });
+    }
+    const reporter = createStripeReporter({
+      client,
+      subscriptions,
+      meter,
+      usageKind: USAGE_KIND,
+      eventName: EVENT_NAME,
+    });
+
+    await reporter.reportPeriodRollover(rollover);
+    expect(client.events).toHaveLength(1);
+    expect(client.events[0]?.value).toBe(3); // only the closed-window events
+  });
+
   it('skips an org with no Stripe customer', async () => {
     const client = recordingClient();
     const subscriptions = createInMemorySubscriptionStore([

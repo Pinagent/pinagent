@@ -34,6 +34,13 @@ export interface UsageQuery {
   organizationId: string;
   /** Only count events at/after this ISO timestamp (e.g. billing-period start). */
   since?: string;
+  /**
+   * Only count events strictly *before* this ISO timestamp — the half-open
+   * window `[since, until)`. Used to bill exactly one closed billing period at
+   * rollover (so usage already accruing in the new period isn't billed to the
+   * old one). Omit for an open-ended window up to now.
+   */
+  until?: string;
 }
 
 /** Totals by usage kind for one organization. */
@@ -58,6 +65,7 @@ export function createInMemoryMeterSink(): MeterSink & { readonly events: readon
       for (const e of events) {
         if (e.organizationId !== query.organizationId) continue;
         if (query.since !== undefined && e.occurredAt < query.since) continue;
+        if (query.until !== undefined && e.occurredAt >= query.until) continue;
         totals[e.kind] = (totals[e.kind] ?? 0) + e.quantity;
       }
       return totals;

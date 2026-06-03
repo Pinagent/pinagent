@@ -90,16 +90,35 @@ describe('runBillingRollover', () => {
     expect(d.audit.events).toHaveLength(0);
   });
 
-  it('continues the batch when a report fails (best-effort)', async () => {
-    const subscriptions = createInMemorySubscriptionStore([sub({ organizationId: 'stale' })]);
+  it('leaves the period un-advanced when the report fails, and continues the batch', async () => {
+    const subscriptions = createInMemorySubscriptionStore([
+      sub({ organizationId: 'stale' }),
+      sub({ organizationId: 'other' }),
+    ]);
     const reporter: BillingReporter = {
-      async reportPeriodRollover() {
-        throw new Error('stripe down');
+      async reportPeriodRollover(e) {
+        if (e.organizationId === 'stale') throw new Error('stripe down');
       },
     };
     const result = await runBillingRollover({ subscriptions, reporter, now: () => NOW });
-    // the period still advanced despite the report throwing
+    // 'stale' failed → NOT advanced and not counted (retried next run); 'other'
+    // still rolled. A failed report must never silently skip a billable period.
     expect(result).toEqual({ rolled: 1 });
+    expect((await subscriptions.get('stale'))?.currentPeriodStart).toBe('2026-01-01T00:00:00.000Z');
+    expect((await subscriptions.get('other'))?.currentPeriodStart).toBe('2026-01-31T00:00:00.000Z');
+  });
+
+  it('reports BEFORE advancing the period', async () => {
+    const subscriptions = createInMemorySubscriptionStore([sub({ organizationId: 'stale' })]);
+    let periodSeenByReporter: string | undefined;
+    const reporter: BillingReporter = {
+      async reportPeriodRollover(e) {
+        // Observe the stored period at report time — it must still be the OLD one.
+        periodSeenByReporter = (await subscriptions.get(e.organizationId))?.currentPeriodStart;
+      },
+    };
+    await runBillingRollover({ subscriptions, reporter, now: () => NOW });
+    expect(periodSeenByReporter).toBe('2026-01-01T00:00:00.000Z'); // reported pre-advance
     expect((await subscriptions.get('stale'))?.currentPeriodStart).toBe('2026-01-31T00:00:00.000Z');
   });
 

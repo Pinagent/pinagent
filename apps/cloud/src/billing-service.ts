@@ -65,20 +65,29 @@ export async function runBillingRollover(deps: RolloverDeps): Promise<{ rolled: 
 
     const rolls = advanceElapsedPeriods(page, at, planById);
     for (const roll of rolls) {
+      // Report to the billing provider BEFORE advancing the period. If the
+      // report fails we leave `currentPeriodStart` un-advanced, so the next run
+      // re-attempts this org rather than skipping it (which would silently lose
+      // a period's billable usage). The reporter's per-period idempotency key
+      // makes that retry a safe no-op on the provider side if it had in fact
+      // landed. A provider failure for one org never aborts the rest of the
+      // batch — we just skip advancing it.
+      if (deps.reporter) {
+        try {
+          await deps.reporter.reportPeriodRollover({
+            organizationId: roll.subscription.organizationId,
+            planId: roll.subscription.planId,
+            previousPeriodStart: roll.previousPeriodStart,
+            newPeriodStart: roll.newPeriodStart,
+          });
+        } catch {
+          continue; // leave un-advanced; retried on the next rollover run
+        }
+      }
       await deps.subscriptions.upsert({
         ...roll.subscription,
         currentPeriodStart: roll.newPeriodStart,
       });
-      try {
-        await deps.reporter?.reportPeriodRollover({
-          organizationId: roll.subscription.organizationId,
-          planId: roll.subscription.planId,
-          previousPeriodStart: roll.previousPeriodStart,
-          newPeriodStart: roll.newPeriodStart,
-        });
-      } catch {
-        // Best-effort: a provider failure must not abort the rest of the batch.
-      }
       await deps.audit?.record({
         occurredAt: at,
         organizationId: roll.subscription.organizationId,
@@ -89,8 +98,8 @@ export async function runBillingRollover(deps: RolloverDeps): Promise<{ rolled: 
           newPeriodStart: roll.newPeriodStart,
         },
       });
+      rolled++; // count only orgs we actually advanced
     }
-    rolled += rolls.length;
     if (page.length < limit) break;
   }
   return { rolled };
