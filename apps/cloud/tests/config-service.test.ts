@@ -109,6 +109,20 @@ describe('/subscriptions', () => {
     expect(res.status).toBe(400);
   });
 
+  it('PUT 403s an admin self-assigning a privileged plan (enterprise)', async () => {
+    const d = deps('u-admin');
+    const res = await handleSubscriptionConfig(
+      req('PUT', '/subscriptions?organizationId=acme', {
+        planId: 'enterprise',
+        currentPeriodStart: '2026-05-01T00:00:00Z',
+      }),
+      d,
+    );
+    expect(res.status).toBe(403);
+    // The escalation must not have persisted.
+    expect(await d.subscriptions.get('acme')).toBeNull();
+  });
+
   it('PUT 400s on a malformed body', async () => {
     const res = await handleSubscriptionConfig(
       req('PUT', '/subscriptions?organizationId=acme', { planId: 'pro' }),

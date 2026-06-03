@@ -30,6 +30,14 @@ describe('parseSubscriptionForm', () => {
     const r = parseSubscriptionForm({ planId: 'pro', currentPeriodStart: '   ' });
     expect(r.ok).toBe(false);
   });
+
+  it('rejects a privileged (non-self-serviceable) plan like enterprise', () => {
+    const r = parseSubscriptionForm({
+      planId: 'enterprise',
+      currentPeriodStart: '2026-05-01T00:00:00Z',
+    });
+    expect(r.ok).toBe(false);
+  });
 });
 
 describe('parseCostControlForm', () => {

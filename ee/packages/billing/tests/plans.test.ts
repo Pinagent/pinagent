@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { describe, expect, it } from 'vitest';
-import { planById, quotaFor, quotaStatus, wouldExceedQuota } from '../src/plans';
+import {
+  isSelfServiceablePlan,
+  planById,
+  quotaFor,
+  quotaStatus,
+  wouldExceedQuota,
+} from '../src/plans';
 
 describe('plans', () => {
   it('looks up plans by id', () => {
@@ -29,5 +35,14 @@ describe('plans', () => {
     const free = planById('free') as NonNullable<ReturnType<typeof planById>>;
     const status = quotaStatus(free, { 'relay.session': 150 });
     expect(status).toContainEqual({ kind: 'relay.session', used: 150, limit: 100, exceeded: true });
+  });
+
+  it('marks finite plans self-serviceable and unlimited/unknown plans not', () => {
+    expect(isSelfServiceablePlan('free')).toBe(true);
+    expect(isSelfServiceablePlan('pro')).toBe(true);
+    // Unlimited enterprise is internal-only — can't be self-assigned.
+    expect(isSelfServiceablePlan('enterprise')).toBe(false);
+    // Unknown plans are never self-serviceable.
+    expect(isSelfServiceablePlan('platinum')).toBe(false);
   });
 });

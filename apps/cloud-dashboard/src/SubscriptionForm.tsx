@@ -9,7 +9,9 @@ import type { SubscriptionInput } from './api-client';
 import { Field, FormError, selectClassName } from './form-controls';
 import { parseSubscriptionForm } from './forms';
 
-const PLAN_OPTIONS = Object.values(PLANS);
+// Only self-serviceable plans are offered — privileged plans (e.g. unlimited
+// `enterprise`) are internal-only and the server 403s a self-assign attempt.
+const PLAN_OPTIONS = Object.values(PLANS).filter((plan) => plan.selfServiceable);
 
 /**
  * Edit form for the org's subscription. Validation lives in
