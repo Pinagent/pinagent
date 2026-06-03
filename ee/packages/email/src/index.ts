@@ -20,6 +20,7 @@ export {
   type MailerOptions,
   type MemberRemovedInput,
   type RoleChangedInput,
+  type UsageAlertInput,
   type WelcomeInput,
 } from './mailer';
 export {

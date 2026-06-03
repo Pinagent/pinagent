@@ -67,6 +67,20 @@ describe('createMailer', () => {
     expect(sent[0]?.html).toContain('Bob');
   });
 
+  it('sends a usage-cap alert with used/limit + the billing link', async () => {
+    const { sender, sent } = recordingSender();
+    await createMailer(sender, { appBaseUrl: APP }).sendUsageAlert({
+      to: 'admin@acme.com',
+      organizationName: 'Acme Inc',
+      resource: 'relay sessions',
+      used: 100,
+      limit: 100,
+      severity: 'blocked',
+    });
+    expect(sent[0]?.subject).toBe('Acme Inc: relay sessions limit reached');
+    expect(sent[0]?.html).toContain('https://app.pinagent.dev/billing');
+  });
+
   it('is best-effort: a transport failure is swallowed, not thrown', async () => {
     const onError = vi.fn();
     const failing: EmailSender = {

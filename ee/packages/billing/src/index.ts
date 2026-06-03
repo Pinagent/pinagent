@@ -43,3 +43,9 @@ export {
   type SubscriptionPageOptions,
   type SubscriptionStore,
 } from './subscriptions';
+export {
+  createInMemoryUsageAlertStore,
+  type UsageAlertClaim,
+  type UsageAlertSeverity,
+  type UsageAlertStore,
+} from './usage-alerts';
