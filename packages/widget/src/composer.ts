@@ -191,7 +191,7 @@ export function createComposerController(ctx: WidgetContext): {
    * lives in `selector.ts::findReanchorTarget` so it can be tested.
    */
   function tryReanchor(composer: Composer): boolean {
-    const found = findReanchorTarget(composer.dataPaLoc, composer.selector);
+    const found = findReanchorTarget(composer.dataPaLoc, composer.selector, composer.instance);
     if (!found) return false;
     composer.target = found;
     return true;

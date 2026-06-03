@@ -233,23 +233,38 @@ export function elementFingerprint(el: Element, maxText = 60): string {
  * (e.g. compiled-away in production, dynamically inserted, or living in
  * a third-party component the Babel plugin never visited).
  *
- * Returns the first match for `data-pa-loc` (which may be ambiguous if the
- * same JSX literal is rendered multiple times via `.map()`), then the
- * first match for `selector`. Returns `null` when neither resolves.
+ * When the same JSX literal renders multiple times via `.map()`, several
+ * live nodes share one `data-pa-loc`. `instance` (captured at pick time)
+ * disambiguates: prefer the node whose fingerprint still matches (survives
+ * row reordering), else the captured positional index, else the first match.
+ * Without it we fall back to the first match. The CSS `selector` is the last
+ * resort for elements that lost their attribute. Returns `null` when nothing
+ * resolves.
  */
 export function findReanchorTarget(
   dataPaLoc: string | null,
   selector: string | null,
+  instance?: { index: number; fingerprint: string } | null,
 ): Element | null {
   if (dataPaLoc) {
     // Iterate rather than escape the value into a CSS attribute selector —
     // some host paths contain characters (quotes, backslashes, brackets)
     // that need careful CSS escaping and a `\` rule that happy-dom doesn't
     // accept the same way real browsers do. Iterating sidesteps that.
+    const matches: Element[] = [];
     const candidates = document.querySelectorAll('[data-pa-loc]');
     for (let i = 0; i < candidates.length; i++) {
       const el = candidates[i];
-      if (el?.getAttribute('data-pa-loc') === dataPaLoc) return el;
+      if (el?.getAttribute('data-pa-loc') === dataPaLoc) matches.push(el);
+    }
+    if (matches.length > 0) {
+      // Single match, or no instance info to disambiguate with → take it.
+      if (matches.length === 1 || !instance) return matches[0] ?? null;
+      // The picked `.map()` row, identified first by fingerprint (robust to
+      // reordering), then by its captured position, then first as a backstop.
+      const byFingerprint = matches.find((el) => elementFingerprint(el) === instance.fingerprint);
+      if (byFingerprint) return byFingerprint;
+      return matches[instance.index] ?? matches[0] ?? null;
     }
   }
   if (selector) {
