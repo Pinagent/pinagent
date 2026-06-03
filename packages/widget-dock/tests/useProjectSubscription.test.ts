@@ -68,6 +68,7 @@ describe('createProjectEventListener', () => {
       ['conversations'],
       ['conversation'],
       ['changes'],
+      ['changeDiff'],
       ['branches'],
       ['pullRequests'],
       ['auditLog'],

@@ -159,7 +159,7 @@ function titleOf(comment: string): string {
 export async function getChangeDiff(
   projectRoot: string,
   feedbackId: string,
-): Promise<WorktreeDiff | null> {
+): Promise<(WorktreeDiff & { worktreePath: string }) | null> {
   const storage = new Storage(projectRoot);
   const rec = await storage.read(feedbackId);
   if (!rec) return null;
@@ -170,5 +170,10 @@ export async function getChangeDiff(
   if (rec.worktreeState !== 'active') return null;
   if (!rec.worktreePath) return null;
   const baseRef = await resolveBaseRef(projectRoot);
-  return computeWorktreeDiff(rec.worktreePath, baseRef);
+  const diff = await computeWorktreeDiff(rec.worktreePath, baseRef);
+  if (!diff) return null;
+  // Surface the worktree's absolute path so the dock can open changed
+  // files at the agent's edited version (the workspace still holds the
+  // old copy until the change lands).
+  return { ...diff, worktreePath: rec.worktreePath };
 }

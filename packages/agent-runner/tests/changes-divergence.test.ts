@@ -192,3 +192,22 @@ describe('listChanges — preview', () => {
     expect(row?.preview).toBe('');
   });
 });
+
+describe('getChangeDiff', () => {
+  it('returns the diff + the worktree absolute path (for open-in-editor)', async () => {
+    const { id, worktreePath } = await makeFeedbackWithWorktree();
+    await writeFile(join(worktreePath, 'README.md'), 'agent edit\n', 'utf8');
+
+    const result = await changesMod.getChangeDiff(ROOT, id);
+    expect(result).not.toBeNull();
+    expect(result?.diff).toContain('README.md');
+    expect(result?.worktreePath).toBe(worktreePath);
+  });
+
+  it('returns null for a non-active conversation', async () => {
+    const { id } = await makeFeedbackWithWorktree();
+    const storage = new storageMod.Storage(ROOT);
+    await storage.patch(id, { worktreeState: 'landed' });
+    expect(await changesMod.getChangeDiff(ROOT, id)).toBeNull();
+  });
+});

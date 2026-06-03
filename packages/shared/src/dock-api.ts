@@ -82,6 +82,11 @@ export const ChangeDiffSchema = z
   .object({
     diff: z.string(),
     truncated: z.boolean(),
+    /**
+     * Absolute path of the conversation's worktree, so the dock can open a
+     * changed file at the agent's edited version. Optional for older servers.
+     */
+    worktreePath: z.string().optional(),
   })
   .loose();
 export type ChangeDiff = z.infer<typeof ChangeDiffSchema>;
