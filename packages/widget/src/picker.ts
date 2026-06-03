@@ -7,6 +7,26 @@ import { locAncestors } from './selector';
 const MIN_REGION_PX = 8;
 
 /**
+ * `document.elementFromPoint` that descends through open shadow roots. The
+ * native call returns a shadow *host* for a click inside a web component's
+ * shadow tree, so walking up from the host would resolve the wrong (outer)
+ * `data-pa-loc` or none. Descend via each host's `shadowRoot.elementFromPoint`
+ * to the real leaf the user clicked. Closed shadow roots can't be pierced
+ * (`shadowRoot` is null) — we stop at the host, the best we can do. The depth
+ * guard caps pathological nesting. (Cross-origin iframes remain opaque — their
+ * document isn't reachable from the host page.)
+ */
+export function deepElementFromPoint(x: number, y: number): Element | null {
+  let el = document.elementFromPoint(x, y);
+  for (let depth = 0; el?.shadowRoot && depth < 20; depth++) {
+    const inner = el.shadowRoot.elementFromPoint(x, y);
+    if (!inner || inner === el) break;
+    el = inner;
+  }
+  return el;
+}
+
+/**
  * Element-picking session. While active, the cursor turns into the pin,
  * a hint banner shows, and mousemove highlights the element under the
  * pointer. A plain click commits the picked element to a new composer;
@@ -479,7 +499,7 @@ export function createPicker(ctx: WidgetContext): {
   function elementFromPointSafe(x: number, y: number): Element | null {
     const prevHost = host.style.pointerEvents;
     host.style.pointerEvents = 'none';
-    const target = document.elementFromPoint(x, y);
+    const target = deepElementFromPoint(x, y);
     host.style.pointerEvents = prevHost;
     if (!target || target === host) return null;
     return target;
@@ -530,7 +550,7 @@ export function createPicker(ctx: WidgetContext): {
       ctx.expandedComposer.iframe.style.pointerEvents = 'none';
     }
 
-    const target = document.elementFromPoint(e.clientX, e.clientY);
+    const target = deepElementFromPoint(e.clientX, e.clientY);
 
     host.style.pointerEvents = prevHost;
     if (ctx.expandedComposer?.expanded && prevExpanded !== null) {
