@@ -69,6 +69,14 @@ export interface Conversation {
    * for docks talking to a server that predates this field).
    */
   apiKeySource?: string | null;
+  /**
+   * Persisted worktree lifecycle state, mirrored from the server record.
+   * `'none'` for inline-mode conversations (no worktree); `'active'` once
+   * a worktree-mode agent has one to land; `'landed'`/`'discarded'` after
+   * resolution. Drives the list's inline Land affordance (only `'active'`
+   * is landable). Optional/undefined for docks talking to an older server.
+   */
+  worktreeState?: 'none' | 'active' | 'landed' | 'discarded';
 }
 
 /** A pending or landed code change produced by an agent for a conversation. */
