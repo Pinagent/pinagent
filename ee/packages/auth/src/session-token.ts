@@ -12,6 +12,19 @@ import { type CodecFailure, nowSeconds, signClaims, verifyClaims } from './token
  * land on the same Durable Object. Built on the shared {@link token-codec}.
  */
 
+/**
+ * Which side of a relay session a token authorizes. The dev machine's
+ * agent-runner connects as the `device`; browsers/docks connect as `client`s.
+ * The relay enforces this against the connection path so a client token can't
+ * be used to impersonate the device (evicting the real agent / injecting
+ * forged agent frames), and vice-versa.
+ */
+export type SessionAudience = 'device' | 'client';
+
+export function isSessionAudience(value: unknown): value is SessionAudience {
+  return value === 'device' || value === 'client';
+}
+
 export interface SessionClaims {
   /** Billing/RBAC tenant the session belongs to (an organization id). */
   tenantId: string;
@@ -23,6 +36,12 @@ export interface SessionClaims {
    * store. Issued by {@link issueRelaySessionToken}.
    */
   role: Role;
+  /**
+   * Which relay side this token authorizes (`device` vs `client`). The relay
+   * rejects a token whose `aud` doesn't match the connection path, so a client
+   * token can't impersonate the device.
+   */
+  aud: SessionAudience;
   /** Issued-at, epoch seconds. */
   iat: number;
   /** Expiry, epoch seconds. */
@@ -43,13 +62,13 @@ export type VerifyResult =
 const DEFAULT_TTL_SECONDS = 3_600;
 
 /**
- * Mint a signed token for `{ tenantId, sessionId, role }`. Prefer
+ * Mint a signed token for `{ tenantId, sessionId, role, audience }`. Prefer
  * {@link issueRelaySessionToken}, which derives these from a verified
  * organization membership; call this directly only when the claims are
- * already trusted.
+ * already trusted (e.g. provisioning a dev machine's `device` token).
  */
 export async function signSessionToken(
-  input: { tenantId: string; sessionId: string; role: Role },
+  input: { tenantId: string; sessionId: string; role: Role; audience: SessionAudience },
   secret: string,
   opts: SignOptions = {},
 ): Promise<string> {
@@ -58,6 +77,7 @@ export async function signSessionToken(
     tenantId: input.tenantId,
     sessionId: input.sessionId,
     role: input.role,
+    aud: input.audience,
     iat: now,
     exp: now + (opts.ttlSeconds ?? DEFAULT_TTL_SECONDS),
   };
@@ -84,6 +104,7 @@ function isSessionClaims(value: unknown): value is SessionClaims {
     typeof c.tenantId === 'string' &&
     typeof c.sessionId === 'string' &&
     isRole(c.role) &&
+    isSessionAudience(c.aud) &&
     typeof c.iat === 'number' &&
     typeof c.exp === 'number'
   );

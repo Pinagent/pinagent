@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Elastic-2.0
-import { type Role, verifySessionToken } from '@pinagent/ee-auth';
+import { type Role, type SessionAudience, verifySessionToken } from '@pinagent/ee-auth';
 import { relayDoName } from './do-name';
 import { isAuthorizedInternal } from './internal-auth';
 import { RelaySession } from './relay-do';
@@ -79,10 +79,14 @@ export default {
       return new Response('relay misconfigured: RELAY_AUTH_SECRET is required', { status: 500 });
     }
 
-    const auth = await verifyToken(request, url, env);
+    // Which side this connection claims to be, from the path. The token's `aud`
+    // must match (enforced in `verifyToken`) so a client token can't be used to
+    // dial the device endpoint and impersonate the agent.
+    const side: SessionAudience = url.pathname === DEVICE_PATH ? 'device' : 'client';
+
+    const auth = await verifyToken(request, url, env, side);
     if (!auth) return new Response('unauthorized', { status: 401 });
 
-    const side = url.pathname === DEVICE_PATH ? 'device' : 'client';
     // Key the DO by tenant + session (never session alone) so a caller-chosen
     // sessionId can't collide across tenants. See `relayDoName`.
     const id = env.RELAY.idFromName(relayDoName(auth.tenantId, auth.sessionId));
@@ -162,13 +166,23 @@ async function handleInternalPush(request: Request, url: URL, env: Env): Promise
  * can't talk its way onto another tenant's Durable Object by changing the
  * URL).
  *
+ * The token's `aud` must match `expectedAudience` (the side derived from the
+ * connection path), so a `client` token can't be used to dial `/device` and
+ * impersonate the agent — and vice-versa.
+ *
  * When the secret is *unset* we fall back to dev mode: accept any
- * non-empty token and namespace the DO by the `?session=` query param.
- * This keeps local end-to-end testing frictionless. The caller (`fetch`)
- * only reaches this branch when `RELAY_ALLOW_INSECURE` is set — otherwise it
- * fails closed before we get here — so production never falls open.
+ * non-empty token and namespace the DO by the `?session=` query param. Audience
+ * isn't enforced in dev-fallback (there are no verified claims). This keeps
+ * local end-to-end testing frictionless. The caller (`fetch`) only reaches this
+ * branch when `RELAY_ALLOW_INSECURE` is set — otherwise it fails closed before
+ * we get here — so production never falls open.
  */
-async function verifyToken(request: Request, url: URL, env: Env): Promise<RelayAuth | null> {
+async function verifyToken(
+  request: Request,
+  url: URL,
+  env: Env,
+  expectedAudience: SessionAudience,
+): Promise<RelayAuth | null> {
   const token =
     request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ??
     url.searchParams.get('token') ??
@@ -178,6 +192,9 @@ async function verifyToken(request: Request, url: URL, env: Env): Promise<RelayA
   if (env.RELAY_AUTH_SECRET) {
     const result = await verifySessionToken(token, env.RELAY_AUTH_SECRET);
     if (!result.ok) return null;
+    // Bind the token to the connection side: a client token presented at
+    // `/device` (or vice-versa) is rejected.
+    if (result.claims.aud !== expectedAudience) return null;
     return {
       tenantId: result.claims.tenantId,
       sessionId: result.claims.sessionId,

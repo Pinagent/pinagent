@@ -3,7 +3,7 @@ import { authorizeOrgMember } from './authz';
 import type { MembershipStore, OrganizationId, UserId } from './membership';
 import type { Principal } from './principal';
 import type { Permission } from './rbac';
-import { signSessionToken } from './session-token';
+import { type SessionAudience, signSessionToken } from './session-token';
 
 /**
  * Relay session-token issuance — the bridge between identity (who you are,
@@ -28,6 +28,12 @@ export interface IssueRelaySessionOptions {
    * same `sessionId` to land on the same DO.
    */
   sessionId: string;
+  /**
+   * Which relay side the token authorizes. `/sessions` issues `client` tokens
+   * for browsers/docks; a dev machine's `device` token is provisioned
+   * separately. The relay binds this to the connection path.
+   */
+  audience: SessionAudience;
   /** HMAC secret shared with the relay (its `RELAY_AUTH_SECRET`). */
   secret: string;
   /** Token lifetime in seconds (defaults to the signer's default). */
@@ -67,7 +73,12 @@ export async function issueRelaySessionToken(
   );
 
   const token = await signSessionToken(
-    { tenantId: opts.organizationId, sessionId: opts.sessionId, role: principal.role },
+    {
+      tenantId: opts.organizationId,
+      sessionId: opts.sessionId,
+      role: principal.role,
+      audience: opts.audience,
+    },
     opts.secret,
     { ttlSeconds: opts.ttlSeconds, nowSeconds: opts.nowSeconds },
   );

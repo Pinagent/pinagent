@@ -49,6 +49,7 @@ const base = {
   userId: 'user-1',
   organizationId: 'acme',
   sessionId: 'sess-1',
+  audience: 'client',
   secret: SECRET,
 } as const;
 
@@ -68,6 +69,7 @@ describe('issueRelaySessionToken', () => {
       expect(result.claims.tenantId).toBe('acme');
       expect(result.claims.sessionId).toBe('sess-1');
       expect(result.claims.role).toBe('member');
+      expect(result.claims.aud).toBe('client');
     }
   });
 
