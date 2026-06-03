@@ -595,6 +595,10 @@ function RowLandButton({ id, title }: { id: string; title: string }) {
         'h-7 gap-1 px-2 text-xs text-status-landed-fg hover:text-status-landed-fg',
         // Reveal on row hover / keyboard focus; stay put while landing.
         'opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
+        // Touch devices report no hover, so Tailwind's hover/group-hover
+        // (gated behind `@media (hover: hover)` in v4) never fires and the
+        // action would be permanently invisible. Keep it shown there.
+        '[@media(hover:none)]:opacity-100',
         landing && 'opacity-100',
       )}
     >
@@ -643,6 +647,10 @@ function RowArchiveButton({
         // Reveal on row hover / keyboard focus; stay put while the
         // mutation is in flight even if the pointer leaves.
         'opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
+        // Touch devices report no hover, so Tailwind's hover/group-hover
+        // (gated behind `@media (hover: hover)` in v4) never fires and the
+        // action would be permanently invisible. Keep it shown there.
+        '[@media(hover:none)]:opacity-100',
         update.isPending && 'opacity-100',
       )}
     >
