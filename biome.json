@@ -9,7 +9,7 @@
       "!**/.pinagent",
       "!**/.next",
       "!**/.turbo",
-      "!**/.claude",
+      "!.claude",
       "!**/coverage",
       "!**/__generated__",
       "!**/drizzle",
