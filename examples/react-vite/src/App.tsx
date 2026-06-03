@@ -25,7 +25,7 @@ export function App() {
           code that needs changing. Try it on anything here, including the counters and the footer.
         </p>
         <section style={{ marginTop: 24 }}>
-          <Counter label="Pineapple" />
+          <Counter label="Pineapple" accent="#f97316" />
           <Counter label="Grapes" />
           <Counter label="Oranges" />
           <Counter label="Mangoes" />

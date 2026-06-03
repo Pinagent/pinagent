@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export function Counter({ label }: { label: string }) {
+export function Counter({ label, accent }: { label: string; accent?: string }) {
   const [count, setCount] = useState(0);
   const [hovered, setHovered] = useState(false);
   return (
@@ -12,8 +12,9 @@ export function Counter({ label }: { label: string }) {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: 12,
-        border: `1px solid ${hovered ? '#94a3b8' : '#e5e7eb'}`,
-        background: hovered ? '#f1f5f9' : 'transparent',
+        border: `1px solid ${accent ?? (hovered ? '#94a3b8' : '#e5e7eb')}`,
+        background: accent ? (hovered ? '#ffedd5' : '#fff7ed') : hovered ? '#f1f5f9' : 'transparent',
+        color: accent ?? undefined,
         borderRadius: 8,
         marginBottom: 8,
         transition: 'background 120ms ease, border-color 120ms ease',
