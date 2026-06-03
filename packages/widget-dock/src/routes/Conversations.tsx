@@ -27,6 +27,7 @@ import {
   useSavedFilters,
 } from '../hooks/useSavedFilters';
 import { useSettings } from '../hooks/useSettings';
+import { useUpdateConversation } from '../hooks/useUpdateConversation';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
 import { LoadingState } from '../shell/states/LoadingState';
@@ -475,6 +476,7 @@ export function Conversations() {
                 selected={selected.has(c.id)}
                 onSelectChange={(next) => toggleSelected(c.id, next)}
                 selectLabel={`Select ${c.title}`}
+                actions={<RowArchiveButton id={c.id} title={c.title} archived={c.archived} />}
                 meta={
                   <>
                     {c.archived && <span className="text-[10px]">archived</span>}
@@ -546,6 +548,47 @@ export function Conversations() {
         </section>
       )}
     </div>
+  );
+}
+
+/**
+ * Per-row quick archive / unarchive. Hover- (and focus-) revealed so the
+ * row stays clean at rest, but a single conversation can be archived
+ * without opening its detail view or going through multi-select + the
+ * bulk bar. Owns its own mutation so each row's pending state is
+ * independent; reuses `useUpdateConversation`, which invalidates the list
+ * (and the open detail) so the row drops out — or reappears under "Show
+ * archived" — without a manual refetch.
+ */
+function RowArchiveButton({
+  id,
+  title,
+  archived,
+}: {
+  id: string;
+  title: string;
+  archived: boolean;
+}) {
+  const update = useUpdateConversation();
+  const Icon = archived ? ArchiveRestore : Archive;
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      onClick={() => update.mutate({ id, patch: { archived: !archived } })}
+      disabled={update.isPending}
+      aria-label={`${archived ? 'Unarchive' : 'Archive'} ${title}`}
+      title={archived ? 'Unarchive' : 'Archive'}
+      className={cn(
+        'h-7 w-7 p-0 text-muted-foreground hover:text-foreground',
+        // Reveal on row hover / keyboard focus; stay put while the
+        // mutation is in flight even if the pointer leaves.
+        'opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
+        update.isPending && 'opacity-100',
+      )}
+    >
+      {update.isPending ? '…' : <Icon className="h-3.5 w-3.5" aria-hidden />}
+    </Button>
   );
 }
 
