@@ -27,8 +27,11 @@ const PROJECT_ROOT = join(tmpdir(), `pa-route-${nanoid(8)}`);
 
 beforeAll(async () => {
   process.env.PINAGENT_PROJECT_ROOT = PROJECT_ROOT;
+  // `PINAGENT_SPAWN_AGENT='off'` already makes the top-level block skip the
+  // WS-server start (resolveAgentMode → false), so we run the handlers under a
+  // dev NODE_ENV — they now 404 under production (see the prod-guard test).
   process.env.PINAGENT_SPAWN_AGENT = 'off';
-  process.env.NODE_ENV = 'production';
+  process.env.NODE_ENV = 'development';
   await mkdir(PROJECT_ROOT, { recursive: true });
 });
 
@@ -523,5 +526,43 @@ describe('GET /dock/embedded.html', () => {
     const bodyIdx = body.indexOf('<body');
     expect(cfgIdx).toBeGreaterThan(headIdx);
     expect(cfgIdx).toBeLessThan(bodyIdx);
+  });
+});
+
+describe('production runtime guard', () => {
+  // The handlers must be inert in production even if the `route-noop` export
+  // condition isn't honoured. prodDisabled() reads NODE_ENV at call time, so
+  // flip it per-test and restore.
+  afterEach(() => {
+    process.env.NODE_ENV = 'development';
+  });
+
+  it('every verb returns 404 when NODE_ENV=production', async () => {
+    process.env.NODE_ENV = 'production';
+    const get = await route.GET(new Request('http://x/__pinagent/branches'), ctx(['branches']));
+    expect(get.status).toBe(404);
+    const post = await route.POST(
+      new Request('http://x/__pinagent/feedback', {
+        method: 'POST',
+        body: JSON.stringify(validFeedbackPayload()),
+      }),
+      ctx(['feedback']),
+    );
+    expect(post.status).toBe(404);
+    const patch = await route.PATCH(
+      new Request('http://x/__pinagent/settings', { method: 'PATCH', body: '{}' }),
+      ctx(['settings']),
+    );
+    expect(patch.status).toBe(404);
+    const put = await route.PUT(
+      new Request('http://x/__pinagent/connections/github', { method: 'PUT', body: '{}' }),
+      ctx(['connections', 'github']),
+    );
+    expect(put.status).toBe(404);
+    const del = await route.DELETE(
+      new Request('http://x/__pinagent/connections/github', { method: 'DELETE' }),
+      ctx(['connections', 'github']),
+    );
+    expect(del.status).toBe(404);
   });
 });
