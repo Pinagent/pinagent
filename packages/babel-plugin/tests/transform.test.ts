@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { parse } from '@babel/parser';
 import { describe, expect, it } from 'vitest';
 import { transformJsx } from '../src/transform';
 
@@ -202,5 +203,37 @@ describe('transformJsx — data-pa-comp (enclosing component)', () => {
     expect(once).toContain('data-pa-comp="PriceCard"');
     // Re-running finds the element already tagged → no mutation → null.
     expect(transform(once!)).toBeNull();
+  });
+
+  it('tags a generic component without producing unparseable output', () => {
+    // Type args (`<string>`) sit between the name and the attributes; the tag
+    // must land AFTER them, not inside the `<...>`.
+    const out = transform('const X = <Foo<string> a={1} />;');
+    expect(out).not.toBeNull();
+    expect(out).toMatch(tagPattern);
+    // The attribute lands after the type arguments…
+    expect(out).toContain('<Foo<string> data-pa-loc=');
+    // …and the result is valid TSX (strict parse, no error recovery).
+    expect(() =>
+      parse(out as string, {
+        sourceType: 'module',
+        // biome-ignore lint/suspicious/noExplicitAny: babel plugin tuple typing
+        plugins: ['jsx', 'typescript'] as any,
+        errorRecovery: false,
+      }),
+    ).not.toThrow();
+  });
+
+  it('tags a generic member-expression component', () => {
+    const out = transform('const X = <UI.Table<Row> rows={[]} />;');
+    expect(out).toContain('<UI.Table<Row> data-pa-loc=');
+    expect(() =>
+      parse(out as string, {
+        sourceType: 'module',
+        // biome-ignore lint/suspicious/noExplicitAny: babel plugin tuple typing
+        plugins: ['jsx', 'typescript'] as any,
+        errorRecovery: false,
+      }),
+    ).not.toThrow();
   });
 });
