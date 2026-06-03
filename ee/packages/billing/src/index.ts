@@ -11,6 +11,7 @@ export {
   type UsageSummary,
 } from './metering';
 export {
+  isSelfServiceablePlan,
   PLANS,
   type Plan,
   type PlanId,

@@ -6,7 +6,7 @@ import {
   type MembershipStore,
   type Permission,
 } from '@pinagent/ee-auth';
-import { planById, type SubscriptionStore } from '@pinagent/ee-billing';
+import { isSelfServiceablePlan, planById, type SubscriptionStore } from '@pinagent/ee-billing';
 import type { ActiveSessionRegistry } from '@pinagent/ee-relay';
 import type {
   BranchRoutingStore,
@@ -66,6 +66,13 @@ export async function handleSubscriptionConfig(
     const parsed = parseSubscriptionBody(body);
     if (!parsed) return json({ error: 'planId and currentPeriodStart are required' }, 400);
     if (!planById(parsed.planId)) return json({ error: `unknown plan "${parsed.planId}"` }, 400);
+    // An admin (billing:manage) may only self-assign self-serviceable plans.
+    // Privileged plans (e.g. unlimited `enterprise`) are internal-only — set by
+    // provisioning, never by the org itself — so this can't be used to escalate
+    // to unlimited quota.
+    if (!isSelfServiceablePlan(parsed.planId)) {
+      return json({ error: `plan "${parsed.planId}" is not self-serviceable` }, 403);
+    }
     const subscription = { organizationId: ctx.organizationId, ...parsed };
     await deps.subscriptions.upsert(subscription);
     return json({ organizationId: ctx.organizationId, subscription }, 200);

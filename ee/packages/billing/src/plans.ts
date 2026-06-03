@@ -18,18 +18,53 @@ export interface Plan {
   limits: Record<string, number>;
   /** Length of a billing period in days — how often usage windows reset. */
   intervalDays: number;
+  /**
+   * Whether an org admin may assign this plan to their own org via the
+   * `billing:manage` config endpoint. Privileged plans (e.g. unlimited
+   * `enterprise`) are `false` — they're internal-only, set by provisioning,
+   * so an admin can't self-grant unlimited quota. Self-serviceable finite
+   * plans (`free`, `pro`) are `true`.
+   */
+  selfServiceable: boolean;
 }
 
 export const PLANS = {
-  free: { id: 'free', name: 'Free', limits: { 'relay.session': 100 }, intervalDays: 30 },
-  pro: { id: 'pro', name: 'Pro', limits: { 'relay.session': 10_000 }, intervalDays: 30 },
-  enterprise: { id: 'enterprise', name: 'Enterprise', limits: {}, intervalDays: 30 },
+  free: {
+    id: 'free',
+    name: 'Free',
+    limits: { 'relay.session': 100 },
+    intervalDays: 30,
+    selfServiceable: true,
+  },
+  pro: {
+    id: 'pro',
+    name: 'Pro',
+    limits: { 'relay.session': 10_000 },
+    intervalDays: 30,
+    selfServiceable: true,
+  },
+  enterprise: {
+    id: 'enterprise',
+    name: 'Enterprise',
+    limits: {},
+    intervalDays: 30,
+    selfServiceable: false,
+  },
 } as const satisfies Record<string, Plan>;
 
 export type PlanId = keyof typeof PLANS;
 
 export function planById(id: string): Plan | null {
   return (PLANS as Record<string, Plan>)[id] ?? null;
+}
+
+/**
+ * Whether `id` is a known plan an org admin may self-assign. Unknown or
+ * privileged (internal-only) plans return `false`. Used to gate
+ * `PUT /subscriptions` so admins can't escalate to an unlimited plan.
+ */
+export function isSelfServiceablePlan(id: string): boolean {
+  return planById(id)?.selfServiceable ?? false;
 }
 
 /** Included quota for a kind on a plan, or `null` when unlimited. */

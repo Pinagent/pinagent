@@ -18,10 +18,11 @@ describe('SubscriptionForm initial render', () => {
     );
     expect(html).toMatch(/<option value="pro"[^>]*selected/);
     expect(html).toContain('value="2026-05-01T00:00:00.000Z"');
-    // every known plan is offered
+    // only self-serviceable plans are offered; privileged enterprise is not
     expect(html).toContain('Free');
     expect(html).toContain('Pro');
-    expect(html).toContain('Enterprise');
+    expect(html).not.toContain('Enterprise');
+    expect(html).not.toContain('value="enterprise"');
     expect(html).toContain('Save');
   });
 

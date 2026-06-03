@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Elastic-2.0
-import { planById } from '@pinagent/ee-billing';
+import { isSelfServiceablePlan, planById } from '@pinagent/ee-billing';
 import type { BranchRoutingInput, CostControlInput, SubscriptionInput } from './api-client';
 
 /**
@@ -23,6 +23,11 @@ export function parseSubscriptionForm(fields: SubscriptionFields): ParseResult<S
   // Mirror the server: a known plan id is required (it rejects unknown plans).
   if (!planById(planId)) {
     return { ok: false, error: `Unknown plan "${planId || '(blank)'}".` };
+  }
+  // Mirror the server's self-escalation guard: privileged (internal-only) plans
+  // can't be self-assigned. The server 403s these regardless.
+  if (!isSelfServiceablePlan(planId)) {
+    return { ok: false, error: `Plan "${planId}" can't be selected here.` };
   }
   const currentPeriodStart = fields.currentPeriodStart.trim();
   if (currentPeriodStart === '') {
