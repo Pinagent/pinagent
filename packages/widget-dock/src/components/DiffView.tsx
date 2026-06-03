@@ -11,7 +11,7 @@
  * file dividers."
  */
 import { cn } from '@pinagent/ui/lib/utils';
-import { File as FileIcon, FileWarning } from 'lucide-react';
+import { ExternalLink, File as FileIcon, FileWarning } from 'lucide-react';
 
 interface ParsedFile {
   /** Most-informative path: prefers `b/`, falls back to `a/`. */
@@ -94,9 +94,14 @@ export interface DiffViewProps {
   diff: string;
   truncated?: boolean;
   className?: string;
+  /**
+   * When provided, each file's header becomes a button that calls this with
+   * the file's repo-relative path — used to open the file in the editor.
+   */
+  onOpenFile?: (path: string) => void;
 }
 
-export function DiffView({ diff, truncated, className }: DiffViewProps) {
+export function DiffView({ diff, truncated, className, onOpenFile }: DiffViewProps) {
   const files = parseUnifiedDiff(diff);
   if (files.length === 0) {
     return (
@@ -115,7 +120,7 @@ export function DiffView({ diff, truncated, className }: DiffViewProps) {
   return (
     <div className={cn('space-y-2', className)}>
       {files.map((file) => (
-        <FileBlock key={file.path} file={file} />
+        <FileBlock key={file.path} file={file} onOpenFile={onOpenFile} />
       ))}
       {truncated && (
         <p className="px-1 text-[11px] text-muted-foreground italic">
@@ -126,16 +131,40 @@ export function DiffView({ diff, truncated, className }: DiffViewProps) {
   );
 }
 
-function FileBlock({ file }: { file: ParsedFile }) {
+function FileBlock({
+  file,
+  onOpenFile,
+}: {
+  file: ParsedFile;
+  onOpenFile?: (path: string) => void;
+}) {
+  const icon = file.binary ? (
+    <FileWarning className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+  ) : (
+    <FileIcon className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+  );
   return (
     <section className="rounded-md border border-border bg-card overflow-hidden">
       <header className="flex items-center gap-2 border-b border-border bg-secondary/40 px-2.5 py-1.5">
-        {file.binary ? (
-          <FileWarning className="h-3 w-3 text-muted-foreground" aria-hidden />
+        {onOpenFile ? (
+          <button
+            type="button"
+            onClick={() => onOpenFile(file.path)}
+            title="Open in your editor"
+            className="group flex min-w-0 flex-1 items-center gap-2 text-left hover:text-accent"
+          >
+            {icon}
+            <span className="truncate font-mono text-[11px] text-foreground group-hover:text-accent group-hover:underline">
+              {file.path}
+            </span>
+            <ExternalLink className="h-2.5 w-2.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100" />
+          </button>
         ) : (
-          <FileIcon className="h-3 w-3 text-muted-foreground" aria-hidden />
+          <>
+            {icon}
+            <span className="truncate font-mono text-[11px] text-foreground">{file.path}</span>
+          </>
         )}
-        <span className="font-mono text-[11px] text-foreground truncate">{file.path}</span>
       </header>
       {file.binary ? (
         <p className="px-3 py-2 text-[11px] text-muted-foreground italic">

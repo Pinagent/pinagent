@@ -18,6 +18,8 @@ import { TimestampDot } from '../components/TimestampDot';
 import type { Change } from '../fixtures';
 import { useChangeDiff } from '../hooks/useChangeDiff';
 import { useChanges } from '../hooks/useChanges';
+import { useExtensionStatus } from '../hooks/useExtensionStatus';
+import { openFileInVSCode } from '../lib/vscode-bridge';
 import { ROUTE_PATHS } from '../route-paths';
 import { EmptyState } from '../shell/states/EmptyState';
 import { ErrorState } from '../shell/states/ErrorState';
@@ -164,6 +166,15 @@ function ReadyChangeRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const diffQuery = useChangeDiff(change.conversationId, { enabled: expanded });
+  const editorReady = useExtensionStatus().present;
+  const worktreePath = diffQuery.data?.worktreePath;
+  // Open a changed file at the agent's edited version (the worktree copy),
+  // not the workspace's pre-change copy. Absolute path → VSCode opens it
+  // directly. Only when the extension is present and the server sent a path.
+  const onOpenFile =
+    editorReady && worktreePath
+      ? (rel: string) => openFileInVSCode(`${worktreePath}/${rel}`)
+      : undefined;
 
   return (
     <article
@@ -251,7 +262,11 @@ function ReadyChangeRow({
                 </p>
               )}
               {diffQuery.isSuccess && diffQuery.data && (
-                <DiffView diff={diffQuery.data.diff} truncated={diffQuery.data.truncated} />
+                <DiffView
+                  diff={diffQuery.data.diff}
+                  truncated={diffQuery.data.truncated}
+                  onOpenFile={onOpenFile}
+                />
               )}
               {diffQuery.isSuccess && !diffQuery.data && (
                 <p className="text-[11px] text-muted-foreground italic">

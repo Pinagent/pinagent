@@ -41,6 +41,9 @@ export const CONVERSATIONS_CHANGED_KEYS: readonly (readonly string[])[] = [
   ['conversations'],
   ['conversation'],
   ['changes'],
+  // An expanded Changes diff goes stale as the agent commits more; refetch
+  // it alongside the list so open diffs stay live.
+  ['changeDiff'],
   ['branches'],
   ['pullRequests'],
   ['auditLog'],

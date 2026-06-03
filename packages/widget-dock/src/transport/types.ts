@@ -477,6 +477,11 @@ export interface ChangeDiff {
   diff: string;
   /** True when the server cut the diff short to keep payloads bounded. */
   truncated: boolean;
+  /**
+   * Absolute path of the conversation's worktree. Lets the dock open a
+   * changed file at the agent's edited version. Absent on older servers.
+   */
+  worktreePath?: string;
 }
 
 export interface PresentableConnections {
