@@ -1,0 +1,40 @@
+{
+  "name": "@pinagent/ee-email",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Transactional email for Pinagent cloud — React Email templates + Resend transport.",
+  "license": "Elastic-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit",
+    "email:dev": "email dev --dir emails"
+  },
+  "dependencies": {
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.0.8",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "react-email": "^6.5.0",
+    "tsdown": "^0.22.0",
+    "typescript": "^6.0.3"
+  }
+}

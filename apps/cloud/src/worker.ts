@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Elastic-2.0
 import { createOidcProvider, type SsoConnection } from '@pinagent/ee-auth';
 import { noopBillingReporter } from '@pinagent/ee-billing';
+import { createInvitationMailer, createResendEmailSender } from '@pinagent/ee-email';
 import { createCloudApp } from './app';
 import { createBearerAuthenticator } from './authenticators';
 import { type BillingServiceDeps, runBillingRollover } from './billing-service';
@@ -113,6 +114,17 @@ async function buildApp(config: CloudConfig) {
     cookieName: config.sessionCookieName,
   });
 
+  // Transactional email. Off (undefined → member-service no-ops) unless a
+  // Resend key, From header, and dashboard base URL are all configured —
+  // keeps local/self-host invites working without an email provider.
+  const invitationMailer =
+    config.resendApiKey && config.emailFrom && config.appBaseUrl
+      ? createInvitationMailer(
+          createResendEmailSender({ apiKey: config.resendApiKey, from: config.emailFrom }),
+          { appBaseUrl: config.appBaseUrl },
+        )
+      : undefined;
+
   // Billing-period rollover. `noopBillingReporter` is the Stripe seam — a
   // `createStripeReporter` (needs API keys) replaces it later. Triggered by the
   // `scheduled()` Cron handler and the `/internal/billing/roll` endpoint.
@@ -152,7 +164,7 @@ async function buildApp(config: CloudConfig) {
       audit,
     },
     read: { store, users, authenticate, audit, meter },
-    members: { store, users, invitations, authenticate, audit },
+    members: { store, users, invitations, authenticate, audit, email: invitationMailer },
     config: {
       store,
       authenticate,

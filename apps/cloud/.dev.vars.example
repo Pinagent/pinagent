@@ -35,3 +35,8 @@ OIDC_REDIRECT_URI=          # registered callback URL (our /sso/callback)
 # SESSION_COOKIE_NAME=pa_session   # user-token cookie name (default pa_session)
 # SESSION_TTL_SECONDS=      # relay-session-token lifetime override (positive int)
 # USER_TOKEN_TTL_SECONDS=   # user-token lifetime override (positive int)
+# Transactional email (Resend). All three are needed to enable email; with any
+# unset, email sending is a no-op (invites still work, just no notification).
+# RESEND_API_KEY=           # Resend API key (a secret) — enables outbound email
+# EMAIL_FROM=               # From header, e.g. "Pinagent <noreply@pinagent.dev>"
+# APP_BASE_URL=             # dashboard origin for email links (e.g. the invite CTA)
