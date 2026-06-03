@@ -89,7 +89,13 @@ function safePath(url: string): string {
   }
 }
 
-function activityMeta(event: AuditEvent): ReactNode | null {
+/**
+ * `suppressLink` is set when the whole row already wraps in a `<Link>`
+ * (a deep-linkable `pr_created` row) — a nested anchor inside an anchor
+ * is invalid markup, so the inline "open on GitHub" link is dropped in
+ * favour of the row navigating into the in-dock PRs tab.
+ */
+function activityMeta(event: AuditEvent, suppressLink: boolean): ReactNode | null {
   const parts: ReactNode[] = [];
   const branch = event.payload.branch as string | undefined;
   const file = event.payload.file as string | undefined;
@@ -124,7 +130,7 @@ function activityMeta(event: AuditEvent): ReactNode | null {
       </span>,
     );
   }
-  if (url && event.action === 'pr_created') {
+  if (url && event.action === 'pr_created' && !suppressLink) {
     parts.push(
       <a
         key="prurl"
@@ -148,10 +154,24 @@ function activityMeta(event: AuditEvent): ReactNode | null {
   return parts;
 }
 
+const ROW_LINK_CLASS = cn(
+  'group flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2',
+  'transition-colors hover:bg-secondary/40',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+);
+
 export function ActivityRow({ event }: { event: AuditEvent }) {
   const visual = describeEvent(event);
-  const meta = activityMeta(event);
   const Icon = visual.Icon;
+  // A `pr_created` row carrying its PR number deep-links into the PRs
+  // tab (which highlights the matching row). Without a number we can't
+  // target a row, so the static render keeps the inline GitHub link.
+  const prNumber =
+    event.action === 'pr_created' && typeof event.payload.number === 'number'
+      ? event.payload.number
+      : null;
+  const wrapsInLink = event.conversationId !== null || prNumber !== null;
+  const meta = activityMeta(event, wrapsInLink);
   const body = (
     <>
       <StatusBadge status={visual.status} variant="dot" className="mt-1.5 pointer-events-none" />
@@ -174,10 +194,7 @@ export function ActivityRow({ event }: { event: AuditEvent }) {
 
   // Conversation-scoped events (`conversation_*`, plus any future
   // action that names a conversation) deep-link to the matching detail
-  // view via `?id=`. Project-scoped events (`pr_created`,
-  // `worktrees_bulk_pruned`) keep the static <li> render — their
-  // payload already carries its own external link (PR URL) inside
-  // `meta`, and nested anchors would be invalid markup.
+  // view via `?id=`.
   if (event.conversationId !== null) {
     return (
       <li>
@@ -185,17 +202,33 @@ export function ActivityRow({ event }: { event: AuditEvent }) {
           to="/conversations"
           search={{ id: event.conversationId }}
           aria-label={`${visual.label} — open conversation`}
-          className={cn(
-            'group flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2',
-            'transition-colors hover:bg-secondary/40',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
-          )}
+          className={ROW_LINK_CLASS}
         >
           {body}
         </Link>
       </li>
     );
   }
+  // `pr_created` rows jump into the in-dock PRs tab, scrolling to and
+  // highlighting the matching PR (where its live state + GitHub link
+  // live). Falls through to the static render when the number is absent.
+  if (prNumber !== null) {
+    return (
+      <li>
+        <Link
+          to="/prs"
+          search={{ number: prNumber }}
+          aria-label={`${visual.label} — open in PRs`}
+          className={ROW_LINK_CLASS}
+        >
+          {body}
+        </Link>
+      </li>
+    );
+  }
+  // Project-scoped events without a deep-link target (`worktrees_bulk_pruned`,
+  // a numberless `pr_created`) keep the static <li> render — their payload
+  // carries its own external link inside `meta` when relevant.
   return (
     <li className="group flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
       {body}
