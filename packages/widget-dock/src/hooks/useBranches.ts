@@ -29,6 +29,14 @@ export function useBranches(): UseQueryResult<Branch[]> {
   return useQuery({
     queryKey: [...KEY, transport.kind],
     queryFn: () => transport.listBranches(),
+    // Visibility-scoped live refresh. The list is already invalidated on
+    // `conversations_changed`, but a worktree's disk usage and dirty /
+    // behind-base state drift *between* those events — while an agent
+    // edits in it, or after the user commits in another terminal — with
+    // no broadcast to trigger a refetch. Polling keeps `diskMb` and the
+    // state pill honest; paused when the dock is hidden, and structural
+    // sharing keeps an unchanged poll from churning the row list.
+    refetchInterval: 10_000,
   });
 }
 
