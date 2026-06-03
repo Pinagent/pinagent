@@ -22,11 +22,15 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { discardWorktree } from './agent';
 import { recordAuditEvent } from './audit-log';
+import { mapLimit } from './concurrency';
 import { runGitCapture } from './git-utils';
 import { enqueue } from './merge-queue';
 import { SettingsStore } from './settings-store';
 import { ID_RE, Storage } from './storage';
 import { type ServeResult, serveWorktree, stopWorktreeServer } from './worktree-serve';
+
+/** Max worktrees whose git/disk stats are computed in parallel per refresh. */
+const GIT_FANOUT_LIMIT = 8;
 
 export interface BranchRecord {
   /** Stable id — uses the conversation id since 1 worktree = 1 conversation. */
@@ -57,8 +61,12 @@ export async function listBranches(projectRoot: string): Promise<BranchRecord[]>
 
   const baseRef = await resolveBaseRef(projectRoot);
 
-  const rows = await Promise.all(
-    candidates.map(async (rec): Promise<BranchRecord | null> => {
+  // Cap concurrency: each row spawns several `git` processes (+ a `du`), so an
+  // unbounded fan-out over many retained worktrees would exhaust FDs/PIDs.
+  const rows = await mapLimit(
+    candidates,
+    GIT_FANOUT_LIMIT,
+    async (rec): Promise<BranchRecord | null> => {
       if (!rec.worktreePath || !rec.branch) return null;
       if (!existsSync(rec.worktreePath)) return null;
       const [state, diskMb] = await Promise.all([
@@ -75,7 +83,7 @@ export async function listBranches(projectRoot: string): Promise<BranchRecord[]>
         state,
         diskMb,
       };
-    }),
+    },
   );
 
   return rows
