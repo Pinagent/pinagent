@@ -10,9 +10,9 @@
 import { Badge } from '@pinagent/ui/components/ui/badge';
 import { Button } from '@pinagent/ui/components/ui/button';
 import { cn } from '@pinagent/ui/lib/utils';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ExternalLink, GitPullRequest, Plus, RotateCw } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TimestampDot } from '../components/TimestampDot';
 import type { PullRequest } from '../fixtures';
 import { usePullRequests, useRefreshPullRequests } from '../hooks/usePullRequests';
@@ -52,6 +52,28 @@ export function PRs() {
     didAutoRefresh.current = true;
     refresh.mutate();
   }, [isMock, refresh]);
+
+  // Deep-link target from the activity feed (`?number=<pr>`): scroll that
+  // row into view and flash a highlight ring that fades on a timer. Keyed
+  // on the loaded data so it re-runs once the row's ref is registered.
+  const { number: focusNumber } = useSearch({ from: ROUTE_PATHS.prs });
+  const rowRefs = useRef(new Map<number, HTMLElement>());
+  const [highlighted, setHighlighted] = useState<number | null>(null);
+  useEffect(() => {
+    // `prsQuery.data` gates on the rows being rendered (so their refs are
+    // registered) and re-runs the scroll once they load.
+    if (focusNumber == null || !prsQuery.data) return;
+    const el = rowRefs.current.get(focusNumber);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setHighlighted(focusNumber);
+    const t = setTimeout(() => setHighlighted((n) => (n === focusNumber ? null : n)), 2200);
+    return () => clearTimeout(t);
+  }, [focusNumber, prsQuery.data]);
+  const registerRow = (n: number, el: HTMLElement | null): void => {
+    if (el) rowRefs.current.set(n, el);
+    else rowRefs.current.delete(n);
+  };
 
   const newPr = () => void navigate({ to: ROUTE_PATHS.prsNew });
 
@@ -129,7 +151,12 @@ export function PRs() {
 
       <div className="flex-1 overflow-auto p-3 space-y-1.5">
         {prs.map((pr) => (
-          <PRRow key={pr.id} pr={pr} />
+          <PRRow
+            key={pr.id}
+            pr={pr}
+            highlighted={highlighted === pr.number}
+            registerRef={registerRow}
+          />
         ))}
       </div>
 
@@ -144,7 +171,15 @@ export function PRs() {
   );
 }
 
-function PRRow({ pr }: { pr: PullRequest }) {
+function PRRow({
+  pr,
+  highlighted,
+  registerRef,
+}: {
+  pr: PullRequest;
+  highlighted: boolean;
+  registerRef: (n: number, el: HTMLElement | null) => void;
+}) {
   const conversationLabel =
     pr.conversationIds.length === 0
       ? null
@@ -153,7 +188,14 @@ function PRRow({ pr }: { pr: PullRequest }) {
         : `${pr.conversationIds.length} conversations`;
 
   return (
-    <article className="group flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
+    <article
+      ref={(el) => registerRef(pr.number, el)}
+      className={cn(
+        'group flex items-start gap-3 rounded-lg border bg-card px-3 py-2.5',
+        'transition-shadow duration-700',
+        highlighted ? 'border-accent/60 ring-2 ring-accent/60' : 'border-border ring-0',
+      )}
+    >
       <GitPullRequest aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <div className="flex-1 min-w-0">
         <div className="flex items-start gap-2">

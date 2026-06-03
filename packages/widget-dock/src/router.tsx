@@ -30,6 +30,7 @@ import { validateComposeSearch } from './routes/compose-search';
 import { validateConversationsSearch } from './routes/conversations-search';
 import { Overview } from './routes/Overview';
 import { validatePreviewSearch } from './routes/preview-search';
+import { validatePrsSearch } from './routes/prs-search';
 import { DockShell } from './shell/DockShell';
 
 // Eager: Overview is the default landing route — splitting it would
@@ -106,6 +107,14 @@ const prsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: ROUTE_PATHS.prs,
   component: PRs,
+  /**
+   * `?number=<pr-number>` scrolls that PR into view and briefly
+   * highlights it — set when the activity feed deep-links a
+   * `pr_created` row into this tab. Absent → the list renders normally.
+   * Parsing lives in `routes/prs-search.ts` so it can be unit-tested
+   * without the router tree.
+   */
+  validateSearch: validatePrsSearch,
 });
 const prsNewRoute = createRoute({
   getParentRoute: () => rootRoute,
