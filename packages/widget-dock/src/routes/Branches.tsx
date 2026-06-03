@@ -529,22 +529,34 @@ function BranchRow({
           <AppWindow className="h-3 w-3" />
         </Button>
       )}
-      <Button
-        size="sm"
-        variant="ghost"
-        disabled={disabled}
-        onClick={handlePrune}
-        className="h-7 px-2 text-xs text-muted-foreground hover:text-status-error-fg"
-        title={
-          isMock
-            ? 'Mock mode — fake prune'
-            : pruneMutation.isPending
-              ? 'Pruning…'
-              : 'Prune worktree'
-        }
-      >
-        {pruneMutation.isPending ? '…' : <Trash2 className="h-3 w-3" />}
-      </Button>
+      {branch.conversationId ? (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={disabled}
+          onClick={handlePrune}
+          className="h-7 px-2 text-xs text-muted-foreground hover:text-status-error-fg"
+          title={
+            isMock
+              ? 'Mock mode — fake prune'
+              : pruneMutation.isPending
+                ? 'Pruning…'
+                : 'Prune worktree'
+          }
+        >
+          {pruneMutation.isPending ? '…' : <Trash2 className="h-3 w-3" />}
+        </Button>
+      ) : (
+        // Unmanaged worktree — no linked conversation, so there's no id to
+        // prune or preview by. Rather than a permanently-disabled trash
+        // button (which reads as broken), label the row's state plainly.
+        <span
+          className="inline-flex h-7 items-center px-2 text-[10px] text-muted-foreground/70"
+          title="This worktree isn't linked to a pinagent conversation, so the dock can't prune or preview it. Remove it with `git worktree remove`."
+        >
+          Unmanaged
+        </span>
+      )}
     </article>
   );
 }
