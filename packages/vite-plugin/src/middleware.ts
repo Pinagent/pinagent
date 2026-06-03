@@ -51,6 +51,7 @@ import {
   stopWorktreeServer,
   summarizeChangesForPr,
   summarizeCommitMessage,
+  toScreenshotCandidates,
   updatePrDescription,
   validateAnthropicKey,
   validateGithubToken,
@@ -408,7 +409,12 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
         // Commit uncommitted edits (git add -A) with the generated title as
         // the message so the PR contains them; openHostBranchPr no-ops the
         // commit when the tree is clean.
-        const result = await openHostBranchPr(storage.root, { title, body, commitMessage: title });
+        const result = await openHostBranchPr(storage.root, {
+          title,
+          body,
+          commitMessage: title,
+          screenshotCandidates: toScreenshotCandidates(await storage.list()),
+        });
         return json(res, result.ok ? 200 : 422, result);
       }
 

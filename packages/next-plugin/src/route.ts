@@ -51,6 +51,7 @@ import {
   stopWorktreeServer,
   summarizeChangesForPr,
   summarizeCommitMessage,
+  toScreenshotCandidates,
   updatePrDescription,
   validateAnthropicKey,
   validateGithubToken,
@@ -456,7 +457,12 @@ export async function POST(req: Request, ctx: RouteCtx): Promise<Response> {
         });
       }
     }
-    const result = await openHostBranchPr(storage.root, { title, body, commitMessage: title });
+    const result = await openHostBranchPr(storage.root, {
+      title,
+      body,
+      commitMessage: title,
+      screenshotCandidates: toScreenshotCandidates(await storage.list()),
+    });
     return json(result.ok ? 200 : 422, result);
   }
 

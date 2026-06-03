@@ -8,7 +8,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 // Import from the SDK-free `/pr` subpath, NOT the package root — the root
 // re-exports the agent providers, which would drag the Claude Agent SDK
 // into the published `pinagent-mcp` bin. See agent-runner's tsdown config.
-import { openHostBranchPr } from '@pinagent/agent-runner/pr';
+import { openHostBranchPr, toScreenshotCandidates } from '@pinagent/agent-runner/pr';
 import { renderTranscript } from '@pinagent/shared';
 import { z } from 'zod';
 import { CHANNEL_INSTRUCTIONS, startFeedbackWatcher } from './channel';
@@ -372,10 +372,14 @@ export async function callTool(
 
       case 'create_pull_request': {
         const input = CreatePrInput.parse(args);
+        // Hand over resolved feedback as screenshot candidates — the PR core
+        // matches each against the branch's commits and embeds the screenshots.
+        const candidates = toScreenshotCandidates(await storage.list());
         const result = await openHostBranchPr(root, {
           title: input.title,
           body: input.body,
           ...(input.commit_message ? { commitMessage: input.commit_message } : {}),
+          screenshotCandidates: candidates,
         });
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
