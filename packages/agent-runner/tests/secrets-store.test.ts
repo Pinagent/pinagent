@@ -72,6 +72,16 @@ describe('SecretsStore write + getters', () => {
     expect(await store.getGithubToken()).toBeNull();
     expect(await store.getAnthropicKey()).toBeNull();
   });
+
+  it('serializes concurrent patches so neither update is lost', async () => {
+    // Both start from the same empty base; without serialization the second
+    // write clobbers the first (last-writer-wins) and one credential vanishes.
+    const store = new SecretsStore(root);
+    await Promise.all([store.setGithub('ghp_x', 'octocat'), store.setAnthropic('sk-ant-y')]);
+    const f = await store.read();
+    expect(f.github?.token).toBe('ghp_x');
+    expect(f.anthropic?.key).toBe('sk-ant-y');
+  });
 });
 
 describe('SecretsStore.presentable', () => {
