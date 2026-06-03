@@ -157,7 +157,7 @@ function FileBlock({
             <span className="truncate font-mono text-[11px] text-foreground group-hover:text-accent group-hover:underline">
               {file.path}
             </span>
-            <ExternalLink className="h-2.5 w-2.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100" />
+            <ExternalLink className="h-2.5 w-2.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100" />
           </button>
         ) : (
           <>
