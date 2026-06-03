@@ -158,3 +158,24 @@ describe('mergeWorktree — allowed branches', () => {
     expect(existsSync(join(ROOT, 'change.txt'))).toBe(true);
   });
 });
+
+describe('mergeWorktree — base-branch drift', () => {
+  it('refuses to land when the project checkout drifted off the base branch', async () => {
+    // The worktree forks from `main`…
+    const storage = new storageMod.Storage(ROOT);
+    await new settingsMod.SettingsStore(ROOT).patch({ baseBranch: 'main' });
+    const id = await makeFeedback(storage);
+    await worktree.createWorktree(ROOT, id, logPathFor(id));
+    // …then the developer switches the main checkout to another branch.
+    await commitFileOnNewBranch('dev', 'dev-only.txt'); // leaves HEAD on `dev`
+
+    const result = await worktree.mergeWorktree(ROOT, id, logPathFor(id));
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('this worktree was based on "main"');
+    // Nothing was merged onto `dev`; the worktree branch is still on disk.
+    expect(existsSync(join(ROOT, 'dev-only.txt'))).toBe(true);
+    const branches = await git(ROOT, ['branch', '--list', `pinagent/${id}`]);
+    expect(branches.stdout).toContain(`pinagent/${id}`);
+  });
+});

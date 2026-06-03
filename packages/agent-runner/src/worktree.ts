@@ -73,7 +73,10 @@ export interface LandResult {
 }
 
 /**
- * Land the agent's worktree onto the project's current HEAD branch.
+ * Land the agent's worktree onto the project's HEAD branch — but only when HEAD
+ * still matches the base the worktree forked from (`settings.baseBranch`). If
+ * the developer switched the main checkout to another branch, landing is
+ * refused rather than silently merging the work into the wrong branch.
  *
  * The agent intentionally does not commit (see `buildInitialPrompt`) so the
  * developer can review the diff before landing; we stage and commit on its
@@ -121,10 +124,28 @@ export async function mergeWorktree(
     return { ok: false, error: `project HEAD is already on ${rec.branch}; nothing to land` };
   }
 
+  const settings = await new SettingsStore(projectRoot).read();
+
+  // Refuse to land if the project checkout has drifted off the base branch the
+  // worktree forked from. `createWorktree` forks from `settings.baseBranch`
+  // when it resolves, but landing merges `rec.branch` into whatever HEAD *now*
+  // is — so a developer who switched the main checkout to another branch would
+  // otherwise silently merge the agent's work into it. (When the base doesn't
+  // resolve, create fell back to forking from HEAD, so we likewise allow it.)
+  const baseResolves =
+    (await runGitCapture(projectRoot, ['rev-parse', '--verify', '--quiet', settings.baseBranch]))
+      .code === 0;
+  if (baseResolves && targetBranch !== settings.baseBranch) {
+    return {
+      ok: false,
+      error: `cannot land: the project is on "${targetBranch}" but this worktree was based on "${settings.baseBranch}". Check out "${settings.baseBranch}" to land, or discard.`,
+    };
+  }
+
   // Branch-routing: refuse to land onto a target the policy disallows. An
   // empty pattern list (the default) allows any branch, so this is a no-op
   // until a policy is configured. Checked before any mutation.
-  const { allowedBranchPatterns } = await new SettingsStore(projectRoot).read();
+  const { allowedBranchPatterns } = settings;
   if (!isBranchAllowed(allowedBranchPatterns, targetBranch)) {
     const allowed = allowedBranchPatterns.join(', ');
     await appendLog(
@@ -195,11 +216,25 @@ export async function mergeWorktree(
       .map((s) => s.trim())
       .filter(Boolean);
 
-    await runGitCapture(projectRoot, ['merge', '--abort']);
+    const abort = await runGitCapture(projectRoot, ['merge', '--abort']);
     await appendLog(
       logPath,
       `> [pinagent] merge into \`${targetBranch}\` failed: ${conflicts.length} conflicted file(s)\n${conflicts.map((c) => `>   - \`${c}\`\n`).join('')}\n`,
     );
+    if (abort.code !== 0) {
+      // The abort failed — the project's working tree may be left mid-merge.
+      // Surface it loudly rather than swallowing it (the dock otherwise just
+      // shows conflicts and the user wouldn't know the tree is dirty).
+      await appendLog(
+        logPath,
+        `> [pinagent] WARNING: \`git merge --abort\` failed; the project working tree may be left mid-merge: ${abort.stderr.trim()}\n`,
+      );
+      return {
+        ok: false,
+        error: `merge conflicted and \`git merge --abort\` failed; the project working tree may be left mid-merge — resolve manually: ${abort.stderr.trim()}`,
+        conflicts,
+      };
+    }
     return { ok: false, conflicts };
   }
 
