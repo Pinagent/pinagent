@@ -18,6 +18,7 @@
     "lint:workspace-deps": "node scripts/check-workspace-deps.mjs",
     "lint:published-deps": "node scripts/check-published-deps.mjs",
     "lint:undeclared-imports": "node scripts/check-undeclared-imports.mjs",
+    "lint:env-example": "node scripts/check-env-example.mjs",
     "lint:peer-deps": "pnpm install --frozen-lockfile --offline --strict-peer-dependencies",
     "format": "biome format --write .",
     "generate:plugin-widget-embed": "node packages/vite-plugin/scripts/embed-widget.mjs && node packages/next-plugin/scripts/embed-widget.mjs",

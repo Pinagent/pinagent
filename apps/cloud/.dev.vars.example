@@ -1,0 +1,37 @@
+# @pinagent/cloud — local Worker env contract (NOT real values).
+#
+# `wrangler dev` reads local config from `.dev.vars` (this file's uncommitted
+# sibling), NOT from process.env — so copy this to `.dev.vars` and fill it in,
+# or let Doppler generate it:
+#
+#   doppler secrets download --no-file --format env --config dev > apps/cloud/.dev.vars
+#
+# Doppler is the source of truth for the values; this file only documents the
+# keys. The required/optional split mirrors `loadCloudConfig` in src/config.ts
+# (a missing required value throws at boot). Keep this in sync — enforced by
+# `pnpm lint:env-example`.
+
+# --- Secrets (high-entropy; never commit real values) ---------------------
+RELAY_AUTH_SECRET=          # HMAC secret shared with the relay for session tokens
+DATABASE_URL=               # Neon/Postgres connection string
+USER_TOKEN_SECRET=          # HMAC secret for signing user-identity tokens
+SSO_STATE_SECRET=           # HMAC secret for the stateless SSO login `state`
+OIDC_NONCE_SECRET=          # HMAC secret the OIDC nonce is derived from
+RELAY_INTERNAL_SECRET=      # shared secret the relay presents to /internal/relay/events
+BILLING_INTERNAL_SECRET=    # shared secret for the billing-rollover cron ingest
+OIDC_CLIENT_SECRET=         # OIDC client secret for the configured connection
+
+# --- Plain config vars -----------------------------------------------------
+PINAGENT_RELAY_PUBLIC_URL=  # public wss:// URL of the relay, handed to clients
+OIDC_CONNECTION_ID=         # stable id for the configured OIDC connection
+OIDC_ORG_ID=                # organization the connection logs users into
+OIDC_ISSUER=                # IdP issuer URL (used for .well-known discovery)
+OIDC_CLIENT_ID=             # OIDC client id
+OIDC_REDIRECT_URI=          # registered callback URL (our /sso/callback)
+
+# --- Optional (defaults applied if unset) ----------------------------------
+# SSO_CONNECTION_KEK=       # base64url AES-256 key to encrypt stored per-connection client secrets
+# LOGIN_RETURN_TO=/         # where to send the browser after login (default /)
+# SESSION_COOKIE_NAME=pa_session   # user-token cookie name (default pa_session)
+# SESSION_TTL_SECONDS=      # relay-session-token lifetime override (positive int)
+# USER_TOKEN_TTL_SECONDS=   # user-token lifetime override (positive int)

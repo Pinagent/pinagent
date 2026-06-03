@@ -1,0 +1,30 @@
+# @pinagent/ee-relay — local Worker env contract (NOT real values).
+#
+# `wrangler dev` reads local config from `.dev.vars` (this file's uncommitted
+# sibling), NOT from process.env. Copy this to `.dev.vars` and fill it in, or
+# let Doppler generate it:
+#
+#   doppler secrets download --no-file --format env --config dev > ee/packages/relay/.dev.vars
+#
+# Keys mirror the `Env` interface in src/worker.ts. Keep in sync — enforced by
+# `pnpm lint:env-example`. (`RELAY`, the Durable Object namespace, is a
+# wrangler binding, not an env var, so it's not listed here.)
+
+# --- Secrets ---------------------------------------------------------------
+# HMAC secret ee-auth signs/verifies session tokens with. When set, connections
+# must present a valid signed token. Production MUST set this (see
+# RELAY_ALLOW_INSECURE — a deploy that forgets it fails closed).
+RELAY_AUTH_SECRET=
+# Shared secret presented to the control plane's /internal/relay/events ingest.
+# Unset → lifecycle reporting is a no-op.
+RELAY_INTERNAL_SECRET=
+
+# --- Plain config vars -----------------------------------------------------
+# Control-plane base URL the Durable Object reports connect/disconnect to.
+# Unset (or with RELAY_INTERNAL_SECRET unset) → reporting is a no-op.
+PINAGENT_CONTROL_PLANE_URL=
+
+# --- Local dev only --------------------------------------------------------
+# Opt-in to the insecure dev fallback (accept any token, no RBAC) when
+# RELAY_AUTH_SECRET is unset. Must be explicitly truthy. NEVER set in production.
+# RELAY_ALLOW_INSECURE=1
