@@ -69,4 +69,10 @@ describe('PgMeterSink', () => {
   it('returns an empty summary for an org with no usage', async () => {
     expect(await meter.summarize({ organizationId: 'nobody' })).toEqual({});
   });
+
+  it('rejects a malformed quantity before inserting', async () => {
+    await expect(meter.record(usage({ quantity: -1 }))).rejects.toThrow(/non-negative integer/);
+    await expect(meter.record(usage({ quantity: 1.5 }))).rejects.toThrow(/non-negative integer/);
+    expect(await meter.summarize({ organizationId: 'acme' })).toEqual({}); // nothing inserted
+  });
 });
