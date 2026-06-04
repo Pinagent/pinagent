@@ -61,7 +61,18 @@ export interface FeedbackForScreenshot {
   commitSha: string | null;
   /** Screenshot path relative to `.pinagent/`, or null/absent if none. */
   screenshot?: string | null;
+  /** Resolution timestamp (ISO string / Date / epoch) — used to attach the most recent. */
+  resolvedAt?: string | Date | number | null;
 }
+
+/**
+ * Max screenshots committed onto one PR. The working-copy PR ships every
+ * unshipped change at once (inline edits all pile into one working tree), so a
+ * long-running project can have a big backlog — committing all of them would
+ * bloat the PR and the repo. We attach the most recent few and still mark the
+ * whole backlog shipped so it drains in one go (see `selectUnshippedScreenshots`).
+ */
+const MAX_PR_SCREENSHOTS = 10;
 
 // POSIX-style path for git pathspecs + URL building (NOT path.join, which
 // would emit backslashes on Windows and break both git and the URL).
@@ -91,32 +102,46 @@ function encodePath(p: string): string {
     .join('/');
 }
 
+/** Comparable epoch ms for a resolvedAt of mixed shape; 0 when missing/unparseable. */
+function resolvedTs(r: FeedbackForScreenshot): number {
+  if (r.resolvedAt == null) return 0;
+  const t = new Date(r.resolvedAt).getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
+
 /**
  * Pick the resolved, inline, not-yet-shipped feedback with a screenshot — the
  * conversations whose work is sitting in the current host working copy. These
- * are what a "working copy" / dock PR should show. The caller stamps the
- * shipped commit onto the returned `ids` after the PR succeeds, so a later PR
- * won't re-attach them.
+ * are what a "working copy" / dock PR should show.
+ *
+ * `ids` is the WHOLE unshipped set — the caller stamps the shipped commit onto
+ * all of them (their changes all ride in this one working-copy PR), so the
+ * backlog drains in a single PR and a later PR won't re-attach them. `shots`
+ * is capped to the most recently resolved `max` (default `MAX_PR_SCREENSHOTS`)
+ * so a large backlog doesn't bloat the PR/repo with dozens of committed PNGs.
  *
  * Excludes: unresolved feedback, worktree-mode feedback (carries a `branch`;
  * its changes live in a separate worktree, not the host working copy), and
  * already-shipped feedback (non-null `commitSha`).
  */
-export function selectUnshippedScreenshots(records: FeedbackForScreenshot[]): {
-  shots: PrScreenshot[];
-  ids: string[];
-} {
-  const shots: PrScreenshot[] = [];
-  const ids: string[] = [];
-  for (const r of records) {
-    if (r.status !== 'fixed') continue;
-    if (r.branch) continue; // worktree-mode — not in the host working copy
-    if (r.commitSha) continue; // already shipped in a prior PR
-    if (!r.screenshot) continue;
-    shots.push({ id: r.id, screenshot: r.screenshot, caption: captionFor(r.comment) });
-    ids.push(r.id);
-  }
-  return { shots, ids };
+export function selectUnshippedScreenshots(
+  records: FeedbackForScreenshot[],
+  opts: { max?: number } = {},
+): { shots: PrScreenshot[]; ids: string[]; total: number } {
+  const max = opts.max ?? MAX_PR_SCREENSHOTS;
+  const unshipped = records.filter(
+    (r) => r.status === 'fixed' && !r.branch && !r.commitSha && r.screenshot,
+  );
+  const ids = unshipped.map((r) => r.id);
+  const shots = [...unshipped]
+    .sort((a, b) => resolvedTs(b) - resolvedTs(a))
+    .slice(0, max)
+    .map((r) => ({
+      id: r.id,
+      screenshot: r.screenshot as string,
+      caption: captionFor(r.comment),
+    }));
+  return { shots, ids, total: unshipped.length };
 }
 
 /**
@@ -144,6 +169,13 @@ export async function stageScreenshotAssets(
   // Blob URLs only resolve on GitHub — skip silently on other/no remotes.
   const remote = await resolveOriginRemote(projectRoot);
   if (!remote) return empty;
+
+  // The path from the git repo ROOT to `commitCwd`. Pinagent's project root is
+  // often a subdirectory of the repo (e.g. `examples/react-vite/`), and the
+  // asset is committed at `<prefix>.pinagent/pr-assets/...`. The blob URL must
+  // use that repo-root-relative path — without the prefix it 404s.
+  const prefixRes = await runGitCapture(commitCwd, ['rev-parse', '--show-prefix']);
+  const repoPrefix = prefixRes.code === 0 ? prefixRes.stdout.trim() : '';
 
   const destDir = join(commitCwd, '.pinagent', 'pr-assets');
   await mkdir(destDir, { recursive: true });
@@ -176,10 +208,11 @@ export async function stageScreenshotAssets(
   }
 
   const lines = staged.map((s) => {
-    const rel = `${ASSET_SUBDIR}/${s.id}.png`;
+    // Path relative to the repo root (prefix included) — what the blob URL needs.
+    const repoRel = `${repoPrefix}${ASSET_SUBDIR}/${s.id}.png`;
     const url = `https://github.com/${remote.owner}/${remote.repo}/blob/${encodePath(
       branch,
-    )}/${encodePath(rel)}?raw=true`;
+    )}/${encodePath(repoRel)}?raw=true`;
     const img = `![${altText(s.caption)}](${url})`;
     return s.caption ? `**${s.caption}**\n\n${img}` : img;
   });

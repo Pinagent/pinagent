@@ -88,6 +88,29 @@ describe('stageScreenshotAssets', () => {
     await git(ROOT, ['checkout', 'main']);
   });
 
+  it('uses the repo-root-relative path in the blob URL when run from a subdirectory', async () => {
+    // Pinagent's project root is often a subdir of the repo (e.g. examples/app);
+    // the blob URL must include that prefix or it 404s on GitHub.
+    await git(ROOT, ['checkout', '-b', 'feat/sub']);
+    const sub = join(ROOT, 'examples', 'app');
+    await mkdir(sub, { recursive: true });
+    await writeFile(join(sub, '.gitignore'), '.pinagent\n', 'utf8');
+    await writeShot(sub, 'screenshots/a.png');
+
+    const res = await mod.stageScreenshotAssets(sub, sub, 'feat/sub', [
+      { id: 'a', screenshot: 'screenshots/a.png' },
+    ]);
+
+    expect(res.committed).toBe(1);
+    expect(res.markdown).toContain(
+      'https://github.com/owner/repo/blob/feat/sub/examples/app/.pinagent/pr-assets/a.png?raw=true',
+    );
+    const tracked = await git(ROOT, ['ls-files', '--', 'examples/app/.pinagent/pr-assets/a.png']);
+    expect(tracked.stdout.trim()).toBe('examples/app/.pinagent/pr-assets/a.png');
+
+    await git(ROOT, ['checkout', 'main']);
+  });
+
   it('returns empty markdown and commits nothing when the origin is not GitHub', async () => {
     await git(NO_REMOTE, ['checkout', '-b', 'feat/x']);
     await writeShot(NO_REMOTE, 'screenshots/a.png');
@@ -147,5 +170,17 @@ describe('selectUnshippedScreenshots', () => {
       fixed('noshot', { screenshot: null }),
     ]);
     expect(ids).toEqual(['keep']);
+  });
+
+  it('caps attached shots to the most recent `max` but drains the whole backlog via ids', () => {
+    const recs = Array.from({ length: 5 }, (_, i) =>
+      fixed(`c${i}`, { resolvedAt: new Date(2026, 0, i + 1).toISOString() }),
+    );
+    const { shots, ids, total } = mod.selectUnshippedScreenshots(recs, { max: 2 });
+    // ids/total cover ALL unshipped (so the caller drains the backlog)...
+    expect(total).toBe(5);
+    expect(ids.length).toBe(5);
+    // ...but only the 2 most-recently-resolved are attached.
+    expect(shots.map((s) => s.id)).toEqual(['c4', 'c3']);
   });
 });

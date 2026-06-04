@@ -375,15 +375,18 @@ export async function callTool(
         // Attach the working copy's unshipped feedback screenshots, then stamp
         // the shipped commit onto them so a later PR won't re-attach them.
         const records = await storage.list();
-        const { shots } = selectUnshippedScreenshots(records);
+        const { shots, ids } = selectUnshippedScreenshots(records);
         const result = await openHostBranchPr(root, {
           title: input.title,
           body: input.body,
           ...(input.commit_message ? { commitMessage: input.commit_message } : {}),
           screenshots: shots,
         });
-        if (result.ok && result.shippedCommit && result.shippedScreenshotIds?.length) {
-          const shipped = new Set(result.shippedScreenshotIds);
+        // Stamp the shipped commit onto every unshipped record (their changes
+        // all ride in this PR) so the backlog drains and a later PR won't
+        // re-attach them — even the ones beyond the attachment cap.
+        if (result.ok && result.shippedCommit && ids.length) {
+          const shipped = new Set(ids);
           for (const rec of records) {
             if (!shipped.has(rec.id)) continue;
             await storage.write({ ...rec, commitSha: result.shippedCommit }).catch(() => {});
