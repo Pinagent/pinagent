@@ -1,5 +1,40 @@
 # @pinagent/vite-plugin
 
+## 0.10.0
+
+### Minor Changes
+
+- 5873372: Changes tab: open changed files in the editor + keep expanded diffs live.
+
+  Each file header in an expanded Changes diff is now a button that opens that
+  file in VSCode — at the **agent's edited version** in the worktree, not the
+  workspace's pre-change copy (the diff endpoint now returns the worktree's
+  absolute path; the link shows only when the Pinagent extension is present).
+  Expanded diffs also refetch on `conversations_changed`, so a diff you're
+  viewing stays current as the agent commits more, instead of going stale.
+
+- c159148: Embed feedback screenshots in pull requests. When a PR is opened for feedback that has a screenshot, the PNG is committed onto the PR branch under `.pinagent/pr-assets/` and referenced from the PR body via its `?raw=true` blob URL — so the review shows the UI the developer actually clicked. The multi-conversation compose flow attaches every selected conversation's screenshot; the host-branch flow (dock "Create PR" and the MCP `create_pull_request` tool) attaches screenshots for any feedback whose resolution commit lands on the branch. GitHub-only and best-effort: it never blocks the PR if hosting the image fails.
+
+### Patch Changes
+
+- 5961da2: Fix the JSX source-location tagger producing unparseable output for generic components (`<Foo<T> .../>`). The `data-pa-loc` attribute was spliced at the element name, but TypeScript type arguments sit between the name and the attributes, so the tag landed inside the `<...>` and broke the dev build. It's now inserted after the type arguments. (The fix is in the bundled `@pinagent/babel-plugin`, so both plugins republish.)
+- 91983c6: Fix the element picker not resolving targets inside open shadow DOM. `document.elementFromPoint` returns a web component's shadow _host_, so clicking a control inside a component library (or any shadow tree) mis-anchored the feedback to the enclosing host element — or none. The picker now descends through open shadow roots to the real leaf. (The fix is in the bundled `@pinagent/widget`, so both plugins re-embed it.)
+- df39f14: Fix screenshots never attaching to dock/working-copy PRs. The first cut matched feedback to the branch by `commit_sha`, but inline-mode feedback is never committed per-conversation (the change is committed by the PR step itself), so `commit_sha` was always null and nothing ever matched. The working-copy/dock "Create PR" now attaches screenshots for the resolved, inline, not-yet-shipped feedback sitting in the working copy, and stamps the shipped commit onto those records so a later PR won't re-attach them. Self-correcting and exact — no time/commit heuristics.
+- ec07562: Re-anchor a feedback bubble to the picked `.map()` instance instead of always rebinding to the first row. When the same JSX literal renders several times, all live nodes share one `data-pa-loc`; the widget now uses the instance fingerprint captured at pick time (with the positional index as a fallback) to find the right node again on reload/re-anchor. (Ships via the bundled `@pinagent/widget`, so both plugins re-embed it.)
+- 2971c99: Upgrade `@anthropic-ai/claude-agent-sdk` to `^0.3.161`.
+- 5ae2c40: Surface connection-/project-level WebSocket `error` frames (the protocol allows an absent `feedbackId`) instead of silently dropping them. The widget and dock clients now `console.warn` a global server error that has no conversation to route to, so a relay/connection failure isn't invisible. (The widget half ships via the bundled `@pinagent/widget`, so both plugins re-embed it.)
+- Updated dependencies [ea607f4]
+- Updated dependencies [b85b843]
+- Updated dependencies [5873372]
+- Updated dependencies [803f684]
+- Updated dependencies [a28b662]
+- Updated dependencies [ef6bb6a]
+- Updated dependencies [3c9c61f]
+- Updated dependencies [bbb8104]
+- Updated dependencies [27ae700]
+- Updated dependencies [5ae2c40]
+  - @pinagent/widget-dock@0.5.0
+
 ## 0.9.0
 
 ### Minor Changes
@@ -19,7 +54,6 @@
   the same `gh` fallback.
 
 - 0628a6a: Dashboard: show new (untracked) files, and name "Start a branch" from the changes.
-
   - `getWorkingCopyStatus` now includes **untracked files** in the file list and
     totals. `git diff` omits them, so a freshly-created file that Create PR would
     commit no longer goes missing from the hero. Counts respect `.gitignore` and
@@ -59,7 +93,6 @@
   the row updates when the reconcile lands), so state no longer silently lags.
 
 - 2989bbb: Stop leaking pinagent's data dir into the dashboard/PRs, and handle detached HEAD.
-
   - **Self-ignore `.pinagent/`.** `getDb` now writes `.pinagent/.gitignore` (`*`)
     on first open, so git never sees the SQLite DB / screenshots / worktrees —
     regardless of whether the host project gitignored `.pinagent`. Without it,
@@ -103,7 +136,6 @@
   working tree silently omitted the uncommitted edits the dashboard was showing.
   Both actions now `git add -A` and commit those changes first (with an
   agent-generated message) so the PR actually contains them:
-
   - **Create PR** commits the working changes using the generated PR title as
     the commit message, then pushes + opens the PR.
   - **Push changes** generates a commit message for the uncommitted batch
@@ -223,7 +255,6 @@
   composer iframe) and iframe keystrokes never bubble to the host, so a shortcut
   only fired when focus happened to sit in the realm that handled it. Two gaps
   are closed:
-
   - **Cmd/Ctrl+Shift+P now toggles the dock from a spawned agent.** The composer
     iframe (a spawned agent's UI) handled `Esc` / `c` / `Shift+N` / `Ctrl+\`` but
     not the dock toggle, so the shortcut was dead while focus was inside it. It
@@ -279,7 +310,6 @@
 - 93d4ac7: fix(widget): composer auto-grow, dot needs-input state, pick-into-draft
 
   Three follow-on fixes to the spawned-agent widget:
-
   - **Auto-grow no longer runs away.** The pre-submit composer textarea is
     `flex: 1`, so measuring its `scrollHeight` reported the flex-filled height,
     which grew the iframe, which re-filled the textarea — looping bigger on every
@@ -330,7 +360,6 @@
 
   The single-line minimal bar (`viewState: 'minimal'`) shown for a spawned agent
   is now more compact and can be repositioned by hand:
-
   - **Smaller.** The status spinner shrinks (13px → 10px, thinner stroke) and the
     card's vertical padding tightens (8px → 4px), dropping the bar's height from
     46px to 36px (`MINI_H`).
@@ -348,7 +377,6 @@
   The per-element agent widget now has three deliberate presentation states,
   driven by a new `viewState` (`minimal` | `expanded` | `bubble`), orthogonal
   to the agent lifecycle:
-
   - **Minimal** — the default after spawn, redesigned from the multi-line mini
     card into a single line: a status indicator (running spinner, an animated
     green check on completion, an alert when the agent needs input, or an error
@@ -483,7 +511,6 @@
   Internal-only restructuring of `@pinagent/widget`. `widget.ts` shrinks from
   ~3230 lines to ~200 — it now only builds the DOM + a shared `WidgetContext`
   and wires three controllers together. Everything else moves to its own module:
-
   - `ws-client.ts` — the multiplexed page WebSocket
   - `stream-handler.ts` — transcript rendering + worktree lifecycle row
   - `composer.ts` — composer lifecycle (create/open/restore/swap/hop) + positioning
@@ -535,7 +562,6 @@
   closest PascalCase function/class that renders the element). The widget
   reads it on pick, shows `in <PriceCard>` in the composer header, and
   sends three new pieces of context to the agent:
-
   - **component** — the enclosing component name, e.g. `PriceCard`.
   - **componentPath** — the outer→inner chain of distinct components
     (`App › PriceList › PriceCard`), giving structural context.
@@ -587,7 +613,6 @@
 
   Four robustness fixes to the new `cli` provider (wraps an arbitrary
   agentic CLI and translates its output into Pinagent events):
-
   - **Signal-terminated runs are no longer reported as success.** A child
     killed by a signal (SIGKILL on OOM, SIGSEGV on a crash) exits with a
     null code; `code ?? 0` previously made that look like a clean exit 0.
@@ -624,7 +649,6 @@
   `total_cost_usd` as a bare `$` for `claude login` (OAuth) runs, where the
   figure is notional (billed against the subscription quota, never
   charged):
-
   - The plain-text transcript renderer (`renderTranscript`) shared by the
     `pinagent transcript` CLI and the MCP `get_conversation_transcript`
     tool — now reads `≈$X API-equivalent (subscription)`. It captures the
@@ -839,7 +863,6 @@ not billed)`. `apiKeySource` is threaded from the run's init message
   via the optional worktree mode.
 
   New middleware routes (all mirror `@pinagent/next-plugin/route`):
-
   - `POST /__pinagent/open` — spawn the developer's editor at file:line:col.
   - `GET /__pinagent/sqlite-wasm/<file>` — proxy sqlite-wasm jswasm files.
   - `GET /__pinagent/db-migrations` — drizzle migration journal + SQL.

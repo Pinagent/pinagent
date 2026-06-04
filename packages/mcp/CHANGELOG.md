@@ -1,5 +1,16 @@
 # @pinagent/mcp
 
+## 0.5.0
+
+### Minor Changes
+
+- c159148: Embed feedback screenshots in pull requests. When a PR is opened for feedback that has a screenshot, the PNG is committed onto the PR branch under `.pinagent/pr-assets/` and referenced from the PR body via its `?raw=true` blob URL — so the review shows the UI the developer actually clicked. The multi-conversation compose flow attaches every selected conversation's screenshot; the host-branch flow (dock "Create PR" and the MCP `create_pull_request` tool) attaches screenshots for any feedback whose resolution commit lands on the branch. GitHub-only and best-effort: it never blocks the PR if hosting the image fails.
+
+### Patch Changes
+
+- df39f14: Fix screenshots never attaching to dock/working-copy PRs. The first cut matched feedback to the branch by `commit_sha`, but inline-mode feedback is never committed per-conversation (the change is committed by the PR step itself), so `commit_sha` was always null and nothing ever matched. The working-copy/dock "Create PR" now attaches screenshots for the resolved, inline, not-yet-shipped feedback sitting in the working copy, and stamps the shipped commit onto those records so a later PR won't re-attach them. Self-correcting and exact — no time/commit heuristics.
+- c8ada69: Set a SQLite `busy_timeout` on the MCP server's DB connection so a `resolve_feedback` write waits and retries instead of throwing `SQLITE_BUSY` when it races the dev server's event-bus writes (which would otherwise silently drop the resolution).
+
 ## 0.4.0
 
 ### Minor Changes
@@ -30,7 +41,6 @@
   title guidance for the connected agent.
 
 - 2989bbb: Stop leaking pinagent's data dir into the dashboard/PRs, and handle detached HEAD.
-
   - **Self-ignore `.pinagent/`.** `getDb` now writes `.pinagent/.gitignore` (`*`)
     on first open, so git never sees the SQLite DB / screenshots / worktrees —
     regardless of whether the host project gitignored `.pinagent`. Without it,
@@ -68,7 +78,6 @@
   working tree silently omitted the uncommitted edits the dashboard was showing.
   Both actions now `git add -A` and commit those changes first (with an
   agent-generated message) so the PR actually contains them:
-
   - **Create PR** commits the working changes using the generated PR title as
     the commit message, then pushes + opens the PR.
   - **Push changes** generates a commit message for the uncommitted batch
