@@ -14,12 +14,12 @@ export function App() {
     >
       <Sidebar />
       <main style={{ padding: '40px', maxWidth: 720, margin: '0 auto' }}>
-        <h1>Pinagent demo</h1>
+        <h1 style={{ fontSize: 64, fontWeight: 900 }}>Pinagent demo</h1>
         <p>
           Open the <Logo size={16} style={{ verticalAlign: '-3px', borderRadius: 3 }} /> button in
           the bottom-right, pick an element, and leave a comment.
         </p>
-        <p style={{ color: '#4b5563', lineHeight: 1.55 }}>
+        <p style={{ color: '#9ca3af', fontSize: 14, lineHeight: 1.55 }}>
           Leave feedback right on the UI. Every comment records a screenshot, the selected element,
           and the exact source file and line that produced it — sending your request straight to the
           code that needs changing. Try it on anything here, including the counters and the footer.
@@ -42,14 +42,14 @@ function Sidebar() {
   return (
     <aside
       style={{
-        borderRight: '1px solid #e5e7eb',
+        borderRight: '1px solid #1f2937',
         padding: '40px 20px',
-        background: '#f9fafb',
+        background: '#111827',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
         <Logo size={18} style={{ borderRadius: 4 }} />
-        <span style={{ fontWeight: 600, fontSize: 14 }}>Pinagent</span>
+        <span style={{ fontWeight: 600, fontSize: 14, color: '#f9fafb' }}>Pinagent</span>
       </div>
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {items.map((item, i) => (
@@ -61,8 +61,8 @@ function Sidebar() {
               borderRadius: 6,
               textDecoration: 'none',
               fontSize: 14,
-              color: i === 0 ? '#111827' : '#4b5563',
-              background: i === 0 ? '#e5e7eb' : 'transparent',
+              color: i === 0 ? '#f9fafb' : '#9ca3af',
+              background: i === 0 ? '#374151' : 'transparent',
             }}
           >
             {item}
