@@ -13,7 +13,7 @@ export function Counter({ label }: { label: string }) {
         justifyContent: 'space-between',
         padding: 12,
         border: `1px solid ${hovered ? '#94a3b8' : '#e5e7eb'}`,
-        background: hovered ? '#f1f5f9' : 'transparent',
+        background: hovered ? '#e2e8f0' : '#f1f5f9',
         borderRadius: 8,
         marginBottom: 8,
         transition: 'background 120ms ease, border-color 120ms ease',
