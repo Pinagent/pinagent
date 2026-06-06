@@ -64,9 +64,14 @@ export function mountComposerFrame(srcdoc: string, opts: ComposerFrameOptions = 
 
   const wrap = document.createElement('div');
   wrap.style.width = `${IFRAME_W}px`;
+  // Anchor box for the dogfood pick target overlaid below.
+  wrap.style.position = 'relative';
   const iframe = document.createElement('iframe');
   iframe.style.width = `${IFRAME_W}px`;
   iframe.style.height = `${mini ? MINI_H : STREAM_H}px`;
+  // Block so the wrap collapses to the iframe's exact box (no inline
+  // descender gap) and the absolutely-positioned pick target lines up.
+  iframe.style.display = 'block';
   iframe.style.border = '0';
   iframe.style.borderRadius = '14px';
   iframe.style.boxShadow = '0 18px 48px rgba(32, 27, 33, 0.22)';
@@ -96,5 +101,39 @@ export function mountComposerFrame(srcdoc: string, opts: ComposerFrameOptions = 
   });
 
   wrap.appendChild(iframe);
+
+  // Dogfood pickability. The composer renders inside an iframe (for the
+  // body-level state knobs above + dark-canvas isolation), which the picker —
+  // running in the canvas document — can't pierce: clicks land inside the
+  // iframe instead of the picker. Overlay a transparent pick target in the
+  // *canvas* so the panel is selectable as one element. It stays inert
+  // (`pointer-events: none`) until the picker arms — the widget toggles
+  // `pa-picking` on the canvas <html> — so plain Storybook (no widget, class
+  // never set) and live composer interaction (typing in the textarea) are
+  // untouched. The `data-pa-loc` lands a dogfood pick on the composer source.
+  ensurePickTargetStyle();
+  const pickTarget = document.createElement('div');
+  pickTarget.className = 'pa-story-pick-target';
+  pickTarget.dataset.paLoc = COMPOSER_PICK_LOC;
+  wrap.appendChild(pickTarget);
+
   return wrap;
+}
+
+/** Source anchor handed to the dogfood picker for the composer panel. */
+const COMPOSER_PICK_LOC = 'src/composer-html.ts:1:1';
+
+/**
+ * Inject the pick-target CSS once: inert by default, interactive only while
+ * the widget's picker is active (`html.pa-picking`). Idempotent across the
+ * many composer stories that mount in one preview document.
+ */
+function ensurePickTargetStyle(): void {
+  if (document.getElementById('pa-story-pick-style')) return;
+  const style = document.createElement('style');
+  style.id = 'pa-story-pick-style';
+  style.textContent =
+    '.pa-story-pick-target{position:absolute;inset:0;pointer-events:none}' +
+    'html.pa-picking .pa-story-pick-target{pointer-events:auto}';
+  document.head.appendChild(style);
 }
