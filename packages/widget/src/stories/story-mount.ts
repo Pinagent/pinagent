@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { IFRAME_W, MINI_H, STREAM_H } from '../constants';
+import { IFRAME_W } from '../constants';
 import type { AgentState } from '../types';
 
 /**
@@ -13,12 +13,12 @@ import type { AgentState } from '../types';
  *    inside it. Light DOM keeps the styles class-based and visually identical
  *    while letting a pick (and `↑/↓` ancestry walk) target a specific element
  *    tagged with `data-pa-loc`.
- *  - `mountComposerFrame` reproduces the same-origin composer iframe whose
- *    document is `composerHTML()` with `COMPOSER_STYLES` inlined, then
- *    drives the CSS-only state knobs (`body.mini`, `body[data-agent-state]`,
- *    `body.needs-input`) that the live composer toggles at runtime. The
- *    composer needs the iframe for those body-level knobs, so it's made
- *    pickable via the canvas overlay below rather than light DOM.
+ *  - `mountComposer` lifts `composerHTML()`'s body markup into the light DOM
+ *    and rewrites its `html`/`body` selectors (incl. the CSS-only state knobs
+ *    `body.mini`, `body[data-agent-state]`, `body.needs-input`) onto a
+ *    `.pa-composer-root`. The live composer uses an iframe for those knobs,
+ *    but the picker can't pierce an iframe, so light DOM is what makes the
+ *    individual controls pickable.
  */
 
 /**
@@ -74,10 +74,20 @@ export interface ComposerFrameOptions {
 }
 
 /**
- * Render `composerHTML(meta)` into a sized iframe and apply the runtime
- * state knobs once it loads. Returns a wrapper element Storybook can mount.
+ * Render `composerHTML(meta)` into the *light* DOM and apply the runtime state
+ * knobs synchronously. Returns a root element Storybook can mount.
+ *
+ * The live composer lives in a same-origin iframe so its `body.*` /
+ * `body[data-agent-state]` selectors and dark-canvas isolation work — but the
+ * picker can't pierce an iframe, so a dogfood pick could only ever grab the
+ * whole panel (the earlier overlay approach). Here we instead lift the
+ * composer's body markup into a light-DOM root and rewrite the stylesheet's
+ * `html`/`body` selectors onto that root, so the same CSS drives the same
+ * states while every control (textarea, Submit, header, …) is individually
+ * pickable. Key controls get a `data-pa-loc` so a pick lands on the composer
+ * source.
  */
-export function mountComposerFrame(srcdoc: string, opts: ComposerFrameOptions = {}): HTMLElement {
+export function mountComposer(srcdoc: string, opts: ComposerFrameOptions = {}): HTMLElement {
   const {
     pane = 'compose',
     mini = false,
@@ -86,78 +96,58 @@ export function mountComposerFrame(srcdoc: string, opts: ComposerFrameOptions = 
     label,
   } = opts;
 
-  const wrap = document.createElement('div');
-  wrap.style.width = `${IFRAME_W}px`;
-  // Anchor box for the dogfood pick target overlaid below.
-  wrap.style.position = 'relative';
-  const iframe = document.createElement('iframe');
-  iframe.style.width = `${IFRAME_W}px`;
-  iframe.style.height = `${mini ? MINI_H : STREAM_H}px`;
-  // Block so the wrap collapses to the iframe's exact box (no inline
-  // descender gap) and the absolutely-positioned pick target lines up.
-  iframe.style.display = 'block';
-  iframe.style.border = '0';
-  iframe.style.borderRadius = '14px';
-  iframe.style.boxShadow = '0 18px 48px rgba(32, 27, 33, 0.22)';
-  iframe.style.background = 'transparent';
-  iframe.srcdoc = srcdoc;
+  const parsed = new DOMParser().parseFromString(srcdoc, 'text/html');
+  ensureComposerStyle(parsed.querySelector('style')?.textContent ?? '');
 
-  iframe.addEventListener('load', () => {
-    const idoc = iframe.contentDocument;
-    if (!idoc?.body) return;
-    const body = idoc.body;
-    const composePane = idoc.getElementById('pa-composer-pane');
-    const streamPane = idoc.getElementById('pa-stream-pane');
+  // Light-DOM stand-in for the iframe `<body>`: it carries the same state
+  // classes the live composer toggles on its body, and the rewritten CSS keys
+  // off `.pa-composer-root` instead of `body`/`html`.
+  const root = document.createElement('div');
+  root.className = 'pa-composer-root';
+  root.style.width = `${IFRAME_W}px`;
+  // The `html, body { height: 100% }` rule (rewritten onto the root) would
+  // collapse against the height-less canvas; let the card size the root.
+  root.style.height = 'auto';
+  while (parsed.body.firstChild) root.appendChild(parsed.body.firstChild);
 
-    if (pane === 'stream') {
-      composePane?.setAttribute('hidden', '');
-      streamPane?.removeAttribute('hidden');
-      body.classList.toggle('mini', mini);
-      body.classList.toggle('needs-input', needsInput);
-      body.dataset.agentState = agentState;
-      if (label) {
-        const miniLabel = idoc.getElementById('pa-mini-label');
-        const header = idoc.getElementById('pa-stream-header');
-        if (miniLabel) miniLabel.textContent = label;
-        if (header) header.textContent = label;
-      }
+  if (pane === 'stream') {
+    root.querySelector('#pa-composer-pane')?.setAttribute('hidden', '');
+    root.querySelector('#pa-stream-pane')?.removeAttribute('hidden');
+    root.classList.toggle('mini', mini);
+    root.classList.toggle('needs-input', needsInput);
+    root.dataset.agentState = agentState;
+    if (label) {
+      const miniLabel = root.querySelector('#pa-mini-label');
+      const header = root.querySelector('#pa-stream-header');
+      if (miniLabel) miniLabel.textContent = label;
+      if (header) header.textContent = label;
     }
-  });
+  }
 
-  wrap.appendChild(iframe);
+  // Best-effort dogfood anchors so a pick on a specific control lands on the
+  // composer source rather than just a CSS selector.
+  for (const sel of ['#pa-ta', '#pa-submit', '#pa-cancel', '.header', '.card']) {
+    root.querySelector(sel)?.setAttribute('data-pa-loc', COMPOSER_PICK_LOC);
+  }
 
-  // Dogfood pickability. The composer renders inside an iframe (for the
-  // body-level state knobs above + dark-canvas isolation), which the picker —
-  // running in the canvas document — can't pierce: clicks land inside the
-  // iframe instead of the picker. Overlay a transparent pick target in the
-  // *canvas* so the panel is selectable as one element. It stays inert
-  // (`pointer-events: none`) until the picker arms — the widget toggles
-  // `pa-picking` on the canvas <html> — so plain Storybook (no widget, class
-  // never set) and live composer interaction (typing in the textarea) are
-  // untouched. The `data-pa-loc` lands a dogfood pick on the composer source.
-  ensurePickTargetStyle();
-  const pickTarget = document.createElement('div');
-  pickTarget.className = 'pa-story-pick-target';
-  pickTarget.dataset.paLoc = COMPOSER_PICK_LOC;
-  wrap.appendChild(pickTarget);
-
-  return wrap;
+  return root;
 }
 
-/** Source anchor handed to the dogfood picker for the composer panel. */
+/** Source anchor handed to the dogfood picker for composer elements. */
 const COMPOSER_PICK_LOC = 'src/composer-html.ts:1:1';
 
 /**
- * Inject the pick-target CSS once: inert by default, interactive only while
- * the widget's picker is active (`html.pa-picking`). Idempotent across the
- * many composer stories that mount in one preview document.
+ * Inject the composer CSS once, rewritten from the iframe's `html`/`body`
+ * selectors onto the light-DOM `.pa-composer-root`. All composer stories share
+ * the same `COMPOSER_STYLES`, so one injection covers them; idempotent.
  */
-function ensurePickTargetStyle(): void {
-  if (document.getElementById('pa-story-pick-style')) return;
+function ensureComposerStyle(styleText: string): void {
+  if (document.getElementById('pa-story-composer-style')) return;
+  const scoped = styleText
+    .replace(/\bhtml\b/g, '.pa-composer-root')
+    .replace(/\bbody\b/g, '.pa-composer-root');
   const style = document.createElement('style');
-  style.id = 'pa-story-pick-style';
-  style.textContent =
-    '.pa-story-pick-target{position:absolute;inset:0;pointer-events:none}' +
-    'html.pa-picking .pa-story-pick-target{pointer-events:auto}';
+  style.id = 'pa-story-composer-style';
+  style.textContent = scoped;
   document.head.appendChild(style);
 }
