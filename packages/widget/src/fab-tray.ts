@@ -215,12 +215,15 @@ export function createFabTray(ctx: WidgetContext): {
     fab.title = title;
   }
 
-  // Tell the dock (a sibling iframe the host bridge mounted) to open and
-  // navigate to this conversation. Same `open-conversation` frame the
-  // composer's "open in dock" button posts — see the dock's
-  // useOpenConversationBridge.
-  function openInDock(feedbackId: string) {
-    openConversationInDock(feedbackId);
+  // Open the conversation as a chat that isn't anchored to any page
+  // element — the agent's pin was pulled off the page once its element
+  // disappeared. With a dock mounted that means jumping the dock to the
+  // conversation (same `open-conversation` frame the composer's "open in
+  // dock" button posts — see the dock's useOpenConversationBridge);
+  // otherwise we drop a free-floating composer chat into the viewport.
+  function openAgent(feedbackId: string) {
+    if (ctx.dockEnabled) openConversationInDock(feedbackId);
+    else ctx.openUnanchored(feedbackId);
   }
 
   // Clear = archive. Remove the row optimistically; the PATCH emits a
@@ -282,15 +285,15 @@ export function createFabTray(ctx: WidgetContext): {
 
     const actions = document.createElement('span');
     actions.className = 'pa-tray-actions';
-    // Open needs the dock iframe; hide it when no dock is mounted.
-    if (ctx.dockEnabled) {
-      actions.appendChild(
-        makeRowBtn('Open', false, (ev) => {
-          ev.stopPropagation();
-          openInDock(agent.id);
-        }),
-      );
-    }
+    // Open the conversation: into the dock when mounted, otherwise as a
+    // free-floating chat. Always available — the tray is the only handle on
+    // an agent whose anchored pin was removed when its element disappeared.
+    actions.appendChild(
+      makeRowBtn('Open', false, (ev) => {
+        ev.stopPropagation();
+        openAgent(agent.id);
+      }),
+    );
     actions.appendChild(
       makeRowBtn('Stop', false, (ev, btn) => {
         ev.stopPropagation();

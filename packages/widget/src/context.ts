@@ -74,6 +74,12 @@ export interface WidgetContext {
   addNodeToComposer(composer: Composer, target: Element, click: Click, extras?: PickExtra[]): void;
   /** Composer: find the composer a bubble element belongs to, if any. */
   bubbleOwner(el: HTMLElement): Composer | null;
+  /**
+   * Composer: open a conversation as a free-floating chat that isn't pinned
+   * to any page element. Used by the running-agents tray when there's no
+   * dock to route into. Surfaces the conversation if it's already on-screen.
+   */
+  openUnanchored(feedbackId: string): void;
   /** Transient corner toast. */
   toast(text: string, kind: 'success' | 'error'): void;
   /**

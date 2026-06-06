@@ -2,32 +2,25 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createComposerController } from '../src/composer';
+import { ANCHOR_LOST_GRACE_MS } from '../src/constants';
 import type { WidgetContext } from '../src/context';
 import { openConversationInDock } from '../src/dock-bridge';
-import type { Composer } from '../src/types';
 import type { WidgetWsClient } from '../src/ws-client';
 
 // composer.ts has its own *local* `tryReanchor`; the only re-anchor lever it
-// exposes is `selector.ts::findReanchorTarget`, which it calls with the
-// composer's `dataPaLoc` + CSS `selector`. The orphaned target here is a plain
-// `<button>` whose selector resolves to `body > button` — and the composer
-// itself appends a `<button class="pa-anchor-lost-dismiss">` to `document.body`,
-// so `document.querySelector('body > button')` *matches that dismiss button*.
-// Re-anchor therefore "succeeds" against the composer's own chrome, resetting
-// `anchorLost` and routing the bubble click down the normal `swapTo` path
-// instead of the orphaned-dot path under test. (Cross-file DOM pollution in the
-// full suite is a second way to trip the same match.) Mock the real lever to
-// always miss so the dot behavior is exercised deterministically; every other
-// selector export stays real via the `...actual` spread.
+// exposes is `selector.ts::findReanchorTarget`. We force it to always miss so
+// a detached target stays lost (and the grace → detach path is exercised)
+// rather than re-resolving against unrelated DOM the full suite leaves around.
+// Every other selector export stays real via the `...actual` spread.
 vi.mock('../src/selector', async (importActual) => {
   const actual = await importActual<typeof import('../src/selector')>();
   return { ...actual, findReanchorTarget: () => null };
 });
 
 /**
- * Stub WS client — every method is a no-op spy. The composer only reaches
- * for `unsubscribe` (in close()) and the subscribe surface (only after the
- * iframe's load handler fires, which we don't wait on here).
+ * Stub WS client — every method is a no-op spy. The composer reaches for
+ * `unsubscribe` (in close()/detachToTray()) and the subscribe surface (only
+ * after the iframe's load handler fires, which we don't wait on here).
  */
 function stubWsClient(): WidgetWsClient {
   return new Proxy(
@@ -59,38 +52,10 @@ function makeCtx(over: Partial<WidgetContext> = {}): WidgetContext {
     hopToNextActive: () => {},
     openComposer: () => {},
     bubbleOwner: () => null,
+    openUnanchored: () => {},
     toast: () => {},
     ...over,
   };
-}
-
-/**
- * Mount a composer on a detached target and force the anchor-lost dot
- * state: the rAF reposition loop flips `anchorLost` once the target is
- * not `isConnected`, but to keep the test deterministic we drive it by
- * hand. Returns the single composer the controller created.
- */
-function mountOrphanedComposer(ctx: WidgetContext, feedbackId = 'fb-123'): Composer {
-  const target = document.createElement('button');
-  target.textContent = 'pick me';
-  document.body.appendChild(target);
-
-  const controller = createComposerController(ctx);
-  controller.open(target, { x: 5, y: 5 });
-  const composer = Array.from(ctx.composers)[0];
-
-  // Give it a conversation id (required for the dot to show) and detach
-  // the target so re-anchor can't possibly succeed. `findReanchorTarget`
-  // is mocked to `null` at the module level, so the bubble click stays on
-  // the orphaned-dot path; we still set the dot state by hand here (the
-  // rAF loop that would normally do it is stubbed out in beforeEach).
-  composer.feedbackId = feedbackId;
-  target.remove();
-  composer.anchorLost = true;
-  composer.reviewingLost = false;
-  composer.bubble.classList.add('anchor-lost');
-  composer.bubble.hidden = false;
-  return composer;
 }
 
 describe('openConversationInDock', () => {
@@ -123,85 +88,131 @@ describe('openConversationInDock', () => {
   });
 });
 
-describe('anchor-lost dot interactions', () => {
+describe('anchor lost — detach to the FAB tray', () => {
+  // Capture the rAF callback so we can step the position loop by hand under
+  // fake timers (happy-dom's real rAF wouldn't fire inside a sync test, and
+  // we need to control how much wall-clock the grace window sees).
+  let rafCb: FrameRequestCallback | null = null;
+
   beforeEach(() => {
     document.body.replaceChildren();
-    // Neutralise the composer's rAF reposition loop. happy-dom's
-    // `requestAnimationFrame` is a macrotask that wouldn't fire inside a
-    // synchronous test, but a leaked fake-timer / rAF stub from another
-    // file in the full suite can drive it — and `reposition()` re-evaluates
-    // the anchor-lost state, which could clobber the hand-driven setup
-    // below. No-op stubs keep the click the only thing that mutates state.
-    vi.stubGlobal('requestAnimationFrame', () => 0);
-    vi.stubGlobal('cancelAnimationFrame', () => {});
+    vi.useFakeTimers();
+    rafCb = null;
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      rafCb = cb;
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => {
+      rafCb = null;
+    });
   });
 
+  afterEach(() => {
+    document.body.replaceChildren();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function step() {
+    rafCb?.(0);
+  }
+
+  it('pulls the whole widget off the page once the grace window elapses', () => {
+    const target = document.createElement('button');
+    target.textContent = 'pick me';
+    document.body.appendChild(target);
+
+    const ctx = makeCtx();
+    const controller = createComposerController(ctx);
+    controller.open(target, { x: 5, y: 5 });
+    const composer = Array.from(ctx.composers)[0];
+    composer.feedbackId = 'fb-detach';
+
+    // Detach the anchor. The first frame flags the loss and freezes the
+    // widget in place — still on the page during the grace window.
+    target.remove();
+    step();
+    expect(composer.anchorLost).toBe(true);
+    expect(composer.iframe.isConnected).toBe(true);
+    expect(ctx.composers.has(composer)).toBe(true);
+
+    // After the grace window the anchor is treated as gone for good: the
+    // widget is removed and the composer drops out of the live set. The
+    // conversation itself is untouched (no cache delete) so the FAB tray,
+    // which polls the server, keeps surfacing it.
+    vi.advanceTimersByTime(ANCHOR_LOST_GRACE_MS + 50);
+    step();
+    expect(composer.iframe.isConnected).toBe(false);
+    expect(composer.bubble.isConnected).toBe(false);
+    expect(ctx.composers.has(composer)).toBe(false);
+  });
+
+  it('recovers without detaching if the element comes back during the grace window', () => {
+    const target = document.createElement('button');
+    document.body.appendChild(target);
+
+    const ctx = makeCtx();
+    const controller = createComposerController(ctx);
+    controller.open(target, { x: 5, y: 5 });
+    const composer = Array.from(ctx.composers)[0];
+    composer.feedbackId = 'fb-recover';
+
+    target.remove();
+    step();
+    expect(composer.anchorLost).toBe(true);
+
+    // Re-attach within the grace window and clear the re-anchor miss so the
+    // next frame finds the live target again.
+    document.body.appendChild(target);
+    vi.advanceTimersByTime(ANCHOR_LOST_GRACE_MS - 100);
+    step();
+
+    expect(composer.anchorLost).toBe(false);
+    expect(composer.iframe.isConnected).toBe(true);
+    expect(ctx.composers.has(composer)).toBe(true);
+  });
+});
+
+describe('openUnanchored — free-floating chat', () => {
   afterEach(() => {
     document.body.replaceChildren();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
-  it('clicking the dot opens the conversation in the dock when dock is enabled', () => {
-    const iframe = document.createElement('iframe');
-    iframe.id = '__pinagent-dock';
-    document.body.appendChild(iframe);
-    const post = vi.fn();
-    Object.defineProperty(iframe, 'contentWindow', {
-      configurable: true,
-      get: () => ({ postMessage: post }),
-    });
-
-    const openDock = vi.fn();
-    const ctx = makeCtx({ dockEnabled: true, openDock });
-    const composer = mountOrphanedComposer(ctx, 'fb-open');
-
-    composer.bubble.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-    expect(post).toHaveBeenCalledWith(
-      { source: 'pinagent-host', type: 'open-conversation', feedbackId: 'fb-open' },
-      '*',
-    );
-    expect(openDock).toHaveBeenCalledTimes(1);
+  beforeEach(() => {
+    document.body.replaceChildren();
+    // Neutralise the rAF loop so the composer's positioning doesn't run
+    // against the detached body rect mid-assertion.
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => {});
   });
 
-  it('clicking the dot without a dock re-shows the composer card inline', () => {
-    const ctx = makeCtx({ dockEnabled: false });
-    const composer = mountOrphanedComposer(ctx, 'fb-inline');
+  it('opens a conversation as an unanchored, expanded composer', () => {
+    const ctx = makeCtx();
+    const controller = createComposerController(ctx);
 
-    composer.bubble.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    controller.openUnanchored('fb-float');
 
-    expect(composer.reviewingLost).toBe(true);
+    const composer = Array.from(ctx.composers)[0];
+    expect(composer).toBeTruthy();
+    expect(composer.feedbackId).toBe('fb-float');
+    expect(composer.unanchored).toBe(true);
     expect(composer.expanded).toBe(true);
-    // showDot is now false → iframe shown, dot hidden.
-    expect(composer.iframe.hidden).toBe(false);
-    expect(composer.bubble.hidden).toBe(true);
+    expect(ctx.expandedComposer).toBe(composer);
   });
 
-  it('clicking dismiss archives the conversation and tears down the pin', () => {
-    const fetchMock = vi.fn(() => Promise.resolve({ ok: true } as Response));
-    vi.stubGlobal('fetch', fetchMock);
+  it('surfaces an already-open conversation instead of duplicating it', () => {
+    const swapTo = vi.fn();
+    const ctx = makeCtx({ swapTo });
+    const controller = createComposerController(ctx);
 
-    const ctx = makeCtx({ dockEnabled: false });
-    const composer = mountOrphanedComposer(ctx, 'fb-dismiss');
+    controller.openUnanchored('fb-dupe');
+    expect(ctx.composers.size).toBe(1);
 
-    // The dismiss button is the sibling of the bubble created in the factory.
-    const dismissBtn = document.querySelector('.pa-anchor-lost-dismiss');
-    expect(dismissBtn).toBeTruthy();
-
-    dismissBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('/__pinagent/feedback/fb-dismiss');
-    expect(init.method).toBe('PATCH');
-    expect(JSON.parse(init.body as string)).toEqual({ archived: true });
-
-    // Teardown: the pin elements are removed and the composer drops out
-    // of the live set.
-    expect(composer.iframe.isConnected).toBe(false);
-    expect(composer.bubble.isConnected).toBe(false);
-    expect(dismissBtn?.isConnected).toBe(false);
-    expect(ctx.composers.has(composer)).toBe(false);
+    controller.openUnanchored('fb-dupe');
+    // No second composer; the existing one is surfaced via swapTo.
+    expect(ctx.composers.size).toBe(1);
   });
 });

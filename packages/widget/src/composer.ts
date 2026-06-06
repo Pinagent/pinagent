@@ -3,10 +3,10 @@
 import { composerHTML, ICON_STOP, ICON_X } from './composer-html';
 import { wireComposerIframe } from './composer-iframe';
 import {
+  ANCHOR_LOST_GRACE_MS,
   AUTO_CLOSE_MS,
   BUBBLE_SIZE,
   COMPOSER_H,
-  ENDPOINT,
   IFRAME_W,
   MAX_TA_H,
   MIN_TA_H,
@@ -17,7 +17,6 @@ import type { Click, PickExtra, RegionRect, WidgetContext } from './context';
 import { getBrowserDb } from './db/client';
 import type { PendingRow } from './db/reads';
 import { deleteConversation } from './db/writes';
-import { openConversationInDock } from './dock-bridge';
 import { pickNextActive } from './keyboard';
 import {
   breadcrumbTags,
@@ -53,6 +52,7 @@ export function createComposerController(ctx: WidgetContext): {
   open(target: Element, click: Click, extras?: PickExtra[], regions?: RegionRect[]): void;
   addNodeToComposer(composer: Composer, target: Element, click: Click, extras?: PickExtra[]): void;
   restore(row: PendingRow): void;
+  openUnanchored(feedbackId: string): void;
   swapTo(c: Composer): void;
   hopToNextActive(): void;
   bubbleOwner(el: HTMLElement): Composer | null;
@@ -184,6 +184,37 @@ export function createComposerController(ctx: WidgetContext): {
   }
 
   /**
+   * Open a conversation as a free-floating chat that isn't pinned to any
+   * page element. Used by the running-agents tray when there's no dock to
+   * route into: the agent's anchored widget was pulled off the page once
+   * its element disappeared (see `detachToTray`), so reopening it from the
+   * tray drops a draggable card into the middle of the viewport instead.
+   * If the conversation is already on-screen (anchored or floating), we
+   * just surface it.
+   */
+  function openUnanchored(feedbackId: string): void {
+    for (const c of ctx.composers) {
+      if (c.feedbackId === feedbackId) {
+        swapTo(c);
+        return;
+      }
+    }
+    if (ctx.expandedComposer) ctx.expandedComposer.minimize();
+    // Centre-ish of the viewport; the user can drag it anywhere. The body
+    // is the positioning anchor (always connected), so the card scrolls
+    // with the page from wherever it lands — `unanchored` suppresses the
+    // re-anchor/pointer machinery that only makes sense for a real element.
+    const click = {
+      x: Math.max(8, (window.innerWidth - IFRAME_W) / 2),
+      y: Math.max(72, window.innerHeight / 2 - STREAM_H / 2),
+    };
+    const composer = createComposer(document.body, click, [], [], { unanchored: true });
+    composer.feedbackId = feedbackId;
+    ctx.composers.add(composer);
+    ctx.expandedComposer = composer;
+  }
+
+  /**
    * Phase G — try to recover a fresh DOM reference for a composer whose
    * `target` is no longer in the document. Mutates `composer.target` on
    * success and returns `true`; returns `false` if the lookup fails,
@@ -202,7 +233,13 @@ export function createComposerController(ctx: WidgetContext): {
     click: Click,
     extras: PickExtra[] = [],
     regions: RegionRect[] = [],
+    opts: { unanchored?: boolean } = {},
   ): Composer {
+    // Unanchored = a free-floating chat (no real picked element). `target`
+    // is just the positioning anchor (document.body); skip the re-anchor
+    // lookup and hide the element-identity chrome so it reads as a plain
+    // conversation rather than a pin on "<body>".
+    const unanchored = opts.unanchored === true;
     const locHit = findLocEl(target);
     const loc = locHit?.loc ?? null;
     const selector = shortSelector(target);
@@ -270,19 +307,6 @@ export function createComposerController(ctx: WidgetContext): {
     bubble.hidden = true;
     bubble.innerHTML = '<div class="pa-bubble-spinner"></div>';
     document.body.appendChild(bubble);
-
-    // Dismiss/archive control — only shown alongside the anchor-lost dot.
-    // The orphaned dot is otherwise a dead end (its target is gone), so
-    // this gives the user an explicit way to archive the pin and clear it
-    // off the page. Lives in document.body next to the bubble so it tracks
-    // the same page coords through scroll/layout.
-    const dismissBtn = document.createElement('button');
-    dismissBtn.className = 'pa-anchor-lost-dismiss';
-    dismissBtn.type = 'button';
-    dismissBtn.textContent = '✕';
-    dismissBtn.title = 'Archive — remove this pin';
-    dismissBtn.hidden = true;
-    document.body.appendChild(dismissBtn);
 
     // Floating-bubble action row (viewState: 'bubble'). Same affordances
     // as the minimal bar — stop while running, cancel (stop + dismiss)
@@ -374,6 +398,16 @@ export function createComposerController(ctx: WidgetContext): {
     // absolute positioning, but layout changes (HMR, JS resize, etc.)
     // need a manual update.
     let rafHandle: number | null = null;
+    // Timestamp the anchor first went missing (target detached + re-anchor
+    // failed). We keep the widget frozen in place for a short grace window
+    // so a transient HMR/re-render swap recovers without a flicker; once it
+    // elapses the whole widget is pulled off the page (`detachToTray`).
+    let lostAt: number | null = null;
+    // Set once the widget has been torn down (close() or detachToTray()).
+    // reposition() can trigger teardown from *inside* the rAF loop, so the
+    // loop checks this before rescheduling — otherwise it would immediately
+    // re-arm the frame the teardown just cancelled and spin forever.
+    let torndown = false;
     // Composer iframe height — starts at COMPOSER_H and grows as the
     // user types (auto-grow), capped at MAX_COMPOSER_H. The iframe's
     // textarea posts its desired scrollHeight via window.postMessage
@@ -382,7 +416,30 @@ export function createComposerController(ctx: WidgetContext): {
     let currentComposerH = COMPOSER_H;
     function positionLoop() {
       reposition();
+      if (torndown) return;
       rafHandle = requestAnimationFrame(positionLoop);
+    }
+    /**
+     * Pull the whole widget off the page when its anchored element is gone
+     * for good. Unlike `close()`, the conversation is kept (no cache delete)
+     * — it lives on in the FAB running-agents tray, which can reopen it as a
+     * free-floating chat (`openUnanchored`). We do drop the per-conversation
+     * WS subscription; the tray keeps its own project-level subscription, so
+     * the agent's status still updates while it's off the page.
+     */
+    function detachToTray() {
+      torndown = true;
+      composer.cancelAutoClose();
+      if (composer.feedbackId) ctx.wsClient.unsubscribe(composer.feedbackId);
+      if (rafHandle != null) cancelAnimationFrame(rafHandle);
+      clearExtraFlashes();
+      iframe.remove();
+      bubble.remove();
+      bubbleActions.remove();
+      dragHandle.remove();
+      pointer.remove();
+      ctx.composers.delete(composer);
+      if (ctx.expandedComposer === composer) ctx.expandedComposer = null;
     }
     function reposition() {
       // Phase G — re-anchor on staleness. If the target Node has been
@@ -390,26 +447,39 @@ export function createComposerController(ctx: WidgetContext): {
       // it with a new element of the same shape), try to relocate it by
       // `data-pa-loc` first and CSS selector second. On success, swap
       // `composer.target` in place and keep going; the user sees no
-      // disruption. On failure, surface a "anchor lost" indicator on the
-      // bubble — re-clicking the bubble retries the lookup.
-      if (!composer.target.isConnected) {
+      // disruption. On a sustained failure the element is genuinely gone
+      // (e.g. an agent in a worktree rewrote the JSX), so we pull the whole
+      // widget off the page — the conversation lives on in the FAB tray,
+      // which reopens it as a free-floating chat. Skipped for an unanchored
+      // composer (its `target` is the always-connected body).
+      if (!unanchored && !composer.target.isConnected) {
         if (tryReanchor(composer)) {
-          if (composer.anchorLost) {
-            composer.anchorLost = false;
-            composer.reviewingLost = false;
-            bubble.classList.remove('anchor-lost');
-            bubble.removeAttribute('title');
+          composer.anchorLost = false;
+          lostAt = null;
+        } else {
+          if (!composer.anchorLost) {
+            composer.anchorLost = true;
+            lostAt = Date.now();
           }
-        } else if (!composer.anchorLost) {
-          composer.anchorLost = true;
-          bubble.classList.add('anchor-lost');
-          bubble.title = 'Anchor lost — element removed. Click to open the conversation.';
+          // A pre-submit draft has no conversation worth keeping — drop it.
+          if (!composer.feedbackId) {
+            composer.close();
+            return;
+          }
+          if (Date.now() - (lostAt ?? 0) >= ANCHOR_LOST_GRACE_MS) {
+            detachToTray();
+            return;
+          }
+          // Within the grace window: leave the widget frozen at its last
+          // good position (don't recompute against the detached, zero-rect
+          // target) and wait for a re-anchor or the grace to elapse.
+          return;
         }
       } else if (composer.anchorLost) {
+        // The same target node was toggled back into the document during
+        // the grace window — clear the lost state and resume tracking it.
         composer.anchorLost = false;
-        composer.reviewingLost = false;
-        bubble.classList.remove('anchor-lost');
-        bubble.removeAttribute('title');
+        lostAt = null;
       }
 
       const r = composer.target.getBoundingClientRect();
@@ -422,20 +492,21 @@ export function createComposerController(ctx: WidgetContext): {
       const anchorViewportY = r.top + relY;
       const anchorViewportX = r.left + relX;
 
-      // Dot (floating bubble) shows in three cases:
-      //  - anchor lost (existing fallback — no live element to pin to),
+      // Dot (floating bubble) shows in two cases:
       //  - the user explicitly collapsed to the bubble (viewState),
       //  - the anchored element scrolled out of view while minimal.
       // Expanded stays put even off-screen (the user opened it on purpose).
-      const anchorLostDot = composer.anchorLost && !!composer.feedbackId && !composer.reviewingLost;
+      // An unanchored chat never collapses to a dot — it floats wherever
+      // the user dropped it.
       const offScreen =
+        !unanchored &&
         !!composer.feedbackId &&
         (anchorViewportY < 0 ||
           anchorViewportY > window.innerHeight ||
           anchorViewportX < 0 ||
           anchorViewportX > window.innerWidth);
       const offScreenDot = offScreen && composer.viewState === 'minimal';
-      const showDot = anchorLostDot || composer.viewState === 'bubble' || offScreenDot;
+      const showDot = composer.viewState === 'bubble' || offScreenDot;
       const composerH = currentIframeH();
       const spaceBelow = window.innerHeight - anchorViewportY;
       const placeBelow = spaceBelow >= composerH + 16 || anchorViewportY < composerH + 16;
@@ -458,7 +529,7 @@ export function createComposerController(ctx: WidgetContext): {
       // it stays reachable instead of scrolling away with the anchor.
       let bubbleTop = iframeTop - BUBBLE_SIZE / 2;
       let bubbleLeft = iframeLeft - BUBBLE_SIZE / 2;
-      if (offScreenDot && !anchorLostDot) {
+      if (offScreenDot) {
         bubbleTop = Math.max(
           window.scrollY + 8,
           Math.min(window.scrollY + window.innerHeight - BUBBLE_SIZE - 8, bubbleTop),
@@ -470,12 +541,6 @@ export function createComposerController(ctx: WidgetContext): {
       }
       bubble.style.top = `${bubbleTop}px`;
       bubble.style.left = `${bubbleLeft}px`;
-
-      // Dismiss button: nestled at the bubble's upper-right corner so it
-      // reads as an "x to remove" affordance on the orphaned dot.
-      const DISMISS_SIZE = 16;
-      dismissBtn.style.top = `${bubbleTop - DISMISS_SIZE / 2}px`;
-      dismissBtn.style.left = `${bubbleLeft + BUBBLE_SIZE - DISMISS_SIZE / 2}px`;
 
       // Bubble action row: tucked just under the dot, left-aligned with it.
       bubbleActions.style.top = `${bubbleTop + BUBBLE_SIZE + 4}px`;
@@ -523,19 +588,16 @@ export function createComposerController(ctx: WidgetContext): {
       pointer.style.left = `${pointerLeft}px`;
 
       // Single source of truth for iframe/dot/pointer visibility. The
-      // iframe is shown in both expanded and mini states; the dashed
-      // dot only takes over when the anchor was lost (no live element
-      // to pin a card to). The tail points at the element whenever the
-      // iframe is visible.
+      // iframe is shown in both expanded and mini states; the dot takes
+      // over for the deliberate bubble / off-screen cases. The tail points
+      // at the element whenever the iframe is visible — never for an
+      // unanchored chat, which isn't pinned to anything.
       iframe.hidden = showDot;
       bubble.hidden = !showDot;
-      // Archive control is for the orphaned (anchor-lost) dot only; the
-      // deliberate bubble/off-screen dot uses the hover action row instead.
-      dismissBtn.hidden = !anchorLostDot;
-      // The stop/cancel action row rides the non-orphaned dot.
-      bubbleActions.hidden = !showDot || anchorLostDot;
+      // The stop/cancel action row rides the dot.
+      bubbleActions.hidden = !showDot;
       if (bubbleActions.hidden) bubbleActions.classList.remove('show');
-      pointer.style.display = showDot ? 'none' : '';
+      pointer.style.display = showDot || unanchored ? 'none' : '';
     }
 
     // Single source of truth for the iframe's height, read by both the
@@ -562,7 +624,7 @@ export function createComposerController(ctx: WidgetContext): {
       componentPath: compPath,
       instance,
       anchorLost: false,
-      reviewingLost: false,
+      unanchored,
       userOffsetX: 0,
       userOffsetY: 0,
       turn: 0,
@@ -578,6 +640,7 @@ export function createComposerController(ctx: WidgetContext): {
         // come back on the next reload. Markers (status='fixed') would
         // also suppress restoration, but the user explicitly said
         // "go away" so we don't keep their transcript around either.
+        torndown = true;
         composer.cancelAutoClose();
         if (composer.feedbackId) {
           ctx.wsClient.unsubscribe(composer.feedbackId);
@@ -590,7 +653,6 @@ export function createComposerController(ctx: WidgetContext): {
         clearExtraFlashes();
         iframe.remove();
         bubble.remove();
-        dismissBtn.remove();
         bubbleActions.remove();
         dragHandle.remove();
         pointer.remove();
@@ -706,6 +768,9 @@ export function createComposerController(ctx: WidgetContext): {
       const idoc = iframe.contentDocument;
       if (!idoc?.body) return;
       idoc.body.classList.toggle('mini', !composer.expanded);
+      // Unanchored chat: hide the element-identity header (tag pill / file
+      // row / breadcrumb) — there's no picked element to describe.
+      idoc.body.classList.toggle('unanchored', composer.unanchored);
       // Expanding clears the attention state (the answer form is now
       // visible); minimizing re-applies it when a question is still
       // pending, so the collapsed bar shows the alert + answer icon
@@ -750,52 +815,7 @@ export function createComposerController(ctx: WidgetContext): {
     bubble.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      // When the anchor is lost, try to re-anchor first — if the element
-      // came back (HMR / re-render), reconnect to it and expand as usual.
-      if (composer.anchorLost) {
-        if (tryReanchor(composer)) {
-          composer.anchorLost = false;
-          composer.reviewingLost = false;
-          bubble.classList.remove('anchor-lost');
-          bubble.removeAttribute('title');
-          reposition();
-          return;
-        }
-        // Re-anchor failed — the element is genuinely gone. Rather than
-        // leaving a dead checkmark dot, route the user to the
-        // conversation: into the dock if it's mounted, otherwise re-show
-        // the composer card inline (positioned at the detached target's
-        // last rect; the user can drag it). The dismiss button on the dot
-        // remains the archive path.
-        if (composer.feedbackId) {
-          if (ctx.dockEnabled) {
-            openConversationInDock(composer.feedbackId);
-            ctx.openDock?.();
-          } else {
-            composer.reviewingLost = true;
-            composer.expanded = true;
-            reposition();
-          }
-        }
-        return;
-      }
       swapTo(composer);
-    });
-
-    // Archive the orphaned pin and remove it from the page. Fire-and-forget
-    // PATCH (same archive endpoint the tray's Clear uses); close() handles
-    // the local teardown regardless of the request outcome.
-    dismissBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (composer.feedbackId) {
-        void fetch(`${ENDPOINT}/${composer.feedbackId}`, {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ archived: true }),
-        }).catch(() => ctx.toast('Couldn’t archive', 'error'));
-      }
-      composer.close();
     });
 
     // Bubble action row (viewState: 'bubble' / off-screen dot). Reveal on
@@ -912,5 +932,5 @@ export function createComposerController(ctx: WidgetContext): {
     return composer;
   }
 
-  return { open, addNodeToComposer, restore, swapTo, hopToNextActive, bubbleOwner };
+  return { open, addNodeToComposer, restore, openUnanchored, swapTo, hopToNextActive, bubbleOwner };
 }

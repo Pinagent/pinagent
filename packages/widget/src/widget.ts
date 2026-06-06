@@ -104,6 +104,7 @@ export function mount(): void {
     openComposer: unwired,
     addNodeToComposer: unwired,
     bubbleOwner: unwired,
+    openUnanchored: unwired,
     toast: unwired,
   };
 
@@ -124,6 +125,7 @@ export function mount(): void {
   ctx.swapTo = composer.swapTo;
   ctx.hopToNextActive = composer.hopToNextActive;
   ctx.bubbleOwner = composer.bubbleOwner;
+  ctx.openUnanchored = composer.openUnanchored;
 
   const picker = createPicker(ctx);
   ctx.enterPicking = picker.enterPicking;
