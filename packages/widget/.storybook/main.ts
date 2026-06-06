@@ -31,14 +31,18 @@ const config: StorybookConfig = {
   // *real* @pinagent/vite-plugin onto Storybook's own dev server: it injects
   // the production widget IIFE into the preview iframe and serves the
   // /__pinagent endpoints, so you can pin-comment your own widget stories with
-  // the widget. `spawnAgent: 'off'` keeps it offline — no WS server, no port
-  // binding (avoids the shared 53636 collision), no agent-runner — comments
-  // land in `.pinagent/` for an external `pinagent mcp` / Claude Code to pick
-  // up. Requires the plugin built first (`pnpm build`).
+  // the widget. `spawnAgent: 'inline'` closes the loop — each submit runs a
+  // Claude Agent SDK query against `packages/widget`, streams progress back
+  // into the composer, and shows the running-agent FAB/tray. It boots the WS
+  // server on the shared port 53636, so don't run another pinagent dev server
+  // at the same time, and it needs Claude credentials. Edits land in
+  // `packages/widget/src` (the `data-pa-loc` anchors point there). Requires the
+  // plugin built first (`pnpm build`); for an offline queue you drive yourself,
+  // swap to `spawnAgent: 'off'` and run `pinagent mcp` / Claude Code instead.
   //
-  // Off by default and gated on the env var so the normal Storybook and the
-  // CI `build-storybook` gate never load the plugin. We import its built
-  // `dist` by workspace-relative path rather than by package specifier on
+  // Gated on the env var so the normal Storybook and the CI `build-storybook`
+  // gate never load the plugin (and never bind the WS port). We import its
+  // built `dist` by workspace-relative path rather than by package specifier on
   // purpose: declaring `@pinagent/vite-plugin` as a widget dependency would
   // create a turbo build cycle (vite-plugin already depends on the widget),
   // and pnpm's strict node_modules won't resolve an undeclared specifier.
@@ -52,9 +56,9 @@ const config: StorybookConfig = {
     try {
       const { default: pinagent } = await import(distUrl);
       viteConfig.plugins = viteConfig.plugins ?? [];
-      viteConfig.plugins.push(pinagent({ spawnAgent: 'off' }));
+      viteConfig.plugins.push(pinagent({ spawnAgent: 'inline' }));
       // eslint-disable-next-line no-console
-      console.log('[pinagent:storybook] dogfood mode — widget injected into the preview');
+      console.log('[pinagent:storybook] dogfood mode — widget injected, spawnAgent: inline');
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
