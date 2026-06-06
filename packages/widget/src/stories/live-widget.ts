@@ -110,6 +110,7 @@ export function mountLiveWidget(opts: { dockEnabled?: boolean } = {}): LiveWidge
     openComposer: unwired,
     addNodeToComposer: unwired,
     bubbleOwner: unwired,
+    openUnanchored: unwired,
     toast: unwired,
   };
 
@@ -127,6 +128,7 @@ export function mountLiveWidget(opts: { dockEnabled?: boolean } = {}): LiveWidge
   ctx.swapTo = composer.swapTo;
   ctx.hopToNextActive = composer.hopToNextActive;
   ctx.bubbleOwner = composer.bubbleOwner;
+  ctx.openUnanchored = composer.openUnanchored;
 
   const picker = createPicker(ctx);
   ctx.enterPicking = picker.enterPicking;

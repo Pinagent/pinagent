@@ -702,6 +702,10 @@ export const COMPOSER_STYLES = `
   body.mini .ask-form,
   body.mini .ask-resolved,
   body.mini .conflict-block { display: none; }
+  /* Unanchored chat (opened from the running-agents tray): no picked
+     element, so drop the element-identity header (tag pill / file row /
+     breadcrumb). The stream pane keeps its own status header. */
+  body.unanchored .header-block { display: none; }
   /* Compact card: tight vertical padding, and extra left padding to clear
      the leading drag grip (a body-level overlay positioned by reposition()
      so the minimized bar can be dragged just like the expanded composer). */

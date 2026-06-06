@@ -198,20 +198,20 @@ export interface Composer {
   componentPath: string[];
   instance: InstanceInfo | null;
   /**
-   * True when neither `dataPaLoc` nor `selector` resolves to a live
-   * element. The widget stays put at its last known coordinates with a
-   * visible "anchor lost" indicator on the bubble; clicking the bubble
-   * retries the re-anchor lookup.
+   * True while the target Node is detached and neither `dataPaLoc` nor
+   * `selector` re-resolves it. The widget freezes in place for a short
+   * grace window (transient HMR/re-render recovery); if the anchor stays
+   * lost the whole widget is pulled off the page (see `detachToTray`) and
+   * the conversation lives on only in the FAB running-agents tray.
    */
   anchorLost: boolean;
   /**
-   * Set when the user pressed an anchor-lost dot that couldn't re-anchor
-   * and no dock is mounted: we fall back to re-showing the composer card
-   * inline so the conversation stays reachable. While true the dot is
-   * suppressed and the iframe card is shown even though `anchorLost` is
-   * still set. Reset whenever the target re-anchors.
+   * True for a free-floating chat that isn't pinned to any page element —
+   * opened from the running-agents tray when there's no dock to route into
+   * (the agent's anchored widget was removed once its element disappeared).
+   * Suppresses the re-anchor/pointer machinery and hides the element header.
    */
-  reviewingLost: boolean;
+  unanchored: boolean;
   /**
    * User-applied positional offset relative to the auto-anchored
    * position. Updated by dragging the handle; applied on top of the

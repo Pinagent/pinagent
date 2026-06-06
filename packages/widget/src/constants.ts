@@ -65,6 +65,15 @@ export const MAX_TA_H = 240;
 export const AUTO_CLOSE_MS = 5_000;
 
 /**
+ * Grace window after a composer's anchored element detaches (and re-anchor
+ * by `data-pa-loc`/selector fails) before the whole widget is pulled off
+ * the page. Long enough to ride out a transient HMR / framework re-render
+ * that swaps the element out for a frame or two; once it elapses the anchor
+ * is treated as gone for good and the conversation moves to the FAB tray.
+ */
+export const ANCHOR_LOST_GRACE_MS = 1_200;
+
+/**
  * Document-level styles for elements that live in document.body (iframes
  * and bubbles). They can't live in the shadow root because we want them
  * to scroll naturally with the page — children of a `position: fixed`
@@ -158,14 +167,6 @@ export const DOC_STYLES = `
   background: ${STATUS.error.bg};
   color: ${STATUS.error.fg};
 }
-/* Phase G — anchor lost. Dashed olive ring so it reads as "needs attention"
-   without claiming an outright error. Click retries the re-anchor lookup. */
-.pa-bubble.anchor-lost {
-  border-style: dashed;
-  border-color: ${STATUS.anchorLost.border};
-  background: ${STATUS.anchorLost.bg};
-  color: ${STATUS.anchorLost.fg};
-}
 /* Needs human input — the agent asked a question (ask_user) while
    collapsed to the dot. Mirrors the minimal bar's awaitingClarification
    language: the alert glyph replaces the spinner, the running pulse ring
@@ -196,36 +197,6 @@ export const DOC_STYLES = `
   animation: pa-bubble-spin 0.9s linear infinite;
 }
 @keyframes pa-bubble-spin { to { transform: rotate(360deg); } }
-
-/* Archive control on the anchor-lost dot. Small circular button at the
-   dot's upper-right corner; only shown when the orphaned dot is visible
-   (toggled via [hidden] in reposition()). Sits one z-index above the
-   bubble so it stays clickable on top of it. */
-.pa-anchor-lost-dismiss {
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid ${THEME.border};
-  background: ${THEME.surface};
-  color: ${THEME.text};
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-  cursor: pointer;
-  z-index: 2147483646;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  line-height: 1;
-  font-family: ${FONT_SANS};
-}
-.pa-anchor-lost-dismiss:hover {
-  background: ${STATUS.error.bg};
-  border-color: ${STATUS.error.border};
-  color: ${STATUS.error.fg};
-}
-.pa-anchor-lost-dismiss[hidden] { display: none; }
 
 /* Floating-bubble action row (viewState: 'bubble'). Mirrors the minimal
    bar's affordances — stop while running, cancel always — as a small pill
