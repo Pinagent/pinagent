@@ -16,6 +16,17 @@ const config: StorybookConfig = {
   stories: ['../src/**/*.stories.@(ts|tsx)'],
   addons: [],
 
+  // Dogfood loop (opt-in), manager half. The widget is injected into the
+  // *preview* iframe (see `viteFinal`), so its pick hotkey only fires when
+  // focus is in the story canvas. Expose the dogfood flag to the manager
+  // bundle so `manager.ts` can relay the hotkey across the frame boundary
+  // when focus is in the Storybook chrome. Off (no flag) otherwise, so the
+  // relay stays a no-op in normal Storybook and the CI build-storybook gate.
+  managerHead: (head) =>
+    process.env.PINAGENT_DOGFOOD
+      ? `${head}\n<script>window.__PINAGENT_DOGFOOD__ = true;</script>`
+      : head,
+
   // Dogfood loop (opt-in). With `PINAGENT_DOGFOOD=1 pnpm storybook`, mount the
   // *real* @pinagent/vite-plugin onto Storybook's own dev server: it injects
   // the production widget IIFE into the preview iframe and serves the
