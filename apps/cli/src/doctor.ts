@@ -14,6 +14,8 @@
  *   - the runtime config is wrapped with `pinagent(...)`,
  *   - `<Pinagent />` is mounted (Next),
  *   - the route handler exists with inline `dynamic`/`runtime` (Next),
+ *   - an existing middleware/proxy file doesn't shadow the `/__pinagent/*`
+ *     rewrite with a catch-all matcher (Next),
  *   - `.pinagent` is gitignored,
  *   - `.mcp.json` registers the server and any `PINAGENT_PROJECT_ROOT` it
  *     pins points at a directory that exists — and, in a monorepo, that it
@@ -230,6 +232,63 @@ export function checkRouteHandler(root: string): Check {
   };
 }
 
+/**
+ * Next only: an existing middleware/proxy file doesn't shadow pinagent's
+ * `/__pinagent/*` → `/pinagent/*` rewrite. Middleware runs *before* config
+ * rewrites, so a broad catch-all `matcher` (next-intl, NextAuth/Clerk,
+ * geo/redirect middleware) intercepts and mangles `/__pinagent/*` before the
+ * rewrite resolves — every endpoint then 404s, silently. The fix is to exclude
+ * `__pinagent` and `pinagent` from the matcher; this check flags the cases
+ * where that exclusion is missing and the coverage is broad enough to bite.
+ *
+ * Next reads the file *next to the app dir*: the repo root, or `src/` when
+ * routes live in `src/app`. (Next 16 renamed `middleware` → `proxy`.)
+ */
+const MIDDLEWARE_FILES = [
+  'middleware.ts',
+  'middleware.js',
+  'proxy.ts',
+  'proxy.js',
+  'src/middleware.ts',
+  'src/middleware.js',
+  'src/proxy.ts',
+  'src/proxy.js',
+];
+
+export function checkMiddlewareMatcher(root: string): Check {
+  const base = resolve(root);
+  const rel = MIDDLEWARE_FILES.find((c) => existsSync(join(base, c)));
+  if (!rel) {
+    return { status: 'skip', label: 'No middleware/proxy file (nothing to exclude)' };
+  }
+  const content = read(join(base, rel)) ?? '';
+  // Any reference to pinagent (a matcher exclusion or an early passthrough)
+  // means the author already accounted for it. `pinagent` also covers `__pinagent`.
+  if (content.includes('pinagent')) {
+    return { status: 'ok', label: `${rel} excludes pinagent paths` };
+  }
+  const hasMatcher = /matcher\s*:/.test(content);
+  // A negative-lookahead matcher (`/((?!api|_next|...).*)`) is the catch-all
+  // form that shadows the rewrite; middleware with no matcher runs on *every*
+  // request, which is just as broad. Either way the exclusion is needed.
+  const hasCatchAll = /\(\?!/.test(content);
+  if (hasCatchAll || !hasMatcher) {
+    return {
+      status: 'warn',
+      label: `${rel} may shadow the /__pinagent/* rewrite`,
+      detail:
+        'Middleware runs before next.config rewrites — add __pinagent and pinagent to its matcher exclusion (or an early passthrough), then restart the dev server. Verify: curl .../__pinagent/branches returns 200, not 404.',
+    };
+  }
+  // A scoped positive matcher (e.g. ['/dashboard/:path*']) is unlikely to match
+  // /__pinagent/*; surface it as OK but nudge a manual check.
+  return {
+    status: 'ok',
+    label: `${rel} has a scoped matcher`,
+    detail: 'If it matches /__pinagent/*, add __pinagent and pinagent to its exclusion.',
+  };
+}
+
 /** `.pinagent` is ignored by a .gitignore at the project root or any ancestor. */
 export function checkGitignore(root: string): Check {
   let dir = resolve(root);
@@ -408,6 +467,7 @@ export function runDoctor(root: string): DoctorResult {
     if (runtime === 'next') {
       checks.push(checkPinagentMount(root));
       checks.push(checkRouteHandler(root));
+      checks.push(checkMiddlewareMatcher(root));
     }
   }
   checks.push(checkGitignore(root));
