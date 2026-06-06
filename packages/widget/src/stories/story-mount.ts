@@ -6,34 +6,58 @@ import type { AgentState } from '../types';
  * Story scaffolding that mirrors how `mount()` (widget.ts) renders the real
  * widget, so stories exercise the shipped DOM + CSS rather than a copy.
  *
- *  - `mountShadow` reproduces the closed-shadow-root host + injected
- *    `STYLES` used for the FAB / picker chrome (here `open` so Storybook's
- *    inspector can see in).
+ *  - `mountChrome` renders the FAB / picker chrome from the real `STYLES`
+ *    into the *light* DOM. The live widget uses a closed shadow root, but a
+ *    shadow root can only be picked as one unit — `document.elementFromPoint`
+ *    returns the host — so the dogfood picker can't reach individual elements
+ *    inside it. Light DOM keeps the styles class-based and visually identical
+ *    while letting a pick (and `↑/↓` ancestry walk) target a specific element
+ *    tagged with `data-pa-loc`.
  *  - `mountComposerFrame` reproduces the same-origin composer iframe whose
  *    document is `composerHTML()` with `COMPOSER_STYLES` inlined, then
  *    drives the CSS-only state knobs (`body.mini`, `body[data-agent-state]`,
- *    `body.needs-input`) that the live composer toggles at runtime.
+ *    `body.needs-input`) that the live composer toggles at runtime. The
+ *    composer needs the iframe for those body-level knobs, so it's made
+ *    pickable via the canvas overlay below rather than light DOM.
  */
 
-export function mountShadow(
+/**
+ * Render `styles` + `build(host)` into a light-DOM box. The widget's
+ * `STYLES` are class-based (`.fab`, `.outline`, `.hint`, `.toast`), so
+ * injecting them at document scope styles only the story's own elements; the
+ * lone shadow-specific rule, `:host { all: initial }`, is isolation we don't
+ * need in the controlled Storybook canvas, and its `color-scheme: dark` is
+ * set on the host box directly.
+ */
+export function mountChrome(
   styles: string,
-  build: (root: ShadowRoot) => void,
+  build: (host: HTMLElement) => void,
   size: { width?: string; height?: string } = {},
 ): HTMLElement {
+  ensureChromeStyle(styles);
   const host = document.createElement('div');
+  host.className = 'pa-story-chrome';
   // Give the fixed-positioned chrome (FAB, outline, hint) a local box to
   // anchor to so it doesn't fly to the viewport corner of the Storybook
   // canvas. Stories that depict fixed elements override their `position`
   // to `absolute` so they sit inside this box.
   host.style.position = 'relative';
+  // color-scheme normally rides in on `:host`; set it here since we're not in
+  // a shadow root (keeps form controls / scrollbars on dark UA theming).
+  host.style.colorScheme = 'dark';
   host.style.width = size.width ?? '320px';
   host.style.height = size.height ?? '180px';
-  const root = host.attachShadow({ mode: 'open' });
-  const style = document.createElement('style');
-  style.textContent = styles;
-  root.appendChild(style);
-  build(root);
+  build(host);
   return host;
+}
+
+/** Inject the widget `STYLES` into the canvas head once for all chrome stories. */
+function ensureChromeStyle(styles: string): void {
+  if (document.getElementById('pa-story-chrome-style')) return;
+  const style = document.createElement('style');
+  style.id = 'pa-story-chrome-style';
+  style.textContent = styles;
+  document.head.appendChild(style);
 }
 
 export interface ComposerFrameOptions {

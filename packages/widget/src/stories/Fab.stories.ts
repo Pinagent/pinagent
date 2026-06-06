@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/html-vite';
 import { BRAND_CREAM } from '../brand';
 import { buildPinIcon } from '../pin-icon';
 import { STYLES } from '../styles';
-import { mountShadow } from './story-mount';
+import { mountChrome } from './story-mount';
 
 /**
  * The floating action button. The live FAB is built imperatively by
@@ -20,17 +20,23 @@ interface FabArgs {
 }
 
 function buildFab(active: boolean): HTMLElement {
-  return mountShadow(STYLES, (root) => {
+  return mountChrome(STYLES, (host) => {
     const fab = document.createElement('div');
     fab.className = active ? 'fab active' : 'fab';
     fab.setAttribute('role', 'button');
+    // Dogfood anchor: a pick on the FAB lands on its `.fab` styling. The pin
+    // icon below carries its own anchor, so picking the icon (or walking ↑ to
+    // the FAB) targets the right source.
+    fab.dataset.paLoc = 'src/styles.ts:30:1';
     // The live FAB anchors to the viewport corner; pin it inside the
     // story box instead so it stays visible on the canvas.
     fab.style.position = 'absolute';
     fab.style.bottom = '20px';
     fab.style.right = '20px';
-    fab.appendChild(buildPinIcon(22, BRAND_CREAM));
-    root.appendChild(fab);
+    const icon = buildPinIcon(22, BRAND_CREAM);
+    icon.setAttribute('data-pa-loc', 'src/pin-icon.ts:4:1');
+    fab.appendChild(icon);
+    host.appendChild(fab);
   });
 }
 
