@@ -1,5 +1,92 @@
 # @pinagent/widget-dock
 
+## 0.5.0
+
+### Minor Changes
+
+- ea607f4: Activity feed: `pr_created` rows now deep-link into the PRs tab.
+
+  Clicking a "PR #N opened" row in the History → Activity feed (or the
+  Overview activity strip) now navigates to the in-dock PRs tab and scrolls
+  to + briefly highlights that PR — where its reconciled state and GitHub
+  link live — instead of only offering a buried external "open on GitHub"
+  link. Rows without a recorded PR number keep the inline GitHub link.
+
+- b85b843: Branches tab: live worktree state + honest unmanaged-row action.
+
+  The branch list now refetches on a visibility-scoped interval (paused
+  when the dock is hidden), so a worktree's disk usage and dirty /
+  behind-base state stay current as an agent edits in it — previously the
+  list only updated on a conversation event or a prune, leaving `diskMb`
+  and the state pill stale in between. Unmanaged worktrees (no linked
+  conversation) now show a plain "Unmanaged" label instead of a
+  permanently-disabled trash button that read as broken.
+
+- 5873372: Changes tab: open changed files in the editor + keep expanded diffs live.
+
+  Each file header in an expanded Changes diff is now a button that opens that
+  file in VSCode — at the **agent's edited version** in the worktree, not the
+  workspace's pre-change copy (the diff endpoint now returns the worktree's
+  absolute path; the link shows only when the Pinagent extension is present).
+  Expanded diffs also refetch on `conversations_changed`, so a diff you're
+  viewing stays current as the agent commits more, instead of going stale.
+
+- 803f684: Conversations list: per-row quick archive / unarchive.
+
+  Each conversation row now has a hover- (and focus-) revealed archive
+  button, so a single conversation can be archived or unarchived in one
+  click — without opening its detail view or going through multi-select and
+  the bulk bar. Reuses the existing `updateConversation` path, so the row
+  drops out (or reappears under "Show archived") live, and the action is
+  recorded in History → Activity.
+
+- 3c9c61f: Conversations list: inline Land for ready worktrees.
+
+  A worktree-mode conversation whose worktree is ready now has a hover-
+  revealed "Land" button right in the list, next to quick-archive — one
+  click merges the agent's branch into the branch you're on, no detail-view
+  detour. Only shown for landable (`active`) worktrees; inline-mode rows
+  never show it (there's nothing to merge). Non-destructive, so no confirm —
+  the live subscription flips the row to `landed` on success; a merge
+  conflict leaves it ready, where you open the detail view to resolve.
+
+  Threads the conversation's `worktreeState` through the list-row shape
+  (the server already sends it; it was only used to derive status before).
+
+- 27ae700: Settings tab: live refresh + clear which permission mode is actually in force.
+
+  The Settings form now refetches while visible (paused when the dock is
+  hidden), so an external `config.json` edit — or, more usefully, an env-override
+  change after a dev-server restart — surfaces without a manual refetch. When
+  `PINAGENT_AGENT_PERMISSION_MODE` is set, the permission-mode picker now marks
+  the row that's actually **In force** and labels your persisted selection
+  **Saved** (it applies once the env is unset), instead of misleadingly badging
+  the saved row as "current."
+
+### Patch Changes
+
+- a28b662: Queue dock follow-up replies typed during a running turn instead of letting the server bounce ("a turn is already in progress") and silently drop them. Replies are parked and flushed one-per-turn-end, a send the server bounces is re-queued (nothing lost), and the transient bounce error is hidden — mirroring the per-element widget's `followUpQueue`.
+- ef6bb6a: Conversation detail: hide Land / Discard / Create-PR for inline-mode runs.
+
+  Inline-mode conversations never get a worktree (the agent edits the
+  working tree directly), so there's nothing to land, discard, or open a PR
+  from. Those three controls used to render in a disabled state next to the
+  Stop button while an inline agent was running, because the action row was
+  gated partly on "a turn is in flight". They're now gated on the
+  conversation actually having a worktree — inline runs show only Stop.
+
+- bbb8104: Row action buttons: keep hover-revealed actions reachable on touch.
+
+  The per-row Land / quick-archive buttons (and the diff file-open hint)
+  reveal on `group-hover`, which Tailwind v4 gates behind
+  `@media (hover: hover)` — so on touch devices (no hover) they never
+  appeared and the actions were effectively unreachable. They now stay
+  visible where hovering isn't available (`@media (hover: none)`), keep the
+  clean hover-reveal on pointer devices, and reveal on keyboard focus
+  (`focus-visible` / `group-focus-visible`) as before.
+
+- 5ae2c40: Surface connection-/project-level WebSocket `error` frames (the protocol allows an absent `feedbackId`) instead of silently dropping them. The widget and dock clients now `console.warn` a global server error that has no conversation to route to, so a relay/connection failure isn't invisible. (The widget half ships via the bundled `@pinagent/widget`, so both plugins re-embed it.)
+
 ## 0.4.0
 
 ### Minor Changes
@@ -30,7 +117,6 @@
   the row updates when the reconcile lands), so state no longer silently lags.
 
 - 2989bbb: Stop leaking pinagent's data dir into the dashboard/PRs, and handle detached HEAD.
-
   - **Self-ignore `.pinagent/`.** `getDb` now writes `.pinagent/.gitignore` (`*`)
     on first open, so git never sees the SQLite DB / screenshots / worktrees —
     regardless of whether the host project gitignored `.pinagent`. Without it,
@@ -55,7 +141,6 @@
   working tree silently omitted the uncommitted edits the dashboard was showing.
   Both actions now `git add -A` and commit those changes first (with an
   agent-generated message) so the PR actually contains them:
-
   - **Create PR** commits the working changes using the generated PR title as
     the commit message, then pushes + opens the PR.
   - **Push changes** generates a commit message for the uncommitted batch
