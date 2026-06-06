@@ -2,15 +2,15 @@
 import type { Meta, StoryObj } from '@storybook/html-vite';
 import { composerHTML } from '../composer-html';
 import type { AgentState, ComposerMeta } from '../types';
-import { type ComposerFrameOptions, mountComposerFrame } from './story-mount';
+import { type ComposerFrameOptions, mountComposer } from './story-mount';
 
 /**
  * Stories for the per-element composer — the card that opens when you pick
  * an element. Everything here renders the real `composerHTML()` document
- * (with the shipped `COMPOSER_STYLES` inlined) inside an iframe, exactly
- * like the live widget. The post-submit visual states are driven by the
- * same CSS-only knobs the runtime uses: `body.mini`, `body[data-agent-state]`
- * and `body.needs-input`.
+ * (with the shipped `COMPOSER_STYLES`), lifted into the light DOM so the
+ * dogfood picker can target individual controls. The post-submit visual
+ * states are driven by the same CSS-only knobs the runtime uses, rewritten
+ * onto the composer root: `.mini`, `[data-agent-state]` and `.needs-input`.
  */
 
 const SAMPLE_META: ComposerMeta = {
@@ -39,7 +39,7 @@ const meta: Meta<ComposerFrameOptions & { agentState: AgentState }> = {
     },
     label: { control: 'text' },
   },
-  render: (args) => mountComposerFrame(html(), args),
+  render: (args) => mountComposer(html(), args),
 };
 export default meta;
 
@@ -54,7 +54,7 @@ export const PreSubmit: Story = {
 /** Multi-element selection — the "+N" badge in the header. */
 export const MultiSelectHeader: Story = {
   render: (args) =>
-    mountComposerFrame(
+    mountComposer(
       html({
         ...SAMPLE_META,
         extraCount: 2,
