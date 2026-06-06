@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { composerHTML, ICON_STOP, ICON_X } from './composer-html';
+import { resolveComposerContext } from './composer-context';
+import { createComposerElements } from './composer-elements';
 import { wireComposerIframe } from './composer-iframe';
 import {
   ANCHOR_LOST_GRACE_MS,
@@ -18,27 +19,8 @@ import { getBrowserDb } from './db/client';
 import type { PendingRow } from './db/reads';
 import { deleteConversation } from './db/writes';
 import { pickNextActive } from './keyboard';
-import {
-  breadcrumbTags,
-  componentOf,
-  componentPath,
-  describeElementLabel,
-  elementFingerprint,
-  findLoc,
-  findLocEl,
-  findReanchorTarget,
-  locInstanceInfo,
-  shortSelector,
-} from './selector';
-import { THEME } from './theme';
-import type {
-  AgentState,
-  Composer,
-  ComposerMeta,
-  ExtraAnchor,
-  InstanceInfo,
-  QueuedNodeRef,
-} from './types';
+import { componentOf, findLoc, findReanchorTarget, shortSelector } from './selector';
+import type { AgentState, Composer, QueuedNodeRef } from './types';
 
 /**
  * Composer lifecycle: creating the per-element feedback widget (iframe +
@@ -241,130 +223,11 @@ export function createComposerController(ctx: WidgetContext): {
     // lookup and hide the element-identity chrome so it reads as a plain
     // conversation rather than a pin on "<body>".
     const unanchored = opts.unanchored === true;
-    const locHit = findLocEl(target);
-    const loc = locHit?.loc ?? null;
-    const selector = shortSelector(target);
-    // Enclosing-component context (from `data-pa-comp`). `component` and
-    // the path read off the same walk-up as the loc; `instance` is only
-    // meaningful when the resolved loc is shared by several live nodes
-    // (a `.map()`), so we leave it null otherwise to keep single-pick
-    // payloads byte-identical to before.
-    const component = componentOf(target);
-    const compPath = componentPath(target);
-    let instance: InstanceInfo | null = null;
-    if (locHit) {
-      const info = locInstanceInfo(locHit.el, locHit.raw);
-      if (info.total > 1) {
-        instance = {
-          index: Math.max(0, info.index),
-          total: info.total,
-          fingerprint: elementFingerprint(locHit.el),
-        };
-      }
-    }
-    // Resolve each extra once, deriving both the wire anchor (sent to
-    // the server on submit) and the display row (the badge popover).
-    const extraData = extras.map(({ target: t, click: c }) => {
-      const eloc = findLoc(t);
-      return {
-        anchor: {
-          file: eloc?.file ?? null,
-          line: eloc?.line ?? null,
-          col: eloc?.col ?? null,
-          selector: shortSelector(t),
-          clickX: c.x,
-          clickY: c.y,
-          component: componentOf(t),
-        } as ExtraAnchor,
-        display: { tag: t.tagName.toLowerCase(), label: describeElementLabel(t), loc: eloc },
-      };
-    });
-    const extraAnchors: ExtraAnchor[] = extraData.map((d) => d.anchor);
-    const meta: ComposerMeta = {
-      tag: target.tagName.toLowerCase(),
-      label: describeElementLabel(target),
-      loc,
-      component,
-      breadcrumbs: breadcrumbTags(target),
-      extraCount: extraAnchors.length,
-      extras: extraData.map((d) => d.display),
-    };
-    const dataPaLoc = loc ? `${loc.file}:${loc.line}:${loc.col}` : null;
+    const { loc, selector, component, compPath, instance, extraAnchors, meta, dataPaLoc } =
+      resolveComposerContext(target, extras);
 
-    // Iframe lives in document.body (not the shadow root) so it scrolls
-    // naturally with the page via absolute positioning in page coords.
-    const iframe = document.createElement('iframe');
-    iframe.className = 'pa-iframe';
-    iframe.title = 'Pinagent feedback';
-    iframe.style.pointerEvents = 'auto';
-    iframe.srcdoc = composerHTML(meta);
-    iframe.style.width = `${IFRAME_W}px`;
-    iframe.style.height = `${COMPOSER_H}px`;
-    document.body.appendChild(iframe);
-
-    const bubble = document.createElement('div');
-    bubble.className = 'pa-bubble pending';
-    bubble.title = 'Pinagent — click to expand';
-    bubble.hidden = true;
-    bubble.innerHTML = '<div class="pa-bubble-spinner"></div>';
-    document.body.appendChild(bubble);
-
-    // Floating-bubble action row (viewState: 'bubble'). Same affordances
-    // as the minimal bar — stop while running, cancel (stop + dismiss)
-    // always — revealed on hover of the dot or the row. Lives in
-    // document.body next to the bubble so reposition() can track it.
-    const bubbleActions = document.createElement('div');
-    bubbleActions.className = 'pa-bubble-actions';
-    bubbleActions.hidden = true;
-    const baStop = document.createElement('button');
-    baStop.className = 'pa-ba-btn';
-    baStop.type = 'button';
-    baStop.title = 'Stop the agent';
-    baStop.setAttribute('aria-label', 'Stop the agent');
-    baStop.innerHTML = ICON_STOP;
-    const baCancel = document.createElement('button');
-    baCancel.className = 'pa-ba-btn danger';
-    baCancel.type = 'button';
-    baCancel.title = 'Cancel — stop and dismiss';
-    baCancel.setAttribute('aria-label', 'Cancel — stop and dismiss');
-    baCancel.innerHTML = ICON_X;
-    bubbleActions.appendChild(baStop);
-    bubbleActions.appendChild(baCancel);
-    document.body.appendChild(bubbleActions);
-
-    // Drag grip — small visible handle inside the top-right corner of
-    // the iframe header. Lives in document.body (not inside the iframe)
-    // so we can track mousemove/mouseup on the parent document during a
-    // drag, which we couldn't do from inside the iframe. The 2x4 dots
-    // grid mirrors the redesign mock; styled in DOC_STYLES.
-    const dragHandle = document.createElement('div');
-    dragHandle.className = 'pa-drag-handle';
-    dragHandle.title = 'Drag to reposition';
-    dragHandle.innerHTML =
-      '<svg width="8" height="16" viewBox="0 0 8 16" aria-hidden="true" fill="currentColor">' +
-      '<circle cx="2" cy="2" r="1"/><circle cx="6" cy="2" r="1"/>' +
-      '<circle cx="2" cy="6" r="1"/><circle cx="6" cy="6" r="1"/>' +
-      '<circle cx="2" cy="10" r="1"/><circle cx="6" cy="10" r="1"/>' +
-      '<circle cx="2" cy="14" r="1"/><circle cx="6" cy="14" r="1"/>' +
-      '</svg>';
-    document.body.appendChild(dragHandle);
-
-    // Pointer tail — a small SVG triangle that sits on whichever edge
-    // of the widget faces the target, so the widget visually anchors
-    // back to the picked element. The path is two strokes only (the
-    // two slanted edges) so the flat edge sits flush with the widget
-    // border without doubling it.
-    const SVG_NS = 'http://www.w3.org/2000/svg';
-    const pointer = document.createElementNS(SVG_NS, 'svg');
-    pointer.setAttribute('class', 'pa-pointer');
-    pointer.setAttribute('viewBox', '0 0 18 10');
-    const pointerPath = document.createElementNS(SVG_NS, 'path');
-    pointerPath.setAttribute('fill', THEME.surface);
-    pointerPath.setAttribute('stroke', THEME.border);
-    pointerPath.setAttribute('stroke-width', '1');
-    pointerPath.setAttribute('stroke-linejoin', 'round');
-    pointer.appendChild(pointerPath);
-    document.body.appendChild(pointer);
+    const { iframe, bubble, bubbleActions, baStop, baCancel, dragHandle, pointer, pointerPath } =
+      createComposerElements(meta);
 
     function setAgentState(next: AgentState) {
       composer.agentState = next;
