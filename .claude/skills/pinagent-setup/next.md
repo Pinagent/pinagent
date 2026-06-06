@@ -129,9 +129,41 @@ If you ever need to inspect the composer in DevTools, drill into the iframe elem
 - **`color-scheme: dark` on the host page** styles form controls inside the widget with dark browser defaults. The widget IIFE counters this with explicit `color-scheme: light` and explicit backgrounds — no action needed, but if you see a dark textarea, the installed IIFE is stale (upgrade `@pinagent/next-plugin` and hard-refresh).
 - **CSP `connect-src` blocking the widget's image inlining.** The widget uses `html-to-image.toBlob()` + `createImageBitmap()` + `canvas.toBlob()` — no `fetch()` calls. It also skips cross-origin `<img>` elements before they're inlined (CSP would block those fetches). Cross-origin images appear as blank slots in the captured screenshot. To get them captured, either (a) add the CDN to `connect-src`, or (b) proxy them through a same-origin Next rewrite (like you might do for analytics).
 - **CSP `connect-src` blocking the widget WebSocket.** If the app sends its own Content-Security-Policy, the widget's dev WebSocket (`ws://127.0.0.1:<PINAGENT_WS_PORT>/__pinagent/ws`, default port 53636) and its `http://127.0.0.1:*` feedback POSTs must be allow-listed in `connect-src`. **`localhost` and `127.0.0.1` are different CSP origins** — allow-listing one does not cover the other, so include **both** loopback forms for dev: `connect-src ... ws://localhost:* wss://localhost:* http://localhost:* ws://127.0.0.1:* wss://127.0.0.1:* http://127.0.0.1:*`. Symptom: the widget loads but the inline streaming pane never connects, with a `connect-src` violation in the console. The agent still runs server-side, so fixes appear to land while the pane stays blank. On Next this CSP is usually emitted from middleware (`proxy.ts` in Next 16, `middleware.ts` before that), which is compiled at startup and does **not** hot-reload — **restart the dev server** (not just hard-refresh) after editing the CSP, then hard-refresh.
+- **Framing headers blocking the dock iframe (`dock: true` only).** The dock is a same-origin iframe served from `/__pinagent/dock/*`, so it inherits the app's security headers. Two headers each **independently** block it, and fixing only one still leaves the frame dead:
+  - `X-Frame-Options: DENY` blocks **all** framing, including same-origin. Set `SAMEORIGIN` in dev (there is no value that allows same-origin-only beyond `SAMEORIGIN`).
+  - CSP `frame-ancestors 'none'` does the same; it needs `'self'` to permit same-origin framing. If your CSP also sets `frame-src`, include `'self'` (and `http://localhost:*`) there too.
+
+  Symptom: the dock area is blank / shows a broken-image placeholder and the console logs `Framing 'http://localhost:<port>/' violates the following Content Security Policy directive: "frame-ancestors 'none'". The request has been blocked.` (and/or an `X-Frame-Options` framing rejection). The per-element widget and its WebSocket still work, so it looks like pinagent loaded ("[pinagent:db] browser cache ready") but the dock is dead. Gate both headers on dev and keep production locked:
+
+  ```ts
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  // X-Frame-Options: DENY blocks same-origin framing too — the dock needs SAMEORIGIN in dev.
+  response.headers.set('X-Frame-Options', isDevelopment ? 'SAMEORIGIN' : 'DENY');
+  // CSP
+  const cspDirectives = [
+    // ...
+    isDevelopment ? "frame-ancestors 'self'" : "frame-ancestors 'none'",
+    `frame-src 'self'${isDevelopment ? ' http://localhost:*' : ''}`,
+  ];
+  ```
+
+  This is the framing sibling of the `connect-src` exception above. Like that one, the headers are usually emitted from middleware (`proxy.ts` in Next 16, `middleware.ts` before that), which is compiled at startup and does **not** hot-reload — **restart the dev server** (not just hard-refresh) after editing them, then hard-refresh.
 - **Custom middleware (`proxy.ts` in Next 16, `middleware.ts` before that).** `/__pinagent/*` runs through every middleware just like other routes. If your middleware rejects unknown paths, add an exclusion. Most setups passthrough by default and don't need changes.
 - **Sherif / monorepo postinstall.** `pnpm add` may roll back due to unrelated workspace lint failures. Use `--ignore-scripts` to skip the postinstall hook on installs of pinagent-only.
 - **Stale `@pinagent/*` symlinks from an earlier attempt.** The package is **`@pinagent/next-plugin`** — there is no `@pinagent/next`. If a previous or aborted install left a broken symlink under `node_modules/@pinagent/` (e.g. a dangling `@pinagent/next`), module resolution can fail in confusing ways even after a correct reinstall. `pnpm dlx @pinagent/cli doctor` flags dangling `@pinagent/*` symlinks; remove the broken links and reinstall.
+
+### Dev security-header / CSP reference
+
+If your app ships a Content-Security-Policy or framing-protection headers, these are the dev-only relaxations pinagent needs. Production stays fully locked — every relaxation is gated on `NODE_ENV === 'development'`. After editing any of these in middleware (`proxy.ts` / `middleware.ts`), **restart the dev server** (they're compiled at startup and don't hot-reload), then hard-refresh.
+
+| Header / directive | Needed by | Dev value |
+| --- | --- | --- |
+| CSP `connect-src` | Widget dev WebSocket + feedback POSTs | both loopback forms: `ws://localhost:* wss://localhost:* http://localhost:* ws://127.0.0.1:* wss://127.0.0.1:* http://127.0.0.1:*` |
+| CSP `frame-src` | Dock iframe (`dock: true`) | `'self' http://localhost:*` |
+| CSP `frame-ancestors` | Dock iframe (`dock: true`) | `'self'` (vs `'none'` in prod) |
+| `X-Frame-Options` | Dock iframe (`dock: true`) | `SAMEORIGIN` (vs `DENY` in prod) — not a CSP directive, but same effect and easy to forget |
+
+`connect-src` is needed for **any** install; the three framing rows only matter with `dock: true`. `localhost` and `127.0.0.1` are distinct CSP origins, so `connect-src` must list **both**.
 
 ## Configuration
 
@@ -168,10 +200,22 @@ The per-element widget ships by default. The **dock** is a second, opt-in surfac
 pinagent(coreConfig, { dock: true });   // combine with spawnAgent if you want both
 ```
 
+> **The dock is a same-origin iframe** (mounted at `/__pinagent/dock/*`), not just
+> shadow DOM. If your app emits `X-Frame-Options` or a CSP `frame-ancestors`
+> directive, you **must allow same-origin framing in dev** or the dock renders as a
+> blank area with a broken-image icon — the per-element widget keeps working, so it
+> looks like pinagent loaded but the dock is dead. Both headers block it
+> *independently*, so relax **both**: `X-Frame-Options: SAMEORIGIN` (there's no value
+> that permits same-origin-only beyond `SAMEORIGIN`; `DENY` blocks even same-origin
+> frames) and CSP `frame-ancestors 'self'` (plus `frame-src 'self'` if your CSP sets
+> `frame-src`). Keep production fully locked (`DENY` / `'none'`) — see the framing
+> pitfall under "Known gotchas" for the dev-only gating pattern.
+
 When using the dock:
 
 - The route handler uses `export *`, so it re-exports whatever HTTP verbs the installed `@pinagent/next-plugin` build provides — `GET, POST, PATCH`, plus `PUT, DELETE` on builds that ship the dock's Connections/Branches panels (see step 4). Using `export *` keeps the route working across plugin versions; keep `dynamic`/`runtime` inline since Next won't follow re-exports for route-segment config.
 - The PR composer needs a GitHub token: set `GITHUB_TOKEN` or `PINAGENT_GITHUB_TOKEN` (tried in that order).
+- If your app sets framing-protection headers (`X-Frame-Options` / CSP `frame-ancestors`), relax them for same-origin framing in dev — see the callout above and the "Known gotchas" framing pitfall.
 - Optionally install `@pinagent/vscode-extension` — it lets the dock open a Claude Code terminal with a conversation piped in.
 
 Full dock docs (routes, shortcuts, deep links) live in `@pinagent/widget-dock`'s README.
