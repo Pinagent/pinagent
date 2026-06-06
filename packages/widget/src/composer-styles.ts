@@ -24,7 +24,11 @@ export const COMPOSER_STYLES = `
     background: ${THEME.surface};
     border: 1px solid ${THEME.border};
     border-radius: 10px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    /* No drop shadow: the card fills the transparent iframe flush to its
+       edges (width 100%, height calc(100% - 2px)), so any box-shadow is
+       rectangular-clipped by the iframe bounds and renders as a hard-edged
+       halo artifact rather than a soft shadow. The 1px border carries the
+       card's separation from the page instead. */
     padding: 12px;
     display: flex;
     flex-direction: column;
@@ -812,8 +816,8 @@ export const COMPOSER_STYLES = `
     animation: pa-card-pulse 1.6s ease-out infinite;
   }
   @keyframes pa-card-pulse {
-    0%, 100% { box-shadow: 0 0 0 1px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(0, 0, 0, 0.5); }
-    50%      { box-shadow: 0 0 0 4px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(0, 0, 0, 0.5); }
+    0%, 100% { box-shadow: 0 0 0 1px ${STATUS.awaitingClarification.border}; }
+    50%      { box-shadow: 0 0 0 4px ${STATUS.awaitingClarification.border}; }
   }
 
   /* One-shot gold flash when a new tool activity lands while minimized,
@@ -825,8 +829,8 @@ export const COMPOSER_STYLES = `
     animation: pa-activity-pulse 0.45s ease-out;
   }
   @keyframes pa-activity-pulse {
-    0%   { box-shadow: 0 0 0 3px ${THEME.accent}, 0 10px 25px rgba(0, 0, 0, 0.5); }
-    100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0), 0 10px 25px rgba(0, 0, 0, 0.5); }
+    0%   { box-shadow: 0 0 0 3px ${THEME.accent}; }
+    100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0); }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -835,7 +839,7 @@ export const COMPOSER_STYLES = `
     .ms-spinner { animation: none; }
     /* Snap the check to drawn rather than animating the stroke. */
     body[data-agent-state='done'] .ms-check path { animation: none; stroke-dashoffset: 0; }
-    body.mini.needs-input .card { animation: none; box-shadow: 0 0 0 2px ${STATUS.awaitingClarification.border}, 0 10px 25px rgba(0, 0, 0, 0.5); }
+    body.mini.needs-input .card { animation: none; box-shadow: 0 0 0 2px ${STATUS.awaitingClarification.border}; }
     body.mini.activity .card { animation: none; }
   }
 `;
