@@ -15,6 +15,7 @@ import {
   checkDanglingSymlinks,
   checkGitignore,
   checkMcpJson,
+  checkMiddlewareMatcher,
   checkPinagentMount,
   checkPluginInstalled,
   checkRouteHandler,
@@ -134,6 +135,40 @@ describe('checkRouteHandler', () => {
   it('fails when the file is missing', () => {
     mkdirSync(join(dir, 'app'), { recursive: true });
     expect(checkRouteHandler(dir).status).toBe('fail');
+  });
+});
+
+describe('checkMiddlewareMatcher', () => {
+  it('skips when there is no middleware/proxy file', () => {
+    expect(checkMiddlewareMatcher(dir).status).toBe('skip');
+  });
+  it('passes when the matcher excludes pinagent paths', () => {
+    write(
+      'middleware.ts',
+      `export const config = { matcher: ['/((?!api|_next|__pinagent|pinagent|.*\\\\..*).*)'] };`,
+    );
+    expect(checkMiddlewareMatcher(dir).status).toBe('ok');
+  });
+  it('warns on a catch-all negative-lookahead matcher without pinagent', () => {
+    write(
+      'middleware.ts',
+      `export const config = { matcher: ['/((?!api|_next|_vercel|.*\\\\..*).*)'] };`,
+    );
+    const r = checkMiddlewareMatcher(dir);
+    expect(r.status).toBe('warn');
+    expect(r.label).toContain('shadow');
+  });
+  it('warns when middleware has no matcher (runs on every request)', () => {
+    write('proxy.ts', 'export default function proxy(req) { return; }');
+    expect(checkMiddlewareMatcher(dir).status).toBe('warn');
+  });
+  it('finds the file under src/', () => {
+    write('src/proxy.ts', `export const config = { matcher: ['/((?!api|_next|.*\\\\..*).*)'] };`);
+    expect(checkMiddlewareMatcher(dir).status).toBe('warn');
+  });
+  it('does not warn on a scoped positive matcher', () => {
+    write('middleware.ts', `export const config = { matcher: ['/dashboard/:path*'] };`);
+    expect(checkMiddlewareMatcher(dir).status).toBe('ok');
   });
 });
 

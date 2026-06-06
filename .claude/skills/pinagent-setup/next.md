@@ -84,7 +84,59 @@ Next.js can't recognize the exported `dynamic` field in route. It mustn't be ree
 
 Why the folder is `pinagent/` not `__pinagent/`: same `_` private-folder rule. The `pinagent(config)` wrapper's rewrite forwards the public URL `/__pinagent/*` (which the widget POSTs to) onto this `/pinagent/*` route.
 
-## 5. Common: gitignore + MCP
+## 5. Exclude pinagent's paths from existing middleware
+
+**Do this whenever the app has a middleware/proxy file — skip it only if there is none.** Check for, in this order:
+
+```bash
+# Next looks for the file NEXT TO the app dir. If routes live in src/app,
+# the middleware lives in src/, NOT the repo root.
+ls middleware.ts middleware.js proxy.ts proxy.js \
+   src/middleware.ts src/middleware.js src/proxy.ts src/proxy.js 2>/dev/null
+```
+
+(Next 16 renamed `middleware` → `proxy`; older versions use `middleware`. Same semantics.)
+
+**Why this matters.** Middleware always runs **before** `next.config` rewrites. The `pinagent(config)` wrapper forwards the public `/__pinagent/*` URL onto the `/pinagent/*` route via a rewrite — but if the app's middleware has a broad catch-all `matcher`, it intercepts `/__pinagent/*` first and rewrites/mangles the path (e.g. next-intl treats `__pinagent` as a locale segment and prepends `/en`), so the pinagent rewrite never matches its destination and **every pinagent endpoint 404s**. The dock and click-to-fix loop then break silently. This is **not** pinagent-specific — any catch-all matcher shadows the rewrite. The usual offenders are **next-intl, NextAuth/Clerk, and custom redirect/geo middleware**; a passthrough middleware still mangles the path, so "my middleware doesn't block anything" is not a reason to skip this.
+
+**The fix.** Add `__pinagent` and `pinagent` to the matcher's exclusion so the middleware doesn't touch either the public endpoint prefix or the rewrite destination. For the common negative-lookahead regex form, splice the two tokens into the existing `(?!...)` group — don't rewrite the regex wholesale:
+
+```diff
+  export const config = {
+    matcher: [
+-     '/((?!api|_next|_vercel|.*\\..*).*)',
++     // __pinagent = pinagent's public dev endpoints; pinagent = the rewrite target route
++     '/((?!api|_next|_vercel|__pinagent|pinagent|.*\\..*).*)',
+    ],
+  };
+```
+
+Matcher syntax varies — handle what's actually there:
+
+- **Single regex string** or **array of regexes**: add `__pinagent|pinagent` to the negative-lookahead of **every** entry that could match `/__pinagent/*` (an array like `['/', '/(de|en)/:path*', '/((?!...).*)']` needs it on each broad entry).
+- **No `config.matcher` at all** (middleware runs on every request): add an early passthrough at the top of the middleware function:
+
+  ```ts
+  if (request.nextUrl.pathname.startsWith('/__pinagent') ||
+      request.nextUrl.pathname.startsWith('/pinagent')) {
+    return; // or NextResponse.next() — let pinagent's rewrite handle it
+  }
+  ```
+
+Don't assume the existing matcher excludes `_next`/`api` in any particular way — parse what's there and add the two pinagent tokens to it rather than replacing the whole pattern.
+
+**Restart the dev server** after editing — middleware/proxy is compiled at server startup and does **not** hot-reload. Then verify the regex still routes real paths and skips pinagent's:
+
+```bash
+node -e 'const re=new RegExp("^/((?!api|_next|_vercel|__pinagent|pinagent|.*\\..*).*)$");
+["/","/pricing","/de/pricing","/__pinagent/branches","/pinagent/x","/api/foo"].forEach(p=>
+console.log((re.test(p)?"MATCH":"skip "),p));'
+# "/", "/pricing", "/de/pricing" → MATCH (still routed); "/__pinagent/..", "/pinagent/..", "/api/.." → skip
+```
+
+> **Separate src/ gotcha:** a root-level `middleware.ts`/`proxy.ts` is **silently ignored** when routes live in `src/app` — Next only reads it from `src/`. A misplaced file produces the same 404 symptom (the middleware never runs, but neither does any exclusion you'd add to it). Confirm the file sits next to the app dir.
+
+## 6. Common: gitignore + MCP
 
 Continue with [mcp.md](./mcp.md) for MCP server setup and `.gitignore`.
 
@@ -104,6 +156,10 @@ Then run the dev server and hit the widget endpoint:
 cd /path/to/target && pnpm dev   # uses the existing dev script
 curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:<port>/__pinagent/widget.js
 # expect: 200
+curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:<port>/__pinagent/branches
+# expect: 200 — a 404 here while the app has a middleware/proxy file means a
+# catch-all matcher is shadowing the rewrite (see step 5). widget.js can 200
+# while the dynamic endpoints 404, so check a routed endpoint, not just the asset.
 ```
 
 Grab `<port>` from the app's own dev script — it's often **not** 3000 (e.g. a custom `next dev -p 3434`). And note: **changes to `next.config.*` or the plugin wiring need a dev-server restart, not just HMR** — Next reads them at boot.
@@ -148,7 +204,7 @@ If you ever need to inspect the composer in DevTools, drill into the iframe elem
   ```
 
   This is the framing sibling of the `connect-src` exception above. Like that one, the headers are usually emitted from middleware (`proxy.ts` in Next 16, `middleware.ts` before that), which is compiled at startup and does **not** hot-reload — **restart the dev server** (not just hard-refresh) after editing them, then hard-refresh.
-- **Custom middleware (`proxy.ts` in Next 16, `middleware.ts` before that).** `/__pinagent/*` runs through every middleware just like other routes. If your middleware rejects unknown paths, add an exclusion. Most setups passthrough by default and don't need changes.
+- **Custom middleware (`proxy.ts` in Next 16, `middleware.ts` before that) shadowing the rewrite.** `/__pinagent/*` runs through middleware **before** `next.config` rewrites, so a broad catch-all `matcher` (next-intl, NextAuth/Clerk, geo/redirect middleware) intercepts and mangles the path and **every pinagent endpoint 404s** — even a passthrough middleware does this, because locale/path rewriting happens before pinagent's own rewrite resolves. This is the single most common Next install failure when the app already has middleware. Fix: exclude `__pinagent` and `pinagent` from the matcher — see **step 5** for the per-syntax patterns. Symptom check: `curl .../__pinagent/branches` returns 404 (while `widget.js` may still 200). Restart the dev server after editing (middleware is compiled at startup, no HMR). Also confirm the middleware/proxy file sits **next to the app dir** (`src/` when routes are in `src/app`) — a misplaced file is silently ignored and 404s the same way.
 - **Sherif / monorepo postinstall.** `pnpm add` may roll back due to unrelated workspace lint failures. Use `--ignore-scripts` to skip the postinstall hook on installs of pinagent-only.
 - **Stale `@pinagent/*` symlinks from an earlier attempt.** The package is **`@pinagent/next-plugin`** — there is no `@pinagent/next`. If a previous or aborted install left a broken symlink under `node_modules/@pinagent/` (e.g. a dangling `@pinagent/next`), module resolution can fail in confusing ways even after a correct reinstall. `pnpm dlx @pinagent/cli doctor` flags dangling `@pinagent/*` symlinks; remove the broken links and reinstall.
 
