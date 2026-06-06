@@ -92,11 +92,12 @@ export function createComposerController(ctx: WidgetContext): {
     click: Click,
     extras: PickExtra[] = [],
     regions: RegionRect[] = [],
+    opts: { draft?: string } = {},
   ) {
     if (ctx.expandedComposer) {
       ctx.expandedComposer.minimize();
     }
-    const composer = createComposer(target, click, extras, regions);
+    const composer = createComposer(target, click, extras, regions, opts);
     ctx.composers.add(composer);
     ctx.expandedComposer = composer;
   }
@@ -233,7 +234,7 @@ export function createComposerController(ctx: WidgetContext): {
     click: Click,
     extras: PickExtra[] = [],
     regions: RegionRect[] = [],
-    opts: { unanchored?: boolean } = {},
+    opts: { unanchored?: boolean; draft?: string } = {},
   ): Composer {
     // Unanchored = a free-floating chat (no real picked element). `target`
     // is just the positioning anchor (document.body); skip the re-anchor
@@ -433,6 +434,7 @@ export function createComposerController(ctx: WidgetContext): {
       if (composer.feedbackId) ctx.wsClient.unsubscribe(composer.feedbackId);
       if (rafHandle != null) cancelAnimationFrame(rafHandle);
       clearExtraFlashes();
+      clearCrumbHighlight();
       iframe.remove();
       bubble.remove();
       bubbleActions.remove();
@@ -651,6 +653,7 @@ export function createComposerController(ctx: WidgetContext): {
         }
         if (rafHandle != null) cancelAnimationFrame(rafHandle);
         clearExtraFlashes();
+        clearCrumbHighlight();
         iframe.remove();
         bubble.remove();
         bubbleActions.remove();
@@ -892,6 +895,67 @@ export function createComposerController(ctx: WidgetContext): {
       });
     }
 
+    // Breadcrumb re-focus (composer header). Each crumb maps to an ancestor
+    // `up` parentElement hops from the picked target. Hovering one flashes a
+    // selection outline over that node (reusing the picker's outline class);
+    // clicking an ancestor crumb re-points the comment at it. Both no-op once
+    // the conversation is bound (feedbackId set) — you can't re-target a run.
+    let crumbHighlight: HTMLDivElement | null = null;
+    function ancestorUp(up: number): Element | null {
+      let el: Element | null = composer.target;
+      for (let i = 0; i < up && el; i++) el = el.parentElement;
+      return el;
+    }
+    function clearCrumbHighlight(): void {
+      crumbHighlight?.remove();
+      crumbHighlight = null;
+    }
+    function highlightCrumb(up: number): void {
+      clearCrumbHighlight();
+      if (composer.feedbackId) return;
+      const el = ancestorUp(up);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const node = document.createElement('div');
+      node.className = 'selection-outline';
+      node.style.top = `${r.top}px`;
+      node.style.left = `${r.left}px`;
+      node.style.width = `${r.width}px`;
+      node.style.height = `${r.height}px`;
+      ctx.root.appendChild(node);
+      crumbHighlight = node;
+    }
+    function refocusTo(up: number): void {
+      clearCrumbHighlight();
+      // up <= 0 is the picked element itself (already the focus) — nothing to do.
+      if (composer.feedbackId || up <= 0) return;
+      const el = ancestorUp(up);
+      if (!el || el === composer.target) return;
+      // Re-pick onto the ancestor by re-opening the composer there, carrying
+      // the in-progress draft, extras and regions so no user work is lost.
+      // Re-derive each extra's live element from its anchor (the live targets
+      // aren't retained on the composer). Anchor near where the old target
+      // currently sits — it's a descendant of `el`, so the point lands inside
+      // it regardless of any scroll since the original pick.
+      const idoc = iframe.contentDocument;
+      const ta = idoc?.getElementById('pa-ta') as HTMLTextAreaElement | null;
+      const draft = ta?.value ?? '';
+      const carriedExtras: PickExtra[] = composer.extraAnchors
+        .map((a) => {
+          const t = findReanchorTarget(
+            a.file && a.line != null && a.col != null ? `${a.file}:${a.line}:${a.col}` : null,
+            a.selector,
+          );
+          return t ? { target: t, click: { x: a.clickX, y: a.clickY } } : null;
+        })
+        .filter((x): x is PickExtra => x !== null);
+      const carriedRegions = composer.regions;
+      const tr = composer.target.getBoundingClientRect();
+      const reclick: Click = { x: tr.left + tr.width / 2, y: tr.top + tr.height / 2 };
+      composer.close();
+      open(el, reclick, carriedExtras, carriedRegions, { draft });
+    }
+
     // Auto-grow the composer pane to fit the textarea as the user types.
     // Pre-submit only — the stream pane has its own fixed STREAM_H. The
     // iframe wiring calls this directly: the composer iframe runs no scripts
@@ -925,7 +989,11 @@ export function createComposerController(ctx: WidgetContext): {
         hopToNextActive,
         onExtrasHover: flashExtras,
         onExtrasLeave: clearExtraFlashes,
+        onCrumbHover: highlightCrumb,
+        onCrumbLeave: clearCrumbHighlight,
+        onCrumbPress: refocusTo,
         onTextareaHeight: applyTextareaHeight,
+        draft: opts.draft,
       });
     });
 
