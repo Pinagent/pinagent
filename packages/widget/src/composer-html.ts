@@ -137,16 +137,21 @@ function renderHeader(meta: ComposerMeta, esc: (s: string) => string): string {
   // Breadcrumb: last item is the picked element and gets the
   // selected style. Items collapse with `>` separators between them.
   // Show at most the last 4 hops so a deep tree doesn't blow up the
-  // header width.
+  // header width. Each crumb is stamped with `data-bc-up` — how many
+  // `parentElement` hops from the picked element it represents (0 = the
+  // element itself, the last crumb). The composer wiring uses that to
+  // highlight the matching page node on hover and re-focus onto it on
+  // click; see `wireComposerIframe`.
   const crumbs = meta.breadcrumbs.slice(-4);
   const breadcrumb =
     `<div class="hdr-row hdr-bc">` +
     crumbs
       .map((tag, i) => {
         const isLast = i === crumbs.length - 1;
+        const up = crumbs.length - 1 - i;
         const cls = isLast ? 'bc-item bc-selected' : 'bc-item';
         return (
-          `<span class="${cls}">&lt;${esc(tag)}&gt;</span>` +
+          `<span class="${cls}" data-bc-up="${up}">&lt;${esc(tag)}&gt;</span>` +
           (isLast ? '' : `<span class="bc-sep">›</span>`)
         );
       })

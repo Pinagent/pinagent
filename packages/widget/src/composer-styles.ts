@@ -236,6 +236,21 @@ export const COMPOSER_STYLES = `
     color: ${THEME.text};
     font-weight: 600;
   }
+  /* Pressable crumb — added by the composer wiring on a fresh, anchored
+     pick so the user can re-focus the comment onto an ancestor. Hovering
+     also flashes the matching node on the page (see wireComposerIframe). */
+  .bc-item.bc-pressable {
+    cursor: pointer;
+    transition: background 0.1s ease, color 0.1s ease;
+  }
+  .bc-item.bc-pressable:hover {
+    background: ${THEME.chip};
+    color: ${THEME.text};
+  }
+  .bc-item.bc-pressable:focus-visible {
+    outline: 1px solid ${THEME.accent};
+    outline-offset: 1px;
+  }
   .bc-sep {
     color: ${THEME.textFaint};
     font-size: 12px;
@@ -815,9 +830,11 @@ export const COMPOSER_STYLES = `
     border-color: ${STATUS.awaitingClarification.border};
     animation: pa-card-pulse 1.6s ease-out infinite;
   }
+  /* Pulse the brighter foreground tone (not the muted .border) so the
+     ring reads loud against a dark host page and pulls attention. */
   @keyframes pa-card-pulse {
-    0%, 100% { box-shadow: 0 0 0 1px ${STATUS.awaitingClarification.border}; }
-    50%      { box-shadow: 0 0 0 4px ${STATUS.awaitingClarification.border}; }
+    0%, 100% { box-shadow: 0 0 0 1px ${STATUS.awaitingClarification.fg}; }
+    50%      { box-shadow: 0 0 0 4px ${STATUS.awaitingClarification.fg}; }
   }
 
   /* One-shot gold flash when a new tool activity lands while minimized,

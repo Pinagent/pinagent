@@ -44,8 +44,16 @@ export interface WireComposerArgs {
   onExtrasHover: () => void;
   /** Clear the extra-element flash outlines. */
   onExtrasLeave: () => void;
+  /** Highlight the breadcrumb ancestor `up` parent-hops from the picked element. */
+  onCrumbHover: (up: number) => void;
+  /** Clear the breadcrumb-hover highlight. */
+  onCrumbLeave: () => void;
+  /** Re-focus this composer onto the ancestor `up` parent-hops up. */
+  onCrumbPress: (up: number) => void;
   /** Report the textarea's natural height so the host can auto-grow the pane. */
   onTextareaHeight: (natural: number) => void;
+  /** Pre-fill the textarea — carries a draft across a breadcrumb re-focus. */
+  draft?: string;
 }
 
 export function wireComposerIframe(args: WireComposerArgs): void {
@@ -62,7 +70,11 @@ export function wireComposerIframe(args: WireComposerArgs): void {
     hopToNextActive,
     onExtrasHover,
     onExtrasLeave,
+    onCrumbHover,
+    onCrumbLeave,
+    onCrumbPress,
     onTextareaHeight,
+    draft,
   } = args;
 
   const idoc = iframe.contentDocument;
@@ -367,6 +379,41 @@ export function wireComposerIframe(args: WireComposerArgs): void {
   // Fresh composer: wire the composer-pane (textarea + submit/cancel).
   setTimeout(() => ta.focus(), 0);
 
+  // Pressable breadcrumb crumbs — let the user re-focus the comment onto an
+  // ancestor without re-picking. Only the fresh path reaches here (the
+  // restored/submitted path returns above), so the affordance never shows on
+  // a conversation that's already bound. Hovering any crumb flashes the
+  // matching page node; clicking an *ancestor* crumb re-opens the composer on
+  // it (the last crumb already IS the picked element). These callbacks run in
+  // the host realm — the iframe has no scripts — so they reach `ctx` + the
+  // composer directly (see composer.ts), the same pattern as the add-element
+  // and "+N" wiring above.
+  idoc.querySelectorAll<HTMLElement>('.bc-item[data-bc-up]').forEach((crumb) => {
+    const up = Number(crumb.dataset.bcUp);
+    if (!Number.isFinite(up)) return;
+    crumb.addEventListener('mouseenter', () => onCrumbHover(up));
+    crumb.addEventListener('mouseleave', onCrumbLeave);
+    if (up === 0) return;
+    crumb.classList.add('bc-pressable');
+    crumb.setAttribute('role', 'button');
+    crumb.tabIndex = 0;
+    crumb.title = 'Focus this element';
+    crumb.addEventListener('focus', () => onCrumbHover(up));
+    crumb.addEventListener('blur', () => onCrumbLeave());
+    crumb.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onCrumbLeave();
+      onCrumbPress(up);
+    });
+    crumb.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onCrumbLeave();
+        onCrumbPress(up);
+      }
+    });
+  });
+
   // Auto-grow: measure the textarea's natural scrollHeight after each
   // input and hand it to the host, which clamps + applies it to
   // iframe.style.height. The textarea is `flex: 1`, so it fills the pane
@@ -417,6 +464,15 @@ export function wireComposerIframe(args: WireComposerArgs): void {
       postTextareaHeight();
     },
   });
+
+  // Carry a draft over a breadcrumb re-focus: the prior composer's textarea
+  // content was handed in (see composer.ts `refocusTo`) so re-targeting an
+  // ancestor doesn't lose typing. Sync submit-enabled + auto-grow to match.
+  if (draft) {
+    ta.value = draft;
+    submit.disabled = ta.value.trim().length === 0;
+    postTextareaHeight();
+  }
 
   cancel.addEventListener('click', () => c.close());
 
@@ -474,6 +530,11 @@ export function wireComposerIframe(args: WireComposerArgs): void {
         c.turn = 1;
         composerPane.hidden = true;
         streamPane.hidden = false;
+        // The conversation is now bound to this element — the breadcrumb
+        // is no longer a re-focus control, so drop the pressable affordance.
+        idoc.querySelectorAll('.bc-item.bc-pressable').forEach((el) => {
+          el.classList.remove('bc-pressable');
+        });
         streamHeader.textContent = '✓ Submitted — agent starting…';
         const miniLabel = idoc.getElementById('pa-mini-label');
         if (miniLabel) miniLabel.textContent = 'Starting…';
