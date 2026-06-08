@@ -165,8 +165,15 @@ export function createFabTray(ctx: WidgetContext): {
       applyFabPresentation();
       return;
     }
-    if (state.mode === 'picking') ctx.exitPicking();
-    else if (state.mode === 'idle') ctx.enterPicking();
+    // While a pick is in progress the picker owns the keyboard: Enter commits
+    // the selection (and stops propagation before it reaches here) and Escape
+    // cancels. The pin keeps focus when picking was started by clicking it, so
+    // without this guard a stray Space — or any Enter the picker didn't
+    // handle — would re-toggle picking off and throw away the user's pending
+    // multi-selection. Cancelling stays available via Escape, the hotkey, or a
+    // click on the pin.
+    if (state.mode === 'picking') return;
+    if (state.mode === 'idle') ctx.enterPicking();
   });
 
   // Collapsed pin: the pick icon plus (when the dock is mounted) a small
