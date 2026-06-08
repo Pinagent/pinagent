@@ -1,5 +1,28 @@
 # @pinagent/next-plugin
 
+## 0.9.1
+
+### Patch Changes
+
+- 15eb766: Drop the composer card's drop shadow. The card fills its transparent iframe
+  flush to the edges, so the `box-shadow` was rectangular-clipped by the iframe
+  bounds and rendered as a hard-edged halo artifact around the anchored widget
+  rather than a soft shadow. The card's 1px border carries its separation from
+  the page instead; the needs-input/activity pulses keep their colored state
+  rings (minus the clipped drop-shadow layer).
+- 57eaf26: Pull a spawned agent's widget off the page when its anchored element is gone
+  for good. Instead of leaving an orphaned "anchor lost" dot, the widget now
+  freezes briefly (riding out transient HMR/re-render swaps) and then removes
+  itself entirely — the conversation lives on in the FAB running-agents tray.
+  Opening it from the tray with no dock mounted drops a free-floating,
+  unanchored chat into the viewport rather than pinning it to a missing element.
+- 454af34: Make the composer header breadcrumbs hoverable and pressable. Hovering any
+  crumb flashes the matching element on the page; clicking an ancestor crumb
+  re-focuses the comment onto that ancestor without re-picking, carrying the
+  in-progress draft, extras and regions across. The affordance is only live on
+  a fresh, unbound pick — once the conversation is submitted the breadcrumb
+  reverts to a plain, non-interactive label.
+
 ## 0.9.0
 
 ### Minor Changes
