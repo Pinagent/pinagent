@@ -162,6 +162,19 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
     return pick.loc ?? null;
   }, [pick, selectedIndex]);
 
+  // The highlight outline tracks the selected crumb: the precise tapped frame
+  // while the innermost crumb is selected, otherwise the chosen ancestor's
+  // measured frame. So pressing a breadcrumb visibly moves the selection box.
+  const activeFrame = useMemo(() => {
+    if (!pick) return null;
+    const last = pick.chain.length - 1;
+    if (selectedIndex >= 0 && selectedIndex < pick.chain.length) {
+      if (selectedIndex === last) return pick.frame ?? pick.chain[last]?.frame ?? null;
+      return pick.chain[selectedIndex]?.frame ?? pick.frame ?? null;
+    }
+    return pick.frame ?? null;
+  }, [pick, selectedIndex]);
+
   const crumbs = pick?.chain ?? [];
 
   const onCrumbPress = useCallback((index: number) => {
@@ -241,19 +254,20 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
         </Pressable>
       )}
 
-      {/* Highlight rect for the last pick, drawn while composing. The RN
-          analog of the web widget's outline; coords come from the
-          Inspector frame (measured in window space). */}
-      {phase === 'composing' && pick?.frame && (
+      {/* Highlight rect for the current selection, drawn while composing. The
+          RN analog of the web widget's outline; coords come from the Inspector
+          frame (window space). Follows the selected breadcrumb via
+          `activeFrame`. */}
+      {phase === 'composing' && activeFrame && (
         <View
           pointerEvents="none"
           style={[
             styles.highlight,
             {
-              left: pick.frame.x,
-              top: pick.frame.y,
-              width: pick.frame.width,
-              height: pick.frame.height,
+              left: activeFrame.x,
+              top: activeFrame.y,
+              width: activeFrame.width,
+              height: activeFrame.height,
             },
           ]}
         />

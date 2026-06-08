@@ -51,6 +51,16 @@ interface RawFiberLike {
 
 type RawProps = Record<string, unknown> | null | undefined;
 
+/** RN measure callback: `(x, y, width, height, pageX, pageY)`. */
+type RawMeasureCb = (
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  pageX: number,
+  pageY: number,
+) => void;
+
 interface RawHierarchyItem {
   name?: string;
   getInspectorData?: (toFiber: unknown) => {
@@ -58,6 +68,8 @@ interface RawHierarchyItem {
     source?: RawFiberLike | null;
     /** The host fiber's `memoizedProps` — carries our `data-pa-loc`. */
     props?: RawProps;
+    /** Measures this owner's host fiber (window/screen coords). */
+    measure?: (cb: RawMeasureCb) => void;
   };
 }
 
@@ -262,15 +274,55 @@ function nameChainOf(data: RawInspectorData): string[] {
   return (data.hierarchy ?? []).map((h) => h.name).filter(isAuthoredComponentName);
 }
 
+type Frame = NonNullable<PickResult['frame']>;
+
+interface RawCrumb {
+  name: string;
+  loc: Loc | null;
+  measure?: (cb: RawMeasureCb) => void;
+}
+
 /**
  * Build the per-segment breadcrumb: each authored component in the hierarchy
  * paired with its own `data-pa-loc` (so a press can re-anchor onto that
- * ancestor). Same order as {@link nameChainOf} — root first, tapped last.
+ * ancestor) and a `measure` fn (so the highlight can follow the selection).
+ * Same order as {@link nameChainOf} — root first, tapped last.
  */
-function crumbsOf(data: RawInspectorData): { name: string; loc: Loc | null }[] {
+function crumbsOf(data: RawInspectorData): RawCrumb[] {
   return (data.hierarchy ?? [])
     .filter((h): h is RawHierarchyItem & { name: string } => isAuthoredComponentName(h.name))
-    .map((h) => ({ name: h.name, loc: paLocOf(h.getInspectorData?.(() => null)?.props) }));
+    .map((h) => {
+      const inspector = h.getInspectorData?.(() => null);
+      return { name: h.name, loc: paLocOf(inspector?.props), measure: inspector?.measure };
+    });
+}
+
+/**
+ * Measure a hierarchy item's host fiber to a window-coordinate {@link Frame}.
+ * Resolves null if there's no measure fn or it never calls back (guarded so a
+ * stuck measure can't hang the pick).
+ */
+export function measureFrame(measure?: (cb: RawMeasureCb) => void): Promise<Frame | null> {
+  if (!measure) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (f: Frame | null) => {
+      if (!settled) {
+        settled = true;
+        resolve(f);
+      }
+    };
+    const timer = setTimeout(() => finish(null), 150);
+    try {
+      measure((_x, _y, width, height, pageX, pageY) => {
+        clearTimeout(timer);
+        finish(width > 0 || height > 0 ? { x: pageX, y: pageY, width, height } : null);
+      });
+    } catch {
+      clearTimeout(timer);
+      finish(null);
+    }
+  });
 }
 
 /**
@@ -318,12 +370,34 @@ export function resolvePick(
               height: data.frame.height,
             }
           : null;
-        done({
-          loc: pickLoc(data, projectRoot),
-          nameChain: nameChainOf(data),
-          chain: crumbsOf(data),
-          frame,
-        });
+        const rawCrumbs = crumbsOf(data);
+        const loc = pickLoc(data, projectRoot);
+        const nameChain = nameChainOf(data);
+        // Measure each crumb so pressing one can move the on-screen highlight
+        // to that ancestor. Concurrent, each guarded — adds ~one measure pass.
+        Promise.all(rawCrumbs.map((c) => measureFrame(c.measure)))
+          .then((frames) => {
+            done({
+              loc,
+              nameChain,
+              chain: rawCrumbs.map((c, i) => ({
+                name: c.name,
+                loc: c.loc,
+                frame: frames[i] ?? null,
+              })),
+              frame,
+            });
+          })
+          .catch(() => {
+            // Measuring failed wholesale — still return the pick without
+            // per-crumb frames rather than hang.
+            done({
+              loc,
+              nameChain,
+              chain: rawCrumbs.map((c) => ({ name: c.name, loc: c.loc, frame: null })),
+              frame,
+            });
+          });
       });
     } catch {
       clearTimeout(timer);

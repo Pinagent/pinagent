@@ -17,7 +17,7 @@
  * manual testing.
  */
 import { describe, expect, it } from 'vitest';
-import { isAuthoredComponentName, resolvePick } from '../src/native/inspector';
+import { isAuthoredComponentName, measureFrame, resolvePick } from '../src/native/inspector';
 
 describe('resolvePick — graceful degradation when the RN inspector is unavailable', () => {
   it('resolves to a safe null pick instead of throwing', async () => {
@@ -63,5 +63,25 @@ describe('isAuthoredComponentName — breadcrumb noise filter', () => {
     expect(isAuthoredComponentName('')).toBe(false);
     expect(isAuthoredComponentName(undefined)).toBe(false);
     expect(isAuthoredComponentName(null)).toBe(false);
+  });
+});
+
+describe('measureFrame — per-crumb highlight rect', () => {
+  it('resolves null when there is no measure fn', async () => {
+    expect(await measureFrame(undefined)).toBeNull();
+  });
+
+  it('maps the measure callback to a window-coordinate frame (pageX/pageY)', async () => {
+    // RN signature: (x, y, width, height, pageX, pageY)
+    const frame = await measureFrame((cb) => cb(1, 2, 100, 40, 30, 80));
+    expect(frame).toEqual({ x: 30, y: 80, width: 100, height: 40 });
+  });
+
+  it('treats a zero-size measurement as no frame', async () => {
+    expect(await measureFrame((cb) => cb(0, 0, 0, 0, 5, 5))).toBeNull();
+  });
+
+  it('resolves null if the measure never calls back (guarded)', async () => {
+    expect(await measureFrame(() => {})).toBeNull();
   });
 });
