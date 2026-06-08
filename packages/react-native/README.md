@@ -42,19 +42,12 @@ export default function App() {
 **Server** — `metro.config.js`:
 
 ```js
-const {
-  pinagentMiddleware,
-  pinagentWebsocketEndpoints,
-} = require('@pinagent/react-native/server');
+const { pinagentMiddleware } = require('@pinagent/react-native/server');
 
 module.exports = {
   server: {
     enhanceMiddleware: (metroMiddleware, server) =>
       pinagentMiddleware({ projectRoot: __dirname }).chain(metroMiddleware),
-    // Optional — live agent streaming back into the app over WebSocket.
-    websocketEndpoints: {
-      ...pinagentWebsocketEndpoints({ projectRoot: __dirname }),
-    },
   },
 };
 ```
@@ -62,12 +55,21 @@ module.exports = {
 `pinagentMiddleware` options: `projectRoot` (where `.pinagent/` lives) and
 `spawnMode` (`false` | `'inline'` | `'worktree'`, default `'inline'`).
 
-`pinagentWebsocketEndpoints` is optional. Add it and a spawned agent's run
-streams live into the app (text, tool calls, result) with follow-ups and
-`ask_user` answering — the native counterpart of the web widget's agent tray.
-It mounts on Metro's own port, so simulators and physical devices work with no
-extra config. Omit it and submitting still files the comment; you just won't
-see the run in-app.
+The middleware mounts `POST /__pinagent/feedback` **and** self-installs the
+`/__pinagent/ws` live-streaming socket on Metro's own port, so a spawned
+agent's run streams live into the app (text, tool calls, result) with
+follow-ups and `ask_user` answering — the native counterpart of the web
+widget's agent tray. Simulators and physical devices work with no extra config.
+
+> The streaming socket rides the middleware (not `config.server.websocketEndpoints`)
+> on purpose: **Expo's dev server ignores `websocketEndpoints`** and destroys
+> any upgrade path it doesn't recognise, which would leave the in-app stream
+> sheet stuck on "Connecting…". Routing through `enhanceMiddleware` — which Expo
+> *does* honor — works under both Expo and bare Metro.
+
+For an explicit bare-Metro setup you can still spread
+`pinagentWebsocketEndpoints({ projectRoot })` into `config.server.websocketEndpoints`;
+it's redundant with the middleware install but harmless.
 
 **Agent pickup** — identical to web. Either let the middleware spawn
 agents, or pull comments into a Claude Code session over `@pinagent/mcp`.
@@ -89,7 +91,7 @@ version differences.
 - No Fast-Refresh pin re-anchoring; `selector` carries the component name
   chain (RN has no CSS selectors).
 
-Live agent streaming is wired (opt in with `pinagentWebsocketEndpoints`).
+Live agent streaming is wired automatically by `pinagentMiddleware`.
 
 ## Tests
 

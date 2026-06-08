@@ -9,15 +9,11 @@
 // project root, Metro needs `watchFolders` to see + transpile it.
 //
 // In a real app outside this monorepo the dep is a normal install:
-//   const { pinagentMiddleware, pinagentWebsocketEndpoints } =
-//     require('@pinagent/react-native/server');
-// and none of the watchFolders/resolver lines are needed — just `server`.
+//   const { pinagentMiddleware } = require('@pinagent/react-native/server');
+// and none of the watchFolders/resolver lines are needed — just `enhanceMiddleware`.
 const path = require('node:path');
 const { getDefaultConfig } = require('expo/metro-config');
-const {
-  pinagentMiddleware,
-  pinagentWebsocketEndpoints,
-} = require('../../packages/react-native/dist/server.js');
+const { pinagentMiddleware } = require('../../packages/react-native/dist/server.js');
 
 const projectRoot = __dirname;
 const pkgRoot = path.resolve(projectRoot, '../../packages/react-native');
@@ -32,17 +28,17 @@ config.resolver.nodeModulesPaths = [path.resolve(projectRoot, 'node_modules')];
 
 config.server = {
   ...config.server,
+  // projectRoot points at wherever you want `.pinagent/` to live; keeping it
+  // here makes the demo self-contained. spawnMode 'inline' runs the agent
+  // in-process; use false to drive the loop from your own Claude Code MCP session.
+  //
+  // The middleware mounts POST /__pinagent/feedback AND self-installs the
+  // /__pinagent/ws live-streaming socket on Metro's own port. The WS install
+  // goes through the middleware (not `config.server.websocketEndpoints`)
+  // because Expo's dev server ignores that field — it would silently drop the
+  // socket and the in-app stream sheet would hang on "Connecting…".
   enhanceMiddleware: (metroMiddleware, _server) =>
-    // projectRoot points at wherever you want `.pinagent/` to live; keeping it
-    // here makes the demo self-contained. spawnMode 'inline' runs the agent
-    // in-process; use false to drive the loop from your own Claude Code MCP session.
     pinagentMiddleware({ projectRoot, spawnMode: 'inline' }).chain(metroMiddleware),
-  // Live agent streaming: mounts /__pinagent/ws on Metro's own port so the
-  // in-app widget streams the run back over WebSocket as the agent works.
-  websocketEndpoints: {
-    ...config.server?.websocketEndpoints,
-    ...pinagentWebsocketEndpoints({ projectRoot }),
-  },
 };
 
 module.exports = config;
