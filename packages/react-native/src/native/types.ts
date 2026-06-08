@@ -45,6 +45,12 @@ export interface PickCrumb {
    * wrapper). Lets the breadcrumb re-anchor the comment onto an ancestor.
    */
   loc: FeedbackInput['loc'];
+  /**
+   * Highlight rectangle for this component (window coordinates), so pressing
+   * the crumb moves the on-screen selection outline onto it. Null when it
+   * couldn't be measured.
+   */
+  frame: { x: number; y: number; width: number; height: number } | null;
 }
 
 /** Result of resolving a tap point to a source location. */
