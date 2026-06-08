@@ -1,5 +1,43 @@
 # @pinagent/vite-plugin
 
+## 0.11.0
+
+### Minor Changes
+
+- a92908f: Add an explicit, opt-in `apiKey` plugin option and stop reading the agent API
+  key from the environment implicitly.
+
+  Pinagent previously inherited whatever `ANTHROPIC_API_KEY` (and, via the
+  bring-your-own CLI provider, `OPENAI_API_KEY`) sat in the dev server's shell.
+  The Claude Agent SDK authenticates from the first credential it finds, so a
+  stale, scoped, or third-party key exported for some other tool got billed — and,
+  when invalid, shadowed the user's Claude Code / Codex subscription so runs died
+  with `authentication_failed` ("Invalid API key").
+
+  A key is now used only when the consuming app hands one to pinagent on purpose:
+  `pinagent({ apiKey })` (Vite) / `pinagent(config, { apiKey })` (Next), bridged to
+  the runner as `PINAGENT_AGENT_API_KEY`, or a key saved at runtime via the dock's
+  Connections route. With neither set, the implicit key is stripped and the run
+  falls back to the agentic subscription. The dock key takes precedence over the
+  plugin option.
+
+  Behaviour change for the CLI provider: a wrapped CLI (Codex, aider, …) no longer
+  inherits an ambient `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`. Codex now falls back
+  to its ChatGPT login by default; pass `apiKey` to supply a raw key explicitly.
+
+### Patch Changes
+
+- e2de120: fix(widget): pressing Enter after multi-selecting nodes now reliably opens the composer
+
+  When the picker was entered by clicking the pin, the FAB kept keyboard focus, so the Enter that commits a multi-node selection also bubbled to the FAB's keydown handler. By then the commit had flipped the mode to idle, so the FAB re-toggled straight back into picking — making Enter look like a no-op. The picker's Enter handler now stops propagation so committing the selection is its sole effect.
+
+- 008a1bd: Widget: the `@`-mention file picker in the comment composer now drops down from
+  the textarea's bottom edge instead of popping up above it, matching the
+  conventional direction for a typeahead menu.
+- c3d7078: fix(widget): the pin's keyboard activation no longer cancels an in-progress pick
+
+  While picking, the picker owns the keyboard (Enter commits, Escape cancels). The pin keeps focus when a pick is started by clicking it, so a stray Space — or any Enter the picker didn't handle — used to re-toggle picking off and discard the user's pending multi-selection. The pin's Enter/Space handler now defers while a pick is in progress; cancelling stays available via Escape, the hotkey, or clicking the pin.
+
 ## 0.10.1
 
 ### Patch Changes
