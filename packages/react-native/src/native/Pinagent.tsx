@@ -25,8 +25,9 @@
  * (MCP) pickup. Single-pick only.
  */
 import type { ReactElement } from 'react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -70,6 +71,29 @@ function nextPaint(): Promise<void> {
 }
 
 /**
+ * Track the soft keyboard's height so the composer can sit directly above it.
+ * `KeyboardAvoidingView` is unreliable inside a `Modal` — the modal presents
+ * in its own window, so the view's measured origin is wrong and the computed
+ * inset never lifts the sheet. Driving the inset off the keyboard frame is the
+ * robust cross-platform path. iOS fires the `*Will*` events (in sync with the
+ * slide animation); Android only fires `*Did*`.
+ */
+function useKeyboardHeight(): number {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvt, (e) => setHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener(hideEvt, () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return height;
+}
+
+/**
  * Hard dev-only gate. `__DEV__` is `false` in release bundles, so the
  * whole widget — and its require()s into RN internals — drops out. Kept
  * as a thin wrapper so the hooks live in `PinagentDev`, called
@@ -82,12 +106,19 @@ export function Pinagent(props: PinagentProps): ReactElement | null {
 
 function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElement {
   const { width, height } = useWindowDimensions();
+  const keyboardHeight = useKeyboardHeight();
   const rootRef = useRef<View>(null);
   const [phase, setPhase] = useState<Phase>('idle');
   const [pick, setPick] = useState<PickResult | null>(null);
+  // Which breadcrumb segment the comment is anchored to (index into
+  // `pick.chain`). Defaults to the innermost — the tapped component — and
+  // moves outward when the user presses an ancestor crumb to re-focus.
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [shot, setShot] = useState<string | null>(null);
   const [comment, setComment] = useState('');
   const [toast, setToast] = useState<string | null>(null);
+  // Transient note under the file:line link (e.g. "No editor found").
+  const [openNote, setOpenNote] = useState<string | null>(null);
   // When set, an agent run is streaming live in the transcript sheet.
   const [stream, setStream] = useState<{ id: string; target: string } | null>(null);
 
@@ -110,22 +141,53 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
       const picked = await resolvePick(rootRef.current, x, y, projectRoot);
       setShot(await captureScreenshot());
       setPick(picked);
+      // Anchor to the innermost (tapped) component by default.
+      setSelectedIndex(Math.max(0, picked.chain.length - 1));
+      setOpenNote(null);
       setPhase('composing');
     },
     [projectRoot],
   );
 
+  // The source location the comment is currently anchored to: the precise
+  // tapped element while the innermost crumb is selected, otherwise the
+  // chosen ancestor component's own location.
+  const activeLoc = useMemo(() => {
+    if (!pick) return null;
+    const last = pick.chain.length - 1;
+    if (selectedIndex >= 0 && selectedIndex < pick.chain.length) {
+      if (selectedIndex === last) return pick.loc ?? pick.chain[last]?.loc ?? null;
+      return pick.chain[selectedIndex]?.loc ?? null;
+    }
+    return pick.loc ?? null;
+  }, [pick, selectedIndex]);
+
+  const crumbs = pick?.chain ?? [];
+
+  const onCrumbPress = useCallback((index: number) => {
+    setSelectedIndex(index);
+    setOpenNote(null);
+  }, []);
+
+  const onOpenInEditor = useCallback(async () => {
+    if (!activeLoc) return;
+    setOpenNote('Opening…');
+    const ok = await openInEditor(activeLoc);
+    setOpenNote(ok ? null : 'No editor found (set PINAGENT_EDITOR)');
+  }, [activeLoc]);
+
   const onSubmit = useCallback(async () => {
     if (!comment.trim()) return;
     // Human-readable target for the stream header, captured before we clear
-    // the pick: file:line if resolved, else the tapped component name.
-    const target = pick?.loc
-      ? `${pick.loc.file}:${pick.loc.line}`
-      : (pick?.nameChain.at(-1) ?? 'component');
+    // the pick: the anchored file:line if resolved, else the component name.
+    const target = activeLoc
+      ? `${activeLoc.file}:${activeLoc.line}`
+      : (pick?.chain[selectedIndex]?.name ?? pick?.nameChain.at(-1) ?? 'component');
     setPhase('sending');
     const result = await submitFeedback({
       comment: comment.trim(),
-      loc: pick?.loc ?? null,
+      // The breadcrumb-selected anchor (defaults to the tapped element).
+      loc: activeLoc,
       // v1 "selector" = the component name breadcrumb (RN has no CSS
       // selectors). Gives the agent a readable hint and satisfies the
       // schema's required `selector` field.
@@ -149,7 +211,7 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
     }
     setToast(result.ok ? 'Sent' : `Failed: ${result.error ?? 'unknown'}`);
     setTimeout(() => setToast(null), 2500);
-  }, [comment, pick, shot, screenName, width, height]);
+  }, [comment, pick, selectedIndex, activeLoc, shot, screenName, width, height]);
 
   return (
     // collapsable={false} keeps this View in the native tree so its ref
@@ -205,23 +267,52 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
         animationType="slide"
         onRequestClose={() => setPhase('idle')}
       >
-        <View style={styles.composerBackdrop}>
+        {/* Pad the docked composer up by the live keyboard height so the
+            input and actions clear the soft keyboard (see useKeyboardHeight
+            for why KeyboardAvoidingView can't do this inside a Modal). */}
+        <View style={[styles.composerBackdrop, { paddingBottom: keyboardHeight }]}>
           <View style={styles.composer}>
-            {/* Title: file:line if resolved (pressable → opens in the editor
-                on the Metro host, the RN analog of web's "navigate to file"),
-                else the tapped component name. */}
-            {pick?.loc ? (
-              <Pressable onPress={() => pick.loc && void openInEditor(pick.loc)}>
+            {/* Title: the anchored file:line if resolved (pressable → opens
+                in the editor on the Metro host, the RN analog of web's
+                "navigate to file"), else the selected component name. */}
+            {activeLoc ? (
+              <Pressable onPress={onOpenInEditor}>
                 <Text style={[styles.composerTitle, styles.composerTitleLink]}>
-                  {`${pick.loc.file}:${pick.loc.line}`}
+                  {`${activeLoc.file}:${activeLoc.line}`}
                 </Text>
               </Pressable>
             ) : (
               <Text style={styles.composerTitle}>
-                {pick?.nameChain.at(-1) ?? 'Unknown component'}
+                {pick?.chain[selectedIndex]?.name ?? pick?.nameChain.at(-1) ?? 'Unknown component'}
               </Text>
             )}
-            {pick?.nameChain.length ? (
+            {openNote ? <Text style={styles.openNote}>{openNote}</Text> : null}
+            {/* Breadcrumb: each component is pressable and re-anchors the
+                comment onto that ancestor (the selected one is highlighted).
+                Mirrors the web composer's ancestor-select. */}
+            {crumbs.length ? (
+              <View style={styles.breadcrumbRow}>
+                {crumbs.map((crumb, i) => (
+                  <View key={`${crumb.name}-${i}`} style={styles.breadcrumbItem}>
+                    {i > 0 ? <Text style={styles.breadcrumbSep}>›</Text> : null}
+                    <Pressable
+                      onPress={() => onCrumbPress(i)}
+                      hitSlop={6}
+                      accessibilityRole="button"
+                    >
+                      <Text
+                        style={[
+                          styles.breadcrumb,
+                          i === selectedIndex && styles.breadcrumbSelected,
+                        ]}
+                      >
+                        {crumb.name}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            ) : pick?.nameChain.length ? (
               <Text style={styles.breadcrumb} numberOfLines={1}>
                 {pick.nameChain.join(' › ')}
               </Text>
@@ -313,7 +404,12 @@ const styles = StyleSheet.create({
   },
   composerTitle: { fontSize: 14, fontWeight: '600', color: '#111827' },
   composerTitleLink: { color: '#2563eb', textDecorationLine: 'underline' },
+  openNote: { fontSize: 11, color: '#9aa0a6', marginTop: 2 },
+  breadcrumbRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 2 },
+  breadcrumbItem: { flexDirection: 'row', alignItems: 'center' },
+  breadcrumbSep: { fontSize: 12, color: '#c4c7cc', paddingHorizontal: 4 },
   breadcrumb: { fontSize: 12, color: '#6b7280' },
+  breadcrumbSelected: { color: '#2563eb', fontWeight: '600' },
   input: {
     minHeight: 80,
     borderWidth: 1,

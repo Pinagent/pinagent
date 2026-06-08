@@ -83,10 +83,15 @@ function loadInspector(): InspectorFn | null {
   if (cachedFn !== undefined) return cachedFn;
   // The inspector module moved in RN 0.81:
   //   Libraries/Inspector/… → src/private/devsupport/devmenu/elementinspector/…
-  // Try newest first, fall back to the legacy path. Each `require` is a
-  // static string literal — Metro forbids `require(variable)`, so we can't
-  // loop over a paths array. Lazy so a production build (widget tree-shaken /
-  // `__DEV__`-gated away) never reaches into RN internals.
+  // We require the RN 0.81+ path only and deliberately do NOT fall back to the
+  // pre-0.81 `Libraries/Inspector/…` path: that file no longer exists on modern
+  // RN, so a static `require` of it makes Metro's resolver log an "invalid
+  // package.json / file does not exist" warning on every bundle (RN's `./*`
+  // exports entry maps it to a missing `.js`). The legacy inspector also
+  // predates the build-time `data-pa-loc` prop this package relies on, so it
+  // couldn't carry a location anyway — pre-0.81 RN degrades to `loc: null`.
+  // Lazy so a production build (widget tree-shaken / `__DEV__`-gated away)
+  // never reaches into RN internals.
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
     const fn = asFn(
@@ -97,17 +102,7 @@ function loadInspector(): InspectorFn | null {
       return cachedFn;
     }
   } catch {
-    // Fall through to the legacy path.
-  }
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-    const fn = asFn(require('react-native/Libraries/Inspector/getInspectorDataForViewAtPoint'));
-    if (fn) {
-      cachedFn = fn;
-      return cachedFn;
-    }
-  } catch {
-    // Neither path resolved.
+    // Module absent (release build, Node/CI, or an RN version that moved it).
   }
   cachedFn = null;
   return cachedFn;
@@ -245,10 +240,37 @@ function legacySource(data: RawInspectorData): RawFiberLike | null {
   return null;
 }
 
+/**
+ * Keep only authored React components in the breadcrumb. Two kinds of noise
+ * are hidden because clicking them is meaningless — they map to no source the
+ * developer can act on:
+ *
+ *  - **Native host components** — RN's view classes, named `RCT…`
+ *    (`RCTText`, `RCTView`, `RCTScrollView`, …).
+ *  - **HOC / wrapper display names** — parenthesized by convention
+ *    (`withDevTools(App)`, `ForwardRef(X)`, `Memo(X)`, `Connect(X)`).
+ *
+ * Identifiers can't contain `(`, so a parenthesized name is always a wrapper.
+ */
+export function isAuthoredComponentName(name: unknown): name is string {
+  return (
+    typeof name === 'string' && name.length > 0 && !name.startsWith('RCT') && !name.includes('(')
+  );
+}
+
 function nameChainOf(data: RawInspectorData): string[] {
+  return (data.hierarchy ?? []).map((h) => h.name).filter(isAuthoredComponentName);
+}
+
+/**
+ * Build the per-segment breadcrumb: each authored component in the hierarchy
+ * paired with its own `data-pa-loc` (so a press can re-anchor onto that
+ * ancestor). Same order as {@link nameChainOf} — root first, tapped last.
+ */
+function crumbsOf(data: RawInspectorData): { name: string; loc: Loc | null }[] {
   return (data.hierarchy ?? [])
-    .map((h) => h.name)
-    .filter((n): n is string => typeof n === 'string' && n.length > 0);
+    .filter((h): h is RawHierarchyItem & { name: string } => isAuthoredComponentName(h.name))
+    .map((h) => ({ name: h.name, loc: paLocOf(h.getInspectorData?.(() => null)?.props) }));
 }
 
 /**
@@ -271,7 +293,7 @@ export function resolvePick(
     // Inspector unavailable (release build, or an RN version that moved
     // the module). Degrade gracefully — the comment can still be filed
     // with `loc: null`, which the server accepts.
-    return Promise.resolve({ loc: null, nameChain: [], frame: null });
+    return Promise.resolve({ loc: null, nameChain: [], chain: [], frame: null });
   }
   const inspectedView = rootHostInstance(rootView);
   return new Promise((resolve) => {
@@ -284,7 +306,7 @@ export function resolvePick(
     };
     // The callback is sometimes never invoked if the point misses every
     // view; guard with a microtask-ish fallback so the picker can't hang.
-    const timer = setTimeout(() => done({ loc: null, nameChain: [], frame: null }), 250);
+    const timer = setTimeout(() => done({ loc: null, nameChain: [], chain: [], frame: null }), 250);
     try {
       fn(inspectedView, x, y, (data) => {
         clearTimeout(timer);
@@ -299,12 +321,13 @@ export function resolvePick(
         done({
           loc: pickLoc(data, projectRoot),
           nameChain: nameChainOf(data),
+          chain: crumbsOf(data),
           frame,
         });
       });
     } catch {
       clearTimeout(timer);
-      done({ loc: null, nameChain: [], frame: null });
+      done({ loc: null, nameChain: [], chain: [], frame: null });
     }
   });
 }

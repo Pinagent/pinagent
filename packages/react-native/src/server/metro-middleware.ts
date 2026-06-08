@@ -24,8 +24,9 @@
  */
 import { Buffer } from 'node:buffer';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { isAbsolute, relative, resolve as resolvePath } from 'node:path';
+import { delimiter, isAbsolute, join, relative, resolve as resolvePath } from 'node:path';
 import {
   FeedbackInputSchema,
   type SpawnAgentMode,
@@ -174,21 +175,84 @@ function badRequest(res: ServerResponse, msg: string): void {
   json(res, 400, { error: msg });
 }
 
+/** Find an executable on `PATH`. Returns the full path, or null. */
+function findOnPath(bin: string): string | null {
+  for (const dir of (process.env.PATH ?? '').split(delimiter)) {
+    if (dir && existsSync(join(dir, bin))) return join(dir, bin);
+  }
+  return null;
+}
+
+interface Opener {
+  cmd: string;
+  /** Flags that precede the `file:line:col` target. */
+  prefixArgs: string[];
+}
+
+// Editors that accept a `file:line:col` target. `-g` makes the VS Code family
+// jump to the line; `subl`/`zed` take the suffix directly.
+const CLI_EDITORS: Array<{ bin: string; args: string[] }> = [
+  { bin: 'code', args: ['-g'] },
+  { bin: 'cursor', args: ['-g'] },
+  { bin: 'windsurf', args: ['-g'] },
+  { bin: 'code-insiders', args: ['-g'] },
+  { bin: 'codium', args: ['-g'] },
+  { bin: 'zed', args: [] },
+  { bin: 'subl', args: [] },
+];
+
+// macOS app names (under /Applications) for when the CLI shim isn't on PATH —
+// `open -a <App> --args …` hands the same flags to the app on launch.
+const MAC_APPS: Array<{ app: string; args: string[] }> = [
+  { app: 'Cursor', args: ['-g'] },
+  { app: 'Visual Studio Code', args: ['-g'] },
+  { app: 'Windsurf', args: ['-g'] },
+  { app: 'VSCodium', args: ['-g'] },
+  { app: 'Zed', args: [] },
+  { app: 'Sublime Text', args: [] },
+];
+
 /**
- * Open `<file>:<line>:<col>` in the developer's editor. Honors
- * `PINAGENT_EDITOR` (a command that takes a `path:line:col` argument, e.g.
- * `code -g`, `cursor -g`, `subl`), else falls back to `code -g`. Best-effort
- * and fully detached — a missing editor binary must never crash Metro.
+ * Pick a command that can open a `file:line:col` target. Order:
+ * `PINAGENT_EDITOR` (explicit) → a known editor CLI on `PATH` → a known macOS
+ * editor app. Returns null if nothing suitable is found.
+ */
+function resolveOpener(): Opener | null {
+  const override = process.env.PINAGENT_EDITOR?.trim();
+  if (override) {
+    const [cmd, ...prefixArgs] = override.split(/\s+/);
+    if (cmd) return { cmd, prefixArgs };
+  }
+  for (const e of CLI_EDITORS) {
+    if (findOnPath(e.bin)) return { cmd: e.bin, prefixArgs: e.args };
+  }
+  if (process.platform === 'darwin') {
+    for (const a of MAC_APPS) {
+      if (existsSync(`/Applications/${a.app}.app`)) {
+        return { cmd: 'open', prefixArgs: ['-a', a.app, '--args', ...a.args] };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Open `<file>:<line>:<col>` in the developer's editor (see
+ * {@link resolveOpener} for selection). Best-effort and fully detached — a
+ * missing editor must never crash Metro. Returns whether a launch was
+ * attempted, so the device can tell the developer when no editor was found.
  */
 function openInEditor(abs: string, line: number, col: number): boolean {
+  const opener = resolveOpener();
+  if (!opener) return false;
   const target = `${abs}:${line}:${col}`;
-  const override = process.env.PINAGENT_EDITOR?.trim();
-  const [cmd, ...args] = override ? override.split(/\s+/) : ['code', '-g'];
-  if (!cmd) return false;
   try {
-    const child = spawn(cmd, [...args, target], { stdio: 'ignore', detached: true });
+    const child = spawn(opener.cmd, [...opener.prefixArgs, target], {
+      stdio: 'ignore',
+      detached: true,
+    });
     child.on('error', () => {
-      // Editor binary not on PATH — swallow; the comment still gets filed.
+      // Editor binary not actually launchable — swallow; comment still files.
     });
     child.unref();
     return true;
