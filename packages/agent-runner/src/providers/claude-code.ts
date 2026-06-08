@@ -172,9 +172,10 @@ async function buildSdkOptions(req: AgentRunRequest): Promise<Options> {
   // ~12 min to cover the full ASK_TTL window in ask-user.ts.
   //
   // `buildSdkAuthEnv` strips the implicit `ANTHROPIC_API_KEY` from the
-  // inherited env and re-adds the dock-configured key only when the user set
-  // one — so an unconfigured run authenticates against the Claude Code
-  // subscription instead of dying on a stray shell key. See agent-auth.ts.
+  // inherited env and re-adds a key only when the developer configured one
+  // explicitly (the `apiKey` plugin option or the dock) — so an unconfigured
+  // run authenticates against the Claude Code subscription instead of dying on
+  // a stray shell key. See agent-auth.ts.
   const env = await buildSdkAuthEnv(req.projectRoot, {
     PINAGENT_PROJECT_ROOT: req.projectRoot,
     CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '720000',

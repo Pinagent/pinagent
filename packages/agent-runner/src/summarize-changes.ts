@@ -176,10 +176,11 @@ async function runOneShot(
   prompt: string,
   systemPrompt: string,
 ): Promise<string> {
-  // Strip the implicit `ANTHROPIC_API_KEY` and use the dock-configured key
-  // only when set, matching the spawned-agent path (providers/claude-code.ts)
-  // so an unconfigured summarizer falls back to the subscription instead of
-  // failing on a stray shell key. See agent-auth.ts.
+  // Strip the implicit `ANTHROPIC_API_KEY` and use only an explicitly-
+  // configured key (the `apiKey` plugin option or the dock), matching the
+  // spawned-agent path (providers/claude-code.ts) so an unconfigured summarizer
+  // falls back to the subscription instead of failing on a stray shell key.
+  // See agent-auth.ts.
   const env = await buildSdkAuthEnv(projectRoot);
 
   let text = '';
