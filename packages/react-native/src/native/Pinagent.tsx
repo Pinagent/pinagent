@@ -23,6 +23,11 @@
  * transcript sheet streams the run back over WebSocket (see StreamSheet /
  * ws-client); otherwise a toast confirms the comment was filed for pull-mode
  * (MCP) pickup. Single-pick only.
+ *
+ * The transcript sheet can be minimized to a pill, freeing the screen to pick
+ * another element and spawn a second agent. Each run keeps its own live sheet,
+ * so multiple agents can stream concurrently — the expanded one shows its full
+ * sheet; the rest sit as pills that keep streaming until tapped open.
  */
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -119,8 +124,18 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
   const [toast, setToast] = useState<string | null>(null);
   // Transient note under the file:line link (e.g. "No editor found").
   const [openNote, setOpenNote] = useState<string | null>(null);
-  // When set, an agent run is streaming live in the transcript sheet.
-  const [stream, setStream] = useState<{ id: string; target: string } | null>(null);
+  // Live agent runs. Each spawned agent gets a StreamSheet; one can be expanded
+  // (full sheet) while the rest sit as minimized pills that keep streaming in
+  // the background — so you can minimize a run, interact with the app, and
+  // spawn another. `expandedId` is the one showing its full sheet (null = all
+  // minimized).
+  const [streams, setStreams] = useState<{ id: string; target: string }[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const closeStream = useCallback((id: string) => {
+    setStreams((prev) => prev.filter((s) => s.id !== id));
+    setExpandedId((cur) => (cur === id ? null : cur));
+  }, []);
 
   const onPickTap = useCallback(
     async (x: number, y: number) => {
@@ -216,10 +231,13 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
     setShot(null);
     setPhase('idle');
 
-    // Agent spawned → stream the run live. Otherwise (spawn off, or POST
+    // Agent spawned → stream the run live and expand its sheet (any previously
+    // expanded run drops to a minimized pill). Otherwise (spawn off, or POST
     // failed) fall back to a transient toast; pull mode (MCP) picks it up.
     if (result.ok && result.agentSpawned && result.id) {
-      setStream({ id: result.id, target });
+      const id = result.id;
+      setStreams((prev) => (prev.some((s) => s.id === id) ? prev : [...prev, { id, target }]));
+      setExpandedId(id);
       return;
     }
     setToast(result.ok ? 'Sent' : `Failed: ${result.error ?? 'unknown'}`);
@@ -374,14 +392,29 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
         </View>
       )}
 
-      {/* Live agent transcript, shown once a run is spawned. */}
-      {stream && (
-        <StreamSheet
-          feedbackId={stream.id}
-          target={stream.target}
-          onClose={() => setStream(null)}
-        />
-      )}
+      {/* Live agent transcripts — one per spawned run. The expanded one shows
+          its full sheet; the rest render as minimized pills (stacked bottom-
+          left) that keep streaming. Each stays mounted across minimize/expand
+          so its WebSocket — and live transcript — survive. */}
+      {streams.map((s, i) => {
+        const minimized = s.id !== expandedId;
+        // Stack index among the minimized pills only, so they don't overlap.
+        const stackIndex = streams
+          .filter((o) => o.id !== expandedId)
+          .findIndex((o) => o.id === s.id);
+        return (
+          <StreamSheet
+            key={s.id}
+            feedbackId={s.id}
+            target={s.target}
+            minimized={minimized}
+            stackIndex={stackIndex < 0 ? i : stackIndex}
+            onMinimize={() => setExpandedId(null)}
+            onExpand={() => setExpandedId(s.id)}
+            onClose={() => closeStream(s.id)}
+          />
+        );
+      })}
     </View>
   );
 }
