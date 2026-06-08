@@ -21,8 +21,8 @@ in its own dev Inspector, so the rewrite is smaller than it looks.
 
 | Concern | Web (today) | React Native | Verdict |
 | --- | --- | --- | --- |
-| Source tagging (`file:line:col`) | `@pinagent/babel-plugin` injects `data-pa-loc` | Metro already injects `__source` in dev via `@babel/plugin-transform-react-jsx-source` | **Reuse RN's** — likely no custom plugin needed |
-| Element under pointer → source | DOM walk for `data-pa-loc` + CSS-selector fallback | `getInspectorDataForViewAtPoint` → fiber `_debugSource` | **Rebuild** (thin wrapper over RN internals) |
+| Source tagging (`file:line:col`) | `@pinagent/babel-plugin` injects `data-pa-loc` | `@pinagent/react-native/babel` injects the same `data-pa-loc` prop | **Build-time plugin** — React 19 removed `_debugSource`, so RN's old dev source is gone (see note) |
+| Element under pointer → source | DOM walk for `data-pa-loc` + CSS-selector fallback | `getInspectorDataForViewAtPoint` → host fiber's `data-pa-loc` prop | **Rebuild** (thin wrapper over RN internals) |
 | Picker overlay / highlight | closed shadow DOM + `getBoundingClientRect` | top-level `<View>` overlay + `measureInWindow` | **Rebuild** |
 | Comment composer | focused `<iframe>` (escapes focus traps) | RN `<Modal>` / overlay `<View>` | **Rebuild** (simpler — no focus-trap problem) |
 | Screenshot | `html-to-image` | `react-native-view-shot` (`captureScreen`) | **Rebuild** (swap the library) |
@@ -130,20 +130,33 @@ This is the only genuinely new code. Three pieces:
 
 ### 1. Picking — `getInspectorDataForViewAtPoint`
 
-RN's built-in dev Inspector (Dev Menu → "Show Inspector") already does
-exactly what pinagent's DOM walk does: you tap, it finds the component
-under the touch and shows its source file/line. It's powered by
+RN's built-in dev Inspector (Dev Menu → "Show Inspector") already does the
+hit-test half of pinagent's DOM walk: you tap, it finds the host view under
+the touch and its component hierarchy. It's powered by
 `getInspectorDataForViewAtPoint(inspectedView, x, y, callback)`, which
-returns the touched fiber + hierarchy; each fiber carries
-`_debugSource = { fileName, lineNumber, columnNumber }` — populated by the
-same `__source` babel transform Metro runs in dev.
+returns the touched view's `props` + the owner `hierarchy` (component
+names).
 
-So `data-pa-loc` ↔ `_debugSource`.
+For the source location pinagent originally rode RN's `_debugSource`,
+populated by the dev `@babel/plugin-transform-react-jsx-source` transform —
+"reuse RN's, no custom plugin needed". **That bet broke with React 19**: the
+`ReactElement` constructor dropped its `source` argument and `_debugSource`
+is gone (the `__source` prop is consumed by `jsxDEV` and never reaches
+`memoizedProps`); RN 0.81+ also dropped the `source` field from the
+inspector payload. So the runtime no longer carries any source location.
+
+Instead we tag at build time, exactly like web: `@pinagent/react-native/babel`
+(a Metro Babel plugin, `src/babel.ts`) splices a `data-pa-loc="file:line:col"`
+prop onto every authored JSX element. That prop survives onto the host
+fiber's `memoizedProps`, which `getInspectorDataForViewAtPoint` returns as
+`data.props` — so `data-pa-loc` (web DOM attribute) ↔ `data-pa-loc` (RN prop),
+the *same* attribute name and value format on both sides.
 [`src/native/inspector.ts`](../../packages/react-native/src/native/inspector.ts)
-wraps this and normalizes the (version-dependent) shape into the `loc`
-field above.
-The project-relative path is derived from `fileName` against
-`projectRoot`, matching what the babel plugin emits on web.
+reads it off the tapped view (then walks the owner hierarchy), and keeps the
+legacy `_debugSource` / inspector-`source` reads as a fallback for older
+RN/React. The inspector module path also moved in RN 0.81
+(`Libraries/Inspector/…` → `src/private/devsupport/devmenu/elementinspector/…`),
+which `loadInspector()` tries newest-first.
 
 ### 2. Overlay + highlight
 

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import { defineConfig } from 'tsdown';
 
-// Only the Node-side dev-server middleware is built. The RN client under
+// The Node-side dev-server middleware (`server`) and the Metro/Babel
+// source-tagging plugin (`babel`) are built. The RN client under
 // `src/native/` ships as TypeScript source (see package.json `exports`)
 // so the consumer's Metro/Babel pipeline transpiles it — it imports
 // `react-native`, which isn't a dependency of this repo.
 export default defineConfig({
-  entry: { server: 'src/server/index.ts' },
+  entry: { server: 'src/server/index.ts', babel: 'src/babel.ts' },
   format: ['esm', 'cjs'],
   dts: true,
   target: 'node20',

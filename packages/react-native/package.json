@@ -14,6 +14,11 @@
       "types": "./dist/server.d.ts",
       "import": "./dist/server.js",
       "require": "./dist/server.cjs"
+    },
+    "./babel": {
+      "types": "./dist/babel.d.ts",
+      "import": "./dist/babel.js",
+      "require": "./dist/babel.cjs"
     }
   },
   "main": "./dist/server.js",

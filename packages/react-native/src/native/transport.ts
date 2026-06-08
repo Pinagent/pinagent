@@ -58,6 +58,30 @@ export async function submitFeedback(input: FeedbackInput): Promise<SubmitResult
   }
 }
 
+/**
+ * Ask the dev server to open a source location in the editor on the machine
+ * running Metro — the RN analog of the web composer's "navigate to file".
+ * Fire-and-forget: the device gets no useful signal beyond "request sent".
+ */
+export async function openInEditor(loc: {
+  file: string;
+  line: number;
+  col: number;
+}): Promise<boolean> {
+  const base = devServerBaseUrl();
+  if (!base) return false;
+  try {
+    const res = await fetch(`${base}/__pinagent/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(loc),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** `${Platform.OS} ${Platform.Version}` — RN's stand-in for a UA string. */
 export function platformTag(): string {
   return `${Platform.OS} ${String(Platform.Version)}`;

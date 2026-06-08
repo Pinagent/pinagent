@@ -7,22 +7,37 @@
  * to a component + source file using exactly this internal API; we lean
  * on the same machinery rather than reinventing it.
  *
- * Source data comes from each fiber's `_debugSource`
- * (`{ fileName, lineNumber, columnNumber }`), populated by the
- * `@babel/plugin-transform-react-jsx-source` transform Metro runs in dev.
- * So `data-pa-loc` (web, build-time) ↔ `_debugSource` (RN, dev-only).
+ * Source data comes from the `data-pa-loc="file:line:col"` prop the
+ * `@pinagent/react-native/babel` plugin splices onto every authored JSX
+ * element at build time — the exact RN analog of the web babel plugin's
+ * DOM attribute. The plugin's prop rides along on the host fiber's
+ * `memoizedProps`, which `getInspectorDataForViewAtPoint` hands back to us
+ * as `data.props`, so the tapped view resolves to its source directly.
  *
- * The shape returned by `getInspectorDataForViewAtPoint` has shifted
- * across RN versions, so every read here is defensive: we extract what we
- * can and degrade to `loc: null` rather than throw inside a tap handler.
+ * Why a build-time prop instead of RN's old `_debugSource`: React 19
+ * deleted `_debugSource`, and RN 0.81+ dropped the `source` field from the
+ * inspector payload — neither carries a source location anymore. We still
+ * read both as a fallback for older RN/React, then degrade to `loc: null`.
+ *
+ * Both the module path AND the payload shape returned by
+ * `getInspectorDataForViewAtPoint` have shifted across RN versions, so
+ * every read here is defensive: we extract what we can and degrade to
+ * `loc: null` rather than throw inside a tap handler.
  */
 import type { PickResult } from './types';
 
 // Internal RN module — not a public export, but the path has been stable
 // and is what the built-in Inspector imports. Typed loosely on purpose.
+//
+// `inspectedView` must be a **host component public instance** (a view ref's
+// `.current`), NOT a `findNodeHandle` tag: on Fabric the renderer calls
+// `getNodeFromPublicInstance(inspectedView)` and then hit-tests *within that
+// view's shadow subtree*. A number fails the guard ("expects to receive a
+// host component"); the instance must also be an ancestor of the tapped view,
+// so we pass the app root (see `rootHostInstance`), not pinagent's overlay.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 type InspectorFn = (
-  inspectedView: number | null,
+  inspectedView: unknown,
   locationX: number,
   locationY: number,
   callback: (data: RawInspectorData) => void,
@@ -34,10 +49,15 @@ interface RawFiberLike {
   columnNumber?: number;
 }
 
+type RawProps = Record<string, unknown> | null | undefined;
+
 interface RawHierarchyItem {
   name?: string;
   getInspectorData?: (toFiber: unknown) => {
+    /** Removed in RN 0.81+, kept for back-compat. */
     source?: RawFiberLike | null;
+    /** The host fiber's `memoizedProps` — carries our `data-pa-loc`. */
+    props?: RawProps;
   };
 }
 
@@ -48,22 +68,107 @@ interface RawInspectorData {
   closestInstance?: { _debugSource?: RawFiberLike } | null;
   /** Some versions surface the resolved source straight on the payload. */
   source?: RawFiberLike | null;
+  /** The tapped host view's props — where `data-pa-loc` lands. */
+  props?: RawProps;
 }
 
 let cachedFn: InspectorFn | null | undefined;
 
+function asFn(mod: unknown): InspectorFn | null {
+  const fn = (mod as { default?: unknown })?.default ?? mod;
+  return typeof fn === 'function' ? (fn as InspectorFn) : null;
+}
+
 function loadInspector(): InspectorFn | null {
   if (cachedFn !== undefined) return cachedFn;
+  // The inspector module moved in RN 0.81:
+  //   Libraries/Inspector/… → src/private/devsupport/devmenu/elementinspector/…
+  // Try newest first, fall back to the legacy path. Each `require` is a
+  // static string literal — Metro forbids `require(variable)`, so we can't
+  // loop over a paths array. Lazy so a production build (widget tree-shaken /
+  // `__DEV__`-gated away) never reaches into RN internals.
   try {
-    // Lazy require so a production build (where this whole widget is
-    // tree-shaken / `__DEV__`-gated away) never reaches into RN internals.
     // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-    const mod = require('react-native/Libraries/Inspector/getInspectorDataForViewAtPoint');
-    cachedFn = (mod?.default ?? mod) as InspectorFn;
+    const fn = asFn(
+      require('react-native/src/private/devsupport/devmenu/elementinspector/getInspectorDataForViewAtPoint'),
+    );
+    if (fn) {
+      cachedFn = fn;
+      return cachedFn;
+    }
   } catch {
-    cachedFn = null;
+    // Fall through to the legacy path.
   }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    const fn = asFn(require('react-native/Libraries/Inspector/getInspectorDataForViewAtPoint'));
+    if (fn) {
+      cachedFn = fn;
+      return cachedFn;
+    }
+  } catch {
+    // Neither path resolved.
+  }
+  cachedFn = null;
   return cachedFn;
+}
+
+// React fiber tag for a host component (`<View>`, `<Text>`, …). Stable across
+// React versions.
+const HOST_COMPONENT = 5;
+
+interface FiberLike {
+  tag?: number;
+  return?: FiberLike | null;
+  stateNode?: { canonical?: { publicInstance?: unknown } } | null;
+}
+
+let cachedGetHandle: ((instance: unknown) => FiberLike | null) | null | undefined;
+
+function getHandleFromPublicInstance(instance: unknown): FiberLike | null {
+  if (cachedGetHandle === undefined) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+      const RNPrivate = require('react-native/Libraries/ReactPrivate/ReactNativePrivateInterface');
+      const fn = RNPrivate?.getInternalInstanceHandleFromPublicInstance;
+      cachedGetHandle = typeof fn === 'function' ? fn : null;
+    } catch {
+      cachedGetHandle = null;
+    }
+  }
+  try {
+    return cachedGetHandle ? cachedGetHandle(instance) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Climb from pinagent's own overlay view to the app's **root** host view and
+ * return its public instance.
+ *
+ * Why: `getInspectorDataForViewAtPoint` hit-tests *within* the shadow subtree
+ * of the instance we pass. pinagent mounts as a sibling/descendant of the
+ * app, so its own view's subtree doesn't contain the tapped component — we
+ * must hand the inspector an ancestor that does. RN's built-in Inspector uses
+ * `AppContainer`'s inner root view for exactly this; we reach the same node by
+ * walking the fiber `return` chain to the topmost host component.
+ *
+ * Defensive: any failure (Paper, an RN internals shuffle, a null handle)
+ * falls back to the instance we were given — the picker degrades, never
+ * throws.
+ */
+function rootHostInstance(publicInstance: unknown): unknown {
+  let fiber = getHandleFromPublicInstance(publicInstance);
+  if (!fiber) return publicInstance;
+  let topHost: FiberLike | null = null;
+  // Cap the walk — a malformed `return` cycle must not spin forever.
+  for (let i = 0; fiber && i < 10_000; i++) {
+    if (fiber.tag === HOST_COMPONENT) topHost = fiber;
+    fiber = fiber.return ?? null;
+  }
+  const rootInstance = topHost?.stateNode?.canonical?.publicInstance;
+  return rootInstance ?? publicInstance;
 }
 
 /**
@@ -78,13 +183,60 @@ function toProjectRelative(fileName: string, projectRoot: string): string {
   return norm;
 }
 
-function pickSource(data: RawInspectorData): RawFiberLike | null {
+type Loc = NonNullable<PickResult['loc']>;
+
+/**
+ * Parse a `data-pa-loc` value (`"src/Foo.tsx:42:7"`) into a {@link Loc}.
+ * The path may itself contain colons on exotic platforms, so we split off
+ * the trailing `:line:col` rather than splitting greedily.
+ */
+function parsePaLoc(value: unknown): Loc | null {
+  if (typeof value !== 'string') return null;
+  const m = /^(.*):(\d+):(\d+)$/.exec(value);
+  if (!m) return null;
+  return { file: m[1]!, line: Number(m[2]), col: Number(m[3]) };
+}
+
+/** The first `data-pa-loc` found on the tapped view or its nearest owner. */
+function paLocOf(props: RawProps): Loc | null {
+  return parsePaLoc(props?.['data-pa-loc']);
+}
+
+/**
+ * Resolve the source location. Preferred path: the build-time `data-pa-loc`
+ * prop our babel plugin splices on (read from the tapped host view's props,
+ * then from each owner outward). Fallback: RN's legacy `_debugSource` /
+ * inspector `source` field, for older RN/React where they still exist.
+ */
+function pickLoc(data: RawInspectorData, projectRoot: string): Loc | null {
+  // 1. `data-pa-loc` on the directly tapped host view.
+  const direct = paLocOf(data.props);
+  if (direct) return direct;
+
+  // 2. `data-pa-loc` walking the owner hierarchy from the tapped element out.
+  for (let i = (data.hierarchy?.length ?? 0) - 1; i >= 0; i--) {
+    const item = data.hierarchy?.[i];
+    const loc = paLocOf(item?.getInspectorData?.(() => null)?.props);
+    if (loc) return loc;
+  }
+
+  // 3. Legacy `_debugSource` / inspector `source` (pre-React-19 / pre-0.81).
+  const src = legacySource(data);
+  if (src?.fileName && typeof src.lineNumber === 'number') {
+    return {
+      file: toProjectRelative(src.fileName, projectRoot),
+      line: src.lineNumber,
+      col: src.columnNumber ?? 0,
+    };
+  }
+  return null;
+}
+
+function legacySource(data: RawInspectorData): RawFiberLike | null {
   if (data.source?.fileName) return data.source;
   if (data.closestInstance?._debugSource?.fileName) {
     return data.closestInstance._debugSource;
   }
-  // Walk the hierarchy from the tapped element outward and take the first
-  // frame that carries a source — i.e. the nearest authored component.
   for (let i = (data.hierarchy?.length ?? 0) - 1; i >= 0; i--) {
     const item = data.hierarchy?.[i];
     const src = item?.getInspectorData?.(() => null)?.source;
@@ -102,12 +254,14 @@ function nameChainOf(data: RawInspectorData): string[] {
 /**
  * Resolve a tap (in window coordinates) to a {@link PickResult}.
  *
- * @param rootTag  The native tag of the inspected root view. In an app
- *   you get this from a ref on your top-level container
- *   (`findNodeHandle(ref.current)`); the POC widget owns that ref.
+ * @param rootView  A host view instance from which to reach the app root —
+ *   pass a ref's `.current` (the widget passes its own overlay `<View>`).
+ *   We climb to the app-root host instance before hit-testing, since the
+ *   inspector searches within the passed view's subtree. NOT a
+ *   `findNodeHandle` number — the Fabric inspector rejects a bare tag.
  */
 export function resolvePick(
-  rootTag: number | null,
+  rootView: unknown,
   x: number,
   y: number,
   projectRoot: string,
@@ -119,6 +273,7 @@ export function resolvePick(
     // with `loc: null`, which the server accepts.
     return Promise.resolve({ loc: null, nameChain: [], frame: null });
   }
+  const inspectedView = rootHostInstance(rootView);
   return new Promise((resolve) => {
     let settled = false;
     const done = (r: PickResult) => {
@@ -131,9 +286,8 @@ export function resolvePick(
     // view; guard with a microtask-ish fallback so the picker can't hang.
     const timer = setTimeout(() => done({ loc: null, nameChain: [], frame: null }), 250);
     try {
-      fn(rootTag, x, y, (data) => {
+      fn(inspectedView, x, y, (data) => {
         clearTimeout(timer);
-        const src = pickSource(data);
         const frame = data.frame
           ? {
               x: data.frame.left,
@@ -143,14 +297,7 @@ export function resolvePick(
             }
           : null;
         done({
-          loc:
-            src?.fileName && typeof src.lineNumber === 'number'
-              ? {
-                  file: toProjectRelative(src.fileName, projectRoot),
-                  line: src.lineNumber,
-                  col: src.columnNumber ?? 0,
-                }
-              : null,
+          loc: pickLoc(data, projectRoot),
           nameChain: nameChainOf(data),
           frame,
         });

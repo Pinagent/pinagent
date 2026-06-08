@@ -116,6 +116,44 @@ describe('pinagentMiddleware', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  describe('POST /__pinagent/open', () => {
+    it('rejects a missing file with 400', async () => {
+      const mw = pinagentMiddleware({ projectRoot: root, spawnMode: false });
+      const { res, done } = mockRes();
+      mw(mockReq('POST', '/__pinagent/open', JSON.stringify({ line: 1 })), res, () => {});
+      await done;
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('rejects a path that escapes the project root with 400', async () => {
+      const mw = pinagentMiddleware({ projectRoot: root, spawnMode: false });
+      const { res, done } = mockRes();
+      const body = JSON.stringify({ file: '../../../../etc/passwd', line: 1, col: 1 });
+      mw(mockReq('POST', '/__pinagent/open', body), res, () => {});
+      await done;
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('accepts an in-root path and reports the editor launch', async () => {
+      // `true` is a harmless stand-in for an editor binary — spawns, ignores
+      // its args, exits 0 — so the test never opens a real editor.
+      const prev = process.env.PINAGENT_EDITOR;
+      process.env.PINAGENT_EDITOR = 'true';
+      try {
+        const mw = pinagentMiddleware({ projectRoot: root, spawnMode: false });
+        const { res, done, parse } = mockRes();
+        const body = JSON.stringify({ file: 'src/HomeScreen.tsx', line: 42, col: 7 });
+        mw(mockReq('POST', '/__pinagent/open', body), res, () => {});
+        await done;
+        expect(res.statusCode).toBe(200);
+        expect((parse() as { ok: boolean }).ok).toBe(true);
+      } finally {
+        if (prev === undefined) delete process.env.PINAGENT_EDITOR;
+        else process.env.PINAGENT_EDITOR = prev;
+      }
+    });
+  });
+
   it('GET /__pinagent/feedback lists created conversations', async () => {
     const mw = pinagentMiddleware({ projectRoot: root, spawnMode: false });
 
