@@ -351,10 +351,17 @@ export function createPicker(ctx: WidgetContext): {
       updatePickHint();
       return;
     }
-    // Enter commits the current selection — the path for region-only snips
-    // (and any time the user would rather commit than plain-click).
+    // Enter commits the current selection — the path for multi-node picks
+    // (and region-only snips, or any time the user would rather commit than
+    // plain-click). stopPropagation is essential: when picking was entered by
+    // clicking the pin, the FAB keeps focus, so this same Enter would also
+    // reach the FAB's keydown handler. By then `commit` has already flipped
+    // the mode to idle, so the FAB would re-toggle straight back into picking
+    // — making Enter look like a no-op. Stopping here keeps commit the sole
+    // effect.
     if (e.key === 'Enter' && pending.length > 0) {
       e.preventDefault();
+      e.stopPropagation();
       commit();
       return;
     }
