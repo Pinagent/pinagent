@@ -1,6 +1,6 @@
 {
   "name": "@pinagent/nuxt-plugin",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "license": "Apache-2.0",
   "description": "Nuxt module for Pinagent — click a UI element in your Nuxt dev server, leave a comment, and hand it to a coding agent with file:line and a screenshot.",
   "repository": {
