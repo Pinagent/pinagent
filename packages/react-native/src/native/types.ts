@@ -35,11 +35,30 @@ export interface FeedbackInput {
   createdAt: string;
 }
 
+/** One segment of the component breadcrumb. */
+export interface PickCrumb {
+  /** Component display name (e.g. `FeatureCard`). */
+  name: string;
+  /**
+   * Source location of that component, from its own `data-pa-loc`. Null when
+   * the component carries no resolvable source (e.g. an untagged 3rd-party
+   * wrapper). Lets the breadcrumb re-anchor the comment onto an ancestor.
+   */
+  loc: FeedbackInput['loc'];
+}
+
 /** Result of resolving a tap point to a source location. */
 export interface PickResult {
+  /** The precise tapped element's source location (the default target). */
   loc: FeedbackInput['loc'];
   /** Component display-name breadcrumb, newest (tapped) last. */
   nameChain: string[];
+  /**
+   * Per-segment breadcrumb (same order as {@link nameChain}: root first,
+   * tapped component last), each carrying its own `loc` so pressing a
+   * breadcrumb can re-anchor the comment onto that ancestor.
+   */
+  chain: PickCrumb[];
   /** Highlight rectangle in window coordinates, for the overlay outline. */
   frame: { x: number; y: number; width: number; height: number } | null;
 }

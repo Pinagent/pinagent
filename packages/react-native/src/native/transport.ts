@@ -12,12 +12,59 @@
 import { NativeModules, Platform } from 'react-native';
 import type { FeedbackInput } from './types';
 
+interface DevServerInfo {
+  url?: string;
+  bundleLoadedFromServer?: boolean;
+}
+
+let cachedGetDevServer: (() => DevServerInfo) | null | undefined;
+
+/**
+ * RN's own dev-server resolver. It reads the `NativeSourceCode` **TurboModule**,
+ * which — unlike the legacy `NativeModules.SourceCode` bridge proxy — is
+ * populated under the New Architecture (bridgeless, RN 0.82+, the only mode RN
+ * ships now). Lazy + cached: a release build (widget `__DEV__`-gated away)
+ * never reaches into RN internals. `require` takes a static string literal —
+ * Metro forbids `require(variable)`.
+ */
+function loadGetDevServer(): (() => DevServerInfo) | null {
+  if (cachedGetDevServer !== undefined) return cachedGetDevServer;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    const mod = require('react-native/Libraries/Core/Devtools/getDevServer');
+    const fn = (mod as { default?: unknown })?.default ?? mod;
+    cachedGetDevServer = typeof fn === 'function' ? (fn as () => DevServerInfo) : null;
+  } catch {
+    cachedGetDevServer = null;
+  }
+  return cachedGetDevServer;
+}
+
 /**
  * Parse `http://192.168.1.5:8081/index.bundle?...` (or the RN packager's
- * variants) down to `http://192.168.1.5:8081`. Returns null in release
- * builds where `scriptURL` points at a baked-in `file://` bundle.
+ * variants) down to `http://192.168.1.5:8081`. Returns null in release builds,
+ * where no Metro server is reachable.
+ *
+ * Prefers RN's `getDevServer()` (TurboModule-backed, works under the New
+ * Architecture) and falls back to the legacy `NativeModules.SourceCode.scriptURL`
+ * for pre-bridgeless RN. The legacy proxy is empty under bridgeless, which is
+ * what made every submit fail with "No dev server" on RN 0.82+.
  */
 export function devServerBaseUrl(): string | null {
+  const getDevServer = loadGetDevServer();
+  if (getDevServer) {
+    try {
+      const info = getDevServer();
+      // `bundleLoadedFromServer` is false in release builds (url defaults to
+      // localhost:8081 there, so the url alone can't be trusted).
+      if (info?.url && info.bundleLoadedFromServer !== false) {
+        const m = /^(https?:\/\/[^/]+)/.exec(info.url);
+        if (m) return m[1]!;
+      }
+    } catch {
+      // Fall through to the legacy bridge read.
+    }
+  }
   const scriptURL: string | undefined = NativeModules?.SourceCode?.scriptURL;
   if (!scriptURL) return null;
   const match = /^(https?:\/\/[^/]+)/.exec(scriptURL);

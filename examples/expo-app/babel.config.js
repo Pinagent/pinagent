@@ -20,7 +20,14 @@ module.exports = (api) => {
   api.cache(true);
   const dev = process.env.NODE_ENV !== 'production';
   return {
-    presets: ['babel-preset-expo'],
+    // `disableDeepImportWarnings` quiets babel-preset-expo's "deep imports
+    // from 'react-native' are deprecated" warning. @pinagent/react-native
+    // intentionally reaches into a couple of RN dev internals (the element
+    // inspector + getDevServer). That warning only fires on FIRST-PARTY code,
+    // and a real consumer installs the package into node_modules (exempt) — so
+    // it never sees it. This demo only trips it because it imports the package
+    // SOURCE via Metro watchFolders, which makes it first-party here.
+    presets: [['babel-preset-expo', { disableDeepImportWarnings: true }]],
     plugins: dev ? [pinagentSource] : [],
   };
 };
