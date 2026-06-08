@@ -25,7 +25,7 @@
 import { Buffer } from 'node:buffer';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import { delimiter, isAbsolute, join, relative, resolve as resolvePath } from 'node:path';
 import {
   FeedbackInputSchema,
@@ -34,6 +34,7 @@ import {
   spawnAgent,
 } from '@pinagent/agent-runner';
 import { nanoid } from 'nanoid';
+import { ensurePinagentUpgrade } from './ws-endpoint';
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024; // 8MB raw JSON (screenshot dominates)
 
@@ -60,7 +61,24 @@ export function pinagentMiddleware(opts: PinagentMiddlewareOpts): PinagentMiddle
   const storage = new Storage(opts.projectRoot);
   const spawnMode: SpawnAgentMode = opts.spawnMode ?? 'inline';
 
+  // Pin the project root so the agent run (which resolves its bus root from
+  // PINAGENT_PROJECT_ROOT, falling back to cwd) writes the same
+  // `.pinagent/db.sqlite` the WS subscription reads. Metro's cwd is usually the
+  // project dir, but don't rely on it.
+  if (!process.env.PINAGENT_PROJECT_ROOT) {
+    process.env.PINAGENT_PROJECT_ROOT = opts.projectRoot;
+  }
+
   const handler = (async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+    // Self-install the `/__pinagent/ws` upgrade handler on the live HTTP
+    // server. Expo's dev server ignores `config.server.websocketEndpoints`
+    // (see ws-endpoint.ts), so routing streaming through the middleware — which
+    // Expo *does* honor via `enhanceMiddleware` — is the only path that works
+    // under both Expo and bare Metro. Idempotent + cheap, so running it on
+    // every request (the bundle fetch arrives long before any WS) is fine.
+    const server = (req.socket as { server?: Server } | undefined)?.server;
+    if (server) ensurePinagentUpgrade(server);
+
     const url = req.url ?? '';
     if (!url.startsWith('/__pinagent')) return next();
 
