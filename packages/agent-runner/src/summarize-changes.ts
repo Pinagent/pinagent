@@ -11,8 +11,8 @@
  * the `@pinagent/mcp` binary import the PR-open core without the SDK.
  */
 import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { buildSdkAuthEnv } from './agent-auth';
 import { runGitCapture } from './git-utils';
-import { SecretsStore } from './secrets-store';
 import { SettingsStore } from './settings-store';
 
 export interface PrSummary {
@@ -176,11 +176,12 @@ async function runOneShot(
   prompt: string,
   systemPrompt: string,
 ): Promise<string> {
-  const env: Record<string, string | undefined> = { ...process.env };
-  // Dock-stored Anthropic key wins over an existing env var, matching the
-  // spawned-agent path (providers/claude-code.ts).
-  const storedKey = await new SecretsStore(projectRoot).getAnthropicKey();
-  if (storedKey) env.ANTHROPIC_API_KEY = storedKey;
+  // Strip the implicit `ANTHROPIC_API_KEY` and use only an explicitly-
+  // configured key (the `apiKey` plugin option or the dock), matching the
+  // spawned-agent path (providers/claude-code.ts) so an unconfigured summarizer
+  // falls back to the subscription instead of failing on a stray shell key.
+  // See agent-auth.ts.
+  const env = await buildSdkAuthEnv(projectRoot);
 
   let text = '';
   for await (const message of query({

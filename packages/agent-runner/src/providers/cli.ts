@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import type { AgentEvent } from '@pinagent/shared';
 import { nanoid } from 'nanoid';
+import { buildCliAuthEnv } from '../agent-auth';
 import { findNearestAgentGuide, renderAgentGuide } from '../agent-guide';
 import { summariseToolInput } from '../agent-render';
 import type { AgentProvider, AgentRunRequest, ProviderRunItem } from './types';
@@ -34,6 +35,13 @@ import type { AgentProvider, AgentRunRequest, ProviderRunItem } from './types';
  * `PINAGENT_FEEDBACK_ID`, and `PINAGENT_RESUME_SESSION` so an MCP-aware
  * CLI (or a wrapper script) can connect to the pinagent MCP server, fetch
  * the feedback, and call `resolve_feedback` itself.
+ *
+ * Auth is explicit-only (see agent-auth.ts): `buildCliAuthEnv` strips any
+ * ambient `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` from the child's env so a
+ * stray shell key can't bill against a wrapped CLI by accident, and re-supplies
+ * a key only when the consuming app passed one via the `apiKey` plugin option.
+ * Absent that, the CLI falls back to its own login (e.g. Codex → the ChatGPT
+ * subscription).
  */
 export class CliAgentProvider implements AgentProvider {
   readonly id = 'cli';
@@ -73,12 +81,11 @@ export class CliAgentProvider implements AgentProvider {
 
     const child = spawn(config.argv[0] as string, args, {
       cwd: req.cwd,
-      env: {
-        ...process.env,
+      env: buildCliAuthEnv({
         PINAGENT_PROJECT_ROOT: req.projectRoot,
         PINAGENT_FEEDBACK_ID: req.feedbackId,
         PINAGENT_RESUME_SESSION: req.resume ?? '',
-      },
+      }),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 

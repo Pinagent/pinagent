@@ -28,6 +28,26 @@ export interface PinagentOptions {
    */
   spawnAgent?: 'worktree' | 'inline' | 'off' | false;
   /**
+   * Explicit API key for the agent that addresses feedback. Optional and
+   * opt-in by design.
+   *
+   * Pinagent never reads `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` from the
+   * environment on its own — a key exported in your shell for other tools must
+   * not get billed (or, if stale, fail the run with "Invalid API key") just
+   * because pinagent happened to inherit it. When you leave this unset, runs
+   * authenticate against your agentic subscription (Claude Code, or Codex's
+   * ChatGPT login when using the CLI provider).
+   *
+   * Set it only when you deliberately want a raw key used, e.g.
+   * `pinagent(config, { apiKey: process.env.MY_PINAGENT_KEY })`. For the default
+   * Claude provider it's passed as the Anthropic key; for the bring-your-own
+   * CLI provider it's supplied to the wrapped CLI as both `ANTHROPIC_API_KEY`
+   * and `OPENAI_API_KEY`. Bridged to the route handler via the
+   * `PINAGENT_AGENT_API_KEY` env var. A key saved at runtime via the dock's
+   * Connections route takes precedence over this option.
+   */
+  apiKey?: string;
+  /**
    * Mount the project-management dock surface alongside the per-element
    * widget. Default: false — the widget ships universally, the dock is
    * opt-in because not every project wants a second floating surface on
@@ -136,6 +156,14 @@ export default function pinagent(
         ? 'off'
         : options.spawnAgent;
   process.env.PINAGENT_SPAWN_AGENT = effective;
+
+  // Bridge an explicitly-configured agent API key to the route handler (which
+  // inherits this env in the dev server it's spawned into). Pinagent only ever
+  // uses a key handed to it on purpose — see `apiKey` above and agent-auth.ts.
+  // No-op (subscription fallback) when the consumer omits it.
+  if (options.apiKey) {
+    process.env.PINAGENT_AGENT_API_KEY = options.apiKey;
+  }
 
   // Pick a WS port at config-load time and propagate via env var. The
   // actual `ws.WebSocketServer` is started by the route module (see

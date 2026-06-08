@@ -6,6 +6,7 @@ import {
   type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentEvent } from '@pinagent/shared';
+import { buildSdkAuthEnv } from '../agent-auth';
 import { findNearestAgentGuide, renderAgentGuide } from '../agent-guide';
 import {
   renderInitFooter,
@@ -14,7 +15,6 @@ import {
   summariseToolInput,
 } from '../agent-render';
 import { ASK_USER_TOOL_NAME, createAskUserMcpServer } from '../ask-user';
-import { SecretsStore } from '../secrets-store';
 import type { AgentProvider, AgentRunRequest, ProviderRunItem } from './types';
 
 /**
@@ -170,17 +170,16 @@ async function buildSdkOptions(req: AgentRunRequest): Promise<Options> {
   // The `ask_user` tool can block for up to 10 min waiting for a human
   // response. SDK MCP tool calls time out at 60s by default; bump it to
   // ~12 min to cover the full ASK_TTL window in ask-user.ts.
-  const env: Record<string, string | undefined> = {
-    ...process.env,
+  //
+  // `buildSdkAuthEnv` strips the implicit `ANTHROPIC_API_KEY` from the
+  // inherited env and re-adds a key only when the developer configured one
+  // explicitly (the `apiKey` plugin option or the dock) — so an unconfigured
+  // run authenticates against the Claude Code subscription instead of dying on
+  // a stray shell key. See agent-auth.ts.
+  const env = await buildSdkAuthEnv(req.projectRoot, {
     PINAGENT_PROJECT_ROOT: req.projectRoot,
     CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '720000',
-  };
-
-  // Dock-stored Anthropic key (set via Connections route) wins over an
-  // existing env var so the user can override CI-style auth without
-  // restarting the dev-server. No-op when the user hasn't set one.
-  const storedKey = await new SecretsStore(req.projectRoot).getAnthropicKey();
-  if (storedKey) env.ANTHROPIC_API_KEY = storedKey;
+  });
 
   // Surface the guide nearest to the clicked element. The `claude_code`
   // preset already discovers guides by walking up from `cwd`, but that
