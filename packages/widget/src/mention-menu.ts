@@ -103,15 +103,16 @@ export function attachMentionMenu(opts: MentionMenuOptions): MentionMenuHandle {
   function position(): void {
     // position: fixed inside the iframe doc is relative to the iframe's
     // own viewport, so getBoundingClientRect coordinates map directly.
-    // Pop upward from the textarea's top edge — there's reliably more room
-    // above (header/log) than below (footer), and below risks clipping at
-    // the iframe's bottom.
+    // Pop downward from the textarea's bottom edge, the conventional
+    // direction for a typeahead menu so the list grows away from the
+    // text you're typing.
     const r = ta.getBoundingClientRect();
     const viewportH = doc.documentElement.clientHeight;
     menu.style.left = `${Math.max(6, r.left)}px`;
     menu.style.width = `${Math.min(r.width, doc.documentElement.clientWidth - 12)}px`;
-    menu.style.bottom = `${viewportH - r.top + 4}px`;
-    menu.style.maxHeight = `${Math.max(96, Math.min(220, r.top - 10))}px`;
+    menu.style.bottom = 'auto';
+    menu.style.top = `${r.bottom + 4}px`;
+    menu.style.maxHeight = `${Math.max(96, Math.min(220, viewportH - r.bottom - 10))}px`;
   }
 
   function render(): void {
