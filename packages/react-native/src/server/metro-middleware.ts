@@ -23,7 +23,9 @@
  * first and defers everything else to Metro's own middleware.
  */
 import { Buffer } from 'node:buffer';
+import { spawn } from 'node:child_process';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { isAbsolute, relative, resolve as resolvePath } from 'node:path';
 import {
   FeedbackInputSchema,
   type SpawnAgentMode,
@@ -93,6 +95,30 @@ export function pinagentMiddleware(opts: PinagentMiddlewareOpts): PinagentMiddle
         return json(res, 200, items);
       }
 
+      // POST /__pinagent/open — open a tapped component's source file in the
+      // developer's editor on the machine running Metro. The RN analog of
+      // the web composer's "navigate to file": the phone can't open your
+      // editor, but the dev server can.
+      if (req.method === 'POST' && url === '/__pinagent/open') {
+        const raw = (await readJsonBody(req)) as {
+          file?: unknown;
+          line?: unknown;
+          col?: unknown;
+        } | null;
+        const file = typeof raw?.file === 'string' ? raw.file : '';
+        if (!file) return badRequest(res, 'missing file');
+        const abs = resolvePath(opts.projectRoot, file);
+        // Confine to the project root — never let a crafted path escape it.
+        const rel = relative(opts.projectRoot, abs);
+        if (rel.startsWith('..') || isAbsolute(rel)) {
+          return badRequest(res, 'path outside project root');
+        }
+        const line = Number.isFinite(Number(raw?.line)) ? Number(raw?.line) : 1;
+        const col = Number.isFinite(Number(raw?.col)) ? Number(raw?.col) : 1;
+        const opened = openInEditor(abs, line, col);
+        return json(res, 200, { ok: opened });
+      }
+
       return json(res, 404, { error: 'not found' });
     } catch (err) {
       return json(res, 500, { error: err instanceof Error ? err.message : String(err) });
@@ -146,4 +172,27 @@ function json(res: ServerResponse, status: number, body: unknown): void {
 
 function badRequest(res: ServerResponse, msg: string): void {
   json(res, 400, { error: msg });
+}
+
+/**
+ * Open `<file>:<line>:<col>` in the developer's editor. Honors
+ * `PINAGENT_EDITOR` (a command that takes a `path:line:col` argument, e.g.
+ * `code -g`, `cursor -g`, `subl`), else falls back to `code -g`. Best-effort
+ * and fully detached — a missing editor binary must never crash Metro.
+ */
+function openInEditor(abs: string, line: number, col: number): boolean {
+  const target = `${abs}:${line}:${col}`;
+  const override = process.env.PINAGENT_EDITOR?.trim();
+  const [cmd, ...args] = override ? override.split(/\s+/) : ['code', '-g'];
+  if (!cmd) return false;
+  try {
+    const child = spawn(cmd, [...args, target], { stdio: 'ignore', detached: true });
+    child.on('error', () => {
+      // Editor binary not on PATH — swallow; the comment still gets filed.
+    });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
 }

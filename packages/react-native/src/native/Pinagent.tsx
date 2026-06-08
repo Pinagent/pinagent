@@ -27,7 +27,6 @@
 import type { ReactElement } from 'react';
 import { useCallback, useRef, useState } from 'react';
 import {
-  findNodeHandle,
   Modal,
   Platform,
   Pressable,
@@ -40,7 +39,7 @@ import {
 import { resolvePick } from './inspector';
 import { StreamSheet } from './StreamSheet';
 import { captureScreenshot } from './screenshot';
-import { platformTag, submitFeedback } from './transport';
+import { openInEditor, platformTag, submitFeedback } from './transport';
 import type { PickResult } from './types';
 
 export interface PinagentProps {
@@ -94,14 +93,21 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
 
   const onPickTap = useCallback(
     async (x: number, y: number) => {
-      // Resolve the tapped component while the picking overlay is still up
-      // (the Inspector hit-test environment is unchanged from today), then
-      // drop our overlay and FAB and wait a frame so the screenshot doesn't
-      // include pinagent's own UI — the web widget excludes its host node
-      // from the html-to-image render for the same reason.
-      const picked = await resolvePick(findNodeHandle(rootRef.current), x, y, projectRoot);
+      // Tear our own overlay down BEFORE hit-testing. The inspector's
+      // `findNodeAtPoint` is geometric and paint-order based (it ignores
+      // `pointerEvents`), so a full-screen picking layer painted on top is
+      // the view "under" the tap — every pick would resolve to wherever
+      // pinagent is mounted (the app root) instead of the real component.
+      // Dropping to `capturing` unmounts the Pressable AND collapses our
+      // root to zero size (see the root View's style), so a frame later the
+      // tap resolves to the component beneath us — and, as a bonus, the
+      // screenshot already excludes pinagent's UI (the web widget excludes
+      // its host node from the html-to-image render for the same reason).
       setPhase('capturing');
       await nextPaint();
+      // Pass our overlay's host instance (not a findNodeHandle tag): the
+      // inspector climbs from it to the app root to hit-test there.
+      const picked = await resolvePick(rootRef.current, x, y, projectRoot);
       setShot(await captureScreenshot());
       setPick(picked);
       setPhase('composing');
@@ -146,12 +152,15 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
   }, [comment, pick, shot, screenName, width, height]);
 
   return (
-    // collapsable={false} keeps this View in the native tree so
-    // findNodeHandle resolves a real tag for the Inspector call.
+    // collapsable={false} keeps this View in the native tree so its ref
+    // resolves to a real host instance for the Inspector call. During
+    // `capturing` we shrink it to zero size so it's not the topmost view at
+    // the tap point while the inspector hit-tests the app beneath us (see
+    // onPickTap); it has no visible children in that phase anyway.
     <View
       ref={rootRef}
       collapsable={false}
-      style={StyleSheet.absoluteFill}
+      style={phase === 'capturing' ? styles.collapsed : StyleSheet.absoluteFill}
       pointerEvents="box-none"
     >
       {/* Picking overlay: a transparent full-screen catcher. onPress gives
@@ -198,11 +207,20 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
       >
         <View style={styles.composerBackdrop}>
           <View style={styles.composer}>
-            <Text style={styles.composerTitle}>
-              {pick?.loc
-                ? `${pick.loc.file}:${pick.loc.line}`
-                : (pick?.nameChain.at(-1) ?? 'Unknown component')}
-            </Text>
+            {/* Title: file:line if resolved (pressable → opens in the editor
+                on the Metro host, the RN analog of web's "navigate to file"),
+                else the tapped component name. */}
+            {pick?.loc ? (
+              <Pressable onPress={() => pick.loc && void openInEditor(pick.loc)}>
+                <Text style={[styles.composerTitle, styles.composerTitleLink]}>
+                  {`${pick.loc.file}:${pick.loc.line}`}
+                </Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.composerTitle}>
+                {pick?.nameChain.at(-1) ?? 'Unknown component'}
+              </Text>
+            )}
             {pick?.nameChain.length ? (
               <Text style={styles.breadcrumb} numberOfLines={1}>
                 {pick.nameChain.join(' › ')}
@@ -264,6 +282,9 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
 }
 
 const styles = StyleSheet.create({
+  // Zero-footprint root for the `capturing` phase — keeps the View (and its
+  // ref) mounted while removing it as a hit-test target over the app.
+  collapsed: { position: 'absolute', width: 0, height: 0 },
   pickLayer: { backgroundColor: 'rgba(59,130,246,0.08)' },
   pickHint: {
     position: 'absolute',
@@ -291,6 +312,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   composerTitle: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  composerTitleLink: { color: '#2563eb', textDecorationLine: 'underline' },
   breadcrumb: { fontSize: 12, color: '#6b7280' },
   input: {
     minHeight: 80,
