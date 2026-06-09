@@ -23,7 +23,16 @@
  */
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Animated,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { type AgentEvent, pendingAsk, renderTranscript } from './transcript';
 import { StreamClient } from './ws-client';
 
@@ -85,6 +94,29 @@ export function StreamSheet({
   const ask = useMemo(() => pendingAsk(events), [events]);
   const askOpen = ask && !answered[ask.askId];
   const running = !done && !transportError;
+  // The agent is blocked on an `ask_user` we haven't answered. While minimized
+  // that would otherwise be invisible — the run just stalls — so the pill flags
+  // it and pulses to pull you back. (When expanded, the answer form shows.)
+  const needsInput = minimized && !!askOpen;
+
+  // Drive the pulse on the minimized pill while it's waiting for input. The
+  // ref/effect are hooks, so they live above the early return; the loop only
+  // runs in the `needsInput` state and resets otherwise.
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!needsInput) {
+      pulse.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.35, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [needsInput, pulse]);
 
   // Minimized: a compact, tappable status pill. The WS hooks above keep
   // running because the component stays mounted — only the rendering changes —
@@ -94,20 +126,26 @@ export function StreamSheet({
       <Pressable
         onPress={onExpand}
         accessibilityRole="button"
-        style={[styles.pill, { bottom: 40 + stackIndex * (PILL_HEIGHT + 8) }]}
+        style={[
+          styles.pill,
+          needsInput && styles.pillAsk,
+          { bottom: 40 + stackIndex * (PILL_HEIGHT + 8) },
+        ]}
       >
-        <View
+        <Animated.View
           style={[
             styles.pillDot,
-            transportError
-              ? styles.pillDotError
-              : running
-                ? styles.pillDotRunning
-                : styles.pillDotDone,
+            needsInput
+              ? [styles.pillDotAsk, { opacity: pulse }]
+              : transportError
+                ? styles.pillDotError
+                : running
+                  ? styles.pillDotRunning
+                  : styles.pillDotDone,
           ]}
         />
         <Text style={styles.pillText} numberOfLines={1}>
-          {target}
+          {needsInput ? `Needs input · ${target}` : target}
         </Text>
         <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button">
           <Text style={styles.pillClose}>✕</Text>
@@ -374,10 +412,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 5,
   },
+  // Waiting on `ask_user`: a purple-tinted pill (matching the expanded ask row)
+  // so a blocked run reads differently from a busy one at a glance.
+  pillAsk: { backgroundColor: 'rgba(76,29,149,0.97)' },
   pillDot: { width: 8, height: 8, borderRadius: 4 },
   pillDotRunning: { backgroundColor: '#3b82f6' },
   pillDotDone: { backgroundColor: '#10b981' },
   pillDotError: { backgroundColor: '#ef4444' },
+  pillDotAsk: { backgroundColor: '#c4b5fd' },
   pillText: { flexShrink: 1, color: '#fff', fontSize: 13, fontWeight: '600' },
   pillClose: { color: '#9aa0a6', fontSize: 13, paddingLeft: 2 },
 });
