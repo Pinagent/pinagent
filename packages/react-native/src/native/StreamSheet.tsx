@@ -13,6 +13,13 @@
  * (the bus only streams agent events, not the developer's messages). A
  * reconnect replays the agent transcript, so we clear `events` on `onReset`
  * but keep local follow-ups.
+ *
+ * The sheet can be **minimized** to a compact status pill so the developer can
+ * keep interacting with the app — e.g. to pick another element and spawn a
+ * second agent. Minimizing doesn't tear the run down: the component stays
+ * mounted (only its rendering changes), so the WebSocket keeps streaming in the
+ * background and the live transcript is intact the moment it's re-expanded.
+ * `<Pinagent/>` mounts one of these per concurrent run.
  */
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -20,14 +27,34 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { type AgentEvent, pendingAsk, renderTranscript } from './transcript';
 import { StreamClient } from './ws-client';
 
+/** Height of a minimized pill — drives the bottom-left stacking offset. */
+const PILL_HEIGHT = 40;
+
 export interface StreamSheetProps {
   feedbackId: string;
   /** Source label shown in the header (e.g. `file:line` or component name). */
   target: string;
+  /** Render as a compact pill (WS stays live) instead of the full sheet. */
+  minimized: boolean;
+  /** Stack position among minimized pills (0 = bottom-most), for layout. */
+  stackIndex: number;
+  /** Collapse the full sheet to its pill. */
+  onMinimize: () => void;
+  /** Expand the pill back to the full sheet. */
+  onExpand: () => void;
+  /** Dismiss for good — tears down the WS and removes this run's view. */
   onClose: () => void;
 }
 
-export function StreamSheet({ feedbackId, target, onClose }: StreamSheetProps): ReactElement {
+export function StreamSheet({
+  feedbackId,
+  target,
+  minimized,
+  stackIndex,
+  onMinimize,
+  onExpand,
+  onClose,
+}: StreamSheetProps): ReactElement {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [followUps, setFollowUps] = useState<string[]>([]);
   const [answered, setAnswered] = useState<Record<string, string>>({});
@@ -59,6 +86,36 @@ export function StreamSheet({ feedbackId, target, onClose }: StreamSheetProps): 
   const askOpen = ask && !answered[ask.askId];
   const running = !done && !transportError;
 
+  // Minimized: a compact, tappable status pill. The WS hooks above keep
+  // running because the component stays mounted — only the rendering changes —
+  // so the run streams on in the background and re-expands with full state.
+  if (minimized) {
+    return (
+      <Pressable
+        onPress={onExpand}
+        accessibilityRole="button"
+        style={[styles.pill, { bottom: 40 + stackIndex * (PILL_HEIGHT + 8) }]}
+      >
+        <View
+          style={[
+            styles.pillDot,
+            transportError
+              ? styles.pillDotError
+              : running
+                ? styles.pillDotRunning
+                : styles.pillDotDone,
+          ]}
+        />
+        <Text style={styles.pillText} numberOfLines={1}>
+          {target}
+        </Text>
+        <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button">
+          <Text style={styles.pillClose}>✕</Text>
+        </Pressable>
+      </Pressable>
+    );
+  }
+
   function submitAnswer(answer: string): void {
     if (!ask || !answer.trim()) return;
     clientRef.current?.sendAskResponse(ask.askId, answer.trim());
@@ -83,9 +140,17 @@ export function StreamSheet({ feedbackId, target, onClose }: StreamSheetProps): 
             <Text style={styles.headerTitle} numberOfLines={1}>
               {running ? 'Agent working' : 'Agent finished'} · {target}
             </Text>
-            <Pressable onPress={onClose} hitSlop={8}>
-              <Text style={styles.close}>✕</Text>
-            </Pressable>
+            <View style={styles.headerBtns}>
+              {/* Minimize: collapse to a pill so the app is interactive again
+                  (e.g. to pick another element and spawn a second agent). The
+                  run keeps streaming in the background. */}
+              <Pressable onPress={onMinimize} hitSlop={8} accessibilityRole="button">
+                <Text style={styles.headerBtn}>—</Text>
+              </Pressable>
+              <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button">
+                <Text style={styles.headerBtn}>✕</Text>
+              </Pressable>
+            </View>
           </View>
 
           <ScrollView
@@ -231,7 +296,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f0f0f0',
   },
   headerTitle: { flex: 1, fontSize: 14, fontWeight: '600', color: '#111827' },
-  close: { fontSize: 16, color: '#6b7280', paddingLeft: 12 },
+  headerBtns: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  headerBtn: { fontSize: 16, color: '#6b7280', paddingLeft: 4 },
   log: { paddingHorizontal: 16 },
   logContent: { paddingVertical: 12, gap: 8 },
   muted: { color: '#9aa0a6', fontSize: 13 },
@@ -289,4 +355,29 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.4 },
   bottomBtn: { alignSelf: 'center', paddingVertical: 8 },
   bottomBtnText: { color: '#6b7280', fontWeight: '600' },
+  // Minimized status pill, bottom-left so it never collides with the FAB
+  // (bottom-right). `bottom` is set inline from the stack index.
+  pill: {
+    position: 'absolute',
+    left: 20,
+    maxWidth: '70%',
+    height: PILL_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    borderRadius: PILL_HEIGHT / 2,
+    backgroundColor: 'rgba(17,24,39,0.95)',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 5,
+  },
+  pillDot: { width: 8, height: 8, borderRadius: 4 },
+  pillDotRunning: { backgroundColor: '#3b82f6' },
+  pillDotDone: { backgroundColor: '#10b981' },
+  pillDotError: { backgroundColor: '#ef4444' },
+  pillText: { flexShrink: 1, color: '#fff', fontSize: 13, fontWeight: '600' },
+  pillClose: { color: '#9aa0a6', fontSize: 13, paddingLeft: 2 },
 });
