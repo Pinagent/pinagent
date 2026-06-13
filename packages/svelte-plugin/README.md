@@ -1,9 +1,14 @@
 # @pinagent/svelte-plugin
 
-> **Status: proof-of-concept.** This package proves out the one genuinely
-> Svelte-specific piece of Pinagent — source-mapping Svelte component markup back
-> to `file:line:col`. It is not yet wired into a Vite/SvelteKit dev server or
-> shipped as an installable integration. See [Where this fits](#where-this-fits).
+> **Status: shipped — internal, not installable.** This package is the home of
+> Pinagent's one genuinely Svelte-specific piece: source-mapping Svelte
+> component markup back to `file:line:col`. It is `private: true` (never
+> published) and is bundled into [`@pinagent/vite-plugin`](../vite-plugin) at
+> build time as an internal devDependency. **Svelte support already ships** —
+> `@pinagent/vite-plugin`'s transform dispatch calls `transformSvelte` for
+> `.svelte` files, and [`examples/sveltekit-app`](../../examples/sveltekit-app)
+> runs the full click→comment→agent loop on it today. See
+> [Where this fits](#where-this-fits) for how users get the feature.
 
 The Svelte analogue of [`@pinagent/babel-plugin`](../babel-plugin) (JSX) and
 [`@pinagent/vue-plugin`](../vue-plugin) (Vue SFCs). It injects a
@@ -33,12 +38,14 @@ changes.
   derived from the filename (`PriceCard.svelte` → `PriceCard`) and every element
   — including every `{#each}` instance — carries it, which is what lets
   downstream loop-instance disambiguation resolve to the right item.
-- **`vite.ts`** (`@pinagent/svelte-plugin/vite`) — a minimal `vitePlugin()` that
-  tags `.svelte` files. Runs with `enforce: 'pre'` so it rewrites the **raw**
-  component before `@sveltejs/vite-plugin-svelte` compiles it; dev-only,
-  honouring the "production builds are untouched" invariant. This is a
-  demonstration of the bundler glue, not the full integration — it does not yet
-  inject the widget or the `/__pinagent` middleware.
+- **`vite.ts`** (`@pinagent/svelte-plugin/vite`) — a standalone `vitePlugin()`
+  that tags `.svelte` files. Runs with `enforce: 'pre'` so it rewrites the
+  **raw** component before `@sveltejs/vite-plugin-svelte` compiles it; dev-only,
+  honouring the "production builds are untouched" invariant. It tags only — it
+  doesn't inject the widget or the `/__pinagent` middleware. In practice you
+  don't use it directly: `@pinagent/vite-plugin` calls `transformSvelte`
+  in-process (see [Where this fits](#where-this-fits)) and ships the widget +
+  middleware alongside, so the whole loop comes from one plugin.
 - **`index.ts`** — public surface: `transformSvelte`, `TransformOptions`.
 
 ### End-to-end demonstration
@@ -65,19 +72,29 @@ transforms emit identical attribute shapes (`data-pa-loc` + `data-pa-comp`).
 
 ## Where this fits
 
-A full Svelte integration would reuse almost everything that already exists:
+Svelte support is shipped, layered on top of the framework-agnostic rest of
+Pinagent. The only Svelte-specific code is the transform in this package;
+everything below it is reused as-is:
 
-| Layer | Source | Reuse |
+| Layer | Source | How |
 |---|---|---|
-| Source tagging | **this package** | new — the only Svelte-specific work |
-| Bundler glue (Vite plugin / SvelteKit) | adapt `@pinagent/vite-plugin` | call `transformSvelte` for `.svelte`, `transformVue` for `.vue`, `transformJsx` for `.tsx` |
-| Widget injection | `@pinagent/widget` | as-is (vanilla JS, no React) |
-| Feedback API + WebSocket | `@pinagent/vite-plugin` middleware | ~copy-paste |
+| Source tagging | **this package** | the only Svelte-specific work — `transformSvelte` |
+| Bundler glue (Vite / SvelteKit) | `@pinagent/vite-plugin` | its transform hook dispatches on extension: `transformSvelte` for `.svelte`, `transformVue` for `.vue`, `transformJsx` for `.tsx` (`vite-plugin/src/index.ts`) |
+| Widget injection | `@pinagent/widget` | embedded in `@pinagent/vite-plugin` (vanilla JS, no React) |
+| Feedback API + WebSocket | `@pinagent/vite-plugin` middleware | as-is |
 | Agent runtime, DB, MCP | `@pinagent/agent-runner`, `@pinagent/db`, `@pinagent/mcp` | as-is |
 
-The natural next step is folding `transformSvelte` into `@pinagent/vite-plugin`'s
-extension dispatch (it already handles `*.vue` and `*.tsx`) — which covers Svelte
-+ Vite apps and (with a SvelteKit wrapper) SvelteKit.
+**How users get it.** SvelteKit's bundler *is* Vite, so a Svelte or SvelteKit
+app adds `@pinagent/vite-plugin` directly — no Svelte-specific wrapper needed.
+The plugin tags `.svelte` files (alongside `.vue` and `.tsx`), injects the
+widget, and mounts the `/__pinagent` middleware. See
+[`examples/sveltekit-app`](../../examples/sveltekit-app) for a working end-to-end
+setup, and the root [README](../../README.md) for the install snippet.
+
+This package stays `private: true` on purpose: publishing the transform
+standalone has no consumer story — every user reaches it through
+`@pinagent/vite-plugin`, which bundles it. The decision is settled; this isn't
+unfinished work.
 
 ## Build & test
 

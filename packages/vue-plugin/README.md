@@ -1,9 +1,14 @@
 # @pinagent/vue-plugin
 
-> **Status: proof-of-concept.** This package proves out the one genuinely
-> Vue-specific piece of Pinagent — source-mapping `<template>` markup back to
-> `file:line:col`. It is not yet wired into a Vite/Nuxt dev server or shipped as
-> an installable integration. See [Where this fits](#where-this-fits) below.
+> **Status: shipped — internal, not installable.** This package is the home of
+> Pinagent's one genuinely Vue-specific piece: source-mapping `<template>`
+> markup back to `file:line:col`. It is `private: true` (never published) and is
+> bundled into [`@pinagent/vite-plugin`](../vite-plugin) at build time as an
+> internal devDependency. **Vue support already ships** — `@pinagent/vite-plugin`'s
+> transform dispatch calls `transformVue` for `.vue` files (plain Vue + Vite
+> apps), and [`@pinagent/nuxt-plugin`](../nuxt-plugin) covers Nuxt by wrapping
+> `@pinagent/vite-plugin` directly. See [Where this fits](#where-this-fits) for
+> how users get the feature.
 
 The Vue analogue of [`@pinagent/babel-plugin`](../babel-plugin). It injects a
 `data-pa-loc="file:line:col"` attribute (plus a `data-pa-comp` component name)
@@ -31,14 +36,16 @@ framework-agnostic and needs **zero** changes.
   component name is derived from the filename (`PriceCard.vue` → `PriceCard`)
   and every element — including every `v-for` instance — carries it, which is
   what lets downstream loop-instance disambiguation resolve to the right item.
-- **`vite.ts`** (`@pinagent/vue-plugin/vite`) — a minimal Vite plugin,
+- **`vite.ts`** (`@pinagent/vue-plugin/vite`) — a standalone Vite plugin,
   `vitePlugin()`, that runs `transformVue` on `.vue` files. It uses
   `enforce: 'pre'` so it tags the **raw** SFC source before `@vitejs/plugin-vue`
   compiles it; plugin-vue then re-parses the tagged source, so the attributes
   flow through to the compiled template. Dev-only (`command === 'serve'`),
-  matching Pinagent's "production builds are untouched" invariant. This is a
-  demonstration of the bundler glue, not the full integration — it does not yet
-  inject the widget or the `/__pinagent` middleware.
+  matching Pinagent's "production builds are untouched" invariant. It tags only
+  — it doesn't inject the widget or the `/__pinagent` middleware. In practice
+  you don't use it directly: `@pinagent/vite-plugin` calls `transformVue`
+  in-process (see [Where this fits](#where-this-fits)) and ships the widget +
+  middleware alongside, so the whole loop comes from one plugin.
 - **`index.ts`** — public surface: `transformVue`, `TransformOptions`.
 
 ### End-to-end demonstration
@@ -79,19 +86,35 @@ emit identical attribute shapes (`data-pa-loc` + `data-pa-comp`).
 
 ## Where this fits
 
-A full Vue integration would reuse almost everything that already exists:
+Vue support is shipped, layered on top of the framework-agnostic rest of
+Pinagent. The only Vue-specific code is the transform in this package;
+everything below it is reused as-is:
 
-| Layer | Source | Reuse |
+| Layer | Source | How |
 |---|---|---|
-| Source tagging | **this package** | new — the only Vue-specific work |
-| Bundler glue (Vite plugin / Nuxt module) | adapt `@pinagent/vite-plugin` | call `transformVue` for `.vue` files, `transformJsx` for `.tsx` |
-| Widget injection | `@pinagent/widget` | as-is (vanilla JS, no React) |
-| Feedback API + WebSocket | `@pinagent/vite-plugin` middleware / Nuxt Nitro routes | ~copy-paste |
+| Source tagging | **this package** | the only Vue-specific work — `transformVue` |
+| Bundler glue (Vite / Nuxt) | `@pinagent/vite-plugin` | its transform hook dispatches on extension: `transformVue` for `.vue`, `transformSvelte` for `.svelte`, `transformJsx` for `.tsx` (`vite-plugin/src/index.ts`) |
+| Widget injection | `@pinagent/widget` | embedded in `@pinagent/vite-plugin` (vanilla JS, no React) |
+| Feedback API + WebSocket | `@pinagent/vite-plugin` middleware | as-is |
 | Agent runtime, DB, MCP | `@pinagent/agent-runner`, `@pinagent/db`, `@pinagent/mcp` | as-is |
 
-The natural next step is a Vite plugin that dispatches on file extension —
-`transformVue` for `*.vue`, the existing `transformJsx` for `*.tsx` — which
-covers both Vue + Vite apps and (with a Nuxt module wrapper) Nuxt.
+**How users get it.** Two paths, depending on the framework:
+
+- **Plain Vue + Vite** → `@pinagent/vite-plugin` directly. It tags `.vue` SFCs
+  (alongside `.svelte` and `.tsx`), injects the widget, and mounts the
+  `/__pinagent` middleware. (See [`examples/vue-vite`](../../examples/vue-vite)
+  once that example lands; for now [`examples/sveltekit-app`](../../examples/sveltekit-app)
+  exercises the same `@pinagent/vite-plugin` dispatch path end-to-end.)
+- **Nuxt** → [`@pinagent/nuxt-plugin`](../nuxt-plugin). The Nuxt module wraps
+  **`@pinagent/vite-plugin` directly** — Nuxt's bundler is Vite, so the module
+  registers the same transform-and-inject plugin and wires the `/__pinagent`
+  surface through Nitro. **It does not depend on `@pinagent/vue-plugin`**; the
+  `transformVue` it ultimately runs is the copy bundled inside `@pinagent/vite-plugin`.
+
+This package stays `private: true` on purpose: publishing the transform
+standalone has no consumer story — every user reaches it through
+`@pinagent/vite-plugin` (and, for Nuxt, through `@pinagent/nuxt-plugin`). The
+decision is settled; this isn't unfinished work.
 
 ## Build & test
 
