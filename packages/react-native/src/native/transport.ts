@@ -106,6 +106,33 @@ export async function submitFeedback(input: FeedbackInput): Promise<SubmitResult
 }
 
 /**
+ * Fetch the conversation list from the dev server (`GET /__pinagent/feedback`).
+ * Used on `<Pinagent/>` mount to restore minimized pills after an app reload —
+ * the server's `.pinagent/db.sqlite` is the source of truth, so RN keeps no
+ * device-local mirror. Returns `[]` (degrade silently) when the dev server is
+ * unreachable or the request fails — exactly as today when there's no server.
+ *
+ * The items are the `storage.list()` projection (`FeedbackRecord[]`); the
+ * caller filters them with `restorePills`. Typed loosely here so the wire JSON
+ * doesn't drag the agent-runner type into RN source.
+ */
+export async function fetchFeedbackList(): Promise<unknown[]> {
+  const base = devServerBaseUrl();
+  if (!base) return [];
+  try {
+    const res = await fetch(`${base}/__pinagent/feedback`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as unknown;
+    return Array.isArray(json) ? json : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Ask the dev server to open a source location in the editor on the machine
  * running Metro — the RN analog of the web composer's "navigate to file".
  * Fire-and-forget: the device gets no useful signal beyond "request sent".

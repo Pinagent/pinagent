@@ -43,9 +43,10 @@ import {
   View,
 } from 'react-native';
 import { resolvePick } from './inspector';
+import { restorePills } from './restore';
 import { StreamSheet } from './StreamSheet';
 import { captureScreenshot } from './screenshot';
-import { openInEditor, platformTag, submitFeedback } from './transport';
+import { fetchFeedbackList, openInEditor, platformTag, submitFeedback } from './transport';
 import type { PickResult } from './types';
 
 export interface PinagentProps {
@@ -132,10 +133,45 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
   const [streams, setStreams] = useState<{ id: string; target: string }[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // The surface this widget is mounted on — the same value we record as the
+  // comment `url` (web sends the page URL). Used to scope restored pills to
+  // this screen, mirroring the web widget's per-page restore.
+  const surfaceUrl = screenName ?? Platform.OS;
+
   const closeStream = useCallback((id: string) => {
     setStreams((prev) => prev.filter((s) => s.id !== id));
     setExpandedId((cur) => (cur === id ? null : cur));
   }, []);
+
+  // Restore minimized pills after an app reload (Fast Refresh, shake-reload,
+  // restart). The dev server (.pinagent/db.sqlite) is the source of truth — RN
+  // keeps no device-local store — so on mount we fetch the conversation list,
+  // filter it to this surface's still-pending runs (newest 5), and seed
+  // `streams` as MINIMIZED pills. Each restored StreamSheet then subscribes
+  // over WS, which replays the transcript (and fires `done` for finished runs,
+  // landing the sheet in its normal done state). Skips silently when the dev
+  // server is unreachable (fetchFeedbackList returns []). Runs once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const items = await fetchFeedbackList();
+      if (cancelled) return;
+      const pills = restorePills(items, surfaceUrl);
+      if (pills.length === 0) return;
+      // Don't clobber any pill spawned between mount and this async resolve;
+      // de-dupe by id and keep everything minimized (expandedId stays null).
+      setStreams((prev) => {
+        const have = new Set(prev.map((s) => s.id));
+        const added = pills.filter((p) => !have.has(p.id));
+        return added.length ? [...prev, ...added] : prev;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Restore once per surface; we deliberately don't re-run on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surfaceUrl]);
 
   const onPickTap = useCallback(
     async (x: number, y: number) => {
@@ -220,7 +256,7 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
       // selectors). Gives the agent a readable hint and satisfies the
       // schema's required `selector` field.
       selector: pick?.nameChain.join(' > ') ?? '',
-      url: screenName ?? Platform.OS,
+      url: surfaceUrl,
       viewport: { w: Math.round(width), h: Math.round(height) },
       userAgent: platformTag(),
       screenshot: shot ?? '',
