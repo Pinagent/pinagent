@@ -56,7 +56,7 @@ cd examples/expo-app && npm install && npx expo start
         └────── data-pa-loc="src/Foo.tsx:42:7" ──── resolves ───┘
 ```
 
-Source is tagged at dev-build time: JSX by `@pinagent/babel-plugin` (Vite) or a webpack/Turbopack loader (Next.js), and Vue SFC `<template>` markup by `@pinagent/vue-plugin` (Vite + Nuxt). The widget walks up from the clicked node, finds the nearest `data-pa-loc`, and POSTs `{ comment, file, line, col, selector, url, viewport, screenshot }` to `/__pinagent/feedback`.
+Source is tagged at dev-build time: JSX by `@pinagent/babel-plugin` (Vite) or a webpack/Turbopack loader (Next.js); Vue SFC `<template>` markup by `@pinagent/vue-plugin`; and Svelte component markup by `@pinagent/svelte-plugin`. The Vue and Svelte transforms are bundled into `@pinagent/vite-plugin` — its transform hook dispatches on file extension — so Vue + Vite and SvelteKit apps install only `@pinagent/vite-plugin`, and Nuxt installs `@pinagent/nuxt-plugin` (which wraps the Vite plugin). The widget walks up from the clicked node, finds the nearest `data-pa-loc`, and POSTs `{ comment, file, line, col, selector, url, viewport, screenshot }` to `/__pinagent/feedback`.
 
 ## Install
 
@@ -203,13 +203,15 @@ The dock surfaces a bottom-left FAB that opens panels for Conversations, Changes
 
 ## Project layout
 
-- **`@pinagent/vite-plugin`** — Vite 5–8 plugin: JSX tagging, widget injection, `/__pinagent` middleware.
+- **`@pinagent/vite-plugin`** — Vite 5–8 plugin: source tagging (JSX, Vue SFCs, Svelte — dispatched on file extension), widget injection, `/__pinagent` middleware. Covers Vite + SvelteKit apps directly.
 - **`@pinagent/next-plugin`** — Next.js 14+ adapter (active on Next 16): webpack and Turbopack loaders, route handler, `<Pinagent />` client component.
+- **`@pinagent/nuxt-plugin`** — Nuxt module. Wraps `@pinagent/vite-plugin` (Nuxt's bundler is Vite) and wires the `/__pinagent` surface through Nitro.
 - **`@pinagent/widget`** — the per-element browser UI (shadow-root button → pick → composer). Embedded by the plugins at build time.
 - **`@pinagent/widget-dock`** — opt-in project-management surface (conversations, changes, PR composer, branches, history). Embedded by the plugins when `dock: true`.
 - **`@pinagent/cli`** — `pinagent` CLI. Currently exposes `pinagent mcp` (stdio MCP server).
 - **`@pinagent/mcp`** — stdio MCP server backing the CLI. Also ships the standalone `pinagent-mcp` bin.
 - **`@pinagent/babel-plugin`** — the JSX → `data-pa-loc` transform used by both plugins.
+- **`@pinagent/vue-plugin`, `@pinagent/svelte-plugin`** — the Vue-SFC and Svelte source-tagging transforms (`transformVue` / `transformSvelte`). Internal (`private: true`); bundled into `@pinagent/vite-plugin` at build time, not installed standalone.
 - **`@pinagent/agent-runner`** — SDK-driven local runtime that backs `spawnAgent` in both plugins. WebSocket server, storage, worktree management, `ask_user`.
 - **`@pinagent/vscode-extension`** — optional VSCode bridge. Registers a `vscode://` URI handler so the dock can hand a conversation back into a Claude Code terminal. Sideload-only today; see [`packages/vscode-extension/README.md`](./packages/vscode-extension/README.md).
 - `@pinagent/browser-runtime`, `@pinagent/db`, `@pinagent/shared`, `@pinagent/ui` — internal.
