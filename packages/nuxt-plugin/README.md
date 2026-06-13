@@ -39,6 +39,10 @@ export default defineNuxtConfig({
     spawnAgent: 'inline',
     // mount the project-management dock surface too (default: false)
     dock: true,
+    // explicit, opt-in agent API key (default: subscription auth)
+    apiKey: process.env.MY_PINAGENT_KEY,
+    // override the dock's worktree "Open app" command (worktree mode only)
+    worktreeServeCommand: 'nuxt dev --port {port}',
   },
 });
 ```
@@ -50,10 +54,22 @@ session over `@pinagent/mcp`.
 
 ## Options
 
-| Option       | Type                              | Default    | Notes                                                                  |
-| ------------ | --------------------------------- | ---------- | ---------------------------------------------------------------------- |
-| `spawnAgent` | `'inline' \| 'worktree' \| 'off'` | `'inline'` | Forwarded to `@pinagent/vite-plugin`. `'off'` records only (no spawn). |
-| `dock`       | `boolean`                         | `false`    | Mount the project-management dock surface alongside the widget.        |
+Every option is forwarded verbatim to `@pinagent/vite-plugin` — `pinagent: {…}`
+in `nuxt.config.ts` behaves identically to the same options on `pinagent()` in a
+Vite app.
+
+| Option                 | Type                              | Default    | Notes                                                                                                                                                                            |
+| ---------------------- | --------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `spawnAgent`           | `'inline' \| 'worktree' \| 'off'` | `'inline'` | When a comment is submitted, spawn a Claude Agent SDK run to address it. `'worktree'` isolates each run in its own git worktree; `'off'` records only (no spawn).               |
+| `apiKey`               | `string`                          | _unset_    | Explicit, opt-in agent API key, bridged to the runner as `PINAGENT_AGENT_API_KEY`. **Unset = subscription auth** — Pinagent never reads `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`. |
+| `dock`                 | `boolean`                         | `false`    | Mount the project-management dock surface alongside the widget.                                                                                                                 |
+| `worktreeServeCommand` | `string`                          | _inferred_ | Command for the dock's worktree "Open app" action (worktree mode). `{port}` is substituted; otherwise ` --port <port>` is appended. Nuxt apps usually want `nuxt dev`.          |
+
+**Not forwarded — `root`.** The vite-plugin `root` option is deliberately
+omitted from the Nuxt module and derived from `nuxt.options.rootDir` instead, so
+the plugin's Storage and WebSocket server resolve against the directory Nuxt is
+actually serving. There is no Nuxt-only option and no implicit env-var fallback
+for any of the above.
 
 ## How it fits
 
