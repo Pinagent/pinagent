@@ -217,4 +217,47 @@ describe('pinagentMiddleware', () => {
     expect(items).toHaveLength(1);
     expect(items[0]?.comment).toBe('rename this button to Banana');
   });
+
+  // ticket 011 — the `apiKey` option bridges to PINAGENT_AGENT_API_KEY exactly
+  // like vite-plugin's option. The middleware is Node code, so the bridge IS
+  // unit-testable (unlike the native side).
+  describe('apiKey → PINAGENT_AGENT_API_KEY bridge', () => {
+    let prevAgentKey: string | undefined;
+
+    beforeEach(() => {
+      prevAgentKey = process.env.PINAGENT_AGENT_API_KEY;
+      delete process.env.PINAGENT_AGENT_API_KEY;
+    });
+    afterEach(() => {
+      if (prevAgentKey === undefined) delete process.env.PINAGENT_AGENT_API_KEY;
+      else process.env.PINAGENT_AGENT_API_KEY = prevAgentKey;
+    });
+
+    it('sets PINAGENT_AGENT_API_KEY when apiKey is provided', () => {
+      pinagentMiddleware({ projectRoot: root, spawnMode: false, apiKey: 'sk-test-123' });
+      expect(process.env.PINAGENT_AGENT_API_KEY).toBe('sk-test-123');
+    });
+
+    it('leaves PINAGENT_AGENT_API_KEY untouched when apiKey is omitted', () => {
+      pinagentMiddleware({ projectRoot: root, spawnMode: false });
+      expect(process.env.PINAGENT_AGENT_API_KEY).toBeUndefined();
+    });
+
+    it('never reads ANTHROPIC_API_KEY / OPENAI_API_KEY implicitly', () => {
+      const prevAnthropic = process.env.ANTHROPIC_API_KEY;
+      const prevOpenai = process.env.OPENAI_API_KEY;
+      process.env.ANTHROPIC_API_KEY = 'sk-anthropic-should-not-leak';
+      process.env.OPENAI_API_KEY = 'sk-openai-should-not-leak';
+      try {
+        pinagentMiddleware({ projectRoot: root, spawnMode: false });
+        // No implicit pickup — the explicit option is the only key input.
+        expect(process.env.PINAGENT_AGENT_API_KEY).toBeUndefined();
+      } finally {
+        if (prevAnthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
+        else process.env.ANTHROPIC_API_KEY = prevAnthropic;
+        if (prevOpenai === undefined) delete process.env.OPENAI_API_KEY;
+        else process.env.OPENAI_API_KEY = prevOpenai;
+      }
+    });
+  });
 });

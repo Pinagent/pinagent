@@ -52,8 +52,7 @@ module.exports = {
 };
 ```
 
-`pinagentMiddleware` options: `projectRoot` (where `.pinagent/` lives) and
-`spawnMode` (`false` | `'inline'` | `'worktree'`, default `'inline'`).
+See [Configuration](#configuration) for the full option/prop/env surface.
 
 The middleware mounts `POST /__pinagent/feedback` **and** self-installs the
 `/__pinagent/ws` live-streaming socket on Metro's own port, so a spawned
@@ -75,6 +74,51 @@ it's redundant with the middleware install but harmless.
 agents, or pull comments into a Claude Code session over `@pinagent/mcp`.
 
 A complete, runnable Expo app is in [`example/`](./example).
+
+## Configuration
+
+### `pinagentMiddleware(opts)` — `metro.config.js`
+
+| Option | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `projectRoot` | `string` | — (required) | Where `.pinagent/` lives. Pass `__dirname`. |
+| `spawnMode` | `false \| 'inline' \| 'worktree'` | `'inline'` | Same semantics as the Vite/Next plugins. `false` files the comment only (pull mode); `'inline'` runs the agent in-process and streams it back; `'worktree'` runs it in an isolated git worktree. |
+| `apiKey` | `string` | — | Explicit API key for spawned agent runs. Bridged to the runner as `PINAGENT_AGENT_API_KEY`, exactly like the Vite plugin's `apiKey`. Omit to authenticate against your agentic subscription. |
+
+```js
+const { pinagentMiddleware } = require('@pinagent/react-native/server');
+
+module.exports = {
+  server: {
+    enhanceMiddleware: (metroMiddleware, server) =>
+      pinagentMiddleware({
+        projectRoot: __dirname,
+        spawnMode: 'inline',
+        apiKey: process.env.MY_PINAGENT_KEY, // optional
+      }).chain(metroMiddleware),
+  },
+};
+```
+
+### `<Pinagent />` props
+
+| Prop | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `projectRoot` | `string` | Metro-injected, else `''` | Makes `_debugSource` file paths project-relative (matching the web babel plugin). |
+| `screenName` | `string` | `Platform.OS` | Route/screen name recorded as the comment `url`. Restored pills are scoped to this value, so pass a stable per-screen name if you want per-screen restore. |
+
+### Environment variables
+
+| Var | Effect |
+| --- | --- |
+| `PINAGENT_AGENT_API_KEY` | The agent-run API key. Set it yourself, or let the `apiKey` middleware option set it. The `apiKey` option wins when both are present (it's applied on middleware construction). |
+| `PINAGENT_EDITOR` | Editor command the dev server uses for tap-to-open (e.g. `code -g`). Falls back to common editor CLIs / macOS apps. |
+
+**Pinagent never reads `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` implicitly.** The
+`apiKey` option (→ `PINAGENT_AGENT_API_KEY`) is the only key input; with neither
+set, runs fall back to your agentic subscription. RN has no dock, so there's no
+runtime Connections store to override the option/env — the option/env is the
+whole story.
 
 ## How a tap becomes `file:line`
 
