@@ -1,0 +1,24 @@
+{
+  "name": "vue-vite-example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm exec turbo run build --filter=@pinagent/vite-plugin",
+    "dev": "vite",
+    "predev:dogfood": "pnpm exec turbo run build --filter=@pinagent/vite-plugin --filter=@pinagent/mcp",
+    "dev:dogfood": "PINAGENT_SPAWN_AGENT=off vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@pinagent/ui": "workspace:*",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@pinagent/vite-plugin": "workspace:*",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14"
+  }
+}
