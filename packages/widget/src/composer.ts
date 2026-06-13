@@ -18,6 +18,7 @@ import type { Click, PickExtra, RegionRect, WidgetContext } from './context';
 import { getBrowserDb } from './db/client';
 import type { PendingRow } from './db/reads';
 import { deleteConversation } from './db/writes';
+import { clearFollowUpQueue } from './followup-outbox';
 import { pickNextActive } from './keyboard';
 import { componentOf, findLoc, findReanchorTarget, shortSelector } from './selector';
 import type { AgentState, Composer, QueuedNodeRef } from './types';
@@ -509,6 +510,9 @@ export function createComposerController(ctx: WidgetContext): {
         composer.cancelAutoClose();
         if (composer.feedbackId) {
           ctx.wsClient.unsubscribe(composer.feedbackId);
+          // Dismissal also drops the persisted follow-up outbox (ticket 004)
+          // — the user said "go away", so unsent queued follow-ups go too.
+          clearFollowUpQueue(localStorage, composer.feedbackId);
           const db = getBrowserDb();
           if (db) {
             void deleteConversation(db, composer.feedbackId).catch(() => {});

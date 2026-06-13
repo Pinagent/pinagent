@@ -512,6 +512,40 @@ export const COMPOSER_STYLES = `
   .err-line { color: ${STATUS.error.fg}; font-size: 12px; white-space: pre-wrap; }
   .footer-note { font-size: 11px; color: ${THEME.textMuted}; font-family: ${FONT_MONO}; }
 
+  /* Non-modal, one-time storage-degradation hint. Shown only when the
+     SQLite worker fell back to :memory: (no persistence) — typically a
+     second tab holding the OPFS storage lock. Quiet by design: a muted
+     strip above the follow-up box with a dismiss ×, never a toast. */
+  .storage-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 0 0 6px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: ${STATUS.awaitingClarification.bg};
+    border: 1px solid ${STATUS.awaitingClarification.border};
+  }
+  .storage-note-text {
+    flex: 1;
+    font-size: 11px;
+    line-height: 1.4;
+    color: ${STATUS.awaitingClarification.fg};
+  }
+  .storage-note-x {
+    flex: 0 0 auto;
+    border: 0;
+    background: transparent;
+    color: ${STATUS.awaitingClarification.fg};
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+    opacity: 0.7;
+  }
+  .storage-note-x:hover { opacity: 1; }
+  body.mini .storage-note { display: none; }
+
   /* Phase H — worktree lifecycle row. The text label on the left
      describes the current state; buttons on the right are the terminal
      actions. Default (working) uses the working palette; landed uses

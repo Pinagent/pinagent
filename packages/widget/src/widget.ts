@@ -4,7 +4,7 @@ import { createComposerController } from './composer';
 import { createWsClient, resolveDockEnabled, resolveHotkey } from './config';
 import { DOC_STYLES } from './constants';
 import type { State, WidgetContext } from './context';
-import { flushBrowserDb, initBrowserDb } from './db/client';
+import { flushBrowserDb, getDbBackend, initBrowserDb } from './db/client';
 import { listPendingForCurrentPage } from './db/reads';
 import { createFabTray } from './fab-tray';
 import { isHopKey, isMinimizeAllKey, shouldIgnoreHotkey } from './keyboard';
@@ -149,6 +149,15 @@ export function mount(): void {
     .then(async (db) => {
       // eslint-disable-next-line no-console
       console.log('[pinagent:db] browser cache ready');
+      // Quiet, discoverable signal when the worker fell back to a
+      // non-persistent (:memory:) store — usually because another tab of
+      // this app holds the OPFS storage lock. A dot on the FAB + a title
+      // hint; the composer footer carries the dismissible note. See
+      // ticket 005 / storage-degradation.ts.
+      if (getDbBackend() === 'memory') {
+        fab.classList.add('storage-degraded');
+        fabTray.applyFabPresentation();
+      }
       try {
         const pending = await listPendingForCurrentPage(db, window.location.href);
         for (const row of pending) {

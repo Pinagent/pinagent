@@ -185,6 +185,16 @@ export function createFabTray(ctx: WidgetContext): {
   // pin grows a count badge — and a pulse ring while any of them is still
   // working — so the developer can see at a glance that runs are live
   // behind the minimized pin, and a click re-expands the tray.
+  // Append the storage-degraded hint when the `storage-degraded` class is
+  // set (browser cache fell back to :memory:). renderPinContent rewrites
+  // `fab.title` on every call, so the suffix is re-applied each time rather
+  // than set once.
+  function withStorageHint(title: string): string {
+    return fab.classList.contains('storage-degraded')
+      ? `${title} · history won't survive reload in this tab (another tab may hold the storage lock)`
+      : title;
+  }
+
   function renderPinContent(hidden: TrayAgent[] = []) {
     fab.replaceChildren();
     fab.appendChild(buildPinIcon(26, BRAND_CREAM));
@@ -202,7 +212,7 @@ export function createFabTray(ctx: WidgetContext): {
         working > 0
           ? `${hidden.length} agent${hidden.length === 1 ? '' : 's'} running — click to expand`
           : `${hidden.length} agent${hidden.length === 1 ? '' : 's'} — click to expand`;
-      fab.title = label;
+      fab.title = withStorageHint(label);
       fab.setAttribute('aria-label', label);
       return;
     }
@@ -219,7 +229,7 @@ export function createFabTray(ctx: WidgetContext): {
       fab.appendChild(chip);
       title = `${title} · ${dockShortcut} opens the dock`;
     }
-    fab.title = title;
+    fab.title = withStorageHint(title);
   }
 
   // Open the conversation as a chat that isn't anchored to any page

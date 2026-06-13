@@ -134,6 +134,25 @@ export const STYLES = `
   100% { transform: scale(1.18); opacity: 0; }
 }
 
+/* Storage-degraded dot — the browser cache fell back to a non-persistent
+   :memory: store (typically another tab holds the OPFS lock). A small,
+   non-alarming amber dot on the pin; the full explanation lives on the
+   FAB title + the composer-footer note. Suppressed in tray mode, which
+   has its own surface. */
+.fab.storage-degraded:not(.tray)::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: ${STATUS.awaitingClarification.fg};
+  border: 2px solid ${THEME.base};
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
 /* ---- Running-agents tray ------------------------------------------------
    The same fixed element as the FAB (so drag + corner-snap are reused),
    re-skinned from a 48px circle into a panel when agents are running.

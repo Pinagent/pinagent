@@ -58,6 +58,14 @@ The widget keeps a per-page mirror of conversation state in SQLite-WASM via `@pi
 
 The schema lives in `@pinagent/db` and is shared with the server's `better-sqlite3` instance. The cache is rebuildable: a divergence from the server triggers a wipe + rehydrate, never a manual reconcile.
 
+### `:memory:` fallback (no persistence)
+
+The worker prefers the persistent OPFS **SAH Pool VFS** and silently falls back to an in-memory (`:memory:`) database when it can't install — most often because **a second tab of the same app already holds the storage lock** (only one worker can own the SAH handles), and otherwise in contexts without OPFS SAH (older Safari, some private windows). In that tab the cache works but is lost on reload.
+
+The worker reports which backend it landed on in its `init` ACK (`{ ok: true, backend: 'opfs' | 'memory' }`; a missing field is treated as `'opfs'` for backward compatibility). The widget surfaces a degraded tab quietly — an amber dot + title hint on the FAB, plus a one-time dismissible note in the composer footer — without blocking anything. Cross-tab lock handoff is intentionally out of scope; the mirror is rebuildable from the server.
+
+For the full offline-first host-integration contract, see [`docs/architecture/offline-first.md`](../../docs/architecture/offline-first.md).
+
 ## Build
 
 ```bash

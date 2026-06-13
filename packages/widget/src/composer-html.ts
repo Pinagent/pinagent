@@ -83,6 +83,10 @@ export function composerHTML(meta: ComposerMeta): string {
         </div>
       </div>
       <div class="log" id="pa-stream-log"></div>
+      <div class="storage-note" id="pa-storage-note" hidden>
+        <span class="storage-note-text">History won't survive reload in this tab (another tab may hold the storage lock).</span>
+        <button class="storage-note-x" id="pa-storage-note-x" type="button" title="Dismiss" aria-label="Dismiss storage notice">×</button>
+      </div>
       <div class="follow">
         <textarea id="pa-follow-input" rows="2" placeholder="Working…" disabled></textarea>
         <button class="btn primary" id="pa-follow-send" type="button" disabled>Send</button>

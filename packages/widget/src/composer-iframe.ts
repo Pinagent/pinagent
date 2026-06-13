@@ -3,7 +3,7 @@ import { resolveDockEnabled } from './config';
 import { ENDPOINT, MINI_H, STREAM_H } from './constants';
 import type { Click, WidgetContext } from './context';
 import { computeUnionCropRect } from './crop';
-import { getBrowserDb } from './db/client';
+import { getBrowserDb, getDbBackend } from './db/client';
 import { getConversationMessages } from './db/reads';
 import { recordConversationStart } from './db/writes';
 import { toggleDock } from './dock-bridge';
@@ -11,6 +11,7 @@ import { isHopKey, isMinimizeAllKey, shouldIgnoreHotkey } from './keyboard';
 import { attachMentionMenu } from './mention-menu';
 import { capturePageScreenshot } from './screenshot';
 import type { PaLoc } from './selector';
+import { dismissStorageNote, shouldShowStorageNote } from './storage-degradation';
 import { attachStreamHandler } from './stream-handler';
 import type { AgentState, Composer, LifecycleEls, ReplayMessage } from './types';
 
@@ -152,6 +153,24 @@ export function wireComposerIframe(args: WireComposerArgs): void {
     landBtn,
     discardBtn,
   };
+
+  // Surface the one-time `:memory:` storage-degradation note in the stream
+  // pane footer (ticket 005). Only when the worker reported it fell back to
+  // non-persistent storage (typically: another tab holds the OPFS lock) and
+  // the developer hasn't dismissed it. Called once the stream pane is live
+  // — from both the restored and the fresh-submit paths.
+  function maybeShowStorageNote() {
+    if (!shouldShowStorageNote(getDbBackend(), localStorage)) return;
+    const note = idoc?.getElementById('pa-storage-note');
+    const noteX = idoc?.getElementById('pa-storage-note-x');
+    if (!note) return;
+    note.hidden = false;
+    noteX?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      note.hidden = true;
+      dismissStorageNote(localStorage);
+    });
+  }
 
   // Minimize ⇄ Expand toggle. Expanding routes through swapTo so any
   // other full composer collapses to its own mini card first (only
@@ -372,6 +391,7 @@ export function wireComposerIframe(args: WireComposerArgs): void {
         lifecycle,
         replayed,
       );
+      maybeShowStorageNote();
     })();
     return;
   }
@@ -586,6 +606,7 @@ export function wireComposerIframe(args: WireComposerArgs): void {
           followSend,
           lifecycle,
         );
+        maybeShowStorageNote();
         // Auto-minimize on submit: the agent works in the background
         // as a mini progress card anchored to the element, instead
         // of the full stream popover taking over the screen.

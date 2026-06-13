@@ -7,6 +7,7 @@ import {
   recordEvent,
   recordUserMessage,
 } from './db/writes';
+import { clearFollowUpQueue, loadFollowUpQueue, saveFollowUpQueue } from './followup-outbox';
 import { attachMentionMenu } from './mention-menu';
 import type {
   AgentEvent,
@@ -329,6 +330,16 @@ export function attachStreamHandler(
   // The item the optimistic send put on the wire, kept so a "turn already
   // in progress" race can re-queue it rather than drop it.
   let lastSent: QueuedFollowUp | null = null;
+
+  // localStorage outbox (ticket 004). `composer.followUpQueue` survives WS
+  // reconnects but not a page reload, so we mirror it to localStorage on
+  // every mutation (enqueue / flush / re-queue race) and rehydrate it on
+  // restore below. The persisted copy is always exactly the current
+  // in-memory queue — so the in-flight re-queue race can't duplicate an
+  // entry (we re-write the whole queue, never append blindly).
+  function persistQueue() {
+    saveFollowUpQueue(localStorage, feedbackId, composer.followUpQueue);
+  }
   // An element the user picked (via "Add another element") while the agent
   // was idle — attached to the draft so they can describe the change before
   // sending, rather than auto-firing a bare "Also look at this…" turn.
@@ -421,6 +432,10 @@ export function attachStreamHandler(
     if (turnRunning || pendingAskId) return;
     const next = composer.followUpQueue.shift();
     if (!next) return;
+    // The shifted item is now on the wire (promoted to pending); shrink the
+    // persisted outbox to match. If the send loses the in-flight race it's
+    // re-queued in onError, which re-persists.
+    persistQueue();
     const pendingNode = queuedNodes.shift() ?? null;
     sendFollowUp(next, pendingNode);
   }
@@ -431,6 +446,7 @@ export function attachStreamHandler(
     const item: QueuedFollowUp = node ? { content, node } : { content };
     if (turnRunning || pendingAskId) {
       composer.followUpQueue.push(item);
+      persistQueue();
       queuedNodes.push(renderQueued(item));
       composer.cancelAutoClose();
     } else {
@@ -601,7 +617,9 @@ export function attachStreamHandler(
         if (!pendingAskId) setFollowEnabled(true);
         // Terminal: stop the conversation from restoring on next
         // reload. The transcript stays in the cache (it's still
-        // useful for review) — only the status flips.
+        // useful for review) — only the status flips. Any unsent
+        // follow-ups are abandoned with the conversation.
+        clearFollowUpQueue(localStorage, feedbackId);
         const db = getBrowserDb();
         if (db) {
           void markConversationResolved(db, feedbackId, 'wontfix').catch(() => {});
@@ -616,6 +634,8 @@ export function attachStreamHandler(
         activeToolGroup = null;
         const status = String(event.status ?? '');
         if (status === 'fixed' || status === 'wontfix' || status === 'deferred') {
+          // Server resolved the conversation — abandon any unsent follow-ups.
+          clearFollowUpQueue(localStorage, feedbackId);
           const db = getBrowserDb();
           if (db) {
             const resolvedRaw = event.resolvedAt;
@@ -707,6 +727,28 @@ export function attachStreamHandler(
       setStatus('(no transcript saved)');
       setFollowEnabled(true);
       setAgentState('done');
+    }
+  }
+
+  // Restore the persisted follow-up queue (ticket 004). Only on a restored
+  // attach (page reload) — the fresh-submit path has no persisted queue yet,
+  // and a WS reconnect re-uses the same handler (no re-attach), so the
+  // in-memory `composer.followUpQueue` is the live copy there. We hydrate
+  // only when the in-memory queue is empty (always true on a page-load
+  // attach: it's a fresh Composer) so we never double-count an entry that's
+  // simultaneously in memory and persisted.
+  if (replayed !== undefined && composer.followUpQueue.length === 0) {
+    const persisted = loadFollowUpQueue(localStorage, feedbackId);
+    for (const item of persisted) {
+      composer.followUpQueue.push(item);
+      queuedNodes.push(renderQueued(item));
+    }
+    if (persisted.length > 0) {
+      // A restored conversation with sent-but-unflushed follow-ups isn't
+      // "done" — keep it from auto-closing and let the next turn-end (or
+      // an immediate idle restore) drain the queue.
+      composer.cancelAutoClose();
+      if (!turnRunning && !pendingAskId) flushQueue();
     }
   }
 
@@ -907,6 +949,10 @@ export function attachStreamHandler(
       // its rendered bubble was already promoted, so it re-renders fresh.)
       if (lastSent && /turn (is )?already in progress/i.test(message)) {
         composer.followUpQueue.unshift(lastSent);
+        // Re-mirror: flushQueue shrank the persisted copy when it sent this
+        // item; the re-queue puts it back, so the outbox round-trips intact
+        // across a reload that happens before the active turn drains it.
+        persistQueue();
         lastSent = null;
         return;
       }
