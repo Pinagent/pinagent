@@ -13,14 +13,14 @@
     "@pinagent/widget": "workspace:*",
     "@tailwindcss/postcss": "^4.0.0",
     "next": "^16.0.0",
-    "react": "^19.2.6",
+    "react": "^19.2.7",
     "react-dom": "^19.2.6",
     "tailwindcss": "^4.0.0"
   },
   "devDependencies": {
     "@pinagent/next-plugin": "workspace:*",
     "@types/node": "^25.9.1",
-    "@types/react": "^19.2.15",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "typescript": "^6.0.3"
   }
