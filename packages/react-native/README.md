@@ -85,11 +85,23 @@ the RN analog of web's build-time `data-pa-loc`. `src/native/inspector.ts`
 wraps it and degrades to `loc: null` (rather than throwing) across RN
 version differences.
 
+## Multi-select
+
+Tap **+ Add element** in the composer to add more targets to the same comment:
+the composer steps aside, you tap another element, and it returns as a
+removable chip. On submit, the extra targets ride along in `additionalAnchors`
+(the same wire shape the web widget sends), landing in the
+`widget_anchors.additional_anchors` column and reaching the agent as
+`additionalTargets` — so a single comment like "make all these buttons match"
+addresses every picked element. A single pick leaves `additional_anchors` null
+(web parity). The screenshot is captured once, at the first pick.
+
 ## Scope / known cuts
 
-- Single-pick only (`additionalAnchors` left empty — schema-compatible).
 - No Fast-Refresh pin re-anchoring; `selector` carries the component name
   chain (RN has no CSS selectors).
+- Breadcrumb re-anchoring applies to the primary pick only; extras keep the
+  location they were tapped with (web behaves the same).
 
 Live agent streaming is wired automatically by `pinagentMiddleware`.
 

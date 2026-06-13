@@ -105,6 +105,49 @@ describe('pinagentMiddleware', () => {
     expect(rec?.file).toBe('src/HomeScreen.tsx');
     expect(rec?.line).toBe(42);
     expect(rec?.status).toBe('pending');
+    // Single pick → additional_anchors stays null (web parity, ticket 008).
+    expect(rec?.additionalAnchors).toBeNull();
+  });
+
+  it('persists multi-picked additionalAnchors through the real Storage (ticket 008)', async () => {
+    const mw = pinagentMiddleware({ projectRoot: root, spawnMode: false });
+    const body = JSON.stringify(
+      validFeedback({
+        additionalAnchors: [
+          {
+            file: 'src/Card.tsx',
+            line: 12,
+            col: 3,
+            selector: 'App > Home > Card > Button',
+            clickX: 50,
+            clickY: 120,
+          },
+          {
+            file: 'src/Card.tsx',
+            line: 30,
+            col: 5,
+            selector: 'App > Home > Card > Link',
+            clickX: 80,
+            clickY: 200,
+          },
+        ],
+      }),
+    );
+    const { res, done, parse } = mockRes();
+    mw(mockReq('POST', '/__pinagent/feedback', body), res, () => {});
+    await done;
+
+    expect(res.statusCode).toBe(200);
+    const out = parse() as { id: string };
+    const rec = await new Storage(root).read(out.id);
+    expect(rec?.additionalAnchors).toHaveLength(2);
+    expect(rec?.additionalAnchors?.map((a) => a.line)).toEqual([12, 30]);
+    expect(rec?.additionalAnchors?.[0]).toMatchObject({
+      file: 'src/Card.tsx',
+      selector: 'App > Home > Card > Button',
+      clickX: 50,
+      clickY: 120,
+    });
   });
 
   it('rejects an invalid body with 400', async () => {
