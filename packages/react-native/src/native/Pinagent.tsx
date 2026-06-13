@@ -22,7 +22,8 @@
  * and (optionally) spawns an agent. When an agent is spawned, a live
  * transcript sheet streams the run back over WebSocket (see StreamSheet /
  * ws-client); otherwise a toast confirms the comment was filed for pull-mode
- * (MCP) pickup. Single-pick only.
+ * (MCP) pickup. "+ Add element" multi-picks several targets into one comment
+ * (sent as `additionalAnchors`); a single pick leaves them null.
  *
  * The transcript sheet can be minimized to a pill, freeing the screen to pick
  * another element and spawn a second agent. Each run keeps its own live sheet,
@@ -43,9 +44,12 @@ import {
   View,
 } from 'react-native';
 import { resolvePick } from './inspector';
+import { buildAdditionalAnchors, type ChipPick, removeChip } from './multi-pick';
+import { restorePills } from './restore';
 import { StreamSheet } from './StreamSheet';
 import { captureScreenshot } from './screenshot';
-import { openInEditor, platformTag, submitFeedback } from './transport';
+import { submitOutcome } from './submit-outcome';
+import { fetchFeedbackList, openInEditor, platformTag, submitFeedback } from './transport';
 import type { PickResult } from './types';
 
 export interface PinagentProps {
@@ -120,10 +124,24 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
   // moves outward when the user presses an ancestor crumb to re-focus.
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [shot, setShot] = useState<string | null>(null);
+  // Extra elements multi-picked into the SAME comment via "+ Add element"
+  // (ticket 008). The primary stays in `pick`; these are the 2nd…Nth taps,
+  // rendered as removable chips and sent as `additionalAnchors`. The screenshot
+  // (`shot`) is captured once at the first pick — extras don't re-capture.
+  const [extraPicks, setExtraPicks] = useState<ChipPick[]>([]);
+  // Counter for stable chip keys (pick order is preserved on the wire).
+  const pickSeq = useRef(0);
+  // True while picking was entered from the composer's "+ Add element" (so the
+  // next tap APPENDS an extra instead of starting a fresh primary pick).
+  const addingExtra = useRef(false);
   const [comment, setComment] = useState('');
   const [toast, setToast] = useState<string | null>(null);
   // Transient note under the file:line link (e.g. "No editor found").
   const [openNote, setOpenNote] = useState<string | null>(null);
+  // Inline submit error, shown in the composer when a POST fails. The draft
+  // (comment/pick/shot) is retained so the user can fix the cause and Retry,
+  // instead of losing everything to a vanishing toast (ticket 002).
+  const [submitError, setSubmitError] = useState<string | null>(null);
   // Live agent runs. Each spawned agent gets a StreamSheet; one can be expanded
   // (full sheet) while the rest sit as minimized pills that keep streaming in
   // the background — so you can minimize a run, interact with the app, and
@@ -132,10 +150,45 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
   const [streams, setStreams] = useState<{ id: string; target: string }[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // The surface this widget is mounted on — the same value we record as the
+  // comment `url` (web sends the page URL). Used to scope restored pills to
+  // this screen, mirroring the web widget's per-page restore.
+  const surfaceUrl = screenName ?? Platform.OS;
+
   const closeStream = useCallback((id: string) => {
     setStreams((prev) => prev.filter((s) => s.id !== id));
     setExpandedId((cur) => (cur === id ? null : cur));
   }, []);
+
+  // Restore minimized pills after an app reload (Fast Refresh, shake-reload,
+  // restart). The dev server (.pinagent/db.sqlite) is the source of truth — RN
+  // keeps no device-local store — so on mount we fetch the conversation list,
+  // filter it to this surface's still-pending runs (newest 5), and seed
+  // `streams` as MINIMIZED pills. Each restored StreamSheet then subscribes
+  // over WS, which replays the transcript (and fires `done` for finished runs,
+  // landing the sheet in its normal done state). Skips silently when the dev
+  // server is unreachable (fetchFeedbackList returns []). Runs once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const items = await fetchFeedbackList();
+      if (cancelled) return;
+      const pills = restorePills(items, surfaceUrl);
+      if (pills.length === 0) return;
+      // Don't clobber any pill spawned between mount and this async resolve;
+      // de-dupe by id and keep everything minimized (expandedId stays null).
+      setStreams((prev) => {
+        const have = new Set(prev.map((s) => s.id));
+        const added = pills.filter((p) => !have.has(p.id));
+        return added.length ? [...prev, ...added] : prev;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Restore once per surface; we deliberately don't re-run on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surfaceUrl]);
 
   const onPickTap = useCallback(
     async (x: number, y: number) => {
@@ -154,15 +207,62 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
       // Pass our overlay's host instance (not a findNodeHandle tag): the
       // inspector climbs from it to the app root to hit-test there.
       const picked = await resolvePick(rootRef.current, x, y, projectRoot);
+
+      // "+ Add element" re-pick: APPEND an extra target to the same comment —
+      // no re-capture (one screenshot per feedback, web parity), no touching
+      // the primary pick or its breadcrumb. The extra keeps the loc it was
+      // tapped with; only the primary re-anchors via the breadcrumb.
+      if (addingExtra.current) {
+        addingExtra.current = false;
+        const label = picked.chain.at(-1)?.name ?? picked.nameChain.at(-1) ?? 'component';
+        const chip: ChipPick = {
+          key: `x${pickSeq.current++}`,
+          loc: picked.loc,
+          selector: picked.nameChain.join(' > '),
+          clickX: x,
+          clickY: y,
+          label,
+        };
+        setExtraPicks((prev) => [...prev, chip]);
+        setPhase('composing');
+        return;
+      }
+
+      // Fresh primary pick → fresh comment: capture the screenshot, reset the
+      // extras and any stale submit error.
       setShot(await captureScreenshot());
       setPick(picked);
       // Anchor to the innermost (tapped) component by default.
       setSelectedIndex(Math.max(0, picked.chain.length - 1));
+      setExtraPicks([]);
       setOpenNote(null);
+      setSubmitError(null);
       setPhase('composing');
     },
     [projectRoot],
   );
+
+  // "+ Add element": re-enter picking from the composer, keeping the current
+  // comment + primary pick. The composer Modal hides while picking (phase !==
+  // 'composing'), so the user can tap another element; `addingExtra` routes the
+  // resulting tap to append a chip rather than start over.
+  const onAddElement = useCallback(() => {
+    addingExtra.current = true;
+    setOpenNote(null);
+    setPhase('picking');
+  }, []);
+
+  const onRemoveExtra = useCallback((key: string) => {
+    setExtraPicks((prev) => removeChip(prev, key));
+  }, []);
+
+  // Dismiss the composer and drop the whole draft (comment + extras + error).
+  // Used by Cancel and the modal's hardware-back close.
+  const onDismissComposer = useCallback(() => {
+    setExtraPicks([]);
+    setSubmitError(null);
+    setPhase('idle');
+  }, []);
 
   // The source location the comment is currently anchored to: the precise
   // tapped element while the innermost crumb is selected, otherwise the
@@ -190,6 +290,13 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
     return pick.frame ?? null;
   }, [pick, selectedIndex]);
 
+  // Label for the primary target chip: the anchored file:line if resolved, else
+  // the selected component name (mirrors the composer title).
+  const primaryChipLabel = useMemo(() => {
+    if (activeLoc) return `${activeLoc.file}:${activeLoc.line}`;
+    return pick?.chain[selectedIndex]?.name ?? pick?.nameChain.at(-1) ?? 'component';
+  }, [activeLoc, pick, selectedIndex]);
+
   const crumbs = pick?.chain ?? [];
 
   const onCrumbPress = useCallback((index: number) => {
@@ -211,6 +318,7 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
     const target = activeLoc
       ? `${activeLoc.file}:${activeLoc.line}`
       : (pick?.chain[selectedIndex]?.name ?? pick?.nameChain.at(-1) ?? 'component');
+    setSubmitError(null);
     setPhase('sending');
     const result = await submitFeedback({
       comment: comment.trim(),
@@ -220,29 +328,49 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
       // selectors). Gives the agent a readable hint and satisfies the
       // schema's required `selector` field.
       selector: pick?.nameChain.join(' > ') ?? '',
-      url: screenName ?? Platform.OS,
+      url: surfaceUrl,
       viewport: { w: Math.round(width), h: Math.round(height) },
       userAgent: platformTag(),
       screenshot: shot ?? '',
       createdAt: new Date().toISOString(),
+      // Multi-picked extras (ticket 008). Omitted entirely for a single pick,
+      // so the server keeps `additional_anchors` null — web parity.
+      additionalAnchors: buildAdditionalAnchors(extraPicks),
     });
+
+    const outcome = submitOutcome(result);
+
+    // Failed POST (Metro restart, network blip, release build): KEEP the draft
+    // — comment, picked anchor, and screenshot — reopen the composer, and show
+    // the reason inline with a Retry. We never destroy composer state on a
+    // failed submit (ticket 002).
+    if (outcome.composer === 'keep') {
+      setSubmitError(outcome.error);
+      setPhase('composing');
+      return;
+    }
+
+    // Success: clear the composer (including any multi-picked extras).
     setComment('');
     setPick(null);
     setShot(null);
+    setExtraPicks([]);
     setPhase('idle');
 
     // Agent spawned → stream the run live and expand its sheet (any previously
-    // expanded run drops to a minimized pill). Otherwise (spawn off, or POST
-    // failed) fall back to a transient toast; pull mode (MCP) picks it up.
-    if (result.ok && result.agentSpawned && result.id) {
-      const id = result.id;
+    // expanded run drops to a minimized pill). Otherwise (spawn off) fall back
+    // to a transient toast; pull mode (MCP) picks it up.
+    if (outcome.streamId) {
+      const id = outcome.streamId;
       setStreams((prev) => (prev.some((s) => s.id === id) ? prev : [...prev, { id, target }]));
       setExpandedId(id);
       return;
     }
-    setToast(result.ok ? 'Sent' : `Failed: ${result.error ?? 'unknown'}`);
-    setTimeout(() => setToast(null), 2500);
-  }, [comment, pick, selectedIndex, activeLoc, shot, screenName, width, height]);
+    if (outcome.toast) {
+      setToast(outcome.toast);
+      setTimeout(() => setToast(null), 2500);
+    }
+  }, [comment, pick, selectedIndex, activeLoc, shot, extraPicks, surfaceUrl, width, height]);
 
   return (
     // collapsable={false} keeps this View in the native tree so its ref
@@ -297,7 +425,7 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
         visible={phase === 'composing'}
         transparent
         animationType="slide"
-        onRequestClose={() => setPhase('idle')}
+        onRequestClose={onDismissComposer}
       >
         {/* Pad the docked composer up by the live keyboard height so the
             input and actions clear the soft keyboard (see useKeyboardHeight
@@ -349,6 +477,36 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
                 {pick.nameChain.join(' › ')}
               </Text>
             ) : null}
+            {/* Target chips + "+ Add element" (ticket 008). The primary chip
+                (non-removable) reflects the breadcrumb-selected anchor; each
+                extra is a removable chip. Tapping "+ Add element" hides the
+                composer, re-enters picking, and appends the next tap as an
+                extra carried in `additionalAnchors`. */}
+            <View style={styles.chipRow}>
+              <View style={[styles.chip, styles.chipPrimary]}>
+                <Text style={styles.chipPrimaryText} numberOfLines={1}>
+                  {primaryChipLabel}
+                </Text>
+              </View>
+              {extraPicks.map((ex) => (
+                <View key={ex.key} style={styles.chip}>
+                  <Text style={styles.chipText} numberOfLines={1}>
+                    {ex.label}
+                  </Text>
+                  <Pressable
+                    onPress={() => onRemoveExtra(ex.key)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${ex.label}`}
+                  >
+                    <Text style={styles.chipRemove}>×</Text>
+                  </Pressable>
+                </View>
+              ))}
+              <Pressable onPress={onAddElement} style={styles.addChip} accessibilityRole="button">
+                <Text style={styles.addChipText}>+ Add element</Text>
+              </Pressable>
+            </View>
             <TextInput
               autoFocus
               multiline
@@ -358,8 +516,12 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
               placeholderTextColor="#9aa0a6"
               style={styles.input}
             />
+            {/* Inline submit error. The draft (comment/pick/shot) is retained
+                under it, so the primary button becomes Retry — no re-pick, no
+                re-capture, no lost typing (ticket 002). */}
+            {submitError ? <Text style={styles.submitError}>{submitError}</Text> : null}
             <View style={styles.composerActions}>
-              <Pressable onPress={() => setPhase('idle')} style={styles.btnGhost}>
+              <Pressable onPress={onDismissComposer} style={styles.btnGhost}>
                 <Text style={styles.btnGhostText}>Cancel</Text>
               </Pressable>
               <Pressable
@@ -367,7 +529,7 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
                 disabled={!comment.trim()}
                 style={[styles.btnPrimary, !comment.trim() && styles.btnDisabled]}
               >
-                <Text style={styles.btnPrimaryText}>Send</Text>
+                <Text style={styles.btnPrimaryText}>{submitError ? 'Retry' : 'Send'}</Text>
               </Pressable>
             </View>
           </View>
@@ -379,7 +541,13 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
           screenshot. */}
       {phase !== 'capturing' && (
         <Pressable
-          onPress={() => setPhase((p) => (p === 'picking' ? 'idle' : 'picking'))}
+          onPress={() =>
+            setPhase((p) => {
+              // Cancelling a pick also drops a pending "+ Add element" intent.
+              if (p === 'picking') addingExtra.current = false;
+              return p === 'picking' ? 'idle' : 'picking';
+            })
+          }
           style={[styles.fab, phase === 'picking' && styles.fabActive]}
         >
           <Text style={styles.fabText}>{phase === 'sending' ? '…' : '💬'}</Text>
@@ -452,11 +620,36 @@ const styles = StyleSheet.create({
   composerTitle: { fontSize: 14, fontWeight: '600', color: '#111827' },
   composerTitleLink: { color: '#2563eb', textDecorationLine: 'underline' },
   openNote: { fontSize: 11, color: '#9aa0a6', marginTop: 2 },
+  submitError: { fontSize: 12, color: '#dc2626', marginTop: 2 },
   breadcrumbRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 2 },
   breadcrumbItem: { flexDirection: 'row', alignItems: 'center' },
   breadcrumbSep: { fontSize: 12, color: '#c4c7cc', paddingHorizontal: 4 },
   breadcrumb: { fontSize: 12, color: '#6b7280' },
   breadcrumbSelected: { color: '#2563eb', fontWeight: '600' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 4 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    maxWidth: '100%',
+  },
+  chipPrimary: { backgroundColor: '#dbeafe' },
+  chipText: { fontSize: 12, color: '#374151', flexShrink: 1 },
+  chipPrimaryText: { fontSize: 12, color: '#1d4ed8', fontWeight: '600', flexShrink: 1 },
+  chipRemove: { fontSize: 15, color: '#6b7280', lineHeight: 15 },
+  addChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+    borderStyle: 'dashed',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  addChipText: { fontSize: 12, color: '#2563eb', fontWeight: '600' },
   input: {
     minHeight: 80,
     borderWidth: 1,

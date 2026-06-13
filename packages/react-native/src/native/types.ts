@@ -33,6 +33,31 @@ export interface FeedbackInput {
   screenshot: string;
   /** ISO timestamp. */
   createdAt: string;
+  /**
+   * Extra elements the developer multi-picked into the SAME comment (the
+   * 2nd…Nth taps). Optional — omitted entirely for a single pick, exactly
+   * like the web widget (the server stores `additional_anchors` as null
+   * unless this is a non-empty array). The agent receives them as
+   * `additionalTargets` and addresses every location. Same per-anchor shape
+   * the web sends in `FeedbackInputSchema.additionalAnchors`
+   * (`packages/agent-runner/src/storage.ts`).
+   */
+  additionalAnchors?: AdditionalAnchor[];
+}
+
+/**
+ * One extra (non-primary) pick. Matches the web `AdditionalAnchorSchema`
+ * exactly so the server accepts it unchanged: `clickX`/`clickY` are required
+ * integers (the tap point in window coordinates); `component` is optional.
+ */
+export interface AdditionalAnchor {
+  file: string | null;
+  line: number | null;
+  col: number | null;
+  selector: string;
+  clickX: number;
+  clickY: number;
+  component?: string | null;
 }
 
 /** One segment of the component breadcrumb. */

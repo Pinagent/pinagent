@@ -49,6 +49,26 @@ export interface PinagentMiddlewareOpts {
    * `'inline'`.
    */
   spawnMode?: SpawnAgentMode;
+  /**
+   * Optional explicit API key for spawned agent runs, same semantics as the
+   * Vite plugin's `apiKey`.
+   *
+   * Pinagent never reads `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` from the
+   * environment on its own — a key exported in your shell for other tools must
+   * not get billed (or, if stale, fail the run with "Invalid API key") just
+   * because pinagent happened to inherit it. When you leave this unset, runs
+   * authenticate against your agentic subscription (Claude Code, or Codex's
+   * ChatGPT login when using the CLI provider).
+   *
+   * Set it only when you deliberately want a raw key used, e.g.
+   * `pinagentMiddleware({ projectRoot: __dirname, apiKey: process.env.MY_KEY })`.
+   * For the default Claude provider it's passed as the Anthropic key; for the
+   * bring-your-own CLI provider it's supplied to the wrapped CLI as both
+   * `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`. Bridged to the runner via the
+   * `PINAGENT_AGENT_API_KEY` env var (RN has no dock, so the option/env is the
+   * whole story — there's no runtime Connections store to take precedence).
+   */
+  apiKey?: string;
 }
 
 export interface PinagentMiddleware {
@@ -67,6 +87,15 @@ export function pinagentMiddleware(opts: PinagentMiddlewareOpts): PinagentMiddle
   // project dir, but don't rely on it.
   if (!process.env.PINAGENT_PROJECT_ROOT) {
     process.env.PINAGENT_PROJECT_ROOT = opts.projectRoot;
+  }
+
+  // Bridge an explicitly-configured agent API key to the runner — identical to
+  // vite-plugin (`packages/vite-plugin/src/index.ts`). Pinagent only ever uses
+  // a key handed to it on purpose; absent this (and any env the user set), runs
+  // fall back to subscription auth. The authority is agent-auth.ts in
+  // @pinagent/agent-runner. No-op when the consumer omits it.
+  if (opts.apiKey) {
+    process.env.PINAGENT_AGENT_API_KEY = opts.apiKey;
   }
 
   const handler = (async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
