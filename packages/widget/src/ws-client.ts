@@ -37,8 +37,16 @@ export class WidgetWsClient {
    * port and connecting to a different project's dev-server that happens
    * to hold it. Feedback capture (HTTP POST) still works; only live
    * streaming is unavailable, which is correct when no agent runs here.
+   *
+   * `createSocket` is an injectable WebSocket factory — the smallest seam
+   * the lifecycle tests need to drive open/close/message deterministically
+   * (ticket 006). Defaults to the global `WebSocket`; production never
+   * passes it.
    */
-  constructor(private readonly url: string | null) {}
+  constructor(
+    private readonly url: string | null,
+    private readonly createSocket: (url: string) => WebSocket = (u) => new WebSocket(u),
+  ) {}
 
   subscribe(feedbackId: string, handler: FeedbackHandler): void {
     this.handlers.set(feedbackId, handler);
@@ -119,7 +127,7 @@ export class WidgetWsClient {
       this.reconnectTimer = null;
     }
     try {
-      this.socket = new WebSocket(this.url);
+      this.socket = this.createSocket(this.url);
     } catch {
       this.scheduleReconnect();
       return;
