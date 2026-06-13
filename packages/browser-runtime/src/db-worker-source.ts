@@ -24,9 +24,15 @@
  *
  *   worker → client
  *     { type: 'ready' }                              // sent once at startup
- *     { id, ok: true }                               // init / exec with no rows
+ *     { id, ok: true, backend: 'opfs' | 'memory' }   // init (backend reports
+ *                                                    //   whether persistence
+ *                                                    //   survives reload)
+ *     { id, ok: true }                               // exec with no rows
  *     { id, ok: true, rows: any[][] }                // exec with results
  *     { id, ok: false, error: string }               // any failure
+ *
+ * The `backend` field on the init ACK is additive: an older worker omits it,
+ * and the client treats a missing value as `'opfs'` (assume persistent).
  */
 export const DB_WORKER_SOURCE = `
 // Filter sqlite-wasm's internal logging. Two streams of noise we
@@ -72,6 +78,11 @@ export const DB_WORKER_SOURCE = `
 import sqlite3InitModule from '/__pinagent/sqlite-wasm/sqlite3-bundler-friendly.mjs';
 
 let db = null;
+// Which storage the open landed on: 'opfs' (persists across reload) or
+// 'memory' (lost on reload — SAH unavailable, or another tab holds the
+// lock). Reported back on the init ACK so the widget can surface a quiet
+// degradation hint.
+let backend = 'opfs';
 
 async function init(args) {
   const sqlite3 = await sqlite3InitModule({
@@ -88,8 +99,10 @@ async function init(args) {
       initialCapacity: 4,
     });
     db = new pool.OpfsSAHPoolDb(args && args.dbName ? args.dbName : 'pinagent.sqlite');
+    backend = 'opfs';
     console.log('[pinagent:sqlite-worker] backend: OPFS SAH Pool (persistent)');
   } catch (err) {
+    backend = 'memory';
     console.warn('[pinagent:sqlite-worker] backend: :memory: (no persistence) — SAH install failed:', err);
     db = new sqlite3.oo1.DB(':memory:');
   }
@@ -100,7 +113,7 @@ self.addEventListener('message', async (e) => {
   try {
     if (type === 'init') {
       await init(args);
-      self.postMessage({ id, ok: true });
+      self.postMessage({ id, ok: true, backend });
       return;
     }
     if (type === 'exec') {

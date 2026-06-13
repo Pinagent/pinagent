@@ -31,9 +31,12 @@ import { pruneOldConversations } from './writes';
  *   the server.
  *
  * Persistence: opfs:pinagent.sqlite via the bundler-friendly Worker.
- * If OPFS isn't available (Firefox in some configurations, Safari pre-17),
- * we fall back to `:memory:` — the cache is lost on reload but the UI
- * keeps working.
+ * If OPFS SAH isn't available (Firefox in some configurations, Safari
+ * pre-17) — or, more commonly, a second tab of the same app already holds
+ * the storage lock — we fall back to `:memory:`: the cache is lost on
+ * reload but the UI keeps working. The worker reports the backend it landed
+ * on in the `init` ACK; `getDbBackend()` exposes it so the widget can show
+ * a quiet degradation hint (see storage-degradation.ts).
  *
  * Source-of-truth is still the server. Browser cache is a mirror —
  * see v2 plan §4.2.
@@ -41,8 +44,34 @@ import { pruneOldConversations } from './writes';
 
 export type BrowserDb = SqliteRemoteDatabase<typeof schema>;
 
+/**
+ * Which storage the worker landed on:
+ *  - `'opfs'` — persistent (survives reload).
+ *  - `'memory'` — non-persistent; the SAH Pool VFS couldn't install,
+ *    typically because OPFS SAH is unavailable (older Safari, private
+ *    windows) or — the common case — another tab of the same app already
+ *    holds the single-writer storage lock.
+ */
+export type DbBackend = 'opfs' | 'memory';
+
+/**
+ * Normalise the worker's `init` ACK into a backend tag. The `backend`
+ * field is additive (added alongside this widget change): an older worker
+ * — which a stale plugin dist can briefly serve next to a newer client —
+ * omits it, so a missing/unknown value is treated as `'opfs'` (assume
+ * persistent, the optimistic no-op). Exported for the protocol-seam test;
+ * the real OPFS/SAH path can't run under vitest.
+ */
+export function normalizeBackend(ack: { backend?: unknown } | null | undefined): DbBackend {
+  return ack && ack.backend === 'memory' ? 'memory' : 'opfs';
+}
+
 let dbInstance: BrowserDb | null = null;
 let initPromise: Promise<BrowserDb> | null = null;
+// Resolved storage backend, learned from the worker's `init` ACK. Defaults
+// to 'opfs' so callers reading it before init (or against an older worker
+// that omits the field) assume persistence — the optimistic, no-op case.
+let dbBackend: DbBackend = 'opfs';
 
 /**
  * Promises for worker calls that haven't completed yet. The widget
@@ -59,6 +88,17 @@ const outstandingCalls = new Set<Promise<unknown>>();
 
 export function getBrowserDb(): BrowserDb | null {
   return dbInstance;
+}
+
+/**
+ * The storage backend the worker landed on. `'opfs'` until init resolves
+ * (and whenever the worker doesn't report one); flips to `'memory'` only
+ * when the worker explicitly told us persistence is off. The widget reads
+ * this after `initBrowserDb()` resolves to decide whether to show the
+ * quiet "history won't survive reload" degradation hint.
+ */
+export function getDbBackend(): DbBackend {
+  return dbBackend;
 }
 
 export async function flushBrowserDb(): Promise<void> {
@@ -107,6 +147,7 @@ async function doInit(): Promise<BrowserDb> {
       ok?: boolean;
       error?: string;
       rows?: unknown[][];
+      backend?: string;
     };
     if (msg.type === 'ready') {
       readyResolve?.();
@@ -128,12 +169,17 @@ async function doInit(): Promise<BrowserDb> {
     console.error('[pinagent:db] worker error:', e.message);
   });
 
-  function call(type: string, args: object): Promise<{ ok: boolean; rows?: unknown[][] }> {
+  function call(
+    type: string,
+    args: object,
+  ): Promise<{ ok: boolean; rows?: unknown[][]; backend?: string }> {
     const id = ++nextMsgId;
-    const promise = new Promise<{ ok: boolean; rows?: unknown[][] }>((resolve, reject) => {
-      pending.set(id, { resolve: resolve as PendingCall['resolve'], reject });
-      worker.postMessage({ id, type, args });
-    });
+    const promise = new Promise<{ ok: boolean; rows?: unknown[][]; backend?: string }>(
+      (resolve, reject) => {
+        pending.set(id, { resolve: resolve as PendingCall['resolve'], reject });
+        worker.postMessage({ id, type, args });
+      },
+    );
     // Track for beforeunload flush. Reads + writes both — reads are
     // fast (SAH is synchronous) and Promise.allSettled doesn't care.
     //
@@ -150,7 +196,9 @@ async function doInit(): Promise<BrowserDb> {
   }
 
   await ready;
-  await call('init', { dbName: 'pinagent.sqlite' });
+  const initAck = await call('init', { dbName: 'pinagent.sqlite' });
+  // Older worker (stale plugin dist) omits `backend` → assume persistent.
+  dbBackend = normalizeBackend(initAck);
 
   // Fetch + apply migrations. Refetched from the dev server rather
   // than bundled so the schema can't drift between server and browser
