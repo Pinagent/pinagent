@@ -46,6 +46,7 @@ import { resolvePick } from './inspector';
 import { restorePills } from './restore';
 import { StreamSheet } from './StreamSheet';
 import { captureScreenshot } from './screenshot';
+import { submitOutcome } from './submit-outcome';
 import { fetchFeedbackList, openInEditor, platformTag, submitFeedback } from './transport';
 import type { PickResult } from './types';
 
@@ -125,6 +126,10 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
   const [toast, setToast] = useState<string | null>(null);
   // Transient note under the file:line link (e.g. "No editor found").
   const [openNote, setOpenNote] = useState<string | null>(null);
+  // Inline submit error, shown in the composer when a POST fails. The draft
+  // (comment/pick/shot) is retained so the user can fix the cause and Retry,
+  // instead of losing everything to a vanishing toast (ticket 002).
+  const [submitError, setSubmitError] = useState<string | null>(null);
   // Live agent runs. Each spawned agent gets a StreamSheet; one can be expanded
   // (full sheet) while the rest sit as minimized pills that keep streaming in
   // the background — so you can minimize a run, interact with the app, and
@@ -195,6 +200,8 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
       // Anchor to the innermost (tapped) component by default.
       setSelectedIndex(Math.max(0, picked.chain.length - 1));
       setOpenNote(null);
+      // Fresh pick → fresh draft; drop any stale submit error from a prior try.
+      setSubmitError(null);
       setPhase('composing');
     },
     [projectRoot],
@@ -247,6 +254,7 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
     const target = activeLoc
       ? `${activeLoc.file}:${activeLoc.line}`
       : (pick?.chain[selectedIndex]?.name ?? pick?.nameChain.at(-1) ?? 'component');
+    setSubmitError(null);
     setPhase('sending');
     const result = await submitFeedback({
       comment: comment.trim(),
@@ -262,23 +270,39 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
       screenshot: shot ?? '',
       createdAt: new Date().toISOString(),
     });
+
+    const outcome = submitOutcome(result);
+
+    // Failed POST (Metro restart, network blip, release build): KEEP the draft
+    // — comment, picked anchor, and screenshot — reopen the composer, and show
+    // the reason inline with a Retry. We never destroy composer state on a
+    // failed submit (ticket 002).
+    if (outcome.composer === 'keep') {
+      setSubmitError(outcome.error);
+      setPhase('composing');
+      return;
+    }
+
+    // Success: clear the composer.
     setComment('');
     setPick(null);
     setShot(null);
     setPhase('idle');
 
     // Agent spawned → stream the run live and expand its sheet (any previously
-    // expanded run drops to a minimized pill). Otherwise (spawn off, or POST
-    // failed) fall back to a transient toast; pull mode (MCP) picks it up.
-    if (result.ok && result.agentSpawned && result.id) {
-      const id = result.id;
+    // expanded run drops to a minimized pill). Otherwise (spawn off) fall back
+    // to a transient toast; pull mode (MCP) picks it up.
+    if (outcome.streamId) {
+      const id = outcome.streamId;
       setStreams((prev) => (prev.some((s) => s.id === id) ? prev : [...prev, { id, target }]));
       setExpandedId(id);
       return;
     }
-    setToast(result.ok ? 'Sent' : `Failed: ${result.error ?? 'unknown'}`);
-    setTimeout(() => setToast(null), 2500);
-  }, [comment, pick, selectedIndex, activeLoc, shot, screenName, width, height]);
+    if (outcome.toast) {
+      setToast(outcome.toast);
+      setTimeout(() => setToast(null), 2500);
+    }
+  }, [comment, pick, selectedIndex, activeLoc, shot, surfaceUrl, width, height]);
 
   return (
     // collapsable={false} keeps this View in the native tree so its ref
@@ -394,8 +418,18 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
               placeholderTextColor="#9aa0a6"
               style={styles.input}
             />
+            {/* Inline submit error. The draft (comment/pick/shot) is retained
+                under it, so the primary button becomes Retry — no re-pick, no
+                re-capture, no lost typing (ticket 002). */}
+            {submitError ? <Text style={styles.submitError}>{submitError}</Text> : null}
             <View style={styles.composerActions}>
-              <Pressable onPress={() => setPhase('idle')} style={styles.btnGhost}>
+              <Pressable
+                onPress={() => {
+                  setSubmitError(null);
+                  setPhase('idle');
+                }}
+                style={styles.btnGhost}
+              >
                 <Text style={styles.btnGhostText}>Cancel</Text>
               </Pressable>
               <Pressable
@@ -403,7 +437,7 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
                 disabled={!comment.trim()}
                 style={[styles.btnPrimary, !comment.trim() && styles.btnDisabled]}
               >
-                <Text style={styles.btnPrimaryText}>Send</Text>
+                <Text style={styles.btnPrimaryText}>{submitError ? 'Retry' : 'Send'}</Text>
               </Pressable>
             </View>
           </View>
@@ -488,6 +522,7 @@ const styles = StyleSheet.create({
   composerTitle: { fontSize: 14, fontWeight: '600', color: '#111827' },
   composerTitleLink: { color: '#2563eb', textDecorationLine: 'underline' },
   openNote: { fontSize: 11, color: '#9aa0a6', marginTop: 2 },
+  submitError: { fontSize: 12, color: '#dc2626', marginTop: 2 },
   breadcrumbRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 2 },
   breadcrumbItem: { flexDirection: 'row', alignItems: 'center' },
   breadcrumbSep: { fontSize: 12, color: '#c4c7cc', paddingHorizontal: 4 },
