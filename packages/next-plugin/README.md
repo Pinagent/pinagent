@@ -123,9 +123,75 @@ Then open the app in a browser:
 ## Caveats
 
 - **Dev only.** The loader, the rewrite, and the `<Pinagent />` render are all `process.env.NODE_ENV === 'development'`-gated. Prod bundles are unchanged.
-- **Turbopack:** the loader is registered under `turbopack.rules` for Next 15+. Older Next versions (webpack-only dev) are handled by the webpack rule on the same config.
-- **Custom middleware / `proxy.ts`:** `/__pinagent/*` runs through your middleware like any other request. If your middleware blocks or transforms it, add an exclusion.
+- **Turbopack:** the loader is registered under `turbopack.rules` for Next 15+, scoped to `*.{tsx,jsx}` to match the webpack rule (`/\.(t|j)sx$/`). Older Next versions (webpack-only dev) are handled by the webpack rule on the same config.
 - **Path security:** the route reads `process.env.PINAGENT_PROJECT_ROOT || process.cwd()` for storage location. Set `PINAGENT_PROJECT_ROOT` in your `.mcp.json` to keep the MCP server and the route in sync, especially in monorepos.
+
+## Deployment-shape support
+
+Pinagent is a localhost dev tool. Its widget and every `/__pinagent/*` endpoint
+are served from **root-absolute** paths, so a handful of Next-specific app shapes
+need attention (none of which exist in the Vite adapter, whose middleware runs at
+the server root). Vite users can ignore this whole section.
+
+### `basePath` / `assetPrefix` (unsupported)
+
+If your `next.config` sets `basePath` or `assetPrefix`, the app moves off the
+server root but pinagent's hardcoded `/__pinagent/widget.js`, the dock iframe,
+and the widget's own fetches (`/__pinagent/feedback`, `/db-worker.js`,
+`/sqlite-wasm/*`) do **not** honor it — every one of them 404s and the widget
+silently fails to load.
+
+To make this fail loudly and early instead, `pinagent()` emits one grep-able
+warning at dev-server start when it sees either field set:
+
+```
+[pinagent] basePath / assetPrefix is set in your Next config — pinagent's /__pinagent/* endpoints are served from root-absolute paths and don't honor either, so the widget will not load. basePath is unsupported; see https://github.com/Pinagent/pinagent/tree/main/packages/next-plugin#basepath--assetprefix-unsupported
+```
+
+There is no workaround other than running the pinagent dev session without a
+`basePath` / `assetPrefix`. Threading a base path through the component, the
+embedded widget IIFE, the rewrite, and every embedded fetch is a cross-package
+change we'll only take on with real demand — open an issue if you need it.
+
+### Custom `middleware.ts` / `proxy.ts`
+
+`/__pinagent/*` requests flow through your `middleware.ts` like any other route.
+An auth gate or redirect that catches them breaks the click→comment→agent loop
+silently. Exclude pinagent's paths from your matcher:
+
+```ts
+// middleware.ts
+export const config = {
+  matcher: ['/((?!__pinagent).*)'],
+};
+```
+
+If your middleware already uses a custom matcher, just make sure none of its
+patterns match `/__pinagent` (and, if you do path matching inside the
+middleware body, early-return for `req.nextUrl.pathname.startsWith('/__pinagent')`).
+
+### Pages Router (unsupported for the route mount — App Router required)
+
+The route mount is **App Router only**. The handler at
+`@pinagent/next-plugin/route` exports App-Router Route Handler functions
+(`GET`/`POST`/`PATCH`/`PUT`/`DELETE` taking a `Request` and returning a
+`Response`) plus the `dynamic` / `runtime` route-segment config. A Pages Router
+`pages/api/*` handler has a different contract entirely — `(req: NextApiRequest,
+res: NextApiResponse)` — so the exports can't be re-used there; a `pages/api`
+re-export does not work.
+
+The JSX-tagging loader (webpack + Turbopack) and the `<Pinagent />` component
+are router-agnostic and work fine in a Pages Router app — but you still need an
+**App Router** route segment for the `/__pinagent/*` endpoints. App Router and
+Pages Router coexist in the same project, so add the route mount under `app/`
+even in an otherwise Pages-Router app:
+
+```ts
+// app/pinagent/[[...slug]]/route.ts — works alongside a pages/ tree
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export * from '@pinagent/next-plugin/route';
+```
 
 ## Endpoints
 

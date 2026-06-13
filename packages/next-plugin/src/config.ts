@@ -94,6 +94,44 @@ const PINAGENT_REWRITE = {
   destination: '/pinagent/:path*',
 };
 
+/** Minimal shape of the deployment fields we warn on — keeps the helper
+ * testable without dragging in Next's full `NextConfig` type. */
+export interface DeploymentShape {
+  basePath?: string;
+  assetPrefix?: string;
+}
+
+/**
+ * Decide whether pinagent should warn about an unsupported deployment shape.
+ *
+ * Pinagent serves the widget and all `/__pinagent/*` endpoints from
+ * root-absolute paths (see `component.tsx` and the embedded widget IIFE).
+ * A non-empty `basePath` or `assetPrefix` shifts the app off the root, so
+ * every one of those requests 404s and the widget silently fails to load.
+ * This is a pure predicate over the relevant config fields so it can be
+ * unit-tested without a Next runtime; `withPinagent` calls it and emits the
+ * actual `console.warn`. We don't attempt basePath support (a cross-package
+ * change touching the component, the IIFE prelude, the rewrite, and every
+ * embedded fetch) — we just fail loudly and early.
+ *
+ * An empty-string `basePath`/`assetPrefix` is the Next default (= root), so
+ * it does NOT trip the warning.
+ */
+export function shouldWarnDeploymentShape(config: DeploymentShape): boolean {
+  return Boolean(config.basePath) || Boolean(config.assetPrefix);
+}
+
+/**
+ * The one grep-able `[pinagent]` warning text emitted when an unsupported
+ * deployment shape is detected. Exported so tests can assert on it and the
+ * README can quote it verbatim.
+ */
+export const DEPLOYMENT_SHAPE_WARNING =
+  "[pinagent] basePath / assetPrefix is set in your Next config — pinagent's " +
+  "/__pinagent/* endpoints are served from root-absolute paths and don't honor " +
+  'either, so the widget will not load. basePath is unsupported; see ' +
+  'https://github.com/Pinagent/pinagent/tree/main/packages/next-plugin#basepath--assetprefix-unsupported';
+
 /**
  * Wrap your Next.js config to enable Pinagent in development.
  *
@@ -137,6 +175,17 @@ export default function pinagent(
   // condition-based resolution.
   if (process.env.NODE_ENV === 'production') {
     return config;
+  }
+
+  // Fail loudly and early on unsupported deployment shapes. basePath /
+  // assetPrefix shift the app off the root, but pinagent's widget + all
+  // /__pinagent/* endpoints are served from root-absolute paths, so the
+  // widget silently 404s. One grep-able `[pinagent]` warning at config-load
+  // time (dev startup) — we're already past the prod short-circuit, so this
+  // never fires in production builds. See `shouldWarnDeploymentShape`.
+  if (shouldWarnDeploymentShape(config)) {
+    // eslint-disable-next-line no-console
+    console.warn(DEPLOYMENT_SHAPE_WARNING);
   }
 
   const userWebpack = config.webpack;
@@ -229,13 +278,20 @@ export default function pinagent(
     ...(config.turbopack ?? {}),
     rules: {
       ...(config.turbopack?.rules ?? {}),
+      // Scope to JSX files only — matches the webpack `test: /\.(t|j)sx$/`
+      // above and the vite reference (`vite-plugin/src/index.ts`). The loader
+      // bails internally on non-JSX, so a wider glob produces byte-identical
+      // output but wastes work: every `.ts`/`.js` module would round-trip
+      // through a JS loader for nothing. Narrowing keeps Turbopack's pipeline
+      // symmetric with webpack's.
+      //
       // Pass the loader as a package specifier (not the absolute path used
       // for webpack). Turbopack resolves loader strings from the project
       // root; an absolute path that lives outside the root (e.g. in a pnpm
       // workspace's `packages/`) breaks `get_next_server_import_map` with
       // "Next.js package not found" because Turbopack walks `node_modules`
       // from the loader file's directory, not the project root.
-      '*.{ts,tsx,js,jsx}': {
+      '*.{tsx,jsx}': {
         loaders: ['@pinagent/next-plugin/loader'],
       },
     },
