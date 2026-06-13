@@ -23,6 +23,7 @@
     "react-vite-example",
     "next-app-example",
     "nuxt-app-example",
-    "sveltekit-app-example"
+    "sveltekit-app-example",
+    "vue-vite-example"
   ]
 }
