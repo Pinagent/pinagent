@@ -1,5 +1,52 @@
 # @pinagent/next-plugin
 
+## 0.10.1
+
+### Patch Changes
+
+- b74c1aa: Warn loudly on unsupported deployment shapes. `pinagent()` now emits one
+  grep-able `[pinagent]` `console.warn` at dev-server start when `basePath` or
+  `assetPrefix` is set in the Next config — pinagent's widget and all
+  `/__pinagent/*` endpoints are served from root-absolute paths and don't honor
+  either, so the widget would otherwise 404 silently. The check is exported as a
+  pure `shouldWarnDeploymentShape` predicate. The README gains three sections
+  covering `basePath`/`assetPrefix` (unsupported), the `middleware.ts` matcher
+  exclusion (`matcher: ['/((?!__pinagent).*)']`), and the App-Router-required
+  stance for the route mount.
+- ca9c662: Add `PUT`/`DELETE` to the production route stub (`route-noop.ts`) so its
+  exported HTTP-verb set matches the dev route handler (`route.ts`).
+
+  The `"default"` package.json export condition swaps in `route-noop` for
+  production bundles, but it only exported `GET`/`POST`/`PATCH` while the dev
+  handler exports `GET`/`POST`/`PATCH`/`PUT`/`DELETE`. A consumer whose
+  generated `app/pinagent/[[...slug]]/route.ts` re-exported a fixed verb list
+  hard-failed the production build ("Export DELETE doesn't exist"); an
+  `export *` consumer silently dropped `PUT`/`DELETE` to Next's default 405
+  instead of the stub's inert 404. Both verbs now return the same no-store 404.
+  A parity test pins the export sets so a future verb added to `route.ts` can't
+  drift from the stub.
+
+- 5f0e1b4: Narrow the Turbopack tagging-loader rule from `*.{ts,tsx,js,jsx}` to
+  `*.{tsx,jsx}`, matching the webpack rule (`/\.(t|j)sx$/`) and the Vite
+  reference. The loader bails internally on non-JSX so output is byte-identical,
+  but the wider glob round-tripped every `.ts`/`.js` module through a JS loader
+  for nothing — measurable on large apps. This realigns Turbopack's pipeline
+  scoping with webpack's.
+- 7aea68a: widget: offline-first persistence for the embedded widget.
+  - Persist the client-side follow-up queue to a per-conversation `localStorage`
+    outbox so queued (but unsent) follow-ups survive a page reload instead of
+    evaporating; they restore as queued bubbles and flush normally at the next
+    turn-end, and are cleared on dismiss / terminal resolve.
+  - Surface the browser cache's `:memory:` (non-persistent) fallback — the
+    SQLite worker now reports its backend in the `init` ACK, and the widget
+    shows a quiet, dismissible signal (a FAB dot + title hint and a one-time
+    composer-footer note) when persistence is off, typically because another
+    tab holds the OPFS storage lock. Backward-compatible: a missing `backend`
+    field is treated as persistent.
+
+  Both ship inside the embedded widget IIFE / served worker source, so the
+  vite-plugin and next-plugin embeds are regenerated.
+
 ## 0.10.0
 
 ### Minor Changes
