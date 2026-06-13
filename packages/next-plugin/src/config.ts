@@ -229,13 +229,20 @@ export default function pinagent(
     ...(config.turbopack ?? {}),
     rules: {
       ...(config.turbopack?.rules ?? {}),
+      // Scope to JSX files only — matches the webpack `test: /\.(t|j)sx$/`
+      // above and the vite reference (`vite-plugin/src/index.ts`). The loader
+      // bails internally on non-JSX, so a wider glob produces byte-identical
+      // output but wastes work: every `.ts`/`.js` module would round-trip
+      // through a JS loader for nothing. Narrowing keeps Turbopack's pipeline
+      // symmetric with webpack's.
+      //
       // Pass the loader as a package specifier (not the absolute path used
       // for webpack). Turbopack resolves loader strings from the project
       // root; an absolute path that lives outside the root (e.g. in a pnpm
       // workspace's `packages/`) breaks `get_next_server_import_map` with
       // "Next.js package not found" because Turbopack walks `node_modules`
       // from the loader file's directory, not the project root.
-      '*.{ts,tsx,js,jsx}': {
+      '*.{tsx,jsx}': {
         loaders: ['@pinagent/next-plugin/loader'],
       },
     },

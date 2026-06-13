@@ -184,7 +184,9 @@ describe('pinagent() — turbopack', () => {
       turbopack: { rules: { '*.svg': { loaders: ['my-svg-loader'] } } },
     });
     const rules = result.turbopack?.rules as Record<string, { loaders: string[] }>;
-    expect(rules['*.{ts,tsx,js,jsx}'].loaders).toEqual(['@pinagent/next-plugin/loader']);
+    // Scoped to JSX only (ticket 009) — matches webpack's `/\.(t|j)sx$/`.
+    expect(rules['*.{tsx,jsx}'].loaders).toEqual(['@pinagent/next-plugin/loader']);
+    expect(rules['*.{ts,tsx,js,jsx}']).toBeUndefined();
     // Pre-existing rule is preserved.
     expect(rules['*.svg'].loaders).toEqual(['my-svg-loader']);
   });
