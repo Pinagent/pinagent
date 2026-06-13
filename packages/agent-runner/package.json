@@ -29,7 +29,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.161",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.177",
     "@octokit/rest": "^22.0.1",
     "@pinagent/db": "workspace:*",
     "@pinagent/shared": "workspace:*",
