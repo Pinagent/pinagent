@@ -2,7 +2,7 @@
 
 Click a UI element in your dev server, leave a comment, and your coding agent picks it up — with `file:line` and a screenshot — over MCP.
 
-Pinagent is a localhost-only dev plugin for Vite, Next.js, Nuxt, and SvelteKit. It tags every element with its source location — JSX for React, `<template>` markup for Vue SFCs, component markup for Svelte — drops a small 💬 widget into the page, and persists each captured comment to a local SQLite database under `.pinagent/`. An MCP server surfaces the queue inside your existing Claude Code session, so the next thing you say can be "fix the pending feedback."
+Pinagent is a localhost-only dev plugin for Vite, Next.js, Nuxt, SvelteKit, and React Native / Expo. On the web it tags every element with its source location — JSX for React, `<template>` markup for Vue SFCs, component markup for Svelte — and drops a small 💬 widget into the page; on React Native a mounted `<Pinagent/>` widget resolves a tapped view to `file:line` through Metro. Either way it persists each captured comment to a local SQLite database under `.pinagent/`. An MCP server surfaces the queue inside your existing Claude Code session, so the next thing you say can be "fix the pending feedback."
 
 There's also an opt-in **dock** surface (`@pinagent/widget-dock`) — a project-management UI for browsing conversations, reviewing diffs, composing PRs from resolved comments, and managing worktrees. Off by default; flip on with `dock: true` on either plugin.
 
@@ -42,6 +42,8 @@ pnpm --filter @pinagent/react-native build   # build the package the demo consum
 cd examples/expo-app && npm install && npx expo start
 ```
 
+In your own app you install the published package — `npm i @pinagent/react-native` — rather than building from source. Setup differs from the web (Metro middleware + a dev-only Babel plugin, no `<script>` injection); follow the [React Native / Expo guide](./.claude/skills/pinagent-setup/react-native.md).
+
 ## How it works
 
 ```
@@ -60,7 +62,7 @@ Source is tagged at dev-build time: JSX by `@pinagent/babel-plugin` (Vite) or a 
 
 ## Install
 
-> **Using Claude Code? Skip the manual steps.** Run `/pinagent-setup` and it detects Vite, Next, or Nuxt, installs the plugin, wires up the config (and the Next route + `<Pinagent />`), registers the MCP server, and sets the tool permissions for you. `pinagent init` does the deterministic parts from the command line.
+> **Using Claude Code? Skip the manual steps.** Run `/pinagent-setup` and it detects Vite, Next, Nuxt, or React Native / Expo, installs the plugin, wires up the config (and the Next route + `<Pinagent />`), registers the MCP server, and sets the tool permissions for you. `pinagent init` does the deterministic parts from the command line.
 >
 > Don't have the skill yet? Add the marketplace once, then install:
 >
@@ -74,6 +76,8 @@ Source is tagged at dev-build time: JSX by `@pinagent/babel-plugin` (Vite) or a 
 ```sh
 pnpm add -D @pinagent/vite-plugin    # or @pinagent/next-plugin, or @pinagent/nuxt-plugin
 ```
+
+> **React Native / Expo?** Install `@pinagent/react-native` (a runtime dep, not `-D`) instead — the wiring differs (Metro middleware + a dev-only Babel plugin, no `<script>` injection). Follow the [React Native / Expo guide](./.claude/skills/pinagent-setup/react-native.md).
 
 **Vite** (`vite.config.ts`)
 
@@ -206,6 +210,7 @@ The dock surfaces a bottom-left FAB that opens panels for Conversations, Changes
 - **`@pinagent/vite-plugin`** — Vite 5–8 plugin: source tagging (JSX, Vue SFCs, Svelte — dispatched on file extension), widget injection, `/__pinagent` middleware. Covers Vite + SvelteKit apps directly.
 - **`@pinagent/next-plugin`** — Next.js 14+ adapter (active on Next 16): webpack and Turbopack loaders, route handler, `<Pinagent />` client component.
 - **`@pinagent/nuxt-plugin`** — Nuxt module. Wraps `@pinagent/vite-plugin` (Nuxt's bundler is Vite) and wires the `/__pinagent` surface through Nitro.
+- **`@pinagent/react-native`** — React Native / Expo plugin: the `<Pinagent/>` widget (ships as source for Metro to transpile), the `@pinagent/react-native/server` Metro middleware, and a `@pinagent/react-native/babel` source-tagging plugin. Tap-to-comment via RN's Inspector; same agent backend as the web plugins.
 - **`@pinagent/widget`** — the per-element browser UI (shadow-root button → pick → composer). Embedded by the plugins at build time.
 - **`@pinagent/widget-dock`** — opt-in project-management surface (conversations, changes, PR composer, branches, history). Embedded by the plugins when `dock: true`.
 - **`@pinagent/cli`** — `pinagent` CLI. Currently exposes `pinagent mcp` (stdio MCP server).
