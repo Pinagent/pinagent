@@ -453,6 +453,7 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
             {crumbs.length ? (
               <View style={styles.breadcrumbRow}>
                 {crumbs.map((crumb, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: positional ancestry path, rebuilt wholesale per pick — never reordered
                   <View key={`${crumb.name}-${i}`} style={styles.breadcrumbItem}>
                     {i > 0 ? <Text style={styles.breadcrumbSep}>›</Text> : null}
                     <Pressable

@@ -1,9 +1,27 @@
 {
   "name": "@pinagent/react-native",
   "version": "0.0.0",
-  "private": true,
   "license": "Apache-2.0",
-  "description": "React Native widget for Pinagent — tap a view, leave a comment, an agent fixes it. Native client ships as source for Metro; the dev-server middleware is built for Node.",
+  "description": "React Native & Expo plugin for Pinagent — tap a view, leave a comment, and a coding agent fixes it with file:line + a screenshot. The native widget ships as source for Metro; the dev-server middleware and Babel source-tagging plugin are built for Node.",
+  "keywords": [
+    "react-native",
+    "expo",
+    "metro",
+    "pinagent",
+    "claude",
+    "ai-agent",
+    "feedback",
+    "devtools"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pinagent/pinagent.git",
+    "directory": "packages/react-native"
+  },
+  "homepage": "https://github.com/Pinagent/pinagent/tree/main/packages/react-native#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -32,13 +50,33 @@
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@pinagent/agent-runner": "workspace:*",
-    "nanoid": "^5.0.9"
+  "peerDependencies": {
+    "react": ">=18",
+    "react-native": ">=0.74",
+    "react-native-view-shot": ">=3"
   },
-  "//peers": "react (>=18), react-native (>=0.74), and react-native-view-shot (>=3) are required by src/native/ but intentionally NOT declared as peerDependencies: doing so drags the full React Native toolchain into this otherwise web-only monorepo's lockfile. The native client ships as source, so the consumer app provides these. See README + docs/architecture/react-native.md. Re-add them before publishing to npm.",
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": true
+    },
+    "react-native-view-shot": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.161",
+    "drizzle-orm": "^0.45.2",
+    "nanoid": "^5.0.9",
+    "ws": "^8.21.0",
+    "zod": "^4.4.3"
+  },
   "devDependencies": {
+    "@pinagent/agent-runner": "workspace:*",
     "@types/node": "^25.9.1",
+    "@types/ws": "^8.18.1",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3"
   }

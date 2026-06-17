@@ -246,6 +246,7 @@ export function StreamSheet({
             })}
 
             {followUps.map((m, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: append-only message log — entries are only pushed, never reordered or removed
               <Text key={`you-${i}-${m}`} style={styles.youRow}>
                 You: {m}
               </Text>

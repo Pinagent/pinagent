@@ -19,7 +19,6 @@
     "@pinagent/babel-plugin",
     "@pinagent/browser-runtime",
     "@pinagent/agent-runner",
-    "@pinagent/react-native",
     "react-vite-example",
     "next-app-example",
     "nuxt-app-example",
