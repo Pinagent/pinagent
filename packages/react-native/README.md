@@ -22,6 +22,40 @@ middleware. Full design + web→RN mapping:
 deps so the monorepo install stays green; a real consumer must provide
 them. See [How the package is split](../../docs/architecture/react-native.md#how-the-package-is-split).
 
+## Install
+
+```bash
+# Expo
+npm i @pinagent/react-native
+npx expo install react-native-view-shot               # optional screenshots
+
+# Bare React Native
+npm i @pinagent/react-native react-native-view-shot
+(cd ios && pod install)                               # iOS native part of view-shot
+```
+
+Use your app's package manager (npm / yarn / pnpm / bun). Then **add the
+Babel source-tagging plugin** — on React 19 / RN 0.81+ this is what makes a
+tap resolve to `file:line` (without it the picker shows "Unknown component"):
+
+```js
+// babel.config.js — dev only, before the preset's JSX transform
+const pinagentSource = require('@pinagent/react-native/babel').default;
+const dev = process.env.NODE_ENV !== 'production';
+
+module.exports = (api) => {
+  api.cache(true);
+  return {
+    presets: ['babel-preset-expo'], // bare RN: 'module:@react-native/babel-preset'
+    plugins: dev ? [pinagentSource] : [],
+  };
+};
+```
+
+Restart Metro with a cleared cache after editing Babel config (`expo start -c`
+or `npm start -- --reset-cache`). Full setup — bare RN and monorepo included —
+is in the [`pinagent-setup` skill](https://github.com/Pinagent/pinagent/blob/main/.claude/skills/pinagent-setup/react-native.md).
+
 ## Usage
 
 **Client** — mount once at the app root (renders `null` in release builds):
@@ -122,12 +156,18 @@ whole story.
 
 ## How a tap becomes `file:line`
 
-RN's dev Inspector already resolves a touch to a component + source via
-`getInspectorDataForViewAtPoint`, reading each fiber's `_debugSource`
-(populated by the `__source` Babel transform Metro runs in dev). That's
-the RN analog of web's build-time `data-pa-loc`. `src/native/inspector.ts`
-wraps it and degrades to `loc: null` (rather than throwing) across RN
-version differences.
+The `@pinagent/react-native/babel` plugin (step 2 of Install, dev-only)
+splices a `data-pa-loc="<file>:<line>:<col>"` prop onto every authored JSX
+element at build time — the direct analog of the web plugin's `data-pa-loc`
+DOM attribute. At tap time RN's dev Inspector locates the view via
+`getInspectorDataForViewAtPoint`, and `src/native/inspector.ts` reads the
+`data-pa-loc` prop back off the host fiber, degrading to `loc: null` (rather
+than throwing) across RN version differences.
+
+This replaced the original `_debugSource` approach: **React 19 removed
+`_debugSource`** and **RN 0.81+ dropped the `source` field from
+`getInspectorDataForViewAtPoint`**, so the runtime no longer carries any
+source location — pinagent injects its own at build time, exactly like web.
 
 ## Multi-select
 
