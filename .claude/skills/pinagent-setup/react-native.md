@@ -277,6 +277,29 @@ a row lands in `<projectRoot>/.pinagent/db.sqlite` and the screenshot at
 
 A complete runnable example is in `packages/react-native/example/` (Expo).
 
+## Troubleshooting
+
+- **`[pinagent:db] no migrations dir at …/@pinagent/react-native/drizzle;
+  skipping migrate()` repeated in the Metro logs.** The installed package is
+  missing its bundled SQL migrations, so the dev-server can't create the
+  feedback DB — and because the skip path still touches a never-created table,
+  the warning re-fires on every tap/stream event. This is a packaging bug fixed
+  in **`@pinagent/react-native@0.1.3`**: upgrade
+  (`npm i @pinagent/react-native@latest`) and restart Metro. (Working *inside*
+  this monorepo instead of a published install? Run
+  `pnpm --filter @pinagent/react-native build` so the `prebuild` copies
+  `packages/db/drizzle/` into the package's `drizzle/` dir.)
+- **Picker shows *"Unknown component"* / `loc: null`.** Step 2's Babel plugin
+  isn't active. Confirm it's the **first** plugin in `babel.config.js` (before
+  the preset's JSX transform) and restart Metro with a cleared cache
+  (`expo start -c` / `npm start -- --reset-cache`) — Babel output is cached
+  aggressively.
+- **In-app stream stuck on *"Connecting…"*.** The middleware isn't mounted, or a
+  wrapped `metro.config.js` dropped it. The socket self-installs through
+  `enhanceMiddleware`, so make sure your `withPinagent` wrapper *chains* (not
+  replaces) any existing `enhanceMiddleware` (step 4), and that the dev guard
+  isn't excluding it (`NODE_ENV` must not be `production` in dev).
+
 ## Caveats specific to RN
 
 - **Device vs simulator hosts.** The widget derives the dev-server URL from
