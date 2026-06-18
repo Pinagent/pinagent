@@ -17,7 +17,7 @@
     "@pinagent/ee-team-features": "workspace:*",
     "@pinagent/ui": "workspace:*",
     "@tailwindcss/postcss": "^4.0.0",
-    "next": "^16.0.0",
+    "next": "^16.2.9",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tailwindcss": "^4.0.0"
