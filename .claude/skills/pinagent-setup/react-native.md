@@ -58,7 +58,12 @@ Add it to `babel.config.js` **before** the preset's JSX transform:
 **Expo** (`babel-preset-expo`):
 
 ```js
-const pinagentSource = require('@pinagent/react-native/babel').default;
+// The plugin is the package's default export, but the CJS build emits
+// `module.exports = fn` (no `.default`) on some versions — normalize both so
+// Babel always receives the function, never `undefined` (an undefined plugin
+// throws "must be a string, object, or function" at transform time).
+const pinagentBabel = require('@pinagent/react-native/babel');
+const pinagentSource = pinagentBabel.default ?? pinagentBabel;
 
 module.exports = (api) => {
   api.cache(true);
@@ -73,7 +78,9 @@ module.exports = (api) => {
 **Bare React Native** (`@react-native/babel-preset`):
 
 ```js
-const pinagentSource = require('@pinagent/react-native/babel').default;
+// interop: default export on some builds, `module.exports = fn` on others.
+const pinagentBabel = require('@pinagent/react-native/babel');
+const pinagentSource = pinagentBabel.default ?? pinagentBabel;
 const dev = process.env.NODE_ENV !== 'production';
 
 module.exports = {
@@ -86,6 +93,14 @@ module.exports = {
 > `npx expo start -c` (Expo) or `npm start -- --reset-cache` (bare RN).
 > Babel output is cached aggressively; without `--reset-cache` the prop
 > won't appear and taps stay unresolved.
+
+> **Merging into an existing `babel.config.js`.** Most apps already have one
+> (other plugins, an `env.production` block). Don't replace it — add
+> `pinagentSource` as the **first** plugin (so it tags JSX before the preset's
+> transform), keep your `dev ?` guard so it's excluded from release bundles,
+> and leave order-sensitive plugins where they belong — e.g.
+> `react-native-worklets/plugin` / `react-native-reanimated/plugin` must stay
+> **last**.
 
 ## 3. Mount the widget at your app root
 
@@ -159,6 +174,30 @@ module.exports = mergeConfig(getDefaultConfig(__dirname), {
 > on "Connecting…". Routing the socket through `enhanceMiddleware` (which
 > Expo *does* honor) works under both Expo and bare Metro, so you don't
 > need `websocketEndpoints` at all.
+
+**Merging into a wrapped config.** Real apps rarely have a bare
+`metro.config.js` — they wrap it (`getSentryExpoConfig`, monorepo path/cache
+helpers, an existing `enhanceMiddleware`). Don't replace it: add a
+`withPinagent` wrapper that **chains any existing middleware**, and `require`
+the server entry **lazily inside a dev guard** so a production `expo export`
+(which also evaluates `metro.config.js`) never loads the Node-side agent
+toolchain (`@anthropic-ai/claude-agent-sdk`, `drizzle-orm`, `ws`):
+
+```js
+function withPinagent(config) {
+  if (process.env.NODE_ENV === 'production') return config;
+  const { pinagentMiddleware } = require('@pinagent/react-native/server');
+  const prev = config.server?.enhanceMiddleware;
+  config.server = {
+    ...config.server,
+    enhanceMiddleware: (mw, server) =>
+      pinagentMiddleware({ projectRoot: __dirname }).chain(prev ? prev(mw, server) : mw),
+  };
+  return config;
+}
+// apply LAST, over your existing (e.g. Sentry-/monorepo-wrapped) config:
+module.exports = withPinagent(existingConfig);
+```
 
 ## 5. Monorepo
 
@@ -248,6 +287,14 @@ A complete runnable example is in `packages/react-native/example/` (Expo).
 - **Dev-only.** Source resolution and the middleware rely on RN internals
   and Metro, present only in dev; release builds compile the widget out
   entirely (the Babel plugin is gated on `NODE_ENV !== 'production'`).
+- **Strict `tsc` type-checks the package's source.** The native client ships
+  as `.ts` (compiled by your Metro/Babel, not pre-built to `.d.ts`), so your
+  app's `tsc --noEmit` pulls `@pinagent/react-native/src/native/*` into your
+  program. Under a strict tsconfig (`strict`, `noUncheckedIndexedAccess`) you
+  may see type errors *from the package itself* — they're real (the package's
+  own CI can't type-check `src/native` without RN types). The fix is upstream:
+  bump to a strict-clean release (or report it) rather than loosening your
+  app's tsconfig to hide it.
 - **`selector` carries the component-name chain**, not a CSS selector (RN
   has none). Live agent streaming into the widget and multi-element select
   both work; the one cut vs web is Fast-Refresh pin re-anchoring.
