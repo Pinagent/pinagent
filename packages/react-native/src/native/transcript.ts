@@ -35,14 +35,22 @@ export type AgentEvent =
       resolvedAt: string | null;
     };
 
-/** Server → client frames the RN client acts on (subset of the web protocol). */
+/**
+ * Server → client frames the RN client acts on (subset of the web protocol).
+ *
+ * Only the frames the widget handles are modeled. Other frames (project /
+ * extension fan-out, pong) still arrive on the wire — `StreamClient.onMessage`
+ * casts the parsed JSON to this type and its `switch` ignores any `type` it
+ * doesn't handle. We deliberately avoid an open
+ * `{ type: string; [k: string]: unknown }` member: it overlaps every
+ * discriminant, collapsing `event`/`message` to `{}` at the use sites and
+ * defeating narrowing.
+ */
 export type ServerMessage =
   | { type: 'event'; feedbackId: string; event: AgentEvent }
   | { type: 'done'; feedbackId: string }
   | { type: 'error'; feedbackId?: string; message: string }
-  | { type: 'worktree_state'; feedbackId: string; state: string; commitSha?: string }
-  // Frames the RN client receives but ignores (project / extension fan-out, pong).
-  | { type: string; [k: string]: unknown };
+  | { type: 'worktree_state'; feedbackId: string; state: string; commitSha?: string };
 
 export type TranscriptKind = 'text' | 'tool' | 'error' | 'result' | 'ask' | 'status';
 
@@ -83,8 +91,9 @@ export function renderTranscript(events: AgentEvent[]): TranscriptRow[] {
         break;
       case 'tool_result':
         for (let j = rows.length - 1; j >= 0; j--) {
-          if (rows[j].kind === 'tool') {
-            rows[j].ok = event.ok;
+          const row = rows[j];
+          if (row?.kind === 'tool') {
+            row.ok = event.ok;
             break;
           }
         }

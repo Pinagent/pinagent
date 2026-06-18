@@ -10,6 +10,7 @@
  * the Android emulator gets `10.0.2.2`. No hard-coded host needed.
  */
 import { NativeModules, Platform } from 'react-native';
+import type { RestoreCandidate } from './restore';
 import type { FeedbackInput } from './types';
 
 interface DevServerInfo {
@@ -116,7 +117,7 @@ export async function submitFeedback(input: FeedbackInput): Promise<SubmitResult
  * caller filters them with `restorePills`. Typed loosely here so the wire JSON
  * doesn't drag the agent-runner type into RN source.
  */
-export async function fetchFeedbackList(): Promise<unknown[]> {
+export async function fetchFeedbackList(): Promise<RestoreCandidate[]> {
   const base = devServerBaseUrl();
   if (!base) return [];
   try {
