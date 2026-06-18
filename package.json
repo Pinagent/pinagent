@@ -36,14 +36,14 @@
     "example": "pnpm --filter=react-vite-example dev"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.16",
+    "@biomejs/biome": "^2.5.0",
     "@changesets/cli": "^2.27.10",
     "@vitest/coverage-v8": "^4.1.8",
     "happy-dom": "^20.9.0",
     "sherif": "^1.6.0",
-    "turbo": "^2.9.16",
+    "turbo": "^2.9.18",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   },
   "engines": {
     "node": ">=22.18.0"
