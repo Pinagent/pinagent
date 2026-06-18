@@ -38,7 +38,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
     "@changesets/cli": "^2.27.10",
-    "@vitest/coverage-v8": "^4.1.8",
+    "@vitest/coverage-v8": "^4.1.9",
     "happy-dom": "^20.9.0",
     "sherif": "^1.6.0",
     "turbo": "^2.9.18",
