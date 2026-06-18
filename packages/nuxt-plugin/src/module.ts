@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { addVitePlugin, defineNuxtModule } from '@nuxt/kit';
+import type { NuxtModule } from '@nuxt/schema';
 import pinagent, {
   DOCK_HOST_BRIDGE_SCRIPT,
   DOCK_IFRAME_SCRIPT,
@@ -91,7 +92,14 @@ type _ModuleOptionsSubsetOfPinagent = keyof ModuleOptions extends keyof Pinagent
 const _moduleOptionsAreVitePluginOptions = true satisfies _ModuleOptionsSubsetOfPinagent;
 void _moduleOptionsAreVitePluginOptions;
 
-export default defineNuxtModule<ModuleOptions>({
+// `defineNuxtModule`'s return type is `NuxtModule<…>` from `@nuxt/schema`, but
+// the workspace can carry more than one `@nuxt/schema` (e.g. an example bumps
+// `nuxt`, so `4.4.6` and `4.4.7` coexist). The *inferred* default-export type
+// then pins a non-portable `.pnpm/@nuxt+schema@x/…` path → `tsc` TS2883. An
+// explicit annotation via the bare `@nuxt/schema` specifier makes the export
+// portably nameable; `as unknown as` keeps it immune to which schema identity
+// resolves (same spirit as the vite-skew cast above).
+const pinagentNuxtModule = defineNuxtModule<ModuleOptions>({
   meta: {
     name: '@pinagent/nuxt-plugin',
     configKey: 'pinagent',
@@ -160,4 +168,6 @@ export default defineNuxtModule<ModuleOptions>({
       );
     }
   },
-});
+}) as unknown as NuxtModule<ModuleOptions>;
+
+export default pinagentNuxtModule;
