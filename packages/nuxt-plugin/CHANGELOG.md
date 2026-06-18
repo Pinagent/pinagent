@@ -1,5 +1,34 @@
 # @pinagent/nuxt-plugin
 
+## 0.2.1
+
+### Patch Changes
+
+- 4d4d38b: fix(nuxt-plugin): annotate the module's default export to survive `@nuxt/schema` version skew
+
+  `defineNuxtModule`'s return type is `NuxtModule<…>` from `@nuxt/schema`. When the
+  workspace resolves more than one `@nuxt/schema` (e.g. an example app bumps `nuxt`
+  so `4.4.6` and `4.4.7` coexist), `tsc` infers the default export's type against a
+  non-portable `.pnpm/@nuxt+schema@x/…` path and fails with TS2883 ("inferred type
+  of 'default' cannot be named … not portable"). Annotate the export with an
+  explicit `NuxtModule<ModuleOptions>` (imported from the bare `@nuxt/schema`
+  specifier, now declared as a type-only devDependency) so the public type is
+  portably nameable regardless of which `@nuxt/schema` identity resolves — the same
+  decoupling the vite-plugin `addVitePlugin` cast already applies.
+
+- 16292a2: fix(nuxt-plugin): make the `addVitePlugin` call resilient to `vite` type-identity skew
+
+  `@nuxt/kit`'s `addVitePlugin` is typed against the `vite` _it_ resolves, while
+  `pinagent()` returns a `Plugin` typed against the `vite` `@pinagent/vite-plugin`
+  resolves. pnpm peer-deduping routinely produces two `vite` instances — same
+  version, different peer hash (e.g. one hashed against `@types/node@x.y.1`, the
+  other `@types/node@x.y.3`) — whose structurally identical `Plugin<any>` types are
+  nominally unrelated, so `tsc` rejected the call with TS2345. Any lockfile re-hash
+  (every Dependabot bump) could flip which instance each side gets, breaking
+  `pnpm typecheck` on the nuxt-plugin even though the runtime object is a valid vite
+  plugin. The call now casts to `addVitePlugin`'s own parameter type, decoupling it
+  from the resolved `vite` identity without pinning `vite` across the workspace.
+
 ## 0.2.0
 
 ### Minor Changes
