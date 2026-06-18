@@ -115,6 +115,18 @@ export default defineNuxtModule<ModuleOptions>({
     // derived from `nuxt.options.rootDir` so the plugin's Storage / WS server
     // resolve against the dir Nuxt is actually serving. Every other public
     // vite-plugin option flows through verbatim.
+    // `pinagent()` returns a `vite` `Plugin`, but the `vite` it's typed against
+    // (resolved by `@pinagent/vite-plugin`) is a *different identity* from the
+    // one `@nuxt/kit`'s `addVitePlugin` expects (resolved by `@nuxt/kit`). pnpm
+    // peer-deduping routinely produces two `vite` instances — same version,
+    // different peer hash (e.g. one hashed against `@types/node@x.y.1`, the
+    // other `@types/node@x.y.3`) — whose structurally-identical `Plugin<any>`
+    // types are nominally unrelated, so a plain call fails `tsc` with TS2345.
+    // Any lockfile re-hash (every Dependabot bump) can flip which instance each
+    // side gets. Casting to `addVitePlugin`'s own parameter type makes this call
+    // immune to that skew without pinning `vite` for the whole workspace — the
+    // runtime object is a real `vite` plugin regardless of which type identity
+    // `tsc` happened to resolve. Mirrors CLAUDE.md's single-`drizzle`-identity note.
     addVitePlugin(
       pinagent({
         root: nuxt.options.rootDir,
@@ -124,7 +136,7 @@ export default defineNuxtModule<ModuleOptions>({
         ...(options.worktreeServeCommand !== undefined
           ? { worktreeServeCommand: options.worktreeServeCommand }
           : {}),
-      }),
+      }) as unknown as Parameters<typeof addVitePlugin>[0],
     );
 
     // Inject the dev-only scripts. Vite's `transformIndexHtml` (how vite-plugin
