@@ -677,6 +677,9 @@ importers:
       '@pinagent/agent-runner':
         specifier: workspace:*
         version: link:../agent-runner
+      '@pinagent/db':
+        specifier: workspace:*
+        version: link:../db
       '@types/node':
         specifier: ^25.9.1
         version: 25.9.1
