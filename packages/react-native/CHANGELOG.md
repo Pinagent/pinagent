@@ -1,5 +1,17 @@
 # @pinagent/react-native
 
+## 0.1.2
+
+### Patch Changes
+
+- 44456a1: fix(react-native): resolve strict-mode type errors in shipped native source
+
+  `src/native/` ships to consumers as TypeScript source for their Metro/TS
+  toolchain to compile, so type errors there surface in strict consumer
+  projects. Tighten the types in `transcript.ts` and `transport.ts` so the
+  shipped source typechecks cleanly under `strict: true`. (Releases the fix
+  landed in #439, which merged without a changeset.)
+
 ## 0.1.0
 
 ### Minor Changes
