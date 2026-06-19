@@ -33,8 +33,10 @@
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   Keyboard,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   StyleSheet,
@@ -102,6 +104,109 @@ function useKeyboardHeight(): number {
   return height;
 }
 
+const FAB_SIZE = 52;
+// Resting insets matching the old fixed layout (right/bottom), plus a uniform
+// edge margin used to keep the button on-screen once it's free to roam.
+const FAB_MARGIN = 20;
+const FAB_BOTTOM = 40;
+// Movement (px) under which a press counts as a tap, not a drag.
+const FAB_TAP_SLOP = 6;
+
+interface DraggableFab {
+  panHandlers: ReturnType<typeof PanResponder.create>['panHandlers'];
+  transform: ReturnType<Animated.ValueXY['getTranslateTransform']>;
+}
+
+/**
+ * Make the FAB draggable anywhere on screen.
+ *
+ * The button defaults to the bottom-right (matching the old fixed `right: 20,
+ * bottom: 40` layout) but can be dragged to any edge — handy when it sits over
+ * the very control the developer wants to comment on. A single PanResponder
+ * owns BOTH gestures: a stationary press (total movement under `FAB_TAP_SLOP`)
+ * fires `onTap` to arm picking, while any real movement relocates the button.
+ * Position lives in an `Animated.ValueXY` of the button's top-left in window
+ * coords; we keep a plain-object mirror (`committed`) because PanResponder
+ * callbacks can't read an Animated.Value synchronously.
+ *
+ * Position is session-local: RN keeps no device store (the dev-server DB is the
+ * source of truth and holds no ephemeral UI state), so it resets to the default
+ * corner on reload — same as the rest of the widget's transient UI.
+ */
+function useDraggableFab(width: number, height: number, onTap: () => void): DraggableFab {
+  // Clamp a top-left position so the whole button stays on-screen.
+  const clamp = useCallback(
+    (x: number, y: number) => {
+      const maxX = Math.max(FAB_MARGIN, width - FAB_SIZE - FAB_MARGIN);
+      const maxY = Math.max(FAB_MARGIN, height - FAB_SIZE - FAB_MARGIN);
+      return {
+        x: Math.min(Math.max(FAB_MARGIN, x), maxX),
+        y: Math.min(Math.max(FAB_MARGIN, y), maxY),
+      };
+    },
+    [width, height],
+  );
+
+  // Default resting spot: bottom-right corner.
+  const home = useMemo(
+    () => clamp(width - FAB_SIZE - FAB_MARGIN, height - FAB_SIZE - FAB_BOTTOM),
+    [clamp, width, height],
+  );
+
+  const pos = useRef(new Animated.ValueXY(home)).current;
+  const committed = useRef(home);
+
+  // Keep the button on-screen across rotations / window-size changes.
+  useEffect(() => {
+    const next = clamp(committed.current.x, committed.current.y);
+    if (next.x !== committed.current.x || next.y !== committed.current.y) {
+      committed.current = next;
+      pos.setValue(next);
+    }
+  }, [clamp, pos]);
+
+  const responder = useMemo(
+    () =>
+      PanResponder.create({
+        // Claim the touch up front so a plain tap still reaches `onTap`; we
+        // discriminate tap vs drag by distance on release.
+        onStartShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          // Drag relative to where the button currently rests.
+          pos.setOffset(committed.current);
+          pos.setValue({ x: 0, y: 0 });
+        },
+        onPanResponderMove: Animated.event([null, { dx: pos.x, dy: pos.y }], {
+          useNativeDriver: false,
+        }),
+        onPanResponderRelease: (_e, g) => {
+          pos.flattenOffset();
+          if (Math.abs(g.dx) <= FAB_TAP_SLOP && Math.abs(g.dy) <= FAB_TAP_SLOP) {
+            // No real movement → it was a tap; undo any sub-pixel drift.
+            pos.setValue(committed.current);
+            onTap();
+            return;
+          }
+          // Commit the dragged spot, clamped on-screen, with a small settle.
+          const next = clamp(committed.current.x + g.dx, committed.current.y + g.dy);
+          committed.current = next;
+          Animated.spring(pos, { toValue: next, useNativeDriver: false, bounciness: 0 }).start();
+        },
+        onPanResponderTerminate: (_e, g) => {
+          // Lost the responder mid-gesture (e.g. to a parent scroll view):
+          // keep wherever the drag had reached rather than snapping away.
+          pos.flattenOffset();
+          const next = clamp(committed.current.x + g.dx, committed.current.y + g.dy);
+          committed.current = next;
+          pos.setValue(next);
+        },
+      }),
+    [pos, clamp, onTap],
+  );
+
+  return { panHandlers: responder.panHandlers, transform: pos.getTranslateTransform() };
+}
+
 /**
  * Hard dev-only gate. `__DEV__` is `false` in release bundles, so the
  * whole widget — and its require()s into RN internals — drops out. Kept
@@ -159,6 +264,18 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
     setStreams((prev) => prev.filter((s) => s.id !== id));
     setExpandedId((cur) => (cur === id ? null : cur));
   }, []);
+
+  // Tapping the FAB toggles picking; cancelling a pick also drops a pending
+  // "+ Add element" intent. Extracted so the draggable-FAB gesture can fire it
+  // on a stationary press (a drag relocates the button instead — see below).
+  const toggleFab = useCallback(() => {
+    setPhase((p) => {
+      if (p === 'picking') addingExtra.current = false;
+      return p === 'picking' ? 'idle' : 'picking';
+    });
+  }, []);
+
+  const fab = useDraggableFab(width, height, toggleFab);
 
   // Restore minimized pills after an app reload (Fast Refresh, shake-reload,
   // restart). The dev server (.pinagent/db.sqlite) is the source of truth — RN
@@ -537,22 +654,23 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
         </View>
       </Modal>
 
-      {/* Floating action button. Toggles picking; shows status while
-          sending. Hidden during `capturing` so it stays out of the
-          screenshot. */}
+      {/* Floating action button. Drag it anywhere; tap to toggle picking.
+          Shows status while sending. Hidden during `capturing` so it stays
+          out of the screenshot. Positioned via an animated translate so the
+          PanResponder can move it (see useDraggableFab). */}
       {phase !== 'capturing' && (
-        <Pressable
-          onPress={() =>
-            setPhase((p) => {
-              // Cancelling a pick also drops a pending "+ Add element" intent.
-              if (p === 'picking') addingExtra.current = false;
-              return p === 'picking' ? 'idle' : 'picking';
-            })
-          }
-          style={[styles.fab, phase === 'picking' && styles.fabActive]}
+        <Animated.View
+          {...fab.panHandlers}
+          accessibilityRole="button"
+          accessibilityLabel="Pinagent — tap to comment, drag to move"
+          style={[
+            styles.fab,
+            phase === 'picking' && styles.fabActive,
+            { transform: fab.transform },
+          ]}
         >
           <Text style={styles.fabText}>{phase === 'sending' ? '…' : '💬'}</Text>
-        </Pressable>
+        </Animated.View>
       )}
 
       {toast && (
@@ -673,9 +791,12 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.4 },
   btnPrimaryText: { color: '#fff', fontWeight: '600' },
   fab: {
+    // Anchored top-left; the live position is applied via an animated
+    // translate so the FAB can be dragged (see useDraggableFab). FAB_SIZE
+    // must stay in sync with width/height below.
     position: 'absolute',
-    right: 20,
-    bottom: 40,
+    left: 0,
+    top: 0,
     width: 52,
     height: 52,
     borderRadius: 26,
