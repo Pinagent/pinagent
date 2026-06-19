@@ -167,7 +167,17 @@ export default function pinagentSource(babel: { types: Any }): Any {
         if (comp) {
           attrs.push(t.jsxAttribute(t.jsxIdentifier(COMP_ATTR), t.stringLiteral(comp)));
         }
-        node.attributes.push(...attrs);
+        // Prepend, NOT append — this is load-bearing for generic wrapper
+        // components. A wrapper like `<ViewRn {...rest} />` forwards the
+        // call site's own `data-pa-loc` (which arrives via `rest`) onto the
+        // host view. JSX props resolve last-wins, so our spliced attribute
+        // must come BEFORE `{...rest}` to let the forwarded call-site location
+        // override the wrapper's own definition line. Append it after the
+        // spread and every element rendered through the wrapper collapses to
+        // the wrapper's `file:line`, and the tapped child becomes unreachable.
+        // The web `@pinagent/babel-plugin` gets this for free by inserting at
+        // `name.end` (before all attributes); we mirror that here.
+        node.attributes.unshift(...attrs);
       },
     },
   };
