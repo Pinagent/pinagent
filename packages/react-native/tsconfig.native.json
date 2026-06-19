@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationMap": false,
+    "sourceMap": false,
+    "outDir": "dist/native",
+    "rootDir": "src/native",
+    "jsx": "react-jsx",
+    "types": ["node"]
+  },
+  "//": "Emits .d.ts for the native client (shipped as TS source for Metro) so a consumer's tsc reads declarations instead of type-checking our raw source. Strict + noUncheckedIndexedAccess (from base) also gate the native source against the bug class that leaked into consumers. Run by `build` after tsdown.",
+  "include": ["src/native"]
+}

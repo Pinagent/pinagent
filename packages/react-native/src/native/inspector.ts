@@ -296,10 +296,12 @@ interface RawCrumb {
  */
 function nearestLoc(locs: (Loc | null)[], i: number): Loc | null {
   for (let j = i + 1; j < locs.length; j++) {
-    if (locs[j]) return locs[j];
+    const loc = locs[j];
+    if (loc) return loc;
   }
   for (let j = i - 1; j >= 0; j--) {
-    if (locs[j]) return locs[j];
+    const loc = locs[j];
+    if (loc) return loc;
   }
   return null;
 }

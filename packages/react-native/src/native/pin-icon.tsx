@@ -12,7 +12,7 @@
  * When the peer isn't installed we fall back to a View-drawn teardrop in the
  * same colour, so the FAB always shows a brand pin — never a generic glyph.
  */
-import type { ReactElement } from 'react';
+import type { ComponentType, ReactElement } from 'react';
 import { View } from 'react-native';
 
 // Canonical pinagent pin — mirror of PIN_PATH / BRAND_VIEWBOX in
@@ -22,9 +22,11 @@ const PIN_PATH =
 const VIEWBOX = '0 0 93 93';
 
 // The two react-native-svg components we use, or `null` when the peer isn't
-// installed. Typed loosely (the peer's types aren't a dep) — native/ isn't
-// tsc-typechecked, and these are only ever rendered as JSX elements.
-type SvgModule = { Svg: unknown; Path: unknown } | null;
+// installed. Typed as bare component types — `react-native-svg`'s own types
+// aren't a dependency, but `unknown` can't be used as a JSX element, and the
+// native source IS declaration-emitted (see tsconfig.native.json), so these
+// must be valid JSX element types.
+type SvgModule = { Svg: ComponentType<any>; Path: ComponentType<any> } | null;
 
 // Resolved once, on first render (dev only — see header). `undefined` = not yet
 // resolved, `null` = peer not installed.
