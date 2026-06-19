@@ -11,7 +11,7 @@ export default function App() {
     <View style={styles.container}>
       <Text style={styles.title}>Pinagent × Expo</Text>
       <Text style={styles.body}>
-        Tap the 💬 button, then tap any component below to leave a comment. It POSTs to the Metro
+        Tap the pin button, then tap any component below to leave a comment. It POSTs to the Metro
         middleware (see metro.config.js) and lands in .pinagent/db.sqlite.
       </Text>
       <Pressable style={styles.button}>
