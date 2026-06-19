@@ -1,6 +1,6 @@
 # Pinagent × Expo example
 
-A minimal Expo app that wires up `@pinagent/react-native`: tap the 💬 FAB,
+A minimal Expo app that wires up `@pinagent/react-native`: tap the pin FAB,
 tap a component, leave a comment — it POSTs to the Metro middleware and
 lands in `.pinagent/db.sqlite`, where an agent (inline spawn, or your
 Claude Code MCP session) picks it up.

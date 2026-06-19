@@ -16,7 +16,7 @@
  * analog. Renders `null` in production so it has zero cost in release
  * builds.
  *
- * Flow: tap the 💬 FAB to arm picking → tap a view → we resolve its source
+ * Flow: tap the pin FAB to arm picking → tap a view → we resolve its source
  * via the RN Inspector, hide our own overlay, and capture a screenshot →
  * type a comment → submit POSTs to the Metro middleware, which stores it
  * and (optionally) spawns an agent. When an agent is spawned, a live
@@ -43,8 +43,10 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { BRAND_CREAM, BRAND_GOLD, BRAND_INK } from './brand';
 import { resolvePick } from './inspector';
 import { buildAdditionalAnchors, type ChipPick, removeChip } from './multi-pick';
+import { PinIcon } from './pin-icon';
 import { restorePills } from './restore';
 import { StreamSheet } from './StreamSheet';
 import { captureScreenshot } from './screenshot';
@@ -550,8 +552,14 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
             })
           }
           style={[styles.fab, phase === 'picking' && styles.fabActive]}
+          accessibilityRole="button"
+          accessibilityLabel={phase === 'picking' ? 'Cancel picking' : 'Pinagent'}
         >
-          <Text style={styles.fabText}>{phase === 'sending' ? '…' : '💬'}</Text>
+          {phase === 'sending' ? (
+            <Text style={styles.fabText}>…</Text>
+          ) : (
+            <PinIcon size={26} color={BRAND_CREAM} />
+          )}
         </Pressable>
       )}
 
@@ -679,7 +687,11 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#111827',
+    backgroundColor: BRAND_INK,
+    // Constant-width rim so toggling the active gold ring never shifts layout;
+    // cream @ 14% is the same subtle idle rim the web widget FAB uses.
+    borderWidth: 2,
+    borderColor: 'rgba(252, 249, 232, 0.14)',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -688,8 +700,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 5,
   },
-  fabActive: { backgroundColor: '#3b82f6' },
-  fabText: { fontSize: 22 },
+  // Gold ring while picking (web widget parity) — replaces the old blue fill.
+  fabActive: { borderColor: BRAND_GOLD },
+  fabText: { fontSize: 22, color: BRAND_CREAM },
   toast: {
     position: 'absolute',
     bottom: 110,
