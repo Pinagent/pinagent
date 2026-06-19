@@ -1,5 +1,31 @@
 # @pinagent/react-native
 
+## 0.2.0
+
+### Minor Changes
+
+- 8fb93dc: feat(react-native): make the feedback FAB draggable
+
+  The 💬 floating action button can now be dragged anywhere on screen, so it
+  can be moved off whatever control the developer wants to comment on. A single
+  PanResponder discriminates a stationary tap (still arms picking) from a drag
+  (relocates the button), the position stays clamped on-screen across rotations,
+  and it resets to the bottom-right corner on reload (RN keeps no device store).
+
+### Patch Changes
+
+- d751150: fix(react-native): re-anchor onto a real source location when pressing any breadcrumb
+
+  Previously only the initially-tapped (innermost) breadcrumb showed a `file:line`
+  path; pressing an ancestor crumb to switch focus often fell back to a bare
+  component name. The tapped element resolved its location via `pickLoc`'s
+  owner-hierarchy walk, but per-crumb locations were read from each crumb's own
+  host props with no fallback, so an ancestor whose first host child is untagged
+  collapsed to `loc: null`. Each crumb now re-resolves to the nearest source in
+  the hierarchy (descendants first, then ancestors), so re-focusing onto any
+  breadcrumb anchors the comment — and the "open in editor" link — onto the actual
+  code snippet.
+
 ## 0.1.4
 
 ### Patch Changes
