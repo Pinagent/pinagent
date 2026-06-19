@@ -27,12 +27,13 @@ The full feedback record persists to a local SQLite database at `.pinagent/db.sq
 
 If the dev server returns 500 on `POST /__pinagent/feedback`, the plugin dist is stale — `pnpm build` from the repo root forces a clean rebuild. See [examples/react-vite/README.md](./examples/react-vite/README.md) for more.
 
-The Next.js, Nuxt, and SvelteKit examples work the same way:
+The Next.js, Nuxt, SvelteKit, and plain Vue examples work the same way:
 
 ```bash
-pnpm --filter next-app-example dev          # :3000
+pnpm --filter next-app-example dev           # :3000
 pnpm --filter nuxt-app-example dev           # :3000 (Nuxt + Vue)
 pnpm --filter sveltekit-app-example dev      # :5173 (SvelteKit + Svelte)
+pnpm --filter vue-vite-example dev           # :5173 (Vue + Vite, no Nuxt)
 ```
 
 There's also a **React Native (Expo)** demo in [`examples/expo-app`](./examples/expo-app/) — tap a component to leave a comment, captured through Metro middleware. It's a standalone app (not a workspace member, so its Expo/RN deps stay out of the root lockfile); run it on its own:
@@ -151,6 +152,7 @@ That's it. In your next Claude Code session, ask it to "address pending Pinagent
 | `resolve_feedback` | Marks `fixed` / `wontfix` / `deferred`; optional note + commit sha. |
 | `get_source_context` | Reads a window of source around a given `file:line`. |
 | `get_conversation_transcript` | Returns the full agent transcript for one feedback id (every captured event), as text or JSON. |
+| `create_pull_request` | Pushes the dev server's current branch and opens a GitHub PR against the configured base (committing uncommitted changes when a `commit_message` is given). Returns the PR URL — or a compare URL if no GitHub token is configured. |
 
 ## What gets captured
 
