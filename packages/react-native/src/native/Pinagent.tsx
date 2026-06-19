@@ -266,13 +266,15 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
 
   // The source location the comment is currently anchored to: the precise
   // tapped element while the innermost crumb is selected, otherwise the
-  // chosen ancestor component's own location.
+  // chosen ancestor component's own (nearest-source-resolved) location. Each
+  // ancestor falls back to the precise tapped loc so an untaggable crumb still
+  // shows a real path rather than degrading to a bare component name.
   const activeLoc = useMemo(() => {
     if (!pick) return null;
     const last = pick.chain.length - 1;
     if (selectedIndex >= 0 && selectedIndex < pick.chain.length) {
       if (selectedIndex === last) return pick.loc ?? pick.chain[last]?.loc ?? null;
-      return pick.chain[selectedIndex]?.loc ?? null;
+      return pick.chain[selectedIndex]?.loc ?? pick.loc ?? null;
     }
     return pick.loc ?? null;
   }, [pick, selectedIndex]);
