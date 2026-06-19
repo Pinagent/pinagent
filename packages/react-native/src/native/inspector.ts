@@ -283,18 +283,62 @@ interface RawCrumb {
 }
 
 /**
+ * The nearest resolvable source to hierarchy index `i`, searching descendants
+ * first (deeper into the component, toward the tapped leaf) then ancestors
+ * (outward toward the root). Returns the first non-null `loc`, or null.
+ *
+ * Why descendants first: a crumb's own props come from RN's `getInspectorData`,
+ * which surfaces the first HOST fiber *inside* that component's render
+ * (`getHostProps`/`findCurrentHostFiber`). When that host carries no
+ * `data-pa-loc` (e.g. it's an untagged 3rd-party view), the most relevant real
+ * source is still the next tagged host *within* this component's subtree — a
+ * descendant — before we fall back to an enclosing ancestor.
+ */
+function nearestLoc(locs: (Loc | null)[], i: number): Loc | null {
+  for (let j = i + 1; j < locs.length; j++) {
+    if (locs[j]) return locs[j];
+  }
+  for (let j = i - 1; j >= 0; j--) {
+    if (locs[j]) return locs[j];
+  }
+  return null;
+}
+
+/**
  * Build the per-segment breadcrumb: each authored component in the hierarchy
  * paired with its own `data-pa-loc` (so a press can re-anchor onto that
  * ancestor) and a `measure` fn (so the highlight can follow the selection).
  * Same order as {@link nameChainOf} — root first, tapped last.
+ *
+ * Each crumb's `loc` falls back to the nearest resolvable source in the
+ * hierarchy when its own host props carry none, so pressing ANY breadcrumb
+ * re-anchors the comment onto a real `file:line` — not just the tapped
+ * (innermost) one. Without the fallback, only the tapped element (which
+ * `pickLoc` resolves with its own hierarchy walk) got a path; ancestor crumbs
+ * whose first host child is untagged collapsed to `loc: null`, so re-focusing
+ * onto them showed a bare component name instead of a source snippet.
+ *
+ * Exported for unit testing — a pure function over the (duck-typed) inspector
+ * payload, so it needs no RN runtime (unlike `resolvePick`).
  */
-function crumbsOf(data: RawInspectorData): RawCrumb[] {
-  return (data.hierarchy ?? [])
-    .filter((h): h is RawHierarchyItem & { name: string } => isAuthoredComponentName(h.name))
-    .map((h) => {
-      const inspector = h.getInspectorData?.(() => null);
-      return { name: h.name, loc: paLocOf(inspector?.props), measure: inspector?.measure };
-    });
+export function crumbsOf(data: RawInspectorData): RawCrumb[] {
+  // Resolve each hierarchy item's inspector data ONCE. We compute locs over the
+  // FULL hierarchy (not just the authored crumbs) so the nearest-source
+  // fallback can borrow a location from an untagged host sitting between two
+  // authored components.
+  const items = (data.hierarchy ?? []).map((h) => {
+    const inspector = h.getInspectorData?.(() => null);
+    return { name: h.name, loc: paLocOf(inspector?.props), measure: inspector?.measure };
+  });
+  const locs = items.map((it) => it.loc);
+  return items
+    .map((it, i) => ({ it, i }))
+    .filter(({ it }) => isAuthoredComponentName(it.name))
+    .map(({ it, i }) => ({
+      name: it.name as string,
+      loc: it.loc ?? nearestLoc(locs, i),
+      measure: it.measure,
+    }));
 }
 
 /**
