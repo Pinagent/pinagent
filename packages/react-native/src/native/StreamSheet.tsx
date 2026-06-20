@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { isDismissKey } from './keyboard';
+import { useKeyboardHeight } from './keyboard-height';
 import { MarkdownView } from './MarkdownView';
 import { deriveRunState, type RunState } from './run-state';
 import { isNearBottom } from './scroll-follow';
@@ -84,6 +85,9 @@ export function StreamSheet({
   // True until the first auto-scroll on a non-empty transcript lands, so the
   // initial scroll-to-end always fires regardless of measured position.
   const didInitialScrollRef = useRef(false);
+  // The sheet is its own Modal, so KeyboardAvoidingView can't lift it — pad the
+  // backdrop up by the live keyboard height (matches the composer; keyboard-height.ts).
+  const keyboardHeight = useKeyboardHeight();
 
   useEffect(() => {
     const client = new StreamClient(feedbackId, {
@@ -168,7 +172,7 @@ export function StreamSheet({
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { paddingBottom: keyboardHeight }]}>
         <View style={styles.sheet}>
           <View style={styles.header}>
             <Text style={styles.headerTitle} numberOfLines={1}>
@@ -255,13 +259,23 @@ export function StreamSheet({
           {askOpen ? (
             <View style={styles.inputBar}>
               {ask.options.length > 0 ? (
-                <View style={styles.options}>
+                // Height-bounded + scrollable so a many-option (or long-option)
+                // ask never grows the form past the sheet and shoves the text
+                // input + Send below the fold (worse with the keyboard up).
+                // `flexShrink` lets the transcript above keep most of the room.
+                <ScrollView
+                  style={styles.optionsScroll}
+                  contentContainerStyle={styles.options}
+                  keyboardShouldPersistTaps="handled"
+                >
                   {ask.options.map((opt) => (
                     <Pressable key={opt} onPress={() => submitAnswer(opt)} style={styles.optionBtn}>
-                      <Text style={styles.optionText}>{opt}</Text>
+                      <Text style={styles.optionText} numberOfLines={1}>
+                        {opt}
+                      </Text>
                     </Pressable>
                   ))}
-                </View>
+                </ScrollView>
               ) : null}
               <View style={styles.row}>
                 <TextInput
@@ -351,7 +365,10 @@ const styles = StyleSheet.create({
   headerTitle: { flex: 1, fontSize: 14, fontWeight: '600', color: '#111827' },
   headerBtns: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   headerBtn: { fontSize: 16, color: '#6b7280', paddingLeft: 4 },
-  log: { paddingHorizontal: 16 },
+  // `flexShrink` so a tall transcript yields room to the pinned input bar (and
+  // the bounded options) instead of overflowing the 80%-max sheet and pushing
+  // the text input + Send off-screen. Short transcripts still size compactly.
+  log: { paddingHorizontal: 16, flexShrink: 1 },
   logContent: { paddingVertical: 12, gap: 8 },
   muted: { color: '#9aa0a6', fontSize: 13 },
   textRow: { fontSize: 14, color: '#111827', lineHeight: 20 },
@@ -376,8 +393,14 @@ const styles = StyleSheet.create({
     gap: 8,
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
+    // Never shrink the answer form — the transcript above yields room instead,
+    // so the text input + Send stay reachable however many options the ask has.
+    flexShrink: 0,
   },
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  // Cap the option area so the text input + Send below it always stay on-screen;
+  // `flexShrink` yields room to the transcript first. The options scroll within.
+  optionsScroll: { maxHeight: 132, flexShrink: 1 },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   optionBtn: {
     borderWidth: 1,
@@ -385,6 +408,8 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    // A single long option ellipsizes instead of forcing the row wide.
+    maxWidth: '100%',
   },
   optionText: { color: '#6d28d9', fontSize: 13, fontWeight: '600' },
   input: {

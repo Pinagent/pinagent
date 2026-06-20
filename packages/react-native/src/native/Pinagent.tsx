@@ -35,7 +35,6 @@ import type { ReactElement } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  Keyboard,
   Modal,
   PanResponder,
   Platform,
@@ -50,6 +49,7 @@ import { AgentDock } from './AgentDock';
 import { BRAND_CREAM, BRAND_GOLD, BRAND_INK } from './brand';
 import { resolvePick } from './inspector';
 import { isDismissKey } from './keyboard';
+import { useKeyboardHeight } from './keyboard-height';
 import { buildAdditionalAnchors, type ChipPick, removeChip } from './multi-pick';
 import { PinIcon } from './pin-icon';
 import { restorePills } from './restore';
@@ -85,29 +85,6 @@ function nextPaint(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   });
-}
-
-/**
- * Track the soft keyboard's height so the composer can sit directly above it.
- * `KeyboardAvoidingView` is unreliable inside a `Modal` — the modal presents
- * in its own window, so the view's measured origin is wrong and the computed
- * inset never lifts the sheet. Driving the inset off the keyboard frame is the
- * robust cross-platform path. iOS fires the `*Will*` events (in sync with the
- * slide animation); Android only fires `*Did*`.
- */
-function useKeyboardHeight(): number {
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const show = Keyboard.addListener(showEvt, (e) => setHeight(e.endCoordinates.height));
-    const hide = Keyboard.addListener(hideEvt, () => setHeight(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return height;
 }
 
 const FAB_SIZE = 52;
@@ -567,7 +544,7 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
         onRequestClose={onDismissComposer}
       >
         {/* Pad the docked composer up by the live keyboard height so the
-            input and actions clear the soft keyboard (see useKeyboardHeight
+            input and actions clear the soft keyboard (see keyboard-height.ts
             for why KeyboardAvoidingView can't do this inside a Modal). */}
         <View style={[styles.composerBackdrop, { paddingBottom: keyboardHeight }]}>
           <View style={styles.composer}>
