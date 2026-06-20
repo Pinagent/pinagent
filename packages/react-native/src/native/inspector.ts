@@ -614,33 +614,45 @@ export function resolvePick(
           const loc = pickLoc(data, projectRoot);
           const nameChain = nameChainOf(data);
 
-          // Measure fallback: when RN's native `findNodeAtPoint` couldn't
-          // descend to a tagged element (`tappedLeafLoc` is null — e.g.
-          // react-native-pager-view detaches its pages from the Fabric shadow
-          // tree the hit-test walks, so it bottoms out at the page wrapper),
-          // resolve the tap by measuring the still-intact fiber subtree under
-          // the touched host. Skipped entirely when the native pick already
-          // found the leaf, so every non-pager screen keeps its existing path.
-          if (!tappedLeafLoc(data)) {
-            const root = getHandleFromPublicInstance(data.closestPublicInstance);
-            const hit = root ? await measureHitTest(root, x, y, measureFiberInWindow) : null;
-            if (hit) {
-              const ancestors = taggedAncestors(hit.fiber);
-              const crumbFrames = await Promise.all(
-                ancestors.map((a) => measureFiberInWindow(a.fiber)),
-              );
-              done({
-                loc: hit.loc,
-                nameChain: ancestors.map((a) => a.name),
-                chain: ancestors.map((a, i) => ({
-                  name: a.name,
-                  loc: a.loc,
-                  frame: crumbFrames[i] ?? null,
-                })),
-                frame: hit.frame,
-              });
-              return;
-            }
+          // Measure fallback: RN's native `findNodeAtPoint` can't descend into
+          // content hosted by a native container — react-native-pager-view
+          // detaches each page from the Fabric shadow tree the hit-test walks,
+          // so a tap inside a pager page bottoms out at the page wrapper. The
+          // React fiber tree stays intact and the widgets are on-screen, so we
+          // hit-test ourselves: DFS the fiber subtree under the natively-hit
+          // host, measuring each, and take the DEEPEST tagged host whose window
+          // frame holds the tap.
+          //
+          // We can't gate this on `tappedLeafLoc(data)` being null: that walks
+          // UP the touched host's `return` chain, and the page wrapper's
+          // authored ancestors (the `<MaterialTopTabs>` in the screen's layout)
+          // ARE tagged, so it returns the wrapper's source and the fallback
+          // would never fire on a pager. Instead we always run the DFS from the
+          // natively-hit host and override ONLY when it descends to a tagged
+          // host BELOW that host (`hit.fiber !== nativeLeaf`). Off the pager the
+          // native pick already reached the leaf, so the DFS bottoms out at that
+          // same fiber and we fall through to the native path untouched — no
+          // regression on any screen that already works.
+          const nativeLeaf = getHandleFromPublicInstance(data.closestPublicInstance);
+          const hit = nativeLeaf
+            ? await measureHitTest(nativeLeaf, x, y, measureFiberInWindow)
+            : null;
+          if (hit && hit.fiber !== nativeLeaf) {
+            const ancestors = taggedAncestors(hit.fiber);
+            const crumbFrames = await Promise.all(
+              ancestors.map((a) => measureFiberInWindow(a.fiber)),
+            );
+            done({
+              loc: hit.loc,
+              nameChain: ancestors.map((a) => a.name),
+              chain: ancestors.map((a, i) => ({
+                name: a.name,
+                loc: a.loc,
+                frame: crumbFrames[i] ?? null,
+              })),
+              frame: hit.frame,
+            });
+            return;
           }
 
           // Native pick: measure each crumb so pressing one can move the

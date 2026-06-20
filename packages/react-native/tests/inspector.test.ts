@@ -299,6 +299,48 @@ describe('measureHitTest — fiber-measure fallback when findNodeAtPoint can’t
   });
 });
 
+describe('measureHitTest — fiber identity drives the resolvePick override gate', () => {
+  // resolvePick runs the DFS from the natively-hit host on EVERY pick and only
+  // overrides the native breadcrumb when the DFS descends PAST that host
+  // (`hit.fiber !== nativeLeaf`). These pin both sides of that comparison — the
+  // gate can't be tightened back to `tappedLeafLoc`-null without breaking the
+  // pager (whose wrapper IS tagged, via its `<MaterialTopTabs>` ancestor).
+
+  it('returns the ROOT fiber itself when the root is the deepest tagged host (→ no override)', async () => {
+    // Off the pager the native hit-test already reached the leaf, so the DFS
+    // root IS that leaf; best must be the exact same object so resolvePick
+    // keeps the native path untouched.
+    const leaf = host('leaf.tsx:1:1', { x: 0, y: 0, width: 50, height: 50 });
+    const hit = await measureHitTest(leaf, 10, 10, measure);
+    expect(hit?.fiber).toBe(leaf);
+  });
+
+  it('returns a DESCENDANT fiber (not the root) when one is deeper (→ override)', async () => {
+    // The pager case: the DFS root is the page wrapper (tagged via its layout
+    // ancestor); a tagged widget lives below it, so best is the descendant and
+    // resolvePick overrides the wrapper breadcrumb with the widget.
+    const widget = host('widget.tsx:9:1', { x: 0, y: 0, width: 20, height: 20 }, [], 'Widget');
+    const wrapper = host('wrapper.tsx:1:1', { x: 0, y: 0, width: 100, height: 100 }, [
+      comp([widget]),
+    ]);
+    const hit = await measureHitTest(wrapper, 5, 5, measure);
+    expect(hit?.fiber).toBe(widget);
+    expect(hit?.fiber).not.toBe(wrapper);
+  });
+
+  it('returns the root when the only deeper tagged host misses the tap (→ no override)', async () => {
+    // An off-screen pager page's widget (frame misses) is pruned, so the
+    // wrapper stays the deepest container — we must NOT override onto a
+    // wrong-page widget.
+    const offscreen = host('other.tsx:9:1', { x: 500, y: 0, width: 20, height: 20 });
+    const wrapper = host('wrapper.tsx:1:1', { x: 0, y: 0, width: 100, height: 100 }, [
+      comp([offscreen]),
+    ]);
+    const hit = await measureHitTest(wrapper, 5, 5, measure);
+    expect(hit?.fiber).toBe(wrapper);
+  });
+});
+
 describe('taggedAncestors — measure-fallback breadcrumb from the fiber return chain', () => {
   it('collects distinct tagged hosts root-first, naming them from data-pa-comp', () => {
     const card = host('card.tsx:1:1', null, [], 'Card');
