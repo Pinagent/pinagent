@@ -492,16 +492,31 @@ function measureFiberInWindow(fiber: FiberLike): Promise<Frame | null> {
  * `react-native-pager-view` (and anything that hosts content in a native
  * container) detaches a page's *native* views from the Fabric shadow tree
  * `findNodeAtPoint` walks, so the native hit-test bottoms out at the page
- * wrapper and never reaches the widget. But the React **fiber** tree is intact
- * and the widgets are on-screen, hence measurable — so we hit-test ourselves:
- * DFS the fiber subtree under `root`, measuring each host, and keep the DEEPEST
- * tagged host whose window frame contains the tap.
+ * wrapper — it returns no touched instance at all (`closestPublicInstance` is
+ * null). But the React **fiber** tree is intact and the page's widgets are
+ * on-screen, hence measurable — so we hit-test ourselves: DFS the fiber subtree
+ * under `root` (the app root, an ancestor of every on-screen view), measuring
+ * each host, and keep the DEEPEST tagged host inside the tapped region.
  *
- * Pruned like the browser's `elementFromPoint`: a host whose frame misses the
- * point can't have a (non-overflowing) descendant that hits, so its subtree is
- * skipped. Composite / fragment fibers carry no frame, so we always descend
- * through them to reach their hosts. `measure` is injected so the traversal is
- * unit-testable without an RN runtime.
+ * `region` threads the frame of the nearest measurable host ancestor that
+ * CONTAINS the tap (null until we enter one). Two subtleties this handles:
+ *
+ *  - **Pruning.** A host with a real frame that MISSES the tap can't have a
+ *    (non-overflowing) descendant that hits, so its subtree is skipped — like
+ *    the browser's `elementFromPoint`.
+ *  - **Flattened / detached hosts.** RN flattens layout-only `<View>`s (no
+ *    native view → `measure` returns null) and pager pages are detached, so a
+ *    widget's own tagged hosts often can't be measured. Once we're inside a
+ *    measurable containing region we keep recording tagged hosts even when they
+ *    can't be measured (they borrow the region's frame for the highlight) and
+ *    descend through them — otherwise geometry bottoms out at the outermost
+ *    non-flattened wrapper (e.g. an animated card) and every widget collapses to
+ *    that shared wrapper's source. Measurable siblings still prune wrong
+ *    branches, so we stay within the tapped element.
+ *
+ * Composite / fragment fibers carry no frame, so we always descend through them
+ * to reach their hosts. `measure` is injected so the traversal is unit-testable
+ * without an RN runtime.
  */
 export async function measureHitTest(
   root: FiberLike | null,
@@ -512,29 +527,42 @@ export async function measureHitTest(
   let best: MeasuredHit | null = null;
   let bestDepth = -1;
 
-  async function visitChildren(parent: FiberLike, depth: number): Promise<void> {
+  async function visitChildren(
+    parent: FiberLike,
+    depth: number,
+    region: Frame | null,
+  ): Promise<void> {
     let n = 0;
     for (let node = parent.child ?? null; node && n < 100_000; node = node.sibling ?? null, n++) {
-      await visitNode(node, depth);
+      await visitNode(node, depth, region);
     }
   }
 
-  async function visitNode(node: FiberLike, depth: number): Promise<void> {
+  async function visitNode(node: FiberLike, depth: number, region: Frame | null): Promise<void> {
+    let nextRegion = region;
     if (node.tag === HOST_COMPONENT) {
       const frame = await measure(node);
-      // A host that doesn't contain the point prunes its whole subtree.
-      if (!frame || !frameContains(frame, x, y)) return;
-      const loc = paLocOf(node.memoizedProps);
-      // Deepest tagged host wins; on a tie the later (over-painted) sibling does.
-      if (loc && depth >= bestDepth) {
-        best = { fiber: node, loc, name: compOf(node.memoizedProps), frame };
-        bestDepth = depth;
+      if (frame) {
+        // A measurable host that misses the tap prunes its whole subtree.
+        if (!frameContains(frame, x, y)) return;
+        nextRegion = frame; // tighten the containing region to this host
+      }
+      // Record any tagged host reached INSIDE a measurable containing region —
+      // including flattened ones (null frame) geometry can't see. Deepest wins;
+      // on a tie the later (over-painted) sibling does. Flattened hosts borrow
+      // the region's frame for the highlight.
+      if (nextRegion) {
+        const loc = paLocOf(node.memoizedProps);
+        if (loc && depth >= bestDepth) {
+          best = { fiber: node, loc, name: compOf(node.memoizedProps), frame: frame ?? nextRegion };
+          bestDepth = depth;
+        }
       }
     }
-    await visitChildren(node, depth + 1);
+    await visitChildren(node, depth + 1, nextRegion);
   }
 
-  if (root) await visitNode(root, 0);
+  if (root) await visitNode(root, 0, null);
   return best;
 }
 
@@ -614,16 +642,27 @@ export function resolvePick(
           const loc = pickLoc(data, projectRoot);
           const nameChain = nameChainOf(data);
 
-          // Measure fallback: when RN's native `findNodeAtPoint` couldn't
-          // descend to a tagged element (`tappedLeafLoc` is null — e.g.
-          // react-native-pager-view detaches its pages from the Fabric shadow
-          // tree the hit-test walks, so it bottoms out at the page wrapper),
-          // resolve the tap by measuring the still-intact fiber subtree under
-          // the touched host. Skipped entirely when the native pick already
-          // found the leaf, so every non-pager screen keeps its existing path.
-          if (!tappedLeafLoc(data)) {
-            const root = getHandleFromPublicInstance(data.closestPublicInstance);
-            const hit = root ? await measureHitTest(root, x, y, measureFiberInWindow) : null;
+          // Measure fallback: RN's native `findNodeAtPoint` can't descend into
+          // content hosted by a native container — react-native-pager-view
+          // detaches each page from the Fabric shadow tree the hit-test walks,
+          // so a tap inside a pager page resolves NO touched instance
+          // (`closestPublicInstance` is null) and bottoms out at the page
+          // wrapper. The React fiber tree stays intact and the page's widgets
+          // are on-screen, so when there's no touched instance we hit-test
+          // ourselves: DFS the fiber tree from the app root (an ancestor of
+          // every on-screen view), measuring each host, and take the deepest
+          // tagged host inside the measurable region under the tap.
+          //
+          // Gated on the native hit-test failing to resolve an instance, so
+          // every screen where it succeeds (the common case) keeps its existing
+          // native path untouched — no regression. Paper surfaces only a numeric
+          // view tag, so `getHandleFromPublicInstance` returns null there too
+          // and the app-root bridge below also fails, degrading to the native
+          // path.
+          const nativeLeaf = getHandleFromPublicInstance(data.closestPublicInstance);
+          if (!nativeLeaf) {
+            const appRoot = getHandleFromPublicInstance(inspectedView);
+            const hit = appRoot ? await measureHitTest(appRoot, x, y, measureFiberInWindow) : null;
             if (hit) {
               const ancestors = taggedAncestors(hit.fiber);
               const crumbFrames = await Promise.all(
