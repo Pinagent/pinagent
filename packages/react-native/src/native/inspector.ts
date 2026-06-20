@@ -80,8 +80,21 @@ interface RawInspectorData {
   closestInstance?: { _debugSource?: RawFiberLike } | null;
   /** Some versions surface the resolved source straight on the payload. */
   source?: RawFiberLike | null;
-  /** The tapped host view's props — where `data-pa-loc` lands. */
+  /**
+   * NOT the tapped leaf's props. RN fills this from the nearest authored
+   * *composite owner's* FIRST host descendant (`getHostProps` →
+   * `findCurrentHostFiber`) — i.e. that component's outermost view — so a tap
+   * on a nested child surfaces its container here, not the element under the
+   * finger. Used only as a fallback; `closestPublicInstance` pins the leaf.
+   */
   props?: RawProps;
+  /**
+   * The public instance of the host view actually under the finger — the
+   * deepest hit-tested node. Fabric only; Paper passes a numeric view tag we
+   * can't bridge, so we degrade to `props`. Its fiber's `memoizedProps` carry
+   * the leaf's own `data-pa-loc`. See {@link tappedLeafLoc}.
+   */
+  closestPublicInstance?: unknown;
 }
 
 let cachedFn: InspectorFn | null | undefined;
@@ -128,6 +141,8 @@ interface FiberLike {
   tag?: number;
   return?: FiberLike | null;
   stateNode?: { canonical?: { publicInstance?: unknown } } | null;
+  /** Host fibers carry the committed props — where `data-pa-loc` rides. */
+  memoizedProps?: RawProps;
 }
 
 let cachedGetHandle: ((instance: unknown) => FiberLike | null) | null | undefined;
@@ -210,13 +225,56 @@ function paLocOf(props: RawProps): Loc | null {
 }
 
 /**
+ * Walk a host fiber's render-tree parent (`return`) chain, returning the first
+ * `data-pa-loc` found on a fiber's `memoizedProps` — the tapped element itself,
+ * or, when that exact host is untagged (a 3rd-party / RN-internal view), the
+ * nearest authored element enclosing it. Capped against a malformed `return`
+ * cycle. Pure over a fiber-like chain; exported for unit testing without an RN
+ * runtime.
+ */
+export function nearestPaLocUp(fiber: FiberLike | null): Loc | null {
+  for (let i = 0; fiber && i < 10_000; i++) {
+    const loc = paLocOf(fiber.memoizedProps);
+    if (loc) return loc;
+    fiber = fiber.return ?? null;
+  }
+  return null;
+}
+
+/**
+ * The source of the host view actually under the finger.
+ *
+ * RN's `data.props` is NOT the tapped leaf — it's the nearest authored
+ * composite owner's first host descendant (its outer container), so a tap on a
+ * nested child resolves to its parent. To land on the leaf, start from the
+ * hit-tested host (`data.closestPublicInstance`), bridge it to its fiber, and
+ * walk the render-tree parents for the nearest `data-pa-loc`. This mirrors the
+ * web widget walking up the DOM from the clicked node.
+ *
+ * Returns null when the instance can't be bridged (Paper, which surfaces only a
+ * numeric view tag) — `pickLoc` then falls back to `data.props`.
+ */
+function tappedLeafLoc(data: RawInspectorData): Loc | null {
+  return nearestPaLocUp(getHandleFromPublicInstance(data.closestPublicInstance));
+}
+
+/**
  * Resolve the source location. Preferred path: the build-time `data-pa-loc`
- * prop our babel plugin splices on (read from the tapped host view's props,
- * then from each owner outward). Fallback: RN's legacy `_debugSource` /
- * inspector `source` field, for older RN/React where they still exist.
+ * prop our babel plugin splices on — read first from the host view actually
+ * under the finger ({@link tappedLeafLoc}), then from `data.props` and each
+ * owner outward. Fallback: RN's legacy `_debugSource` / inspector `source`
+ * field, for older RN/React where they still exist.
  */
 function pickLoc(data: RawInspectorData, projectRoot: string): Loc | null {
-  // 1. `data-pa-loc` on the directly tapped host view.
+  // 0. The host view actually under the finger. MUST come first: `data.props`
+  //    (step 1) is the nearest composite owner's first host — an outer
+  //    container — so without this a tap on a nested child resolves to its
+  //    parent (e.g. a card's content tapped, but its screen layout returned).
+  const leaf = tappedLeafLoc(data);
+  if (leaf) return leaf;
+
+  // 1. `data-pa-loc` on `data.props` — the nearest authored owner's first host.
+  //    Fallback for when the touched host can't be bridged to a fiber (Paper).
   const direct = paLocOf(data.props);
   if (direct) return direct;
 

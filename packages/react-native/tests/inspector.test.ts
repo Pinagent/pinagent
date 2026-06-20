@@ -21,6 +21,7 @@ import {
   crumbsOf,
   isAuthoredComponentName,
   measureFrame,
+  nearestPaLocUp,
   resolvePick,
 } from '../src/native/inspector';
 
@@ -147,6 +148,44 @@ describe('crumbsOf — every breadcrumb resolves to a real source', () => {
   it('returns an empty chain for a missing/empty hierarchy', () => {
     expect(crumbsOf({})).toEqual([]);
     expect(crumbsOf({ hierarchy: [] })).toEqual([]);
+  });
+});
+
+describe('nearestPaLocUp — resolve the tapped leaf, not its owner’s container', () => {
+  // Minimal fiber-like chain, leaf → parents via `return`. RN's inspector
+  // surfaces `data.props` as the nearest composite owner's FIRST host (an outer
+  // container); this walk instead reads the host actually under the finger.
+  type Fib = { memoizedProps?: Record<string, unknown>; return?: Fib | null };
+  const fib = (paLoc: string | null, parent: Fib | null = null): Fib => ({
+    memoizedProps: paLoc ? { 'data-pa-loc': paLoc } : {},
+    return: parent,
+  });
+
+  it('returns the tapped host’s own loc when that exact host is tagged', () => {
+    // The leaf the developer tapped — NOT its screen/card container parent.
+    const leaf = fib('src/StepsCard.tsx:12:4', fib('src/_layout.tsx:89:6'));
+    expect(nearestPaLocUp(leaf)).toEqual({ file: 'src/StepsCard.tsx', line: 12, col: 4 });
+  });
+
+  it('climbs to the nearest tagged ancestor when the exact host is untagged', () => {
+    // Tapped host is a 3rd-party / RN-internal view carrying no data-pa-loc;
+    // resolve the nearest authored element enclosing it (still leaf-ward).
+    const leaf = fib(null, fib(null, fib('src/Card.tsx:9:6')));
+    expect(nearestPaLocUp(leaf)).toEqual({ file: 'src/Card.tsx', line: 9, col: 6 });
+  });
+
+  it('returns null when nothing in the parent chain is tagged', () => {
+    expect(nearestPaLocUp(fib(null, fib(null)))).toBeNull();
+  });
+
+  it('returns null for a missing fiber (instance could not be bridged)', () => {
+    expect(nearestPaLocUp(null)).toBeNull();
+  });
+
+  it('terminates on a malformed `return` cycle instead of spinning', () => {
+    const a = fib(null);
+    a.return = a; // self-referential cycle
+    expect(nearestPaLocUp(a)).toBeNull();
   });
 });
 
