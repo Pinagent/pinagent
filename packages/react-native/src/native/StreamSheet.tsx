@@ -14,58 +14,55 @@
  * reconnect replays the agent transcript, so we clear `events` on `onReset`
  * but keep local follow-ups.
  *
- * The sheet can be **minimized** to a compact status pill so the developer can
- * keep interacting with the app — e.g. to pick another element and spawn a
- * second agent. Minimizing doesn't tear the run down: the component stays
- * mounted (only its rendering changes), so the WebSocket keeps streaming in the
- * background and the live transcript is intact the moment it's re-expanded.
- * `<Pinagent/>` mounts one of these per concurrent run.
+ * The sheet can be **minimized**: the run drops into the compact bottom-left
+ * `AgentDock` (a chip / count bar) so the developer can keep interacting with
+ * the app — e.g. to pick another element and spawn a second agent. Minimizing
+ * doesn't tear the run down: this component stays mounted and simply renders
+ * `null` (the dock draws the compact UI), so the WebSocket keeps streaming in
+ * the background and the live transcript is intact the moment it's re-expanded.
+ * `<Pinagent/>` mounts one of these per concurrent run and reads each run's
+ * derived {@link RunState} (reported via `onState`) to drive the dock.
  */
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Animated,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { isDismissKey } from './keyboard';
 import { MarkdownView } from './MarkdownView';
+import { deriveRunState, type RunState } from './run-state';
 import { type AgentEvent, pendingAsk, renderTranscript } from './transcript';
 import { StreamClient } from './ws-client';
 
-/** Height of a minimized pill — drives the bottom-left stacking offset. */
-const PILL_HEIGHT = 40;
+/** Expanded-sheet header text per run state. */
+const HEADER_LABEL: Record<RunState, string> = {
+  connecting: 'Connecting',
+  working: 'Agent working',
+  awaiting: 'Agent needs input',
+  done: 'Agent finished',
+  failed: 'Agent failed',
+};
 
 export interface StreamSheetProps {
   feedbackId: string;
   /** Source label shown in the header (e.g. `file:line` or component name). */
   target: string;
-  /** Render as a compact pill (WS stays live) instead of the full sheet. */
+  /** Minimized → render nothing (the dock shows the compact chip); WS stays live. */
   minimized: boolean;
-  /** Stack position among minimized pills (0 = bottom-most), for layout. */
-  stackIndex: number;
-  /** Collapse the full sheet to its pill. */
+  /** Collapse the full sheet back into the dock. */
   onMinimize: () => void;
-  /** Expand the pill back to the full sheet. */
-  onExpand: () => void;
   /** Dismiss for good — tears down the WS and removes this run's view. */
   onClose: () => void;
+  /** Report the run's derived state up so the dock can render it. */
+  onState: (state: RunState) => void;
 }
 
 export function StreamSheet({
   feedbackId,
   target,
   minimized,
-  stackIndex,
   onMinimize,
-  onExpand,
   onClose,
-}: StreamSheetProps): ReactElement {
+  onState,
+}: StreamSheetProps): ReactElement | null {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [followUps, setFollowUps] = useState<string[]>([]);
   const [answered, setAnswered] = useState<Record<string, string>>({});
@@ -79,7 +76,13 @@ export function StreamSheet({
 
   useEffect(() => {
     const client = new StreamClient(feedbackId, {
-      onReset: () => setEvents([]),
+      // A reconnect replays the transcript from scratch, so clear the events —
+      // and the prior transport error, so a recovered run leaves the `failed`
+      // state instead of staying stuck red after a successful reconnect.
+      onReset: () => {
+        setEvents([]);
+        setTransportError(null);
+      },
       onEvent: (event) => {
         setEvents((prev) => [...prev, event]);
         if (event.type === 'result') setDone(true);
@@ -94,67 +97,24 @@ export function StreamSheet({
 
   const rows = useMemo(() => renderTranscript(events), [events]);
   const ask = useMemo(() => pendingAsk(events), [events]);
-  const askOpen = ask && !answered[ask.askId];
-  const running = !done && !transportError;
-  // The agent is blocked on an `ask_user` we haven't answered. While minimized
-  // that would otherwise be invisible — the run just stalls — so the pill flags
-  // it and pulses to pull you back. (When expanded, the answer form shows.)
-  const needsInput = minimized && !!askOpen;
+  const state = deriveRunState({ events, done, transportError, answered });
+  const askOpen = state === 'awaiting' && !!ask;
+  const running = state === 'connecting' || state === 'working' || state === 'awaiting';
 
-  // Drive the pulse on the minimized pill while it's waiting for input. The
-  // ref/effect are hooks, so they live above the early return; the loop only
-  // runs in the `needsInput` state and resets otherwise.
-  const pulse = useRef(new Animated.Value(1)).current;
+  // Report the derived state up to <Pinagent/> so the dock reflects it. The
+  // callback is held in a ref so the effect fires only on a real state change
+  // (not whenever the parent passes a fresh inline `onState`). Runs while
+  // minimized too — this component stays mounted and only renders null.
+  const onStateRef = useRef(onState);
+  onStateRef.current = onState;
   useEffect(() => {
-    if (!needsInput) {
-      pulse.setValue(1);
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 0.35, duration: 600, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [needsInput, pulse]);
+    onStateRef.current(state);
+  }, [state]);
 
-  // Minimized: a compact, tappable status pill. The WS hooks above keep
-  // running because the component stays mounted — only the rendering changes —
-  // so the run streams on in the background and re-expands with full state.
-  if (minimized) {
-    return (
-      <Pressable
-        onPress={onExpand}
-        accessibilityRole="button"
-        style={[
-          styles.pill,
-          needsInput && styles.pillAsk,
-          { bottom: 40 + stackIndex * (PILL_HEIGHT + 8) },
-        ]}
-      >
-        <Animated.View
-          style={[
-            styles.pillDot,
-            needsInput
-              ? [styles.pillDotAsk, { opacity: pulse }]
-              : transportError
-                ? styles.pillDotError
-                : running
-                  ? styles.pillDotRunning
-                  : styles.pillDotDone,
-          ]}
-        />
-        <Text style={styles.pillText} numberOfLines={1}>
-          {needsInput ? `Needs input · ${target}` : target}
-        </Text>
-        <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button">
-          <Text style={styles.pillClose}>✕</Text>
-        </Pressable>
-      </Pressable>
-    );
-  }
+  // Minimized: render nothing. The WS hooks above keep running because the
+  // component stays mounted; the compact chip is drawn by the dock from the
+  // state we report. Re-expanding shows the full sheet with live state intact.
+  if (minimized) return null;
 
   function submitAnswer(answer: string): void {
     if (!ask || !answer.trim()) return;
@@ -169,7 +129,10 @@ export function StreamSheet({
     clientRef.current?.sendUserMessage(text);
     setFollowUps((prev) => [...prev, text]);
     setDraft('');
-    setDone(false); // a follow-up resumes the run
+    // A follow-up resumes the run: clear the terminal/error flags so it leaves
+    // the done/failed state and reads as working again.
+    setDone(false);
+    setTransportError(null);
   }
 
   return (
@@ -178,12 +141,12 @@ export function StreamSheet({
         <View style={styles.sheet}>
           <View style={styles.header}>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              {running ? 'Agent working' : 'Agent finished'} · {target}
+              {HEADER_LABEL[state]} · {target}
             </Text>
             <View style={styles.headerBtns}>
-              {/* Minimize: collapse to a pill so the app is interactive again
-                  (e.g. to pick another element and spawn a second agent). The
-                  run keeps streaming in the background. */}
+              {/* Minimize: collapse into the dock so the app is interactive
+                  again (e.g. to pick another element and spawn a second agent).
+                  The run keeps streaming in the background. */}
               <Pressable onPress={onMinimize} hitSlop={8} accessibilityRole="button">
                 <Text style={styles.headerBtn}>—</Text>
               </Pressable>
@@ -412,33 +375,4 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.4 },
   bottomBtn: { alignSelf: 'center', paddingVertical: 8 },
   bottomBtnText: { color: '#6b7280', fontWeight: '600' },
-  // Minimized status pill, bottom-left so it never collides with the FAB
-  // (bottom-right). `bottom` is set inline from the stack index.
-  pill: {
-    position: 'absolute',
-    left: 20,
-    maxWidth: '70%',
-    height: PILL_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    borderRadius: PILL_HEIGHT / 2,
-    backgroundColor: 'rgba(17,24,39,0.95)',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 5,
-  },
-  // Waiting on `ask_user`: a purple-tinted pill (matching the expanded ask row)
-  // so a blocked run reads differently from a busy one at a glance.
-  pillAsk: { backgroundColor: 'rgba(76,29,149,0.97)' },
-  pillDot: { width: 8, height: 8, borderRadius: 4 },
-  pillDotRunning: { backgroundColor: '#3b82f6' },
-  pillDotDone: { backgroundColor: '#10b981' },
-  pillDotError: { backgroundColor: '#ef4444' },
-  pillDotAsk: { backgroundColor: '#c4b5fd' },
-  pillText: { flexShrink: 1, color: '#fff', fontSize: 13, fontWeight: '600' },
-  pillClose: { color: '#9aa0a6', fontSize: 13, paddingLeft: 2 },
 });
