@@ -25,10 +25,11 @@
  * (MCP) pickup. "+ Add element" multi-picks several targets into one comment
  * (sent as `additionalAnchors`); a single pick leaves them null.
  *
- * The transcript sheet can be minimized to a pill, freeing the screen to pick
- * another element and spawn a second agent. Each run keeps its own live sheet,
- * so multiple agents can stream concurrently — the expanded one shows its full
- * sheet; the rest sit as pills that keep streaming until tapped open.
+ * The transcript sheet can be minimized into the compact bottom-left dock,
+ * freeing the screen to pick another element and spawn a second agent. Each run
+ * keeps its own live sheet, so multiple agents can stream concurrently — the
+ * expanded one shows its full sheet; the rest collapse into the dock (a chip, or
+ * a count bar at 2+) and keep streaming until tapped open.
  */
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -45,12 +46,14 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { AgentDock } from './AgentDock';
 import { BRAND_CREAM, BRAND_GOLD, BRAND_INK } from './brand';
 import { resolvePick } from './inspector';
 import { isDismissKey } from './keyboard';
 import { buildAdditionalAnchors, type ChipPick, removeChip } from './multi-pick';
 import { PinIcon } from './pin-icon';
 import { restorePills } from './restore';
+import type { RunState } from './run-state';
 import { StreamSheet } from './StreamSheet';
 import { captureScreenshot } from './screenshot';
 import { submitOutcome } from './submit-outcome';
@@ -251,12 +254,15 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
   // instead of losing everything to a vanishing toast (ticket 002).
   const [submitError, setSubmitError] = useState<string | null>(null);
   // Live agent runs. Each spawned agent gets a StreamSheet; one can be expanded
-  // (full sheet) while the rest sit as minimized pills that keep streaming in
-  // the background — so you can minimize a run, interact with the app, and
-  // spawn another. `expandedId` is the one showing its full sheet (null = all
-  // minimized).
+  // (full sheet) while the rest collapse into the compact bottom-left dock and
+  // keep streaming in the background — so you can minimize a run, interact with
+  // the app, and spawn another. `expandedId` is the one showing its full sheet
+  // (null = all minimized into the dock).
   const [streams, setStreams] = useState<{ id: string; target: string }[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Each run's derived lifecycle state, reported up by its StreamSheet, so the
+  // dock can render the right chip / count-bar without owning the WS state.
+  const [statuses, setStatuses] = useState<Record<string, RunState>>({});
 
   // The surface this widget is mounted on — the same value we record as the
   // comment `url` (web sends the page URL). Used to scope restored pills to
@@ -266,6 +272,17 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
   const closeStream = useCallback((id: string) => {
     setStreams((prev) => prev.filter((s) => s.id !== id));
     setExpandedId((cur) => (cur === id ? null : cur));
+    setStatuses((prev) => {
+      if (!(id in prev)) return prev;
+      const { [id]: _drop, ...rest } = prev;
+      return rest;
+    });
+  }, []);
+
+  // A StreamSheet reports its derived state here (stable identity so the
+  // sheet's effect doesn't re-fire on every parent render).
+  const onRunState = useCallback((id: string, state: RunState) => {
+    setStatuses((prev) => (prev[id] === state ? prev : { ...prev, [id]: state }));
   }, []);
 
   // Tapping the FAB toggles picking; cancelling a pick also drops a pending
@@ -480,8 +497,8 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
     setPhase('idle');
 
     // Agent spawned → stream the run live and expand its sheet (any previously
-    // expanded run drops to a minimized pill). Otherwise (spawn off) fall back
-    // to a transient toast; pull mode (MCP) picks it up.
+    // expanded run collapses into the dock). Otherwise (spawn off) fall back to
+    // a transient toast; pull mode (MCP) picks it up.
     if (outcome.streamId) {
       const id = outcome.streamId;
       setStreams((prev) => (prev.some((s) => s.id === id) ? prev : [...prev, { id, target }]));
@@ -696,29 +713,32 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
         </View>
       )}
 
-      {/* Live agent transcripts — one per spawned run. The expanded one shows
-          its full sheet; the rest render as minimized pills (stacked bottom-
-          left) that keep streaming. Each stays mounted across minimize/expand
-          so its WebSocket — and live transcript — survive. */}
-      {streams.map((s, i) => {
-        const minimized = s.id !== expandedId;
-        // Stack index among the minimized pills only, so they don't overlap.
-        const stackIndex = streams
-          .filter((o) => o.id !== expandedId)
-          .findIndex((o) => o.id === s.id);
-        return (
-          <StreamSheet
-            key={s.id}
-            feedbackId={s.id}
-            target={s.target}
-            minimized={minimized}
-            stackIndex={stackIndex < 0 ? i : stackIndex}
-            onMinimize={() => setExpandedId(null)}
-            onExpand={() => setExpandedId(s.id)}
-            onClose={() => closeStream(s.id)}
-          />
-        );
-      })}
+      {/* Live agent transcripts — one per spawned run. Each stays mounted so
+          its WebSocket and transcript survive minimize/expand; the expanded one
+          renders its full sheet, the rest render null and surface as compact
+          chips in the dock below (each reports its state via onState). */}
+      {streams.map((s) => (
+        <StreamSheet
+          key={s.id}
+          feedbackId={s.id}
+          target={s.target}
+          minimized={s.id !== expandedId}
+          onMinimize={() => setExpandedId(null)}
+          onClose={() => closeStream(s.id)}
+          onState={(state) => onRunState(s.id, state)}
+        />
+      ))}
+
+      {/* Compact dock for the minimized runs (bottom-left): a chip when one
+          runs, a count bar at 2+, with finished runs rolled into a summary.
+          The expanded run is excluded — it's showing its full sheet. */}
+      <AgentDock
+        runs={streams
+          .filter((s) => s.id !== expandedId)
+          .map((s) => ({ id: s.id, target: s.target, state: statuses[s.id] ?? 'connecting' }))}
+        onExpand={setExpandedId}
+        onClose={closeStream}
+      />
     </View>
   );
 }

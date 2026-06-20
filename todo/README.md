@@ -60,6 +60,19 @@ the RN Metro middleware — RN's multi-agent story is MCP pull mode. Not a gap; 
 Suggested order: 003 (smallest, prod-build risk) → 001 → 002 → 007 → 004/006 → 008 → rest.
 001+002 touch the same RN files — one agent should do both, 001 first.
 
+## RN agent-dock follow-ups (audit 2026-06-20)
+
+Found while rehauling the minimized running-agent UI into the compact dock
+(`run-state.ts` + `AgentDock.tsx`; the stuck-error and missing-connecting-state
+bugs were fixed in that change). These are independent stream-sheet bugs left as
+follow-ups. Same ground rules below apply.
+
+| # | Ticket | Priority | Packages |
+|---|---|---|---|
+| 015 | [RN: surface interrupt (Stop) feedback](015-rn-stream-stop-feedback.md) | P2 | react-native |
+| 016 | [RN: ask-options overflow pushes input off-screen](016-rn-ask-options-overflow.md) | P3 | react-native |
+| 017 | [RN: transcript auto-scroll hijacks scroll-back](017-rn-transcript-autoscroll-hijack.md) | P3 | react-native |
+
 ## Ground rules for every ticket (sub-agent checklist)
 
 1. **Worktree isolation.** Other agents run concurrently in this repo. Do code work in a git
