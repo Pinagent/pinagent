@@ -140,6 +140,9 @@ const HOST_COMPONENT = 5;
 interface FiberLike {
   tag?: number;
   return?: FiberLike | null;
+  /** First child / next sibling — the render-tree walk for the measure fallback. */
+  child?: FiberLike | null;
+  sibling?: FiberLike | null;
   stateNode?: { canonical?: { publicInstance?: unknown } } | null;
   /** Host fibers carry the committed props — where `data-pa-loc` rides. */
   memoizedProps?: RawProps;
@@ -222,6 +225,12 @@ function parsePaLoc(value: unknown): Loc | null {
 /** The first `data-pa-loc` found on the tapped view or its nearest owner. */
 function paLocOf(props: RawProps): Loc | null {
   return parsePaLoc(props?.['data-pa-loc']);
+}
+
+/** The enclosing component name the babel plugin records as `data-pa-comp`. */
+function compOf(props: RawProps): string | null {
+  const c = props?.['data-pa-comp'];
+  return typeof c === 'string' && c.length > 0 ? c : null;
 }
 
 /**
@@ -429,6 +438,132 @@ export function measureFrame(measure?: (cb: RawMeasureCb) => void): Promise<Fram
   });
 }
 
+/** True when window-coordinate point (x, y) lies within frame `f`. */
+export function frameContains(f: Frame, x: number, y: number): boolean {
+  return x >= f.x && y >= f.y && x <= f.x + f.width && y <= f.y + f.height;
+}
+
+/** A measure-resolved hit: the deepest tagged host whose frame holds the tap. */
+interface MeasuredHit {
+  fiber: FiberLike;
+  loc: Loc;
+  name: string | null;
+  frame: Frame;
+}
+
+/**
+ * Measure a host fiber's on-screen rect via its public instance's
+ * `measureInWindow` (window coordinates). Guarded + timed-out like
+ * {@link measureFrame}; resolves null for a non-host fiber, a missing instance,
+ * or a zero-size / never-firing measure. The RN-runtime half of the measure
+ * fallback — not unit-tested (see {@link measureHitTest}, which injects this).
+ */
+function measureFiberInWindow(fiber: FiberLike): Promise<Frame | null> {
+  const inst = fiber.stateNode?.canonical?.publicInstance as
+    | { measureInWindow?: (cb: (x: number, y: number, w: number, h: number) => void) => void }
+    | undefined;
+  const measure = inst?.measureInWindow;
+  if (typeof measure !== 'function') return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (f: Frame | null) => {
+      if (!settled) {
+        settled = true;
+        resolve(f);
+      }
+    };
+    const timer = setTimeout(() => finish(null), 120);
+    try {
+      measure.call(inst, (x, y, width, height) => {
+        clearTimeout(timer);
+        finish(width > 0 || height > 0 ? { x, y, width, height } : null);
+      });
+    } catch {
+      clearTimeout(timer);
+      finish(null);
+    }
+  });
+}
+
+/**
+ * Measure-based hit-test — the fallback for when RN's geometric
+ * `findNodeAtPoint` can't descend to the tapped element.
+ *
+ * `react-native-pager-view` (and anything that hosts content in a native
+ * container) detaches a page's *native* views from the Fabric shadow tree
+ * `findNodeAtPoint` walks, so the native hit-test bottoms out at the page
+ * wrapper and never reaches the widget. But the React **fiber** tree is intact
+ * and the widgets are on-screen, hence measurable — so we hit-test ourselves:
+ * DFS the fiber subtree under `root`, measuring each host, and keep the DEEPEST
+ * tagged host whose window frame contains the tap.
+ *
+ * Pruned like the browser's `elementFromPoint`: a host whose frame misses the
+ * point can't have a (non-overflowing) descendant that hits, so its subtree is
+ * skipped. Composite / fragment fibers carry no frame, so we always descend
+ * through them to reach their hosts. `measure` is injected so the traversal is
+ * unit-testable without an RN runtime.
+ */
+export async function measureHitTest(
+  root: FiberLike | null,
+  x: number,
+  y: number,
+  measure: (fiber: FiberLike) => Promise<Frame | null>,
+): Promise<MeasuredHit | null> {
+  let best: MeasuredHit | null = null;
+  let bestDepth = -1;
+
+  async function visitChildren(parent: FiberLike, depth: number): Promise<void> {
+    let n = 0;
+    for (let node = parent.child ?? null; node && n < 100_000; node = node.sibling ?? null, n++) {
+      await visitNode(node, depth);
+    }
+  }
+
+  async function visitNode(node: FiberLike, depth: number): Promise<void> {
+    if (node.tag === HOST_COMPONENT) {
+      const frame = await measure(node);
+      // A host that doesn't contain the point prunes its whole subtree.
+      if (!frame || !frameContains(frame, x, y)) return;
+      const loc = paLocOf(node.memoizedProps);
+      // Deepest tagged host wins; on a tie the later (over-painted) sibling does.
+      if (loc && depth >= bestDepth) {
+        best = { fiber: node, loc, name: compOf(node.memoizedProps), frame };
+        bestDepth = depth;
+      }
+    }
+    await visitChildren(node, depth + 1);
+  }
+
+  if (root) await visitNode(root, 0);
+  return best;
+}
+
+/**
+ * The chain of distinctly-located tagged hosts from `leaf` up to the root,
+ * root-first (matching {@link crumbsOf}'s order). Built from the fiber `return`
+ * chain for the measure-fallback breadcrumb. Consecutive hosts sharing a
+ * `data-pa-loc` (a forwarding wrapper re-emitting the call site) collapse to a
+ * single crumb; names come from the babel plugin's `data-pa-comp`. Pure over a
+ * fiber-like chain (capped against a malformed `return` cycle); exported for
+ * unit testing.
+ */
+export function taggedAncestors(
+  leaf: FiberLike | null,
+): { name: string; loc: Loc; fiber: FiberLike }[] {
+  const out: { name: string; loc: Loc; fiber: FiberLike }[] = [];
+  const seen = new Set<string>();
+  for (let f = leaf, i = 0; f && i < 10_000; f = f.return ?? null, i++) {
+    if (f.tag !== HOST_COMPONENT) continue;
+    const loc = paLocOf(f.memoizedProps);
+    if (!loc) continue;
+    const key = `${loc.file}:${loc.line}:${loc.col}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name: compOf(f.memoizedProps) ?? 'View', loc, fiber: f });
+  }
+  return out.reverse();
+}
+
 /**
  * Resolve a tap (in window coordinates) to a {@link PickResult}.
  *
@@ -466,42 +601,62 @@ export function resolvePick(
     try {
       fn(inspectedView, x, y, (data) => {
         clearTimeout(timer);
-        const frame = data.frame
-          ? {
-              x: data.frame.left,
-              y: data.frame.top,
-              width: data.frame.width,
-              height: data.frame.height,
+        void (async () => {
+          const frame = data.frame
+            ? {
+                x: data.frame.left,
+                y: data.frame.top,
+                width: data.frame.width,
+                height: data.frame.height,
+              }
+            : null;
+          const rawCrumbs = crumbsOf(data);
+          const loc = pickLoc(data, projectRoot);
+          const nameChain = nameChainOf(data);
+
+          // Measure fallback: when RN's native `findNodeAtPoint` couldn't
+          // descend to a tagged element (`tappedLeafLoc` is null — e.g.
+          // react-native-pager-view detaches its pages from the Fabric shadow
+          // tree the hit-test walks, so it bottoms out at the page wrapper),
+          // resolve the tap by measuring the still-intact fiber subtree under
+          // the touched host. Skipped entirely when the native pick already
+          // found the leaf, so every non-pager screen keeps its existing path.
+          if (!tappedLeafLoc(data)) {
+            const root = getHandleFromPublicInstance(data.closestPublicInstance);
+            const hit = root ? await measureHitTest(root, x, y, measureFiberInWindow) : null;
+            if (hit) {
+              const ancestors = taggedAncestors(hit.fiber);
+              const crumbFrames = await Promise.all(
+                ancestors.map((a) => measureFiberInWindow(a.fiber)),
+              );
+              done({
+                loc: hit.loc,
+                nameChain: ancestors.map((a) => a.name),
+                chain: ancestors.map((a, i) => ({
+                  name: a.name,
+                  loc: a.loc,
+                  frame: crumbFrames[i] ?? null,
+                })),
+                frame: hit.frame,
+              });
+              return;
             }
-          : null;
-        const rawCrumbs = crumbsOf(data);
-        const loc = pickLoc(data, projectRoot);
-        const nameChain = nameChainOf(data);
-        // Measure each crumb so pressing one can move the on-screen highlight
-        // to that ancestor. Concurrent, each guarded — adds ~one measure pass.
-        Promise.all(rawCrumbs.map((c) => measureFrame(c.measure)))
-          .then((frames) => {
-            done({
-              loc,
-              nameChain,
-              chain: rawCrumbs.map((c, i) => ({
-                name: c.name,
-                loc: c.loc,
-                frame: frames[i] ?? null,
-              })),
-              frame,
-            });
-          })
-          .catch(() => {
-            // Measuring failed wholesale — still return the pick without
-            // per-crumb frames rather than hang.
-            done({
-              loc,
-              nameChain,
-              chain: rawCrumbs.map((c) => ({ name: c.name, loc: c.loc, frame: null })),
-              frame,
-            });
+          }
+
+          // Native pick: measure each crumb so pressing one can move the
+          // on-screen highlight to that ancestor. Concurrent, each guarded.
+          const frames = await Promise.all(rawCrumbs.map((c) => measureFrame(c.measure)));
+          done({
+            loc,
+            nameChain,
+            chain: rawCrumbs.map((c, i) => ({
+              name: c.name,
+              loc: c.loc,
+              frame: frames[i] ?? null,
+            })),
+            frame,
           });
+        })().catch(() => done({ loc: null, nameChain: [], chain: [], frame: null }));
       });
     } catch {
       clearTimeout(timer);
