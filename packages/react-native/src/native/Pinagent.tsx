@@ -47,6 +47,7 @@ import {
 } from 'react-native';
 import { BRAND_CREAM, BRAND_GOLD, BRAND_INK } from './brand';
 import { resolvePick } from './inspector';
+import { isDismissKey } from './keyboard';
 import { buildAdditionalAnchors, type ChipPick, removeChip } from './multi-pick';
 import { PinIcon } from './pin-icon';
 import { restorePills } from './restore';
@@ -634,6 +635,14 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
               multiline
               value={comment}
               onChangeText={setComment}
+              // Escape backs out of the composer (web-widget parity) when a
+              // hardware keyboard is attached. Enter stays a newline: the
+              // composer is multiline (agent prompts run long) and RN's
+              // onKeyPress can't see Shift to tell submit from newline, so Send
+              // stays the explicit action. See keyboard.ts.
+              onKeyPress={(e) => {
+                if (isDismissKey(e.nativeEvent.key)) onDismissComposer();
+              }}
               placeholder="What should change here?"
               placeholderTextColor="#9aa0a6"
               style={styles.input}

@@ -33,6 +33,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { isDismissKey } from './keyboard';
 import { type AgentEvent, pendingAsk, renderTranscript } from './transcript';
 import { StreamClient } from './ws-client';
 
@@ -271,6 +272,15 @@ export function StreamSheet({
                 <TextInput
                   value={askDraft}
                   onChangeText={setAskDraft}
+                  // Enter sends the answer; Escape minimizes the sheet
+                  // (web-widget parity). Single-line, so onSubmitEditing fires
+                  // reliably on Return; submitBehavior keeps focus. keyboard.ts.
+                  returnKeyType="send"
+                  submitBehavior="submit"
+                  onSubmitEditing={() => submitAnswer(askDraft)}
+                  onKeyPress={(e) => {
+                    if (isDismissKey(e.nativeEvent.key)) onMinimize();
+                  }}
                   placeholder="Answer the agent…"
                   placeholderTextColor="#9aa0a6"
                   style={styles.input}
@@ -290,6 +300,15 @@ export function StreamSheet({
                 <TextInput
                   value={draft}
                   onChangeText={setDraft}
+                  // Enter sends the follow-up; Escape minimizes the sheet
+                  // (web-widget parity). submitBehavior keeps the keyboard up so
+                  // several can be queued in a row. keyboard.ts.
+                  returnKeyType="send"
+                  submitBehavior="submit"
+                  onSubmitEditing={sendFollowUp}
+                  onKeyPress={(e) => {
+                    if (isDismissKey(e.nativeEvent.key)) onMinimize();
+                  }}
                   placeholder={running ? 'Queue a follow-up…' : 'Send a follow-up…'}
                   placeholderTextColor="#9aa0a6"
                   style={styles.input}
