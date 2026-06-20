@@ -1,6 +1,6 @@
 {
   "name": "@pinagent/react-native",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "license": "Apache-2.0",
   "description": "React Native & Expo plugin for Pinagent — tap a view, leave a comment, and a coding agent fixes it with file:line + a screenshot. The native widget ships as source for Metro; the dev-server middleware and Babel source-tagging plugin are built for Node.",
   "keywords": [
