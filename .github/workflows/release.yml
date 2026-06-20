@@ -80,7 +80,10 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
+          # `app-id` is deprecated in favour of `client-id`; GitHub accepts the
+          # numeric App ID as a valid JWT issuer, so the existing secret works
+          # unchanged under the new key.
+          client-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       - name: Checkout
