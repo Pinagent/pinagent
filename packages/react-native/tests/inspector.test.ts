@@ -299,45 +299,56 @@ describe('measureHitTest — fiber-measure fallback when findNodeAtPoint can’t
   });
 });
 
-describe('measureHitTest — fiber identity drives the resolvePick override gate', () => {
-  // resolvePick runs the DFS from the natively-hit host on EVERY pick and only
-  // overrides the native breadcrumb when the DFS descends PAST that host
-  // (`hit.fiber !== nativeLeaf`). These pin both sides of that comparison — the
-  // gate can't be tightened back to `tappedLeafLoc`-null without breaking the
-  // pager (whose wrapper IS tagged, via its `<MaterialTopTabs>` ancestor).
+describe('measureHitTest — flattened descendants inside a measured region', () => {
+  // The crux of the pager fix. RN flattens layout-only <View>s (no native view
+  // → measure returns null) and detaches pager pages, so a widget's own tagged
+  // hosts often can't be measured and geometry bottoms out at the outermost
+  // non-flattened wrapper (e.g. the animated card every widget shares). Once
+  // inside a measured containing region we must keep recording tagged hosts even
+  // when they can't be measured, so the tap resolves to the widget, not the
+  // shared wrapper.
 
-  it('returns the ROOT fiber itself when the root is the deepest tagged host (→ no override)', async () => {
-    // Off the pager the native hit-test already reached the leaf, so the DFS
-    // root IS that leaf; best must be the exact same object so resolvePick
-    // keeps the native path untouched.
-    const leaf = host('leaf.tsx:1:1', { x: 0, y: 0, width: 50, height: 50 });
-    const hit = await measureHitTest(leaf, 10, 10, measure);
-    expect(hit?.fiber).toBe(leaf);
+  it('records a flattened (unmeasurable) tagged descendant inside a measured region', async () => {
+    // card is measurable + contains the tap; the widget inside it is flattened
+    // (null frame). Without region-threading the card wins (every widget → the
+    // card); with it the widget wins and borrows the card's frame.
+    const widget = host('widget.tsx:9:1', null, [], 'Widget'); // flattened
+    const card = host(
+      'card.tsx:1:1',
+      { x: 0, y: 0, width: 100, height: 100 },
+      [comp([widget])],
+      'Card',
+    );
+    const hit = await measureHitTest(card, 50, 50, measure);
+    expect(hit?.loc).toEqual({ file: 'widget.tsx', line: 9, col: 1 });
+    expect(hit?.name).toBe('Widget');
+    expect(hit?.frame).toEqual({ x: 0, y: 0, width: 100, height: 100 }); // borrowed card frame
   });
 
-  it('returns a DESCENDANT fiber (not the root) when one is deeper (→ override)', async () => {
-    // The pager case: the DFS root is the page wrapper (tagged via its layout
-    // ancestor); a tagged widget lives below it, so best is the descendant and
-    // resolvePick overrides the wrapper breadcrumb with the widget.
-    const widget = host('widget.tsx:9:1', { x: 0, y: 0, width: 20, height: 20 }, [], 'Widget');
-    const wrapper = host('wrapper.tsx:1:1', { x: 0, y: 0, width: 100, height: 100 }, [
-      comp([widget]),
-    ]);
-    const hit = await measureHitTest(wrapper, 5, 5, measure);
-    expect(hit?.fiber).toBe(widget);
-    expect(hit?.fiber).not.toBe(wrapper);
+  it('does NOT record a flattened tagged host outside any measured region', async () => {
+    // A null-frame tagged host with no measurable containing ancestor isn't
+    // known to be under the tap, so it must not be recorded.
+    const orphan = host('orphan.tsx:1:1', null, [], 'Orphan');
+    expect(await measureHitTest(orphan, 50, 50, measure)).toBeNull();
   });
 
-  it('returns the root when the only deeper tagged host misses the tap (→ no override)', async () => {
-    // An off-screen pager page's widget (frame misses) is pruned, so the
-    // wrapper stays the deepest container — we must NOT override onto a
-    // wrong-page widget.
-    const offscreen = host('other.tsx:9:1', { x: 500, y: 0, width: 20, height: 20 });
-    const wrapper = host('wrapper.tsx:1:1', { x: 0, y: 0, width: 100, height: 100 }, [
-      comp([offscreen]),
+  it('still prunes a measurable sibling that misses, keeping us in the tapped card', async () => {
+    // Two sibling cards; only the second contains the tap. The first (measurable
+    // miss) is pruned along with its flattened widget, so we resolve the widget
+    // in the tapped card — never leak into a sibling.
+    const wrongWidget = host('wrong.tsx:1:1', null, [], 'Wrong'); // flattened, in card A
+    const rightWidget = host('right.tsx:1:1', null, [], 'Right'); // flattened, in card B
+    const cardA = host('cardA.tsx:1:1', { x: 0, y: 0, width: 50, height: 100 }, [
+      comp([wrongWidget]),
     ]);
-    const hit = await measureHitTest(wrapper, 5, 5, measure);
-    expect(hit?.fiber).toBe(wrapper);
+    const cardB = host('cardB.tsx:1:1', { x: 50, y: 0, width: 50, height: 100 }, [
+      comp([rightWidget]),
+    ]);
+    const screen = host('screen.tsx:1:1', { x: 0, y: 0, width: 100, height: 100 }, [
+      comp([cardA, cardB]),
+    ]);
+    const hit = await measureHitTest(screen, 70, 50, measure); // inside cardB
+    expect(hit?.loc).toEqual({ file: 'right.tsx', line: 1, col: 1 });
   });
 });
 
