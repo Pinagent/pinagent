@@ -84,9 +84,14 @@ export class StreamClient {
     this.send({ type: 'ask_response', askId, answer });
   }
 
-  /** Interrupt the in-flight run. */
-  interrupt(): void {
-    this.send({ type: 'interrupt', feedbackId: this.feedbackId });
+  /**
+   * Interrupt the in-flight run. Returns whether the frame was actually written
+   * to an OPEN socket — `false` means it was dropped (socket closed/reconnecting)
+   * so the UI can say "couldn't stop" instead of silently no-opping. The server
+   * tears the run down on its own terminal event; this is just the request.
+   */
+  interrupt(): boolean {
+    return this.send({ type: 'interrupt', feedbackId: this.feedbackId });
   }
 
   private connect(): void {
@@ -151,13 +156,16 @@ export class StreamClient {
     }
   }
 
-  private send(msg: Record<string, unknown>): void {
+  /** Write a frame if the socket is OPEN. Returns whether it was sent. */
+  private send(msg: Record<string, unknown>): boolean {
     const s = this.socket;
-    if (!s || s.readyState !== 1 /* OPEN */) return;
+    if (!s || s.readyState !== 1 /* OPEN */) return false;
     try {
       s.send(JSON.stringify(msg));
+      return true;
     } catch {
       // socket closing mid-write
+      return false;
     }
   }
 

@@ -97,8 +97,35 @@ const PRESENTATION: Record<RunState, RunPresentation> = {
   failed: { label: 'Failed', glyph: '✕', tone: 'danger', pulse: false, active: false },
 };
 
-export function runPresentation(state: RunState): RunPresentation {
-  return PRESENTATION[state];
+/**
+ * Does an "interrupting" overlay actually apply right now?
+ *
+ * Stop is purely a client-side affordance over the existing `interrupt` frame
+ * (ticket 015): tapping it sets a local flag, and we keep showing "Stopping…"
+ * until the server lands a terminal event. The overlay therefore applies only
+ * while the run is still {@link RunPresentation.active active} — once it reaches
+ * a terminal `done`/`failed` state the interrupt resolved, so the overlay drops
+ * even if the caller's flag hasn't been cleared yet. Modeling it as an overlay
+ * (rather than a sixth {@link RunState}) keeps the state machine — and the dock
+ * aggregation — unchanged and unit-testable.
+ */
+export function interruptOverlayActive(state: RunState, interrupting: boolean): boolean {
+  return interrupting && PRESENTATION[state].active;
+}
+
+/**
+ * Presentation for a run, optionally overlaid with an interrupting affordance.
+ *
+ * With `interrupting` true on a still-active run we relabel to "Stopping…" and
+ * stop any pulse (the developer asked it to halt — pulsing for attention is the
+ * wrong signal), keeping the underlying state's glyph/tone/active so the dock
+ * partitioning is undisturbed. Terminal states ignore the flag (see
+ * {@link interruptOverlayActive}).
+ */
+export function runPresentation(state: RunState, interrupting = false): RunPresentation {
+  const base = PRESENTATION[state];
+  if (!interruptOverlayActive(state, interrupting)) return base;
+  return { ...base, label: 'Stopping…', pulse: false };
 }
 
 /** A run as the dock sees it: identity, header label, and derived state. */
@@ -107,6 +134,12 @@ export interface DockRun {
   /** Header label — `file:line` if anchored, else the component name. */
   target: string;
   state: RunState;
+  /**
+   * The developer tapped Stop and we're awaiting the run's terminal event
+   * (ticket 015). An overlay over `state`, not a state — the chip relabels to
+   * "Stopping…" while it's still active. Ignored once terminal.
+   */
+  interrupting?: boolean;
 }
 
 export interface DockModel {

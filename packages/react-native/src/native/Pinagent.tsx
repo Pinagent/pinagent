@@ -263,6 +263,9 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
   // Each run's derived lifecycle state, reported up by its StreamSheet, so the
   // dock can render the right chip / count-bar without owning the WS state.
   const [statuses, setStatuses] = useState<Record<string, RunState>>({});
+  // Which runs are mid-interrupt (Stop tapped, awaiting teardown) — an overlay
+  // over `statuses`, so the dock chip relabels to "Stopping…" (ticket 015).
+  const [interrupting, setInterrupting] = useState<Record<string, boolean>>({});
 
   // The surface this widget is mounted on — the same value we record as the
   // comment `url` (web sends the page URL). Used to scope restored pills to
@@ -277,12 +280,20 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
       const { [id]: _drop, ...rest } = prev;
       return rest;
     });
+    setInterrupting((prev) => {
+      if (!(id in prev)) return prev;
+      const { [id]: _drop, ...rest } = prev;
+      return rest;
+    });
   }, []);
 
-  // A StreamSheet reports its derived state here (stable identity so the
-  // sheet's effect doesn't re-fire on every parent render).
-  const onRunState = useCallback((id: string, state: RunState) => {
+  // A StreamSheet reports its derived state (and Stop overlay) here (stable
+  // identity so the sheet's effect doesn't re-fire on every parent render).
+  const onRunState = useCallback((id: string, state: RunState, stopping: boolean) => {
     setStatuses((prev) => (prev[id] === state ? prev : { ...prev, [id]: state }));
+    setInterrupting((prev) =>
+      (prev[id] ?? false) === stopping ? prev : { ...prev, [id]: stopping },
+    );
   }, []);
 
   // Tapping the FAB toggles picking; cancelling a pick also drops a pending
@@ -725,7 +736,7 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
           minimized={s.id !== expandedId}
           onMinimize={() => setExpandedId(null)}
           onClose={() => closeStream(s.id)}
-          onState={(state) => onRunState(s.id, state)}
+          onState={(state, stopping) => onRunState(s.id, state, stopping)}
         />
       ))}
 
@@ -735,7 +746,12 @@ function PinagentDev({ projectRoot = '', screenName }: PinagentProps): ReactElem
       <AgentDock
         runs={streams
           .filter((s) => s.id !== expandedId)
-          .map((s) => ({ id: s.id, target: s.target, state: statuses[s.id] ?? 'connecting' }))}
+          .map((s) => ({
+            id: s.id,
+            target: s.target,
+            state: statuses[s.id] ?? 'connecting',
+            interrupting: interrupting[s.id] ?? false,
+          }))}
         onExpand={setExpandedId}
         onClose={closeStream}
       />

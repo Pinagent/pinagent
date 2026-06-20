@@ -29,7 +29,7 @@ import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { isDismissKey } from './keyboard';
 import { MarkdownView } from './MarkdownView';
-import { deriveRunState, type RunState } from './run-state';
+import { deriveRunState, interruptOverlayActive, type RunState } from './run-state';
 import { isNearBottom } from './scroll-follow';
 import { type AgentEvent, pendingAsk, renderTranscript } from './transcript';
 import { StreamClient } from './ws-client';
@@ -53,8 +53,12 @@ export interface StreamSheetProps {
   onMinimize: () => void;
   /** Dismiss for good — tears down the WS and removes this run's view. */
   onClose: () => void;
-  /** Report the run's derived state up so the dock can render it. */
-  onState: (state: RunState) => void;
+  /**
+   * Report the run's derived state up so the dock can render it. `interrupting`
+   * is the Stop overlay (ticket 015) — the developer tapped Stop and we're
+   * awaiting teardown; the dock relabels the chip to "Stopping…" while active.
+   */
+  onState: (state: RunState, interrupting: boolean) => void;
 }
 
 export function StreamSheet({
@@ -72,6 +76,10 @@ export function StreamSheet({
   const [transportError, setTransportError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [askDraft, setAskDraft] = useState('');
+  // The developer tapped Stop and we sent the interrupt frame; we keep showing
+  // "Interrupting…" (button disabled) until a terminal event lands (ticket 015).
+  // Purely a client-side affordance over the fire-and-forget `interrupt` frame.
+  const [interrupting, setInterrupting] = useState(false);
 
   const clientRef = useRef<StreamClient | null>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -93,6 +101,9 @@ export function StreamSheet({
       onReset: () => {
         setEvents([]);
         setTransportError(null);
+        // A reconnect replays a still-live run; drop any stale interrupting
+        // affordance so a recovered run reads as working, not stuck "Stopping…".
+        setInterrupting(false);
       },
       onEvent: (event) => {
         setEvents((prev) => [...prev, event]);
@@ -111,6 +122,15 @@ export function StreamSheet({
   const state = deriveRunState({ events, done, transportError, answered });
   const askOpen = state === 'awaiting' && !!ask;
   const running = state === 'connecting' || state === 'working' || state === 'awaiting';
+  // The interrupt only shows while the run is still active; once a terminal
+  // event lands the run is done/failed and the overlay no longer applies.
+  const showInterrupting = interruptOverlayActive(state, interrupting);
+
+  // A terminal event cleared the run — drop the local interrupting flag so a
+  // subsequent follow-up (which resumes the run) starts fresh, not "Stopping…".
+  useEffect(() => {
+    if (interrupting && !interruptOverlayActive(state, true)) setInterrupting(false);
+  }, [state, interrupting]);
 
   // Report the derived state up to <Pinagent/> so the dock reflects it. The
   // callback is held in a ref so the effect fires only on a real state change
@@ -119,8 +139,8 @@ export function StreamSheet({
   const onStateRef = useRef(onState);
   onStateRef.current = onState;
   useEffect(() => {
-    onStateRef.current(state);
-  }, [state]);
+    onStateRef.current(state, showInterrupting);
+  }, [state, showInterrupting]);
 
   // Track whether the developer is parked at the bottom so a content change
   // only re-pins when they haven't scrolled up to re-read (chat-log behavior).
@@ -161,9 +181,25 @@ export function StreamSheet({
     setFollowUps((prev) => [...prev, text]);
     setDraft('');
     // A follow-up resumes the run: clear the terminal/error flags so it leaves
-    // the done/failed state and reads as working again.
+    // the done/failed state and reads as working again — and drop any pending
+    // interrupt (the developer is continuing, not stopping).
     setDone(false);
     setTransportError(null);
+    setInterrupting(false);
+  }
+
+  // Stop: send the interrupt frame and immediately show "Interrupting…" until a
+  // terminal event lands. `interrupt()` reports whether the frame actually went
+  // out — if the socket is mid-reconnect it can't, so surface that instead of a
+  // silent no-op (ticket 015). Guarded against repeat taps by the disabled state.
+  function handleStop(): void {
+    if (interrupting) return;
+    const sent = clientRef.current?.interrupt() ?? false;
+    if (sent) {
+      setInterrupting(true);
+    } else {
+      setTransportError("Couldn't stop — connection lost. Reconnecting…");
+    }
   }
 
   return (
@@ -172,7 +208,7 @@ export function StreamSheet({
         <View style={styles.sheet}>
           <View style={styles.header}>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              {HEADER_LABEL[state]} · {target}
+              {showInterrupting ? 'Stopping' : HEADER_LABEL[state]} · {target}
             </Text>
             <View style={styles.headerBtns}>
               {/* Minimize: collapse into the dock so the app is interactive
@@ -317,10 +353,17 @@ export function StreamSheet({
                 </Pressable>
               </View>
               <Pressable
-                onPress={() => (running ? clientRef.current?.interrupt() : onClose())}
-                style={styles.bottomBtn}
+                onPress={() => (running ? handleStop() : onClose())}
+                // Disable repeat taps while the interrupt is in flight; the
+                // affordance clears itself on the run's terminal event.
+                disabled={running && showInterrupting}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: running && showInterrupting }}
+                style={[styles.bottomBtn, showInterrupting && styles.disabled]}
               >
-                <Text style={styles.bottomBtnText}>{running ? 'Stop' : 'Dismiss'}</Text>
+                <Text style={styles.bottomBtnText}>
+                  {running ? (showInterrupting ? 'Interrupting…' : 'Stop') : 'Dismiss'}
+                </Text>
               </Pressable>
             </View>
           )}

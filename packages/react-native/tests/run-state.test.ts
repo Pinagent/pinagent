@@ -12,6 +12,7 @@ import {
   type DockRun,
   deriveRunState,
   dockModel,
+  interruptOverlayActive,
   type RunState,
   runPresentation,
 } from '../src/native/run-state';
@@ -96,6 +97,57 @@ describe('runPresentation', () => {
     ).toBe(true);
     expect(runPresentation('done').active).toBe(false);
     expect(runPresentation('failed').active).toBe(false);
+  });
+});
+
+describe('interruptOverlayActive (ticket 015)', () => {
+  it('applies only to still-active runs when interrupting is set', () => {
+    for (const s of ['connecting', 'working', 'awaiting'] as RunState[]) {
+      expect(interruptOverlayActive(s, true)).toBe(true);
+    }
+  });
+
+  it('never applies once the run is terminal — the interrupt resolved', () => {
+    expect(interruptOverlayActive('done', true)).toBe(false);
+    expect(interruptOverlayActive('failed', true)).toBe(false);
+  });
+
+  it('never applies when not interrupting', () => {
+    for (const s of ['connecting', 'working', 'awaiting', 'done', 'failed'] as RunState[]) {
+      expect(interruptOverlayActive(s, false)).toBe(false);
+    }
+  });
+});
+
+describe('runPresentation with the interrupting overlay', () => {
+  it('relabels an active run to "Stopping…" and stops its pulse', () => {
+    const p = runPresentation('working', true);
+    expect(p.label).toBe('Stopping…');
+    expect(p.pulse).toBe(false);
+  });
+
+  it('overrides an awaiting run’s pulse while stopping (no attention pull)', () => {
+    expect(runPresentation('awaiting').pulse).toBe(true);
+    const p = runPresentation('awaiting', true);
+    expect(p.label).toBe('Stopping…');
+    expect(p.pulse).toBe(false);
+  });
+
+  it('keeps the underlying glyph/tone/active so dock partitioning is undisturbed', () => {
+    const base = runPresentation('working');
+    const overlaid = runPresentation('working', true);
+    expect(overlaid.glyph).toBe(base.glyph);
+    expect(overlaid.tone).toBe(base.tone);
+    expect(overlaid.active).toBe(base.active);
+  });
+
+  it('ignores the flag for terminal states (the interrupt resolved)', () => {
+    expect(runPresentation('done', true)).toEqual(runPresentation('done'));
+    expect(runPresentation('failed', true)).toEqual(runPresentation('failed'));
+  });
+
+  it('defaults to the plain presentation when no flag is passed', () => {
+    expect(runPresentation('working')).toEqual(runPresentation('working', false));
   });
 });
 

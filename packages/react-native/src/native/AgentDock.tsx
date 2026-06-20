@@ -105,7 +105,9 @@ function AgentChip({
   onExpand: (id: string) => void;
   onClose: (id: string) => void;
 }): ReactElement {
-  const p = runPresentation(run.state);
+  // Pass the interrupting overlay through so a stopping chip relabels to
+  // "Stopping…" (and stops pulsing) without changing the underlying state.
+  const p = runPresentation(run.state, run.interrupting);
   const pulse = usePulse(p.pulse);
   return (
     <Pressable
@@ -118,7 +120,7 @@ function AgentChip({
         {p.glyph}
       </Animated.Text>
       <Text style={styles.chipText} numberOfLines={1}>
-        {run.target}
+        {p.label === 'Stopping…' ? `${p.label} · ${run.target}` : run.target}
       </Text>
       <Pressable
         onPress={() => onClose(run.id)}
