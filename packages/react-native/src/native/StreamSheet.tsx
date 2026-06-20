@@ -24,11 +24,13 @@
  * derived {@link RunState} (reported via `onState`) to drive the dock.
  */
 import type { ReactElement } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { isDismissKey } from './keyboard';
 import { MarkdownView } from './MarkdownView';
 import { deriveRunState, type RunState } from './run-state';
+import { isNearBottom } from './scroll-follow';
 import { type AgentEvent, pendingAsk, renderTranscript } from './transcript';
 import { StreamClient } from './ws-client';
 
@@ -73,6 +75,15 @@ export function StreamSheet({
 
   const clientRef = useRef<StreamClient | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+  // Whether the developer is pinned at (or near) the bottom of the transcript.
+  // Starts true so a freshly expanded sheet auto-follows the latest output;
+  // flips off the moment they scroll up to re-read, and back on when they
+  // return to the bottom. A ref (not state) so updating it on every scroll
+  // frame doesn't re-render the sheet.
+  const atBottomRef = useRef(true);
+  // True until the first auto-scroll on a non-empty transcript lands, so the
+  // initial scroll-to-end always fires regardless of measured position.
+  const didInitialScrollRef = useRef(false);
 
   useEffect(() => {
     const client = new StreamClient(feedbackId, {
@@ -110,6 +121,26 @@ export function StreamSheet({
   useEffect(() => {
     onStateRef.current(state);
   }, [state]);
+
+  // Track whether the developer is parked at the bottom so a content change
+  // only re-pins when they haven't scrolled up to re-read (chat-log behavior).
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+    atBottomRef.current = isNearBottom({
+      offsetY: contentOffset.y,
+      viewportH: layoutMeasurement.height,
+      contentH: contentSize.height,
+    });
+  }, []);
+
+  // On a content change, auto-follow only when pinned at the bottom — except the
+  // very first non-empty layout, which always lands at the latest so a freshly
+  // expanded sheet opens scrolled to the end.
+  const onContentSizeChange = useCallback(() => {
+    if (didInitialScrollRef.current && !atBottomRef.current) return;
+    didInitialScrollRef.current = true;
+    scrollRef.current?.scrollToEnd({ animated: true });
+  }, []);
 
   // Minimized: render nothing. The WS hooks above keep running because the
   // component stays mounted; the compact chip is drawn by the dock from the
@@ -160,7 +191,9 @@ export function StreamSheet({
             ref={scrollRef}
             style={styles.log}
             contentContainerStyle={styles.logContent}
-            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+            onScroll={onScroll}
+            scrollEventThrottle={16}
+            onContentSizeChange={onContentSizeChange}
           >
             {rows.length === 0 && !transportError ? (
               <Text style={styles.muted}>Connecting…</Text>
