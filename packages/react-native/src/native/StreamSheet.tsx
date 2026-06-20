@@ -34,6 +34,7 @@ import {
   View,
 } from 'react-native';
 import { isDismissKey } from './keyboard';
+import { MarkdownView } from './MarkdownView';
 import { type AgentEvent, pendingAsk, renderTranscript } from './transcript';
 import { StreamClient } from './ws-client';
 
@@ -239,11 +240,9 @@ export function StreamSheet({
                   </Text>
                 );
               }
-              return (
-                <Text key={row.id} style={styles.textRow}>
-                  {row.text}
-                </Text>
-              );
+              // Agent prose arrives as Markdown — render it as such rather than
+              // dumping the raw `**`/`` ` ``/`#` markers into a plain <Text>.
+              return <MarkdownView key={row.id} text={row.text} baseStyle={styles.textRow} />;
             })}
 
             {followUps.map((m, i) => (
