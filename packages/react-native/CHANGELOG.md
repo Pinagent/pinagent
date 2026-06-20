@@ -1,5 +1,58 @@
 # @pinagent/react-native
 
+## 0.2.5
+
+### Patch Changes
+
+- 06f14ef: Render the agent's streamed replies as Markdown in the React Native widget. The
+  StreamSheet previously dumped the raw text into a plain `<Text>`, so `**bold**`,
+  `` `code` ``, fenced blocks, lists, headings and links showed up as literal
+  markers. A tiny dependency-free parser now folds the text into a block/inline
+  tree rendered with RN primitives; anything it doesn't recognise degrades to
+  plain text.
+- 0b9832d: fix(react-native): resolve taps inside react-native-pager-view pages to the widget
+
+  Taps on dashboard widgets inside a `react-native-pager-view` page (e.g. a
+  `MaterialTopTabs` swipeable day dashboard) resolved to the full-screen scene
+  wrapper instead of the tapped widget. The measure fallback shipped in 0.2.4
+  never helped because it was rooted at `closestPublicInstance` — and RN's native
+  hit-test returns **no** touched instance for a pager page (its native views are
+  detached from the Fabric shadow tree the hit-test walks), so there was nothing
+  to walk.
+
+  Two fixes:
+  - **Root the measure DFS at the app root** when the native hit-test resolves no
+    instance (`closestPublicInstance` is null), instead of at the (null) touched
+    instance. The app root is an ancestor of every on-screen view in the
+    still-intact fiber tree. Gated on the native hit-test failing, so every screen
+    where it succeeds keeps its existing native path — no regression.
+  - **Descend through flattened / detached hosts.** RN flattens layout-only
+    `<View>`s (no native view → unmeasurable) and detaches pager pages, so a
+    widget's own tagged hosts often can't be measured and geometry bottoms out at
+    the outermost non-flattened wrapper (the animated card every widget shares).
+    Once inside a measurable containing region the DFS now keeps recording tagged
+    hosts even when they can't be measured (borrowing the region's frame for the
+    highlight), so different widgets resolve to their own sources. Measurable
+    siblings still prune wrong branches, so the tap stays within the tapped card.
+
+- 5fb682c: feat(react-native): keyboard shortcuts in the widget
+
+  Brings the browser widget's hardware-keyboard shortcuts to React Native, scoped
+  to where RN can actually surface key events — the modal composer and the live
+  stream sheet (no native module, no setup):
+  - **Enter** submits the agent answer and the follow-up in the stream sheet (via
+    `onSubmitEditing`; `submitBehavior="submit"` keeps the keyboard up so several
+    can be queued in a row).
+  - **Escape** backs out — cancels the composer and minimizes the stream sheet —
+    mirroring the web widget's Escape.
+
+  Hardware Back (Android) already dismisses both modals via `onRequestClose` and is
+  unchanged. The truly global web hotkeys (`c` to pick, Shift+N hop, Ctrl+\`
+  minimize-all) aren't ported: RN has no JS-level global key stream, so they'd need
+  a native module, which the source-only RN widget deliberately avoids. The
+  composer stays multiline (Enter inserts a newline) because RN's `onKeyPress`
+  can't see Shift to tell submit from newline.
+
 ## 0.2.4
 
 ### Patch Changes
