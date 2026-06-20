@@ -212,6 +212,19 @@ storage lives** and **Metro resolution**.
   `PINAGENT_PROJECT_ROOT` to the **app dir** so it reads the same DB. This
   is the same root-vs-app split as web — see [mcp.md](./mcp.md) §2.
 
+- **If the RN app sits alongside *other* wired apps, it gets its own server
+  key — and its own permission entry.** A repo with both a web dashboard and
+  this RN app needs two MCP servers (`pinagent` and e.g. `pinagent-mobile`),
+  each pointed at its app's `.pinagent/` (see [mcp.md](./mcp.md) §2 "More than
+  one UI app"). The mobile app's feedback tools are then
+  `mcp__pinagent-mobile__*`, so `mcp__pinagent-mobile__*` **must** be in the
+  permission allow-list — a rule's server segment is glob-free, so allow-listing
+  only `mcp__pinagent__*` leaves every mobile tap denied. This is the usual cause
+  of a tapped-and-submitted RN comment where the spawned agent stalls on *"the
+  mobile channel needs an interactive permission grant I can't self-approve"*:
+  the run is fine, the **per-key allow-list** is missing. See
+  [mcp.md](./mcp.md) §4.
+
 - **Metro must watch the workspace and find hoisted deps.** Point Metro at
   the repo root and both `node_modules` so it can resolve
   `@pinagent/react-native` (and your shared packages):

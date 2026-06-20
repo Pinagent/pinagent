@@ -69,6 +69,39 @@ my-monorepo/
 
 The rule: `.mcp.json` goes wherever you start `claude`; `PINAGENT_PROJECT_ROOT` goes wherever you start the dev server. They coincide only in a single-package repo.
 
+**More than one UI app? One server per app, each with a distinct key.** The
+worked example above wires a *single* app. If you've wired pinagent into several
+apps in the same monorepo (a dashboard, a marketing site, a React Native app, …),
+each app writes its **own** `.pinagent/db.sqlite`, and one MCP server can only
+watch one DB — so register one server **per app**, all in the same root
+`.mcp.json`, under distinct keys (`pinagent`, then `pinagent-<app>`):
+
+```json
+{
+  "mcpServers": {
+    "pinagent": {
+      "type": "stdio",
+      "command": "pnpm",
+      "args": ["dlx", "@pinagent/cli", "mcp"],
+      "env": { "PINAGENT_PROJECT_ROOT": "/abs/path/to/apps/dashboard" }
+    },
+    "pinagent-mobile": {
+      "type": "stdio",
+      "command": "pnpm",
+      "args": ["dlx", "@pinagent/cli", "mcp"],
+      "env": { "PINAGENT_PROJECT_ROOT": "/abs/path/to/apps/mobile" }
+    }
+  }
+}
+```
+
+Claude Code namespaces each server's tools by its key: `mcp__pinagent__*` for the
+first, `mcp__pinagent-mobile__*` for the second. That naming carries straight
+into the permission allow-list — **every** key must be allow-listed separately
+(§4), and channel mode loads the channel for the specific key
+(`--dangerously-load-development-channels server:pinagent-mobile`). Skipping a
+key in either place breaks that one app silently while the others work.
+
 ## 3. Verify the server is reachable
 
 First, a one-shot read-only check of the whole setup (plugin, config, route, gitignore, and this `.mcp.json` + `PINAGENT_PROJECT_ROOT`):
@@ -113,9 +146,49 @@ Easiest is the `/permissions` slash command inside a running Claude Code session
 }
 ```
 
-(All five `mcp__pinagent__*` tools are listed so nothing is denied mid-flow; `mcp__pinagent__*` as a single wildcard works too.)
+(All five `mcp__pinagent__*` tools are listed so nothing is denied mid-flow; `mcp__pinagent__*` as a single wildcard works too — the tool-name segment after a **literal** `mcp__<server>__` prefix accepts globs.)
 
-> **Agent checkpoint.** If you're an agent running this setup, **stop here** — Claude Code's auto mode blocks you from self-modifying trust settings. Ask the developer to apply the JSON above (or run `/permissions`) and confirm before you continue.
+> **Monorepo with more than one UI app? Allow-list every server.** This is the
+> one that bites silently. When the workspace wires several apps, each gets its
+> own MCP server under a **distinct key** (`pinagent-www`, `pinagent-mobile`, …
+> — see §2 "More than one UI app"). Claude Code namespaces tools by that key, so
+> the mobile app's feedback tool is `mcp__pinagent-mobile__get_feedback`, **not**
+> `mcp__pinagent__get_feedback`. And **the server segment of a permission rule is
+> glob-free** — there is no `mcp__pinagent*` / `mcp__pinagent-*` that spans
+> servers (an unanchored glob in the server slot is skipped with a warning and
+> approves nothing). So **you must list each server separately**, one
+> `mcp__<server>__*` entry per key — the tool-name `*` after the **literal**
+> server prefix is allowed, the server name itself must be spelled out in full:
+>
+> ```json
+> {
+>   "enableAllProjectMcpServers": true,
+>   "permissions": {
+>     "allow": [
+>       "mcp__pinagent__*",
+>       "mcp__pinagent-www__*",
+>       "mcp__pinagent-app__*",
+>       "mcp__pinagent-support__*",
+>       "mcp__pinagent-mobile__*"
+>     ]
+>   }
+> }
+> ```
+>
+> Use the `mcp__<server>__*` glob form (not a bare `mcp__<server>`, which some
+> Claude Code versions ignore with a warning). `enableAllProjectMcpServers: true`
+> trusts every server in the project `.mcp.json` for your interactive session; if
+> you instead pin them with `enabledMcpjsonServers`, list **all** the keys there
+> too. Miss one server and that app's feedback silently fails: the agent calls
+> its `get_feedback`, the call falls outside the allow-list, and — with no human
+> to approve in a spawned or channel run — it's auto-denied ("the … channel needs
+> an interactive permission grant that I can't self-approve"). **This applies to
+> spawn mode too:** the in-process SDK agent loads these same
+> `.claude/settings*.json` rules (it runs with `settingSources: ['user',
+> 'project', 'local']`), so the per-server allow-list is exactly what lets a
+> spawned run auto-accept its own `get_feedback` / `resolve_feedback`.
+
+> **Agent checkpoint.** If you're an agent running this setup, **stop here** — Claude Code's auto mode blocks you from self-modifying trust settings. Ask the developer to apply the JSON above (or run `/permissions`) and confirm before you continue. In a multi-app monorepo, double-check that **every** `pinagent-*` server key from `.mcp.json` appears in the allow-list — a missing one breaks only that app, which is easy to overlook.
 
 ## 5. Pick a feedback-delivery mode
 
