@@ -87,7 +87,7 @@ jobs:
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0 # changesets needs full history to compute tags
           token: ${{ steps.app-token.outputs.token }}
