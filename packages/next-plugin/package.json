@@ -75,7 +75,7 @@
     "@sqlite.org/sqlite-wasm": "3.50.0-build1",
     "drizzle-orm": "^0.45.2",
     "nanoid": "^5.0.9",
-    "ws": "^8.21.0",
+    "ws": "^8.21.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
