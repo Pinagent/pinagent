@@ -37,7 +37,7 @@
     "@pinagent/shared": "workspace:*",
     "@pinagent/vite-plugin": "workspace:*",
     "@types/node": "^25.9.1",
-    "nanoid": "^5.0.9",
+    "nanoid": "^5.1.16",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3"
   }
