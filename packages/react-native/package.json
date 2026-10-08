@@ -74,7 +74,7 @@
     }
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.181",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.294",
     "drizzle-orm": "^0.45.2",
     "nanoid": "^5.0.9",
     "ws": "^8.21.0",
