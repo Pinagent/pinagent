@@ -8,7 +8,8 @@
 //                          print the remaining manual wiring steps.
 //   pinagent mcp           Start the stdio MCP server. Resolves the project
 //                          root from PINAGENT_PROJECT_ROOT or the current
-//                          working directory.
+//                          working directory; PINAGENT_PROJECT_ROOTS /
+//                          PINAGENT_WORKSPACE_ROOT serve several apps.
 //   pinagent transcript    Fetch + print the persisted agent transcript
 //                          for one conversation from a running dev-server.
 //
@@ -59,7 +60,9 @@ Subcommands:
   mcp                Start the stdio MCP server. Configure your coding
                      agent (Claude Code, etc.) to spawn this command so it
                      can read pending feedback, screenshots, and source
-                     context from a running Pinagent dev session.
+                     context from a running Pinagent dev session. One
+                     server can serve every app in a monorepo — see
+                     PINAGENT_PROJECT_ROOTS / PINAGENT_WORKSPACE_ROOT.
 
   transcript <id>    Print the persisted agent transcript for one
                      conversation, fetched over HTTP from a running
@@ -77,9 +80,18 @@ Options:
   -v, --version      Print the CLI version.
 
 Environment:
-  PINAGENT_PROJECT_ROOT  Override the project root the MCP server reads
-                         from. Defaults to the current working directory.
-  PINAGENT_SERVER_URL    Default dev-server URL for \`pinagent transcript\`.
+  PINAGENT_PROJECT_ROOT    Override the project root the MCP server reads
+                           from. Defaults to the current working directory.
+  PINAGENT_PROJECT_ROOTS   Serve several project roots (one per wired app)
+                           from one MCP server. Separated by ':' (';' on
+                           Windows); relative entries resolve against the
+                           working directory.
+  PINAGENT_WORKSPACE_ROOT  Serve every app with a .pinagent/ found under this
+                           directory (bounded scan; skips node_modules,
+                           dot-dirs and build output; re-scanned so new apps
+                           appear without a restart). Combines with
+                           PINAGENT_PROJECT_ROOTS.
+  PINAGENT_SERVER_URL      Default dev-server URL for \`pinagent transcript\`.
 `;
 
 async function main(): Promise<void> {

@@ -8,7 +8,7 @@
  */
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   checkConfigWired,
@@ -226,6 +226,91 @@ describe('checkMcpJson', () => {
     mkdirSync(join(dir, 'apps', 'web'), { recursive: true });
     const checks = checkMcpJson(join(dir, 'apps', 'web'));
     expect(checks.every((c) => c.status !== 'warn')).toBe(true);
+  });
+  it('passes when PINAGENT_PROJECT_ROOTS lists this app', () => {
+    write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\n");
+    mkdirSync(join(dir, 'apps', 'web'), { recursive: true });
+    mkdirSync(join(dir, 'apps', 'mobile'), { recursive: true });
+    write(
+      '.mcp.json',
+      JSON.stringify({
+        mcpServers: {
+          pinagent: {
+            command: 'pnpm',
+            args: ['exec', 'pinagent', 'mcp'],
+            env: {
+              PINAGENT_PROJECT_ROOTS: ['apps/web', join(dir, 'apps', 'mobile')].join(delimiter),
+            },
+          },
+        },
+      }),
+    );
+    const checks = checkMcpJson(join(dir, 'apps', 'web'));
+    expect(checks.every((c) => c.status === 'ok')).toBe(true);
+    expect(checks.some((c) => /2 project root\(s\) exist/.test(c.label))).toBe(true);
+    expect(checks.some((c) => /this app is served/.test(c.label))).toBe(true);
+  });
+  it('fails on a missing PINAGENT_PROJECT_ROOTS entry and warns when this app is not listed', () => {
+    mkdirSync(join(dir, 'apps', 'web'), { recursive: true });
+    write(
+      '.mcp.json',
+      JSON.stringify({
+        mcpServers: {
+          pinagent: { command: 'pnpm', env: { PINAGENT_PROJECT_ROOTS: 'apps/nope' } },
+        },
+      }),
+    );
+    const checks = checkMcpJson(join(dir, 'apps', 'web'));
+    expect(checks.some((c) => c.status === 'fail' && /missing directories/.test(c.label))).toBe(
+      true,
+    );
+    expect(checks.some((c) => c.status === 'warn' && /not one of the roots/.test(c.label))).toBe(
+      true,
+    );
+  });
+  it('accepts an app discovered under PINAGENT_WORKSPACE_ROOT', () => {
+    mkdirSync(join(dir, 'apps', 'web', '.pinagent'), { recursive: true });
+    write(
+      '.mcp.json',
+      JSON.stringify({
+        mcpServers: { pinagent: { command: 'pnpm', env: { PINAGENT_WORKSPACE_ROOT: '.' } } },
+      }),
+    );
+    const checks = checkMcpJson(join(dir, 'apps', 'web'));
+    expect(checks.every((c) => c.status === 'ok')).toBe(true);
+    expect(checks.some((c) => /1 project\(s\) with \.pinagent\/ found/.test(c.label))).toBe(true);
+  });
+  it('warns that an app without .pinagent/ is not discovered yet', () => {
+    mkdirSync(join(dir, 'apps', 'web'), { recursive: true });
+    write(
+      '.mcp.json',
+      JSON.stringify({
+        mcpServers: { pinagent: { command: 'pnpm', env: { PINAGENT_WORKSPACE_ROOT: '.' } } },
+      }),
+    );
+    const checks = checkMcpJson(join(dir, 'apps', 'web'));
+    expect(checks.some((c) => c.status === 'warn' && /no \.pinagent\/ yet/.test(c.label))).toBe(
+      true,
+    );
+  });
+  it('warns when several per-app pinagent servers could be one', () => {
+    write(
+      '.mcp.json',
+      JSON.stringify({
+        mcpServers: {
+          pinagent: { command: 'pnpm', args: ['exec', 'pinagent', 'mcp'] },
+          'pinagent-www': { command: 'pnpm', args: ['exec', 'pinagent', 'mcp'] },
+          'pinagent-mobile': { command: 'npx', args: ['-y', '@pinagent/cli', 'mcp'] },
+          github: { command: 'npx', args: ['github-mcp'] },
+        },
+      }),
+    );
+    const warn = checkMcpJson(dir).find((c) => /pinagent MCP servers registered/.test(c.label));
+    expect(warn?.status).toBe('warn');
+    expect(warn?.label).toContain(
+      '3 pinagent MCP servers registered (pinagent, pinagent-www, pinagent-mobile)',
+    );
+    expect(warn?.detail).toContain('PINAGENT_PROJECT_ROOTS');
   });
   it('points a missing-config warning at the monorepo root', () => {
     write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\n");
