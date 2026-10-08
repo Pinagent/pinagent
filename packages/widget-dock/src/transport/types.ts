@@ -513,6 +513,13 @@ export interface DockProjectSettings {
    * the resolved SDK mode (e.g. `'plan'`, `'acceptEdits'`).
    */
   permissionModeOverride: string | null;
+  /** Claude model for inline agent runs; `null` = the SDK's default. */
+  model: string | null;
+  /**
+   * Server-derived read-only value of `PINAGENT_AGENT_MODEL` when set on
+   * the dev server; it overrides `model` at spawn time. `null` otherwise.
+   */
+  modelOverride: string | null;
 }
 
 export interface CreatePullRequestInput {

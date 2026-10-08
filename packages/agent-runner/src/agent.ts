@@ -24,6 +24,7 @@ import { createWorktree } from './worktree';
 // module; the worktree lifecycle, read-side stats, and permission/mode
 // resolution were split into focused siblings but are re-exported here so
 // `./agent` stays the single import surface for consumers and test mocks.
+export { resolveModelOverride } from './agent-model';
 export {
   resolveAgentMode,
   resolvePermissionMode,

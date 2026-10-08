@@ -249,7 +249,7 @@ Requires:
 - The consumer repo is a git repo.
 - Either `claude login` (uses the OAuth subscription, default — billed against the developer's Claude account), an exported `ANTHROPIC_API_KEY` (bills the API account), or a `CLAUDE_CODE_USE_BEDROCK` / `_VERTEX` / `_FOUNDRY` provider env var. The SDK bundles the Claude Code binary and respects the same auth as the CLI.
 
-`PINAGENT_AGENT_PERMISSION_MODE` is passed as the SDK's `permissionMode` (default `acceptEdits`).
+`PINAGENT_AGENT_PERMISSION_MODE` is passed as the SDK's `permissionMode` (default `acceptEdits`). `PINAGENT_AGENT_MODEL` (or `"model"` in `.pinagent/config.json`; the env var wins) is passed as the SDK's `model` — unset, the SDK's bundled Claude Code CLI picks its own default, which tracks the SDK version your lockfile resolved rather than your installed `claude`.
 
 ### Inline spawn mode (Next only)
 

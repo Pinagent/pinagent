@@ -283,6 +283,7 @@ Full dock docs (routes, shortcuts, deep links) live in `@pinagent/widget-dock`'s
 | `PINAGENT_PROJECT_ROOT` | Project root for `.pinagent/` storage. Set in `.mcp.json` env block. | `process.cwd()` |
 | `PINAGENT_SPAWN_AGENT` | `inline` (V2 default) / `worktree` / `off`. Set by the `spawnAgent` option or manually. | `inline` |
 | `PINAGENT_AGENT_PERMISSION_MODE` | Passed to the Agent SDK as `permissionMode`. | `acceptEdits` |
+| `PINAGENT_AGENT_MODEL` | Passed to the Agent SDK as `model` (alias like `opus` or a full id like `claude-opus-5-5`). Wins over the `model` saved in `.pinagent/config.json` / dock Settings. | unset (SDK default) |
 | `ANTHROPIC_API_KEY` | Optional. If set, the Agent SDK bills the API account instead of the OAuth subscription from `claude login`. Alternatives: `CLAUDE_CODE_USE_BEDROCK`/`_VERTEX`/`_FOUNDRY` + their respective provider credentials. | unset (use OAuth) |
 | `PINAGENT_EDITOR` | Editor for the "click file:line:col to open" feature. Honored before `EDITOR` and `VISUAL`. | unset; falls back to `EDITOR`, `VISUAL`, then `code` |
 

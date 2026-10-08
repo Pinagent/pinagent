@@ -330,6 +330,32 @@ describe('GET /settings — permissionModeOverride', () => {
   });
 });
 
+describe('GET /settings — model + modelOverride', () => {
+  let priorEnv: string | undefined;
+  beforeEach(() => {
+    priorEnv = process.env.PINAGENT_AGENT_MODEL;
+    delete process.env.PINAGENT_AGENT_MODEL;
+  });
+  afterEach(() => {
+    if (priorEnv === undefined) delete process.env.PINAGENT_AGENT_MODEL;
+    else process.env.PINAGENT_AGENT_MODEL = priorEnv;
+  });
+
+  it('returns model: null and modelOverride: null by default', async () => {
+    const res = await route.GET(makeRequest('/__pinagent/settings'), ctx(['settings']));
+    const body = (await res.json()) as { model: string | null; modelOverride: string | null };
+    expect(body.model).toBeNull();
+    expect(body.modelOverride).toBeNull();
+  });
+
+  it('returns the PINAGENT_AGENT_MODEL value as modelOverride when set', async () => {
+    process.env.PINAGENT_AGENT_MODEL = 'claude-opus-5-5';
+    const res = await route.GET(makeRequest('/__pinagent/settings'), ctx(['settings']));
+    const body = (await res.json()) as { modelOverride: string | null };
+    expect(body.modelOverride).toBe('claude-opus-5-5');
+  });
+});
+
 describe('GET /feedback/:id', () => {
   it('returns 400 for an invalid id', async () => {
     const res = await route.GET(makeRequest('/__pinagent/feedback/!'), ctx(['feedback', '!']));

@@ -259,6 +259,18 @@ export const DockProjectSettingsSchema = z
      * cleanly into the dock.
      */
     permissionModeOverride: z.string().nullable().default(null),
+    /**
+     * Claude model for inline agent runs (`opus`, `claude-opus-5-5`, …), or
+     * `null` to let the Claude Agent SDK pick its default. Defaults to
+     * `null` so older servers without the field still parse.
+     */
+    model: z.string().nullable().default(null),
+    /**
+     * The `PINAGENT_AGENT_MODEL` value in force on the dev server, which
+     * wins over `model` above at spawn time; `null` when unset. Read-only
+     * on the wire, like `permissionModeOverride`.
+     */
+    modelOverride: z.string().nullable().default(null),
   })
   .loose();
 export type DockProjectSettings = z.infer<typeof DockProjectSettingsSchema>;
