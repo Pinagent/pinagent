@@ -12,6 +12,25 @@ PINAGENT_PROJECT_ROOT=/path/to/repo npx @pinagent/mcp
 
 The server walks up from `cwd` looking for `.pinagent/` (then `package.json`) if `PINAGENT_PROJECT_ROOT` is unset, and logs the resolved root on startup.
 
+### Several apps, one server
+
+A monorepo with several wired apps (each with its own `.pinagent/db.sqlite`) needs only one server:
+
+| Variable | Effect |
+| --- | --- |
+| `PINAGENT_PROJECT_ROOTS` | Project roots to serve, separated by `:` (`;` on Windows). Relative entries resolve against `cwd`. |
+| `PINAGENT_WORKSPACE_ROOT` | Serve every directory under this workspace that has a `.pinagent/`. Bounded breadth-first scan (4 levels; skips `node_modules`, dot-dirs, `worktrees/`, `dist`/`build`/`out`/`coverage`/`Pods`/`vendor`/`target`; symlinks not followed), re-run every ~10s and on an unknown id, so a new app appears without a restart. |
+
+Either one switches the server to multi-root mode; together they combine, and a `PINAGENT_PROJECT_ROOT` that's also set (a spawned agent inherits one from its dev server) is added to the set. With neither set, behaviour is exactly the single-root resolution above. Each project is labelled by its path relative to the workspace root (or to the roots' common ancestor), e.g. `apps/web`.
+
+In multi-root mode:
+
+- `list_pending_feedback` merges every project oldest-first and adds `project`, `project_root` and `abs_file` to each item (plus a top-level `projects` list); an optional `project` argument filters to one.
+- `get_feedback`, `resolve_feedback` and `get_conversation_transcript` look the id up in every project's DB and act on the one that holds it. An unknown id errors listing the projects searched; an id found in two DBs (only possible when a DB was copied) errors as ambiguous, and `project` picks one.
+- `get_source_context` accepts an absolute `file` inside any served root, a root-relative `file` that exists in exactly one project, or `project` + a root-relative `file`.
+- `create_pull_request` needs `project` when more than one project is served (the PR targets that app's dev-server branch and settings).
+- Channel events gain `project`, `root` and `absFile` attributes; `file` and `additionalTargets` stay relative to `root`. The server instructions tell the agent so.
+
 ## Claude Code config
 
 ```json
@@ -35,6 +54,7 @@ The server walks up from `cwd` looking for `.pinagent/` (then `package.json`) if
 | `resolve_feedback`            | Set status to `fixed` / `wontfix` / `deferred` (or back to pending).   |
 | `get_source_context`          | Return a numbered window of source lines around a `file:line`.         |
 | `get_conversation_transcript` | Fetch the full persisted agent transcript for one conversation.        |
+| `create_pull_request`         | Push the dev server's current branch and open a GitHub PR.             |
 
 ### `get_conversation_transcript`
 
