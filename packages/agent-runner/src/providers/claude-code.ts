@@ -15,6 +15,7 @@ import {
   summariseToolInput,
 } from '../agent-render';
 import { ASK_USER_TOOL_NAME, createAskUserMcpServer } from '../ask-user';
+import { resolveWorkspaceAdditionalDirectories } from '../workspace-root';
 import type { AgentProvider, AgentRunRequest, ProviderRunItem } from './types';
 
 /**
@@ -215,6 +216,13 @@ async function buildSdkOptions(req: AgentRunRequest): Promise<Options> {
       ].join('\n'),
     },
   };
+
+  // In a monorepo `cwd` is the app subdirectory; grant the enclosing repo
+  // root so reads of sibling workspace packages don't hit a permission
+  // prompt that a headless run silently denies. Empty for a worktree run
+  // (its root is `cwd`). The dry-run `canUseTool` gate below still applies.
+  const additionalDirectories = await resolveWorkspaceAdditionalDirectories(req.cwd);
+  if (additionalDirectories.length > 0) options.additionalDirectories = additionalDirectories;
 
   // Dry-run ('plan') has to be a hard guarantee, not a hope the model
   // stays compliant. Plan mode keeps the agent read-only only until it
