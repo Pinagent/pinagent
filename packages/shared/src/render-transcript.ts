@@ -51,8 +51,11 @@ function renderEvent(event: AgentEvent, apiKeySource: string | null): string {
     case 'ask_user': {
       const opts = event.options?.length ? ` · options: ${event.options.join(' | ')}` : '';
       const ctx = event.context ? `\n  ${event.context}` : '';
-      return `[ask_user] ${event.question}${opts}${ctx}`;
+      const tag = event.kind === 'permission' ? 'permission_request' : 'ask_user';
+      return `[${tag}] ${event.question}${opts}${ctx}`;
     }
+    case 'ask_expired':
+      return `[ask_expired] ${event.reason}`;
     case 'error':
       return `[error] ${event.message}`;
     case 'result': {

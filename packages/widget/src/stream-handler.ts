@@ -64,6 +64,9 @@ export function attachStreamHandler(
   let lastToolLabel: string | null = null;
   let pendingAskId: string | null = null;
   let pendingAskFormRoot: HTMLElement | null = null;
+  // Swaps the open ask form for its resolved summary (`note` in place of
+  // an answer) and clears the pending state. Set while a form is open.
+  let retirePendingAsk: ((note: string) => void) | null = null;
   let apiKeySource: string | null = null;
   let turnRunning = true;
   // Live turn count from `progress` events, shown in the footer while a
@@ -247,7 +250,13 @@ export function attachStreamHandler(
           : 'Send a follow-up…';
   }
 
-  function renderAskUserForm(askId: string, question: string, options?: string[]) {
+  function renderAskUserForm(
+    askId: string,
+    question: string,
+    options?: string[],
+    context?: string,
+    permission = false,
+  ) {
     if (pendingAskFormRoot) pendingAskFormRoot.remove();
     pendingAskId = askId;
     // Record on the composer so minimizing mid-question re-surfaces the
@@ -256,8 +265,9 @@ export function attachStreamHandler(
     composer.needsInput = true;
     composer.bubble.classList.add('needs-input');
 
-    const wrap = el('div', 'ask-form');
+    const wrap = el('div', permission ? 'ask-form permission' : 'ask-form');
     wrap.appendChild(el('div', 'ask-question', question));
+    if (context) wrap.appendChild(el('div', 'ask-context', context));
 
     if (options && options.length > 0) {
       const opts = el('div', 'ask-options');
@@ -273,7 +283,8 @@ export function attachStreamHandler(
 
     const row = el('div', 'ask-row');
     const ta = el('textarea', 'ask-input') as HTMLTextAreaElement;
-    ta.placeholder = 'Type your answer…';
+    // A permission prompt's free-text reply is a "no, and here's why".
+    ta.placeholder = permission ? 'Or deny with a note…' : 'Type your answer…';
     ta.rows = 2;
     const sendBtn = el('button', 'btn primary') as HTMLButtonElement;
     sendBtn.type = 'button';
@@ -302,14 +313,21 @@ export function attachStreamHandler(
     setTimeout(() => ta.focus(), 0);
     setFollowEnabled(false);
 
+    retirePendingAsk = retire;
+
     function submitAnswer(answer: string) {
       client.sendAskResponse(askId, answer);
+      retire(answer);
+    }
+
+    function retire(answer: string) {
       const replaced = el('div', 'ask-resolved');
       replaced.appendChild(el('div', 'ask-question', question));
       replaced.appendChild(el('div', 'ask-answer', answer));
       wrap.replaceWith(replaced);
       pendingAskFormRoot = null;
       pendingAskId = null;
+      retirePendingAsk = null;
       composer.needsInput = false;
       idoc.body.classList.remove('needs-input');
       composer.bubble.classList.remove('needs-input');
@@ -592,8 +610,9 @@ export function attachStreamHandler(
         const askId = String(event.askId ?? '');
         const question = String(event.question ?? '');
         const options = Array.isArray(event.options) ? (event.options as string[]) : undefined;
+        const context = typeof event.context === 'string' ? event.context : undefined;
         if (!askId || !question) break;
-        renderAskUserForm(askId, question, options);
+        renderAskUserForm(askId, question, options, context, event.kind === 'permission');
         // If we're minimized, the answer form isn't visible — pulse the
         // card and swap the header so the developer knows the agent is
         // blocked on them. Cleared when they expand (applyMiniChrome).
@@ -603,6 +622,15 @@ export function attachStreamHandler(
         }
         // A blocked agent shouldn't auto-close out from under the user.
         composer.cancelAutoClose();
+        break;
+      }
+      case 'ask_expired': {
+        // The server closed the ask unanswered (timeout / Stop / run end):
+        // retire the form so it stops blocking the follow-up box. Only the
+        // open form matters — an older ask was already retired.
+        if (retirePendingAsk && String(event.askId ?? '') === pendingAskId) {
+          retirePendingAsk(`No answer — ${String(event.reason ?? 'closed')}.`);
+        }
         break;
       }
       case 'error': {
@@ -906,6 +934,7 @@ export function attachStreamHandler(
       activeToolGroup = null;
       pendingAskId = null;
       pendingAskFormRoot = null;
+      retirePendingAsk = null;
       composer.needsInput = false;
       composer.bubble.classList.remove('needs-input');
       // The attached-element pill lived in the (now-wiped) follow row.

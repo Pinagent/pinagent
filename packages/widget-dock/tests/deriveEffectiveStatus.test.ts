@@ -80,6 +80,15 @@ describe('deriveEffectiveStatus', () => {
     expect(deriveEffectiveStatus('pending', items, new Set(['a1']), NO_WT)).toBe('working');
   });
 
+  it('treats an ask the server closed unanswered as working', () => {
+    const items = [init(), askUser('a1'), ev({ type: 'ask_expired', askId: 'a1', reason: 'x' })];
+    expect(deriveEffectiveStatus('pending', items, NO_ASKED, NO_WT)).toBe('working');
+    // …but a queued ask published right after it is awaiting again.
+    expect(deriveEffectiveStatus('pending', [...items, askUser('a2')], NO_ASKED, NO_WT)).toBe(
+      'awaitingClarification',
+    );
+  });
+
   it('lets a live landed/discarded worktree transition win outright', () => {
     const items = [init(), text()];
     expect(
