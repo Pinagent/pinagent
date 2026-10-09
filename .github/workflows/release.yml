@@ -106,8 +106,11 @@ jobs:
 
       # OIDC trusted publishing needs npm >= 11.5.1; Node 22 ships npm 10.
       # `changeset publish` shells out to this npm, so upgrade it globally.
+      # Pinned to 11: npm 12 rejects unknown CLI flags (EUNKNOWNCONFIG), and
+      # pnpm 10's publish forwards `--git-checks` to npm, so every package
+      # failed to publish on the 2026-10-09 release.
       - name: Upgrade npm for OIDC support
-        run: npm install -g npm@latest
+        run: npm install -g npm@11
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
