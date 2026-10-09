@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { isNotionalCost, isUntrackedCost, type WorktreeWireState } from '@pinagent/shared';
+import { buildAskForm, buildResolvedAsk } from './ask-form';
 import { getBrowserDb } from './db/client';
 import {
   deleteConversationMessages,
@@ -265,48 +266,13 @@ export function attachStreamHandler(
     composer.needsInput = true;
     composer.bubble.classList.add('needs-input');
 
-    const wrap = el('div', permission ? 'ask-form permission' : 'ask-form');
-    wrap.appendChild(el('div', 'ask-question', question));
-    if (context) wrap.appendChild(el('div', 'ask-context', context));
-
-    if (options && options.length > 0) {
-      const opts = el('div', 'ask-options');
-      for (const o of options) {
-        const btn = el('button', 'ask-option') as HTMLButtonElement;
-        btn.type = 'button';
-        btn.textContent = o;
-        btn.addEventListener('click', () => submitAnswer(o));
-        opts.appendChild(btn);
-      }
-      wrap.appendChild(opts);
-    }
-
-    const row = el('div', 'ask-row');
-    const ta = el('textarea', 'ask-input') as HTMLTextAreaElement;
-    // A permission prompt's free-text reply is a "no, and here's why".
-    ta.placeholder = permission ? 'Or deny with a note…' : 'Type your answer…';
-    ta.rows = 2;
-    const sendBtn = el('button', 'btn primary') as HTMLButtonElement;
-    sendBtn.type = 'button';
-    sendBtn.textContent = 'Send';
-    sendBtn.disabled = true;
-    ta.addEventListener('input', () => {
-      sendBtn.disabled = ta.value.trim().length === 0;
+    const { root: wrap, input: ta } = buildAskForm(idoc, {
+      question,
+      ...(options ? { options } : {}),
+      ...(context ? { context } : {}),
+      permission,
+      onSubmit: submitAnswer,
     });
-    ta.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        if (!sendBtn.disabled) sendBtn.click();
-      }
-    });
-    sendBtn.addEventListener('click', () => {
-      const answer = ta.value.trim();
-      if (!answer) return;
-      submitAnswer(answer);
-    });
-    row.appendChild(ta);
-    row.appendChild(sendBtn);
-    wrap.appendChild(row);
 
     pendingAskFormRoot = wrap;
     append(wrap);
@@ -321,10 +287,7 @@ export function attachStreamHandler(
     }
 
     function retire(answer: string) {
-      const replaced = el('div', 'ask-resolved');
-      replaced.appendChild(el('div', 'ask-question', question));
-      replaced.appendChild(el('div', 'ask-answer', answer));
-      wrap.replaceWith(replaced);
+      wrap.replaceWith(buildResolvedAsk(idoc, question, answer));
       pendingAskFormRoot = null;
       pendingAskId = null;
       retirePendingAsk = null;
