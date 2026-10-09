@@ -14,7 +14,23 @@ function rec(partial: Partial<RawFeedback> & Pick<RawFeedback, 'id'>): RawFeedba
 }
 
 function agent(id: string): TrayAgent {
-  return { id, title: id, selector: null, status: 'working', messageCount: 0, costUsd: 0 };
+  return {
+    id,
+    title: id,
+    selector: null,
+    status: 'working',
+    messageCount: 0,
+    costUsd: 0,
+    awaiting: null,
+  };
+}
+
+function waitingAgent(id: string, askId: string): TrayAgent {
+  return {
+    ...agent(id),
+    status: 'awaitingClarification',
+    awaiting: { askId, kind: 'permission', since: 0, expiresAt: null },
+  };
 }
 
 describe('selectUnresolvedAgents', () => {
@@ -95,6 +111,46 @@ describe('selectUnresolvedAgents', () => {
   });
 });
 
+describe('selectUnresolvedAgents — open asks', () => {
+  it('flags a running agent blocked on a permission prompt as awaiting, with its times', () => {
+    const [a] = selectUnresolvedAgents([
+      rec({
+        id: 'blocked000',
+        isRunning: true,
+        awaitingInput: {
+          askId: 'ask1',
+          kind: 'permission',
+          since: '2026-10-08T10:00:00.000Z',
+          expiresAt: '2026-10-08T10:05:00.000Z',
+        },
+      }),
+    ]);
+    expect(a).toMatchObject({
+      status: 'awaitingClarification',
+      awaiting: {
+        askId: 'ask1',
+        kind: 'permission',
+        since: Date.parse('2026-10-08T10:00:00.000Z'),
+        expiresAt: Date.parse('2026-10-08T10:05:00.000Z'),
+      },
+    });
+  });
+
+  it('treats an unknown kind as a question and tolerates missing times', () => {
+    const [a] = selectUnresolvedAgents([
+      rec({ id: 'question00', isRunning: true, awaitingInput: { askId: 'q1' } }),
+    ]);
+    expect(a?.awaiting).toEqual({ askId: 'q1', kind: 'question', since: null, expiresAt: null });
+  });
+
+  it('leaves a running agent with no open ask as working', () => {
+    const [a] = selectUnresolvedAgents([
+      rec({ id: 'running000', isRunning: true, awaitingInput: null }),
+    ]);
+    expect(a).toMatchObject({ status: 'working', awaiting: null });
+  });
+});
+
 describe('shouldAutoExpand', () => {
   it('re-expands when a newly-appeared agent shows up', () => {
     const prev = new Set(['a']);
@@ -111,6 +167,21 @@ describe('shouldAutoExpand', () => {
     expect(shouldAutoExpand(prev, [agent('a')])).toBe(false);
     // Same set, just re-rendered — keep minimized.
     expect(shouldAutoExpand(prev, [agent('a'), agent('b')])).toBe(false);
+  });
+
+  it('re-expands when a known agent starts waiting on a new ask', () => {
+    // A blocked agent must not sit behind a minimized pin until it times out.
+    expect(shouldAutoExpand(new Set(['a']), [waitingAgent('a', 'ask1')], new Set())).toBe(true);
+  });
+
+  it('stays minimized for an ask the user already saw', () => {
+    expect(shouldAutoExpand(new Set(['a']), [waitingAgent('a', 'ask1')], new Set(['ask1']))).toBe(
+      false,
+    );
+    // …but a second ask on the same agent re-expands.
+    expect(shouldAutoExpand(new Set(['a']), [waitingAgent('a', 'ask2')], new Set(['ask1']))).toBe(
+      true,
+    );
   });
 
   it('re-expands on the very first render (no prior ids)', () => {

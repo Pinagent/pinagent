@@ -9,6 +9,7 @@
  *
  * Mapping rules (in order of precedence):
  *
+ *   awaitingInput == true              → awaitingClarification
  *   isRunning == true                  → working   (overrides all below)
  *
  *   worktreeState         status       → dock status
@@ -37,6 +38,11 @@
  *   "working" while live. Defaults to false so callers that don't track
  *   run state (older servers, the two-axis storage shape) are unchanged.
  *
+ *   `awaitingInput` (the run is blocked on an open `ask_user` / permission
+ *   prompt — `active_runs.awaiting_ask_id`) outranks `isRunning`: the turn
+ *   is technically in flight, but nothing happens until the developer
+ *   answers, so list surfaces show it as needing them rather than working.
+ *
  *   `error` and `anchorLost` are out of band — the server doesn't track
  *   them, only the widget does (client-side), so they don't appear here.
  *
@@ -49,11 +55,26 @@ import type { StatusKey } from './dock-api';
 export type ServerStatus = 'pending' | 'fixed' | 'wontfix' | 'deferred';
 export type ServerWorktreeState = 'none' | 'active' | 'landed' | 'discarded';
 
+/**
+ * An open ask a run is blocked on, as the conversation list reports it
+ * (`FeedbackRecord.awaitingInput`). `since` is when the ask was shown and
+ * `expiresAt` when it closes unanswered (a permission prompt is then
+ * denied); either is null when the server couldn't tell.
+ */
+export interface AwaitingInput {
+  askId: string;
+  kind: 'permission' | 'question';
+  since: string | null;
+  expiresAt: string | null;
+}
+
 export function deriveDockStatus(
   status: ServerStatus,
   worktreeState: ServerWorktreeState,
   isRunning = false,
+  awaitingInput = false,
 ): StatusKey {
+  if (awaitingInput) return 'awaitingClarification';
   if (isRunning) return 'working';
   if (worktreeState === 'landed') return 'landed';
   if (worktreeState === 'discarded') return 'discarded';

@@ -573,6 +573,7 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
           instanceIndex: r.instanceIndex,
           instanceTotal: r.instanceTotal,
           isRunning: r.isRunning,
+          awaitingInput: r.awaitingInput,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
           resolvedAt: r.resolvedAt,

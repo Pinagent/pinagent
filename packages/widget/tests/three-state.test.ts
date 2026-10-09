@@ -15,8 +15,8 @@ import type { WidgetWsClient } from '../src/ws-client';
 // ---------------------------------------------------------------------------
 
 /** Build the subset of the stream-pane DOM that attachStreamHandler touches. */
-function buildStreamDom() {
-  document.body.innerHTML = `
+function buildStreamDom(doc: Document = document) {
+  doc.body.innerHTML = `
     <div class="card">
       <div class="mini-bar"><span id="pa-mini-label"></span></div>
       <div id="pa-stream-header"></div>
@@ -36,7 +36,7 @@ function buildStreamDom() {
         <button id="pa-stop" hidden></button>
       </div>
     </div>`;
-  const byId = (id: string) => document.getElementById(id) as HTMLElement;
+  const byId = (id: string) => doc.getElementById(id) as HTMLElement;
   const lifecycle: LifecycleEls = {
     row: byId('pa-lifecycle'),
     label: byId('pa-lifecycle-label'),
@@ -44,7 +44,7 @@ function buildStreamDom() {
     discardBtn: byId('pa-discard') as HTMLButtonElement,
   };
   return {
-    idoc: document,
+    idoc: doc,
     header: byId('pa-stream-header'),
     log: byId('pa-stream-log'),
     footer: byId('pa-stream-footer'),
@@ -102,8 +102,8 @@ function fakeClient() {
   };
 }
 
-function attach(composer: Composer) {
-  const dom = buildStreamDom();
+function attach(composer: Composer, doc: Document = document) {
+  const dom = buildStreamDom(doc);
   const ws = fakeClient();
   attachStreamHandler(
     ws.client,
@@ -273,6 +273,138 @@ describe('attachStreamHandler — needs-input (ask_user)', () => {
   });
 });
 
+describe('attachStreamHandler — status line (mini label)', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+    vi.useRealTimers();
+  });
+
+  const init: AgentEvent = { type: 'init', sessionId: 'sess1234abcd', model: 'opus' };
+  const mini = (doc: Document = document) => doc.getElementById('pa-mini-label')?.textContent;
+
+  /** Mirror the submit path: it pre-fills both surfaces before attaching. */
+  function attachFresh(composer: Composer, doc: Document = document) {
+    const r = attach(composer, doc);
+    r.dom.header.textContent = '✓ Submitted — agent starting…';
+    const label = doc.getElementById('pa-mini-label');
+    if (label) label.textContent = 'Starting…';
+    return r;
+  }
+
+  function answer(dom: ReturnType<typeof buildStreamDom>, text: string) {
+    const input = dom.log.querySelector('.ask-input') as HTMLTextAreaElement;
+    input.value = text;
+    input.dispatchEvent(new Event('input'));
+    (dom.log.querySelector('.ask-form .btn.primary') as HTMLButtonElement).click();
+  }
+
+  it('replaces "Starting…" as soon as init arrives', () => {
+    const { ws } = attachFresh(fakeComposer({ expanded: false }));
+    expect(mini()).toBe('Starting…');
+    ws.handler.onEvent(init);
+    expect(mini()).toBe('Working · opus · sess1234');
+  });
+
+  it('keeps each card on its own label when several cards are live', () => {
+    // Every card is its own iframe document, so `#pa-mini-label` can't
+    // collide across cards — init on one card must not touch the other.
+    const otherDoc = document.implementation.createHTMLDocument('card-2');
+    const a = attachFresh(fakeComposer({ feedbackId: 'fb-a', expanded: false }));
+    const b = attachFresh(fakeComposer({ feedbackId: 'fb-b', expanded: false }), otherDoc);
+    a.ws.handler.onEvent(init);
+    expect(mini()).toBe('Working · opus · sess1234');
+    expect(mini(otherDoc)).toBe('Starting…');
+    b.ws.handler.onEvent({
+      type: 'ask_user',
+      askId: 'p1',
+      question: 'Allow Bash?',
+      kind: 'permission',
+    });
+    expect(mini(otherDoc)).toBe('Approve?');
+    expect(mini()).toBe('Working · opus · sess1234');
+  });
+
+  it('labels an ask that arrived while expanded, so minimizing still shows it', () => {
+    // Regression: the label only switched when the ask arrived minimized;
+    // expanded-then-minimized read "Working · …" next to the alert icon.
+    const { ws } = attachFresh(fakeComposer({ expanded: true }));
+    ws.handler.onEvent(init);
+    ws.handler.onEvent({
+      type: 'ask_user',
+      askId: 'p1',
+      question: 'Allow Bash?',
+      kind: 'permission',
+    });
+    expect(mini()).toBe('Approve?');
+  });
+
+  it('restores the run status once the ask is answered', () => {
+    // Regression: after answering, the card kept saying "Needs your input"
+    // for the rest of the turn.
+    const { dom, ws } = attachFresh(fakeComposer({ expanded: false }));
+    ws.handler.onEvent(init);
+    ws.handler.onEvent({ type: 'ask_user', askId: 'q1', question: 'Which one?' });
+    expect(mini()).toBe('Needs your input');
+    answer(dom, 'the second');
+    expect(mini()).toBe('Working · opus · sess1234');
+    expect(dom.header.textContent).toBe('Working · opus · sess1234');
+  });
+
+  it('restores the run status when the ask expires unanswered', () => {
+    const { ws } = attachFresh(fakeComposer({ expanded: false }));
+    ws.handler.onEvent(init);
+    ws.handler.onEvent({ type: 'ask_user', askId: 'p1', question: 'Allow?', kind: 'permission' });
+    ws.handler.onEvent({ type: 'ask_expired', askId: 'p1', reason: 'no answer within 300s' });
+    expect(mini()).toBe('Working · opus · sess1234');
+  });
+
+  it('counts a permission prompt down to its auto-deny', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse('2026-10-08T10:00:00.000Z'));
+    const { ws } = attachFresh(fakeComposer({ expanded: false }));
+    ws.handler.onEvent(init);
+    ws.handler.onEvent({
+      type: 'ask_user',
+      askId: 'p1',
+      question: 'Allow Bash?',
+      kind: 'permission',
+      expiresAt: '2026-10-08T10:05:00.000Z',
+    });
+    expect(mini()).toBe('Approve? · auto-deny in 5:00');
+    vi.advanceTimersByTime(65_000);
+    expect(mini()).toBe('Approve? · auto-deny in 3:55');
+    vi.advanceTimersByTime(5 * 60_000);
+    expect(mini()).toBe('Approve?');
+  });
+
+  it('puts the submit-time texts back when an ask opens and closes before init', () => {
+    const { dom, ws } = attachFresh(fakeComposer({ expanded: false }));
+    ws.handler.onEvent({ type: 'ask_user', askId: 'q1', question: 'Hm?' });
+    expect(mini()).toBe('Needs your input');
+    ws.handler.onEvent({ type: 'ask_expired', askId: 'q1', reason: 'closed' });
+    expect(mini()).toBe('Starting…');
+    expect(dom.header.textContent).toBe('✓ Submitted — agent starting…');
+  });
+
+  it('focuses the open answer form when the card is revealed', () => {
+    const composer = fakeComposer({ expanded: false });
+    const { dom, ws } = attachFresh(composer);
+    ws.handler.onEvent(init);
+    ws.handler.onEvent({ type: 'ask_user', askId: 'p1', question: 'Allow?', kind: 'permission' });
+    composer.revealPendingAsk?.();
+    const form = dom.log.querySelector('.ask-form');
+    expect(form?.contains(document.activeElement)).toBe(true);
+  });
+
+  it('drops the ask overlay on a reconnect reset (the replay re-opens it if still live)', () => {
+    const { ws } = attachFresh(fakeComposer({ expanded: false }));
+    ws.handler.onEvent(init);
+    ws.handler.onEvent({ type: 'ask_user', askId: 'q1', question: 'Which?' });
+    ws.handler.onReset?.();
+    expect(mini()).toBe('Working · opus · sess1234');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Composer view-state transitions + the real auto-close timer, driven through
 // the controller (mirrors the anchor-lost test's rAF-stub approach).
@@ -352,6 +484,22 @@ describe('composer view-state transitions', () => {
     c.expand();
     expect(c.viewState).toBe('expanded');
     expect(c.expanded).toBe(true);
+  });
+
+  it('expanding a card that needs input reveals the pending question', () => {
+    const ctx = makeCtx();
+    const c = mountComposer(ctx);
+    c.feedbackId = 'fb-1';
+    c.revealPendingAsk = vi.fn();
+    c.minimize();
+
+    c.expand();
+    expect(c.revealPendingAsk).not.toHaveBeenCalled();
+
+    c.minimize();
+    c.needsInput = true;
+    c.expand();
+    expect(c.revealPendingAsk).toHaveBeenCalledTimes(1);
   });
 
   it('discards (closes) a pre-submit composer instead of minimizing it', () => {

@@ -16,8 +16,9 @@ import {
   notInArray,
   widgetAnchors,
 } from '@pinagent/db';
-import type { AgentEvent } from '@pinagent/shared';
+import type { AgentEvent, AwaitingInput } from '@pinagent/shared';
 import { z } from 'zod';
+import { readAwaitingInputs } from './ask-state';
 import { recordAuditEvent } from './audit-log';
 import { type Db, getDb } from './db/client';
 import { emitProjectChange } from './project-events';
@@ -194,6 +195,13 @@ export interface FeedbackRecord {
    * the moment the run ends. See `deriveDockStatus`'s `isRunning` axis.
    */
   isRunning: boolean;
+  /**
+   * The open `ask_user` / permission prompt the in-flight run is blocked
+   * on, or null. Read from `active_runs.awaiting_ask_id` (see
+   * `ask-state.ts`) so list surfaces — the widget's agent tray, the dock —
+   * can flag a waiting agent without subscribing to its event stream.
+   */
+  awaitingInput: AwaitingInput | null;
 }
 
 export const PatchSchema = z.object({
@@ -395,6 +403,7 @@ export class Storage {
       apiKeySource: null,
       // No SDK turn has started for a freshly-created row.
       isRunning: false,
+      awaitingInput: null,
     };
     // Notify project subscribers (the dock) that the conversation list
     // changed. Best-effort — emit failures shouldn't break the write.
@@ -457,6 +466,8 @@ export class Storage {
     // `isRunning` without an N+1 probe. Typically 0–1 rows.
     const runningRows = await db.select({ id: activeRuns.conversationId }).from(activeRuns);
     const runningIds = new Set(runningRows.map((r) => r.id));
+    const awaitingById =
+      runningIds.size > 0 ? await readAwaitingInputs(db) : new Map<string, AwaitingInput>();
     return rows.map((r) =>
       rowToRecord(
         r,
@@ -464,6 +475,7 @@ export class Storage {
         costByConvId.get(r.conversations.id) ?? 0,
         apiKeySourceByConvId.get(r.conversations.id) ?? null,
         runningIds.has(r.conversations.id),
+        awaitingById.get(r.conversations.id) ?? null,
       ),
     );
   }
@@ -493,12 +505,14 @@ export class Storage {
       .from(activeRuns)
       .where(eq(activeRuns.conversationId, id))
       .limit(1);
+    const awaiting = runningRows.length > 0 ? await readAwaitingInputs(db, [id]) : null;
     return rowToRecord(
       row,
       countRows[0]?.n ?? 0,
       totalCostUsd,
       apiKeySource,
       runningRows.length > 0,
+      awaiting?.get(id) ?? null,
     );
   }
 
@@ -668,6 +682,7 @@ function rowToRecord(
   totalCostUsd: number,
   apiKeySource: string | null,
   isRunning: boolean,
+  awaitingInput: AwaitingInput | null,
 ): FeedbackRecord {
   const c = row.conversations;
   const a = row.widget_anchors;
@@ -705,6 +720,7 @@ function rowToRecord(
     totalCostUsd,
     apiKeySource,
     isRunning,
+    awaitingInput,
   };
 }
 

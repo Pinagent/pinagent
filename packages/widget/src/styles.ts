@@ -133,6 +133,23 @@ export const STYLES = `
   70% { transform: scale(1.18); opacity: 0; }
   100% { transform: scale(1.18); opacity: 0; }
 }
+/* An agent behind the minimized pin is blocked on the developer (an open
+   question or permission prompt): the badge goes amber and the ring pulses
+   in the same awaiting colour, so it reads as "needs you", not "busy". */
+.fab-agent-badge.needs-input {
+  background: ${STATUS.awaitingClarification.fg};
+  color: ${THEME.base};
+}
+.fab.needs-input::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid ${STATUS.awaitingClarification.fg};
+  opacity: 0.8;
+  animation: pa-fab-pulse 1.2s ease-out infinite;
+  pointer-events: none;
+}
 
 /* Storage-degraded dot — the browser cache fell back to a non-persistent
    :memory: store (typically another tab holds the OPFS lock). A small,
@@ -243,6 +260,16 @@ export const STYLES = `
   border-radius: 8px;
 }
 .pa-tray-row:hover { background: rgba(252, 249, 232, 0.06); }
+/* A row whose agent is waiting on the developer: amber edge + tint so it
+   stands out from the working rows around it. */
+.pa-tray-row.awaiting {
+  background: rgba(255, 215, 0, 0.08);
+  box-shadow: inset 2px 0 0 ${STATUS.awaitingClarification.fg};
+}
+.pa-tray-row.awaiting:hover { background: rgba(255, 215, 0, 0.14); }
+.pa-tray-row.awaiting .pa-status-dot {
+  animation: pa-tray-pulse 1s ease-in-out infinite;
+}
 .pa-status-dot {
   width: 8px;
   height: 8px;
@@ -281,6 +308,15 @@ export const STYLES = `
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.pa-tray-row.awaiting { flex-wrap: wrap; row-gap: 3px; }
+.pa-tray-meta.pa-tray-wait {
+  flex-basis: 100%;
+  /* Align under the title: 8px dot + 8px gap. */
+  padding-left: 16px;
+  font-size: 11px;
+  color: ${STATUS.awaitingClarification.fg};
+  font-weight: 600;
 }
 .pa-tray-actions { display: inline-flex; gap: 4px; flex-shrink: 0; }
 .pa-tray-btn {
@@ -450,5 +486,7 @@ export const STYLES = `
   .fab:hover { transform: none; }
   .pa-status-dot[data-status="working"] { animation: none; }
   .fab.running::after { animation: none; }
+  .fab.needs-input::after { animation: none; opacity: 1; }
+  .pa-tray-row.awaiting .pa-status-dot { animation: none; }
 }
 `;

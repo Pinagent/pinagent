@@ -47,6 +47,7 @@ export {
   HostToDockSchema,
 } from './dock-postmessage';
 export {
+  type AwaitingInput,
   deriveDockStatus,
   isUnresolvedStatus,
   type ServerStatus,

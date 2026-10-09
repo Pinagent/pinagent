@@ -16,6 +16,7 @@ import {
   type ServerWorktreeState,
   type StatusKey,
 } from '@pinagent/shared';
+import { type AwaitingAsk, parseTime } from './awaiting';
 
 /**
  * The shallow conversation record returned by `GET /__pinagent/feedback`.
@@ -40,6 +41,16 @@ export interface RawFeedback {
    * a widget talking to an older server (no field) still parses.
    */
   isRunning?: boolean;
+  /**
+   * The open ask_user / permission prompt the run is blocked on (from
+   * `active_runs.awaiting_ask_id`), or null. Optional for older servers.
+   */
+  awaitingInput?: {
+    askId: string;
+    kind?: string;
+    since?: string | null;
+    expiresAt?: string | null;
+  } | null;
 }
 
 /** One row in the tray. `status` is the derived, unresolved dock status. */
@@ -52,6 +63,19 @@ export interface TrayAgent {
   messageCount: number;
   /** Running cost in USD (0 when unknown). */
   costUsd: number;
+  /** The open ask this agent is blocked on, or null when it isn't waiting. */
+  awaiting: AwaitingAsk | null;
+}
+
+function awaitingOf(rec: RawFeedback): AwaitingAsk | null {
+  const a = rec.awaitingInput;
+  if (!a || typeof a.askId !== 'string' || !a.askId) return null;
+  return {
+    askId: a.askId,
+    kind: a.kind === 'permission' ? 'permission' : 'question',
+    since: parseTime(a.since),
+    expiresAt: parseTime(a.expiresAt),
+  };
 }
 
 const MAX_TITLE_LEN = 80;
@@ -74,7 +98,13 @@ export function selectUnresolvedAgents(raw: readonly RawFeedback[]): TrayAgent[]
   const agents: TrayAgent[] = [];
   for (const rec of raw) {
     if (!rec || rec.archived) continue;
-    const status = deriveDockStatus(rec.status, rec.worktreeState, rec.isRunning === true);
+    const awaiting = awaitingOf(rec);
+    const status = deriveDockStatus(
+      rec.status,
+      rec.worktreeState,
+      rec.isRunning === true,
+      awaiting !== null,
+    );
     if (!isUnresolvedStatus(status)) continue;
     agents.push({
       id: rec.id,
@@ -83,6 +113,7 @@ export function selectUnresolvedAgents(raw: readonly RawFeedback[]): TrayAgent[]
       status,
       messageCount: rec.messageCount ?? 0,
       costUsd: rec.totalCostUsd ?? 0,
+      awaiting,
     });
   }
   return agents;
@@ -91,17 +122,22 @@ export function selectUnresolvedAgents(raw: readonly RawFeedback[]): TrayAgent[]
 /**
  * Pure: should a tray refresh force the FAB back to its expanded default,
  * overriding a user "minimize"? Yes when a *newly-appeared* agent shows up
- * (so a fresh run is never hidden) or the list empties (nothing left to
- * minimize). A refresh that only shrinks or restatuses the agents the user
- * already saw keeps the minimized pin. `prevIds` is the id set shown before
- * this refresh.
+ * (so a fresh run is never hidden), when an agent starts waiting on a *new*
+ * ask (a blocked agent mustn't sit behind a minimized pin until its prompt
+ * times out), or the list empties (nothing left to minimize). A refresh
+ * that only shrinks or restatuses what the user already saw keeps the
+ * minimized pin. `prevIds` / `prevAskIds` are the agent ids and open ask
+ * ids shown before this refresh.
  */
 export function shouldAutoExpand(
   prevIds: ReadonlySet<string>,
   next: readonly TrayAgent[],
+  prevAskIds: ReadonlySet<string> = new Set(),
 ): boolean {
   if (next.length === 0) return true;
-  return next.some((a) => !prevIds.has(a.id));
+  return next.some(
+    (a) => !prevIds.has(a.id) || (a.awaiting !== null && !prevAskIds.has(a.awaiting.askId)),
+  );
 }
 
 export interface AgentTrayDeps {

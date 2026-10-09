@@ -3,6 +3,7 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentEvent } from '@pinagent/shared';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
+import { clearAwaitingAsk, setAwaitingAsk } from './ask-state';
 import { getOrCreateBus } from './bus';
 
 /**
@@ -138,6 +139,13 @@ export function awaitAnswer(
           }
           reject(new AskClosedError(outcome.closed));
         }
+        // The run is no longer blocked on this ask (answered or closed).
+        // Conditional on the id, so it can't clobber the next queued ask
+        // that showNext publishes below.
+        if (entry.shown) {
+          const root = getOrCreateBus(feedbackId).projectRoot;
+          if (root) void clearAwaitingAsk(root, feedbackId, askId);
+        }
         showNext(feedbackId);
       },
     };
@@ -160,7 +168,19 @@ function showNext(feedbackId: string): void {
       () => entry.settle({ closed: `no answer within ${seconds}s` }),
       entry.ttlMs,
     );
-    void getOrCreateBus(feedbackId).publish(entry.event);
+    // The TTL starts now, so stamp when it lapses — the widget counts down
+    // to it so a waiting prompt can't quietly time out unnoticed.
+    entry.event = { ...entry.event, expiresAt: new Date(Date.now() + entry.ttlMs).toISOString() };
+    const bus = getOrCreateBus(feedbackId);
+    const askId = entry.event.askId;
+    // Publish first so the `ask_user` row (its timestamp + kind) exists by
+    // the time list readers see `awaiting_ask_id` and look it up. Skip the
+    // flag if the ask already settled while the publish was in flight.
+    void bus.publish(entry.event).then(() => {
+      if (bus.projectRoot && pending.get(askId)?.shown) {
+        void setAwaitingAsk(bus.projectRoot, feedbackId, askId);
+      }
+    });
     return;
   }
 }

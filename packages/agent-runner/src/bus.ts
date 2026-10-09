@@ -41,7 +41,7 @@ const FINISHED_ROLE = '__finished';
 export class SqliteEventBus {
   constructor(
     private readonly feedbackId: string,
-    private readonly projectRoot: string,
+    readonly projectRoot: string,
   ) {}
 
   /**

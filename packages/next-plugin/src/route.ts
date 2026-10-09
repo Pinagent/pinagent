@@ -328,6 +328,7 @@ export async function GET(req: Request, ctx: RouteCtx): Promise<Response> {
       instanceIndex: r.instanceIndex,
       instanceTotal: r.instanceTotal,
       isRunning: r.isRunning,
+      awaitingInput: r.awaitingInput,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
       resolvedAt: r.resolvedAt,

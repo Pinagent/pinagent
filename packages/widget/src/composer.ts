@@ -539,6 +539,7 @@ export function createComposerController(ctx: WidgetContext): {
         // chrome; refitStream applies the height + repositions.
         applyMiniChrome();
         composer.refitStream();
+        if (composer.needsInput) composer.revealPendingAsk?.();
       },
       minimize() {
         // A pre-submit composer has no conversation to preserve, and its
