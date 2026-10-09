@@ -1,5 +1,33 @@
 # @pinagent/widget-dock
 
+## 0.6.0
+
+### Minor Changes
+
+- 92342ee: Choose the Claude model for inline agent runs, and require Claude Agent SDK `^0.3.294`.
+
+  Spawned agents never passed `model` to the Claude Agent SDK, so they ran on
+  whatever default the SDK's bundled Claude Code CLI shipped with — which tracks
+  the SDK version your lockfile resolved, not the Claude Code you have installed
+  (e.g. SDK 0.3.183 ran `claude-opus-4-8[1m]` while `claude` 2.1.294 used Opus
+  5.5). The model is now configurable:
+  - `PINAGENT_AGENT_MODEL` — env override (an alias like `opus` / `sonnet`, or a
+    full id like `claude-opus-5-5`), passed through as the SDK's `model`.
+  - `"model"` in `.pinagent/config.json` — the per-project setting, editable in
+    the dock's Settings → Agent model. The env var wins when both are set, and
+    the dock shows a banner when it does (mirroring `PINAGENT_AGENT_PERMISSION_MODE`).
+  - Neither set: `model` is omitted and the SDK default applies, as before.
+
+  This is separate from the BYO CLI provider's `PINAGENT_AGENT_CLI_MODEL`, which
+  only labels the widget's model chip.
+
+  The `@anthropic-ai/claude-agent-sdk` floor moves from `^0.3.181` to `^0.3.294`
+  (bundled Claude Code 2.1.294), so the SDK default is current too.
+
+### Patch Changes
+
+- ecbe901: Ask the developer before a tool call the agent isn't pre-approved for, instead of silently denying it. The inline agent used to run headless with no permission handler, so a read outside the project, an un-allowlisted Bash command or MCP tool was denied without a word — the run looked stalled behind a row of "✗ tool result" lines. Those calls now raise an Allow / Allow for this run / Deny prompt in the widget pane (and the dock and React Native sheet) through the existing `ask_user` form; typing a reply denies with your note passed to the agent. An unanswered prompt is denied after 5 minutes, or straight away when the run is stopped, so the agent moves on instead of hanging. "Allow for this run" applies the SDK's suggested rule for the current session only and never writes your settings files. Dry-run mode still hard-denies every edit, command and plan-mode exit. This also makes "Require approval" mode work as described: each edit now pauses for your approval rather than being refused. Asks closed without an answer now retire their form instead of blocking the follow-up box.
+
 ## 0.5.0
 
 ### Minor Changes
