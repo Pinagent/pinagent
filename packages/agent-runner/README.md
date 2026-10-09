@@ -52,7 +52,7 @@ The WS server picks `DEFAULT_PORT` (53636) and falls back to adjacent ports if i
 Both live under `.pinagent/` in the project root and are gitignored.
 
 - **`secrets.json`** — `{ github?: { token, login? }, anthropic?: { key } }`. Validated upstream before write (GitHub `/user`, Anthropic `/v1/messages`). The GitHub token drives `pr-composer.ts`; the Anthropic key is injected into spawned agent processes as `ANTHROPIC_API_KEY`.
-- **`settings.json`** — `{ baseBranch, worktreeRetentionDays, perConversationCapUsd, monthlyBudgetUsd, permissionMode }`. `permissionMode` controls how the SDK handles tool calls (`auto` / `approve` / `dry-run`).
+- **`settings.json`** — `{ baseBranch, worktreeRetentionDays, perConversationCapUsd, monthlyBudgetUsd, permissionMode }`. `permissionMode` controls how the SDK handles tool calls (`auto` = SDK classifier mode, the default / `accept-edits` / `approve` / `dry-run`).
 
 ## Build
 

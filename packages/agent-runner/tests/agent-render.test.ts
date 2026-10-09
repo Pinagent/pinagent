@@ -101,6 +101,35 @@ describe('renderMessage', () => {
     expect(ok).not.toContain('large file content');
   });
 
+  it('renders an auto-mode classifier denial so it shows in the log', () => {
+    const out = renderMessage(
+      asSdk({
+        type: 'system',
+        subtype: 'permission_denied',
+        tool_name: 'Bash',
+        decision_reason_type: 'classifier',
+        decision_reason: '\x1b[1mdeletes files outside the project\x1b[0m',
+        message: 'Permission denied',
+      } as never),
+    );
+    expect(out).toBe(
+      '> _denied_ `Bash` by auto-mode classifier: deletes files outside the project\n\n',
+    );
+  });
+
+  it('falls back to the rejection message when a denial has no reason', () => {
+    const out = renderMessage(
+      asSdk({
+        type: 'system',
+        subtype: 'permission_denied',
+        tool_name: 'Write',
+        decision_reason_type: 'rule',
+        message: 'Denied by a deny rule',
+      } as never),
+    );
+    expect(out).toBe('> _denied_ `Write` by rule: Denied by a deny rule\n\n');
+  });
+
   it('renders the result message as a separator only (footer is built separately)', () => {
     const out = renderMessage(asSdk({ type: 'result' }));
     expect(out).toBe('\n---\n');

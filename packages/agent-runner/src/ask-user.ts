@@ -262,6 +262,6 @@ export function rejectAsk(feedbackId: string, reason: string): void {
  * MCP namespaces tools as `mcp__<server-name>__<tool-name>`. Pass this in
  * the SDK's `allowedTools` so the model can actually call it without a
  * permission prompt — otherwise `acceptEdits` mode wouldn't auto-allow a
- * non-Edit tool call.
+ * non-Edit tool call (and `auto` mode would send it to the classifier).
  */
 export const ASK_USER_TOOL_NAME = 'mcp__pinagent-ask-user__ask_user';

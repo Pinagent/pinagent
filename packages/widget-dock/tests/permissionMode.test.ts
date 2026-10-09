@@ -11,6 +11,12 @@ import {
 } from '../src/lib/permissionMode';
 
 describe('permissionModeDisplay', () => {
+  it('maps auto to the classifier Auto chip from the shared table', () => {
+    const out = permissionModeDisplay('auto');
+    expect(out.label).toBe('Auto');
+    expect(out.title).toMatch(/classifier/);
+  });
+
   it('maps acceptEdits to the Auto-accept chip', () => {
     const out = permissionModeDisplay('acceptEdits');
     expect(out.label).toBe('Auto-accept');
@@ -33,9 +39,8 @@ describe('permissionModeDisplay', () => {
     expect(permissionModeDisplay('bypassPermissions').label).toBe('Bypass');
   });
 
-  it('maps dontAsk and auto to their own chips', () => {
+  it('maps dontAsk to its own chip', () => {
     expect(permissionModeDisplay('dontAsk').label).toBe("Don't ask");
-    expect(permissionModeDisplay('auto').label).toBe('Auto');
   });
 
   it('falls back to the raw mode string for unknown values', () => {
@@ -48,7 +53,8 @@ describe('permissionModeDisplay', () => {
 describe('overrideProjectMode', () => {
   it('maps an SDK override mode back to its picker project mode', () => {
     expect(overrideProjectMode('plan')).toBe('dry-run');
-    expect(overrideProjectMode('acceptEdits')).toBe('auto');
+    expect(overrideProjectMode('auto')).toBe('auto');
+    expect(overrideProjectMode('acceptEdits')).toBe('accept-edits');
     expect(overrideProjectMode('default')).toBe('approve');
   });
 

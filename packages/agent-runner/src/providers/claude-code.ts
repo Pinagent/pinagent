@@ -16,6 +16,7 @@ import {
   summariseToolInput,
 } from '../agent-render';
 import { ASK_USER_TOOL_NAME, createAskUserMcpServer } from '../ask-user';
+import { createAutoModeFallback } from '../auto-mode-fallback';
 import { createPermissionGate } from '../permission-gate';
 import { resolveWorkspaceAdditionalDirectories } from '../workspace-root';
 import type { AgentProvider, AgentRunRequest, ProviderRunItem } from './types';
@@ -56,13 +57,15 @@ const TOOL_GUIDANCE = [
   `${PINAGENT_MCP_TOOLS.map((t) => `\`${t}\``).join(', ')}.`,
   'Use those, not tools from similarly named MCP servers (those are not pre-approved).',
   '',
-  'Any other tool call that is not pre-approved waits for the developer to approve',
-  'it in the widget, and the run is stuck until they do. To keep it moving:',
+  'Any other tool call that is not pre-approved may need approval: in auto mode a',
+  'safety classifier decides it, and a call the classifier cannot approve (or, in',
+  'the stricter modes, any such call) waits for the developer to approve it in the',
+  'widget, and the run is stuck until they do. To keep it moving:',
   '- Find and read code with the Read, Grep and Glob tools, not shell pipelines.',
   '- When you need Bash, run one simple command with literal paths from the',
   '  current working directory: no command substitution (`$(…)`), shell variables',
-  '  or `cd … &&` chains. Those can never be checked automatically, so each one',
-  '  blocks on the developer.',
+  '  or `cd … &&` chains. Those can never be pre-approved by permission rules, so',
+  '  each one risks blocking on the developer.',
 ];
 
 /**
@@ -92,24 +95,32 @@ export class ClaudeCodeProvider implements AgentProvider {
     let sawResult = false;
 
     try {
-      for await (const message of query({
-        prompt: req.prompt,
-        options: sdkOptions,
-      }) as AsyncIterable<SDKMessage>) {
+      const run = query({ prompt: req.prompt, options: sdkOptions });
+      // A requested `auto` the CLI can't honour comes back as `default`;
+      // drop to `acceptEdits` with a log note instead. See auto-mode-fallback.ts.
+      const autoFallback = createAutoModeFallback(req.permissionMode, run);
+      for await (const message of run as AsyncIterable<SDKMessage>) {
         const sessionId =
           'session_id' in message && typeof message.session_id === 'string'
             ? message.session_id
             : undefined;
+        const fallback = await autoFallback.check(message);
 
         if (message.type === 'system' && message.subtype === 'init') {
           apiKeySource = message.apiKeySource ?? null;
+          const events = toAgentEvents(message);
+          // The header chip shows the mode the run is actually in.
+          for (const event of events) {
+            if (fallback && event.type === 'init') event.permissionMode = fallback.mode;
+          }
           yield {
-            events: toAgentEvents(message),
-            log: renderInitFooter(message),
+            events,
+            log: renderInitFooter(message) + (fallback?.note ?? ''),
             sessionId,
           };
           continue;
         }
+        if (fallback) yield { events: [], log: fallback.note, sessionId };
 
         if (message.type === 'result') {
           sawResult = true;
