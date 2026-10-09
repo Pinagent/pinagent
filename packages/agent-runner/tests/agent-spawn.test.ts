@@ -330,18 +330,12 @@ describe('spawnAgent', () => {
       })(),
     );
 
-    const events: import('@pinagent/shared').AgentEvent[] = [];
-    bus.getOrCreateBus(id).subscribe({
-      onEvent(e) {
-        events.push(e);
-      },
-      onClose() {},
-    });
-
+    // Wait for the synthesized terminal `result` rather than a fixed sleep:
+    // the run does async setup (auth env, workspace-root git lookup) before
+    // `query()` throws, so a fixed window is load-sensitive.
+    const eventsP = collectUntil(id, (e) => e.type === 'result', 5000);
     await agent.spawnAgent({ projectRoot: PROJECT_ROOT, feedback: rec!, mode: 'inline' });
-    // Wait long enough for the SqliteEventBus poll loop (100ms) to deliver
-    // the error event written by the consumeStream finally block.
-    await new Promise((r) => setTimeout(r, 250));
+    const events = await eventsP;
 
     const errorEvent = events.find((e) => e.type === 'error');
     expect(errorEvent).toBeDefined();

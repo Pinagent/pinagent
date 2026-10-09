@@ -17,6 +17,7 @@ import {
 } from '../agent-render';
 import { ASK_USER_TOOL_NAME, createAskUserMcpServer } from '../ask-user';
 import { createPermissionGate } from '../permission-gate';
+import { resolveWorkspaceAdditionalDirectories } from '../workspace-root';
 import type { AgentProvider, AgentRunRequest, ProviderRunItem } from './types';
 
 /**
@@ -202,6 +203,13 @@ async function buildSdkOptions(req: AgentRunRequest): Promise<Options> {
       ].join('\n'),
     },
   };
+
+  // In a monorepo `cwd` is the app subdirectory; grant the enclosing repo
+  // root so reads of sibling workspace packages don't stall the run on a
+  // permission prompt. Empty for a worktree run
+  // (its root is `cwd`). The permission gate below still applies.
+  const additionalDirectories = await resolveWorkspaceAdditionalDirectories(req.cwd);
+  if (additionalDirectories.length > 0) options.additionalDirectories = additionalDirectories;
 
   // Tool calls nothing pre-approved would otherwise be silently denied in
   // a headless run; ask the developer in the widget instead. In dry-run
