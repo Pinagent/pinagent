@@ -322,11 +322,11 @@ describe('GET /settings — permissionModeOverride', () => {
     expect(body.permissionModeOverride).toBe('plan');
   });
 
-  it('coerces invalid env values to the resolver default (acceptEdits), not null', async () => {
+  it('coerces invalid env values to the resolver default (auto), not null', async () => {
     process.env.PINAGENT_AGENT_PERMISSION_MODE = 'not-a-mode';
     const res = await route.GET(makeRequest('/__pinagent/settings'), ctx(['settings']));
     const body = (await res.json()) as { permissionModeOverride: string | null };
-    expect(body.permissionModeOverride).toBe('acceptEdits');
+    expect(body.permissionModeOverride).toBe('auto');
   });
 });
 

@@ -32,6 +32,11 @@ export function resolveAgentMode(env: NodeJS.ProcessEnv): SpawnAgentMode {
  *   (`.pinagent/config.json` permissionMode) > default.
  * The env override is kept so CI / power users can bypass the dock UI
  * without editing the settings file.
+ *
+ * `'auto'` (the out-of-the-box result) is the SDK's classifier mode; when
+ * the CLI reports auto mode unavailable at run start, the Claude provider
+ * drops the run to `'acceptEdits'` and notes it in the log — see
+ * `auto-mode-fallback.ts`.
  */
 export async function resolveRunPermissionMode(projectRoot: string): Promise<PermissionMode> {
   const override = resolvePermissionModeOverride(process.env);
@@ -40,6 +45,12 @@ export async function resolveRunPermissionMode(projectRoot: string): Promise<Per
   return toSdkPermissionMode(settings.permissionMode);
 }
 
+/**
+ * `PINAGENT_AGENT_PERMISSION_MODE` passes SDK values straight through:
+ * `auto` is the SDK's classifier mode (the same thing the project default
+ * resolves to), `acceptEdits` the pre-classifier default. Unset or
+ * unrecognised values resolve to `'auto'`, the default.
+ */
 export function resolvePermissionMode(env: NodeJS.ProcessEnv): PermissionMode {
   const v = env.PINAGENT_AGENT_PERMISSION_MODE;
   if (
@@ -52,13 +63,13 @@ export function resolvePermissionMode(env: NodeJS.ProcessEnv): PermissionMode {
   ) {
     return v;
   }
-  return 'acceptEdits';
+  return 'auto';
 }
 
 /**
  * The active env override for permission mode, or `null` when no
  * override is set. Different shape from `resolvePermissionMode`, which
- * falls back to `'acceptEdits'` whether the env was unset or invalid —
+ * falls back to `'auto'` whether the env was unset or invalid —
  * callers that need to distinguish "no override" from "override → some
  * mode" (e.g. the dock's Settings UI banner) want this signal.
  */
@@ -75,10 +86,11 @@ export function resolvePermissionModeOverride(env: NodeJS.ProcessEnv): Permissio
  */
 export function toSdkPermissionMode(mode: ProjectPermissionMode): PermissionMode {
   // `find` always hits because `mode` is typed against the literal
-  // union derived from the same table; the `?? 'acceptEdits'` is just
-  // a belt-and-braces fallback that satisfies the type checker.
+  // union derived from the same table; the `?? 'auto'` (the default
+  // mode's SDK value) is just a belt-and-braces fallback that satisfies
+  // the type checker.
   const meta = PROJECT_PERMISSION_MODES.find(
     (m: (typeof PROJECT_PERMISSION_MODES)[number]) => m.projectMode === mode,
   );
-  return (meta?.sdkMode as PermissionMode | undefined) ?? 'acceptEdits';
+  return (meta?.sdkMode as PermissionMode | undefined) ?? 'auto';
 }

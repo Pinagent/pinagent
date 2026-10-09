@@ -23,9 +23,28 @@ export function renderMessage(message: SDKMessage): string {
       return '\n---\n';
     case 'user':
       return renderUser(message);
+    case 'system':
+      return message.subtype === 'permission_denied' ? renderPermissionDenied(message) : '';
     default:
       return '';
   }
+}
+
+/**
+ * A tool call the CLI denied without asking — in auto mode usually the
+ * classifier. These never reach the permission gate, so without this line
+ * the log would show only a bare failed tool result.
+ */
+function renderPermissionDenied(
+  message: Extract<SDKMessage, { type: 'system'; subtype: 'permission_denied' }>,
+): string {
+  const by =
+    message.decision_reason_type === 'classifier'
+      ? 'auto-mode classifier'
+      : (message.decision_reason_type ?? 'permission rules');
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI colour codes the CLI may embed
+  const reason = (message.decision_reason ?? message.message).replace(/\x1b\[[0-9;]*m/g, '').trim();
+  return `> _denied_ \`${message.tool_name}\` by ${by}${reason ? `: ${reason}` : ''}\n\n`;
 }
 
 export function renderInitFooter(

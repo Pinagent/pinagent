@@ -24,7 +24,8 @@ export interface PinagentOptions {
    *   happens automatically.
    *
    * Communicated to the route handler via PINAGENT_SPAWN_AGENT env var.
-   * Set PINAGENT_AGENT_PERMISSION_MODE to override the default `acceptEdits`.
+   * Set PINAGENT_AGENT_PERMISSION_MODE to override the default `auto` (the
+   * SDK's classifier mode; `acceptEdits` for the pre-classifier behaviour).
    */
   spawnAgent?: 'worktree' | 'inline' | 'off' | false;
   /**

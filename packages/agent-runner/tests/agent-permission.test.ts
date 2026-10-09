@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { nanoid } from 'nanoid';
@@ -47,9 +47,9 @@ describe('resolvePermissionMode', () => {
     }
   });
 
-  it("falls back to 'acceptEdits' when unset or invalid", () => {
-    expect(resolvePermissionMode({})).toBe('acceptEdits');
-    expect(resolvePermissionMode({ [PERMISSION_ENV]: 'nonsense' })).toBe('acceptEdits');
+  it("falls back to 'auto' (the default) when unset or invalid", () => {
+    expect(resolvePermissionMode({})).toBe('auto');
+    expect(resolvePermissionMode({ [PERMISSION_ENV]: 'nonsense' })).toBe('auto');
   });
 });
 
@@ -65,13 +65,14 @@ describe('resolvePermissionModeOverride', () => {
   it('returns the fallback mode (not null) for an invalid but present override', () => {
     // Distinct from resolvePermissionMode: presence — not validity — is what
     // makes this non-null, so the dock can show "an override is active".
-    expect(resolvePermissionModeOverride({ [PERMISSION_ENV]: 'nonsense' })).toBe('acceptEdits');
+    expect(resolvePermissionModeOverride({ [PERMISSION_ENV]: 'nonsense' })).toBe('auto');
   });
 });
 
 describe('toSdkPermissionMode', () => {
   it('maps each project mode to its SDK mode', () => {
-    expect(toSdkPermissionMode('auto')).toBe('acceptEdits');
+    expect(toSdkPermissionMode('auto')).toBe('auto');
+    expect(toSdkPermissionMode('accept-edits')).toBe('acceptEdits');
     expect(toSdkPermissionMode('approve')).toBe('default');
     expect(toSdkPermissionMode('dry-run')).toBe('plan');
   });
@@ -99,7 +100,23 @@ describe('resolveRunPermissionMode', () => {
     expect(await resolveRunPermissionMode(root)).toBe('default');
   });
 
-  it("defaults to the 'auto' project setting → acceptEdits with no config file", async () => {
+  it("defaults to the 'auto' project setting → SDK auto with no config file", async () => {
+    expect(await resolveRunPermissionMode(root)).toBe('auto');
+  });
+
+  it("gives a saved pre-classifier 'auto' config the classifier", async () => {
+    // Configs written before `accept-edits` existed say "auto"; they get the
+    // SDK's auto mode now (opting back out = picking Auto-accept edits).
+    await mkdir(join(root, '.pinagent'), { recursive: true });
+    await writeFile(
+      join(root, '.pinagent', 'config.json'),
+      JSON.stringify({ baseBranch: 'main', permissionMode: 'auto' }),
+    );
+    expect(await resolveRunPermissionMode(root)).toBe('auto');
+  });
+
+  it("maps a saved 'accept-edits' setting to acceptEdits", async () => {
+    await new SettingsStore(root).patch({ permissionMode: 'accept-edits' });
     expect(await resolveRunPermissionMode(root)).toBe('acceptEdits');
   });
 

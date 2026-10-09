@@ -45,8 +45,8 @@ describe('resolveAgentMode', () => {
 });
 
 describe('resolvePermissionMode', () => {
-  it('returns acceptEdits when env is unset (default)', () => {
-    expect(resolvePermissionMode(permEnv())).toBe('acceptEdits');
+  it('returns auto (the classifier mode) when env is unset (default)', () => {
+    expect(resolvePermissionMode(permEnv())).toBe('auto');
   });
 
   it.each([
@@ -60,16 +60,20 @@ describe('resolvePermissionMode', () => {
     expect(resolvePermissionMode(permEnv(mode))).toBe(mode);
   });
 
-  it('falls back to acceptEdits for unknown values', () => {
-    expect(resolvePermissionMode(permEnv('rude'))).toBe('acceptEdits');
-    expect(resolvePermissionMode(permEnv('YOLO'))).toBe('acceptEdits');
-    expect(resolvePermissionMode(permEnv(''))).toBe('acceptEdits');
+  it('falls back to auto for unknown values', () => {
+    expect(resolvePermissionMode(permEnv('rude'))).toBe('auto');
+    expect(resolvePermissionMode(permEnv('YOLO'))).toBe('auto');
+    expect(resolvePermissionMode(permEnv(''))).toBe('auto');
   });
 });
 
 describe('toSdkPermissionMode', () => {
-  it('maps "auto" (dock label: Auto-accept edits) to acceptEdits', () => {
-    expect(toSdkPermissionMode('auto')).toBe('acceptEdits');
+  it('maps "auto" (dock label: Auto (classifier)) to the SDK auto mode', () => {
+    expect(toSdkPermissionMode('auto')).toBe('auto');
+  });
+
+  it('maps "accept-edits" (dock label: Auto-accept edits) to acceptEdits', () => {
+    expect(toSdkPermissionMode('accept-edits')).toBe('acceptEdits');
   });
 
   it('maps "approve" (dock label: Require approval) to the SDK default', () => {

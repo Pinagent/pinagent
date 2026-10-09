@@ -12,7 +12,14 @@ import type { AgentEvent } from '@pinagent/shared';
  * own alias means a future provider can't silently break when the SDK's
  * union drifts.
  */
-export type AgentPermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
+export type AgentPermissionMode =
+  | 'default'
+  | 'acceptEdits'
+  | 'bypassPermissions'
+  | 'plan'
+  | 'dontAsk'
+  /** The SDK's classifier mode — Pinagent's default. */
+  | 'auto';
 
 /**
  * Everything a provider needs to run one turn for one feedback record.

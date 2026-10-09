@@ -313,6 +313,18 @@ describe('spawnAgent', () => {
     expect(opts?.mcpServers).toHaveProperty('pinagent-ask-user');
     expect(opts?.allowedTools).toContain('mcp__pinagent-ask-user__ask_user');
     expect(opts?.systemPrompt).toMatchObject({ type: 'preset', preset: 'claude_code' });
+    const append = (opts?.systemPrompt as { append?: string }).append ?? '';
+    expect(append).toContain('mcp__pinagent-ask-user__ask_user');
+    // Names the exact pre-approved pinagent tools, so a run with several
+    // pinagent-ish servers registered doesn't pick an un-allowlisted one.
+    for (const tool of ['mcp__pinagent__get_feedback', 'mcp__pinagent__resolve_feedback']) {
+      expect(append).toContain(`\`${tool}\``);
+      expect(opts?.allowedTools).toContain(tool);
+    }
+    // Steers off shell shapes that always need a human permission answer.
+    expect(append).toContain('Read, Grep and Glob');
+    expect(append).toContain('command substitution');
+    expect(append).toContain('`cd … &&`');
     // PINAGENT_PROJECT_ROOT is pinned in the SDK env so the MCP server
     // running in the worktree resolves storage back to the real root.
     expect(opts?.env?.PINAGENT_PROJECT_ROOT).toBe(PROJECT_ROOT);
@@ -388,7 +400,8 @@ describe('spawnAgent', () => {
     });
 
     it.each([
-      ['auto', 'acceptEdits'],
+      ['auto', 'auto'],
+      ['accept-edits', 'acceptEdits'],
       ['approve', 'default'],
       ['dry-run', 'plan'],
     ] as const)('persists settings.permissionMode=%s and the SDK call sees %s', async (saved, expected) => {
@@ -528,6 +541,55 @@ describe('spawnAgent', () => {
         },
       );
       expect(res.behavior).toBe('deny');
+    });
+
+    it('falls back to acceptEdits, with a log note, when the CLI declines auto mode', async () => {
+      // Auto mode unavailable (plan, model, disableAutoMode): the CLI starts
+      // the session in `default` instead of failing. The run should switch
+      // to acceptEdits, report that mode on its init event, and log why.
+      await store.patch({ permissionMode: 'auto' });
+      restoreSettings = () => store.patch({ permissionMode: 'auto' }).then(() => undefined);
+
+      const { id, storage } = await makeFeedback();
+      const rec = await storage.read(id);
+      const setPermissionMode = vi.fn(async () => {});
+      (sdk.query as Mock).mockImplementation(() =>
+        Object.assign(
+          (async function* () {
+            yield {
+              type: 'system',
+              subtype: 'init',
+              session_id: 'sess-noauto',
+              model: 'claude',
+              permissionMode: 'default',
+              mcp_servers: [],
+              apiKeySource: 'oauth',
+            } as never;
+            yield {
+              type: 'result',
+              subtype: 'success',
+              num_turns: 0,
+              usage: { input_tokens: 0, output_tokens: 0 },
+              total_cost_usd: 0,
+              duration_ms: 0,
+            } as never;
+          })(),
+          { setPermissionMode },
+        ),
+      );
+
+      const done = collectUntil(id, (e) => e.type === 'result');
+      await agent.spawnAgent({ projectRoot: PROJECT_ROOT, feedback: rec!, mode: 'inline' });
+      const events = await done;
+      await waitForRunIdle(id);
+
+      expect(setPermissionMode).toHaveBeenCalledWith('acceptEdits');
+      expect(events.find((e) => e.type === 'init')).toMatchObject({
+        permissionMode: 'acceptEdits',
+      });
+      const log = await readFile(join(PROJECT_ROOT, '.pinagent', 'logs', `${id}.md`), 'utf8');
+      expect(log).toContain("Auto mode isn't available");
+      expect(log).toContain('Switched to `acceptEdits`');
     });
   });
 });

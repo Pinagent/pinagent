@@ -157,15 +157,15 @@ describe('GET /__pinagent/settings — permissionModeOverride', () => {
     expect(body.permissionModeOverride).toBe('plan');
   });
 
-  it('coerces invalid env values to the resolver default (acceptEdits), not null', async () => {
+  it('coerces invalid env values to the resolver default (auto), not null', async () => {
     // The override is "active" any time the env is set — even garbage
     // values flow through `resolvePermissionMode`'s fallback to
-    // `acceptEdits`. Banner should still show; users will see the
+    // `auto`. Banner should still show; users will see the
     // value they typed is being treated as the fallback.
     process.env.PINAGENT_AGENT_PERMISSION_MODE = 'not-a-mode';
     const res = await fetch(`${base}/__pinagent/settings`);
     const body = (await res.json()) as { permissionModeOverride: string | null };
-    expect(body.permissionModeOverride).toBe('acceptEdits');
+    expect(body.permissionModeOverride).toBe('auto');
   });
 });
 
