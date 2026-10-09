@@ -38,6 +38,7 @@ import {
   pushHostBranch,
   refreshPullRequests,
   reopenConversations,
+  resolveModelOverride,
   resolvePermissionModeOverride,
   SecretsStore,
   SettingsStore,
@@ -528,10 +529,12 @@ export function createMiddleware(opts: CreateMiddlewareOpts): Connect.NextHandle
       // this dev shell. When non-null, the spawned agent ignores
       // `permissionMode` from the settings file; the dock surfaces a
       // banner so the user knows their picker is being overridden.
+      // `modelOverride` is the same signal for `PINAGENT_AGENT_MODEL`.
       if (req.method === 'GET' && url === '/__pinagent/settings') {
         const settings = await new SettingsStore(storage.root).read();
         const permissionModeOverride = resolvePermissionModeOverride(process.env);
-        return json(res, 200, { ...settings, permissionModeOverride });
+        const modelOverride = resolveModelOverride(process.env);
+        return json(res, 200, { ...settings, permissionModeOverride, modelOverride });
       }
 
       // PATCH /__pinagent/settings — partial update; whole record echoed back.

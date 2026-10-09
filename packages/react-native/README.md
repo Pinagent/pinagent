@@ -146,6 +146,7 @@ module.exports = {
 | Var | Effect |
 | --- | --- |
 | `PINAGENT_AGENT_API_KEY` | The agent-run API key. Set it yourself, or let the `apiKey` middleware option set it. The `apiKey` option wins when both are present (it's applied on middleware construction). |
+| `PINAGENT_AGENT_MODEL` | Claude model for spawned runs (`opus`, `claude-opus-5-5`, …), passed to the Agent SDK as `model`. Wins over `"model"` in `.pinagent/config.json`; with neither set, the SDK's bundled-CLI default applies. |
 | `PINAGENT_EDITOR` | Editor command the dev server uses for tap-to-open (e.g. `code -g`). Falls back to common editor CLIs / macOS apps. |
 
 **Pinagent never reads `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` implicitly.** The

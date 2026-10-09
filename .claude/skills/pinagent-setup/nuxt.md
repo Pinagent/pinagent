@@ -80,7 +80,9 @@ The `pinagent` key in `nuxt.config` accepts:
   `PINAGENT_GITHUB_TOKEN`.
 
 Override the permission mode with `PINAGENT_AGENT_PERMISSION_MODE` (default
-`acceptEdits`). Override the WebSocket port with `PINAGENT_WS_PORT` (default
+`acceptEdits`). Pick the agent's Claude model with `PINAGENT_AGENT_MODEL` (e.g.
+`opus`, `claude-opus-5-5`) or `"model"` in `.pinagent/config.json` (the env var
+wins); unset uses the SDK's bundled-CLI default. Override the WebSocket port with `PINAGENT_WS_PORT` (default
 `53636`; the server walks forward to the next free port if it's taken).
 
 Auth: by default uses the OAuth session from `claude login` (billed against your

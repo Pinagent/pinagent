@@ -8,6 +8,7 @@ import {
 import type { AgentEvent } from '@pinagent/shared';
 import { buildSdkAuthEnv } from '../agent-auth';
 import { findNearestAgentGuide, renderAgentGuide } from '../agent-guide';
+import { resolveRunModel } from '../agent-model';
 import {
   renderInitFooter,
   renderMessage,
@@ -211,6 +212,12 @@ async function buildSdkOptions(req: AgentRunRequest): Promise<Options> {
     permissionMode: req.permissionMode,
   });
   if (canUseTool) options.canUseTool = canUseTool;
+
+  // Pass `model` only when the developer chose one (env or project setting);
+  // otherwise the SDK's bundled CLI default applies. Resolved per turn, so a
+  // follow-up picks up a changed setting.
+  const model = await resolveRunModel(req.projectRoot);
+  if (model) options.model = model;
 
   if (req.resume) options.resume = req.resume;
   return options;

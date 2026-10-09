@@ -14,6 +14,7 @@ export {
   reopenConversation,
   reopenConversations,
   resolveAgentMode,
+  resolveModelOverride,
   resolvePermissionMode,
   resolvePermissionModeOverride,
   runFollowUpTurn,

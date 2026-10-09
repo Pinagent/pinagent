@@ -100,6 +100,7 @@ The plugins, MCP server, and CLI are published to npm under the `@pinagent/*` sc
 | `PINAGENT_WORKSPACE_ROOT` | Workspace dir the MCP server scans for apps with a `.pinagent/` (combines with `PINAGENT_PROJECT_ROOTS`) | MCP server |
 | `PINAGENT_SPAWN_AGENT` | `worktree` / `inline` / unset — agent spawn mode for the Next adapter | Next route handler |
 | `PINAGENT_AGENT_PERMISSION_MODE` | `permissionMode` passed to the Agent SDK (default `acceptEdits`) | Next + Vite agent spawners |
+| `PINAGENT_AGENT_MODEL` | `model` passed to the Agent SDK (`opus`, `sonnet`, `claude-opus-5-5`, …). Wins over the `model` in `.pinagent/config.json` (dock Settings → Agent model). Unset = the SDK's bundled-CLI default. | Next + Vite agent spawners |
 | `ANTHROPIC_API_KEY` | Optional API key. If set, the SDK bills the API account instead of the OAuth subscription. Unset to use `claude login` credentials. | Next + Vite agent spawners |
 | `PINAGENT_WS_PORT` | Port the dev-side WebSocket server binds (Next only). Widget connects to this port. | `53636` |
 | `PINAGENT_EDITOR` | Editor command for the "click file:line:col to open" feature | Route handler `/open` endpoint |

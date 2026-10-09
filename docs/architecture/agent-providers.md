@@ -75,6 +75,12 @@ Configuration (all read per-run, so no dev-server restart needed):
 | `PINAGENT_AGENT_CLI_FORMAT`   | `text`             | `text` = each stdout line is narration; `stream-json` = parse per-line. |
 | `PINAGENT_AGENT_CLI_MODEL`    | the executable name | label for the widget's model chip.                                     |
 
+`PINAGENT_AGENT_CLI_MODEL` is only a display label — the wrapped CLI picks
+its own model from its argv. It is unrelated to `PINAGENT_AGENT_MODEL`,
+which the default `claude-code` provider passes to the Agent SDK as
+`options.model` (precedence: that env var > `model` in
+`.pinagent/config.json` > unset, i.e. the SDK's bundled-CLI default).
+
 The child inherits the parent environment plus `PINAGENT_PROJECT_ROOT`,
 `PINAGENT_FEEDBACK_ID`, and `PINAGENT_RESUME_SESSION`, so an MCP-aware
 CLI (or a wrapper script) can connect to the `@pinagent/mcp` server,
