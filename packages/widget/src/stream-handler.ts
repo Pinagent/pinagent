@@ -9,7 +9,9 @@ import {
   recordUserMessage,
 } from './db/writes';
 import { clearFollowUpQueue, loadFollowUpQueue, saveFollowUpQueue } from './followup-outbox';
+import { renderLifecycleRow } from './lifecycle-row';
 import { attachMentionMenu } from './mention-menu';
+import { createStatusLine } from './status-line';
 import type {
   AgentEvent,
   AgentState,
@@ -43,14 +45,10 @@ export function attachStreamHandler(
 ): void {
   if (!composer.feedbackId) return;
   const feedbackId = composer.feedbackId;
-  // The single-line minimal bar's label mirrors the expanded header text.
-  const miniLabel = idoc.getElementById('pa-mini-label');
-  // Set the status text on both surfaces at once — the expanded header and
-  // the minimal bar — so they never drift.
-  function setStatus(text: string) {
-    header.textContent = text;
-    if (miniLabel) miniLabel.textContent = text;
-  }
+  // One status line on both surfaces (expanded header + minimal bar label),
+  // with an open ask overlaid on top of the run status — see status-line.ts.
+  const statusLine = createStatusLine(header, idoc.getElementById('pa-mini-label'));
+  const setStatus = (text: string) => statusLine.set(text);
   let activeTextBlock: HTMLElement | null = null;
   let lastToolChip: HTMLElement | null = null;
   // The open run of consecutive tool calls. Tool chips are tucked inside
@@ -257,9 +255,13 @@ export function attachStreamHandler(
     options?: string[],
     context?: string,
     permission = false,
+    expiresAt: number | null = null,
   ) {
     if (pendingAskFormRoot) pendingAskFormRoot.remove();
     pendingAskId = askId;
+    // Label both surfaces now, expanded or not, so minimizing later still
+    // reads "Approve? · auto-deny in 4:05" rather than "Working · …".
+    statusLine.setAwaiting({ kind: permission ? 'permission' : 'question', expiresAt });
     // Record on the composer so minimizing mid-question re-surfaces the
     // attention state (see applyMiniChrome). Mirror it onto the bubble so
     // the fully-collapsed dot shows the alert state, not the spinner.
@@ -292,6 +294,8 @@ export function attachStreamHandler(
       pendingAskId = null;
       retirePendingAsk = null;
       composer.needsInput = false;
+      // Back to the run status — the turn resumes (or the ask lapsed).
+      statusLine.clearAwaiting();
       idoc.body.classList.remove('needs-input');
       composer.bubble.classList.remove('needs-input');
       setFollowEnabled(!turnRunning);
@@ -299,6 +303,19 @@ export function attachStreamHandler(
       if (composer.followUpQueue.length > 0) flushQueue();
     }
   }
+
+  // Expanding a card that's waiting on the developer must land on the
+  // question: the form was appended while minimized (the log was collapsed,
+  // so it never scrolled), and the expanded log can be short. Scroll only
+  // the log — scrollIntoView / a plain focus() would also scroll the host
+  // page to bring this iframe into view.
+  composer.revealPendingAsk = () => {
+    if (!pendingAskFormRoot) return;
+    log.scrollTop = log.scrollHeight;
+    pendingAskFormRoot
+      .querySelector<HTMLElement>('textarea, button')
+      ?.focus({ preventScroll: true });
+  };
 
   // --- Client-side follow-up queue ------------------------------------
   // The server rejects a `user_message` while a turn is in flight, so
@@ -575,14 +592,19 @@ export function attachStreamHandler(
         const options = Array.isArray(event.options) ? (event.options as string[]) : undefined;
         const context = typeof event.context === 'string' ? event.context : undefined;
         if (!askId || !question) break;
-        renderAskUserForm(askId, question, options, context, event.kind === 'permission');
+        const expiresAt = typeof event.expiresAt === 'string' ? Date.parse(event.expiresAt) : NaN;
+        renderAskUserForm(
+          askId,
+          question,
+          options,
+          context,
+          event.kind === 'permission',
+          Number.isFinite(expiresAt) ? expiresAt : null,
+        );
         // If we're minimized, the answer form isn't visible — pulse the
-        // card and swap the header so the developer knows the agent is
-        // blocked on them. Cleared when they expand (applyMiniChrome).
-        if (!composer.expanded) {
-          idoc.body.classList.add('needs-input');
-          setStatus('Needs your input');
-        }
+        // card so the developer knows the agent is blocked on them.
+        // Cleared when they expand (applyMiniChrome).
+        if (!composer.expanded) idoc.body.classList.add('needs-input');
         // A blocked agent shouldn't auto-close out from under the user.
         composer.cancelAutoClose();
         break;
@@ -748,95 +770,12 @@ export function attachStreamHandler(
   // fills the log; the first streamed event grows it back via append().
   composer.refitStream();
 
-  /**
-   * Render the lifecycle row from the current `worktreeState` +
-   * `turnRunning`. Called from both the worktree_state listener and
-   * after turn transitions (because Land/Discard are disabled while a
-   * turn is running). Idempotent — safe to call repeatedly.
-   */
-  function branchSummary(): string {
-    // Worktree branches are always named `pinagent/<feedbackId>` (see
-    // `createWorktree` in agent-runner). Show the full branch in the label
-    // so the dev can match it against `git branch` output.
-    const branch = `pinagent/${feedbackId}`;
-    if (worktreeChanges === null) return branch;
-    const noun = worktreeChanges === 1 ? 'change' : 'changes';
-    return `${branch} · ${worktreeChanges} ${noun}`;
-  }
-
   function renderLifecycle(extra?: { commitSha?: string; message?: string }) {
-    const { row, label, landBtn, discardBtn } = lifecycle;
-    const cls = row.classList;
-    cls.remove('landed', 'discarded', 'conflict', 'busy');
-
-    if (worktreeState === 'none') {
-      row.hidden = true;
-      return;
-    }
-    row.hidden = false;
-
-    const canAct = !turnRunning && !pendingAskId;
-    switch (worktreeState) {
-      case 'active':
-        label.textContent = canAct ? branchSummary() : `Working on ${branchSummary()}`;
-        landBtn.hidden = false;
-        discardBtn.hidden = false;
-        landBtn.disabled = !canAct;
-        discardBtn.disabled = !canAct;
-        landBtn.textContent = 'Land';
-        discardBtn.textContent = 'Discard';
-        if (extra?.message) label.textContent = `Last attempt: ${extra.message}`;
-        break;
-      case 'landing':
-        cls.add('busy');
-        label.textContent = 'Landing…';
-        landBtn.hidden = false;
-        discardBtn.hidden = true;
-        landBtn.disabled = true;
-        landBtn.textContent = 'Landing…';
-        break;
-      case 'landed':
-        cls.add('landed');
-        label.textContent = extra?.commitSha
-          ? `Landed · ${extra.commitSha.slice(0, 12)}`
-          : 'Landed';
-        landBtn.hidden = true;
-        discardBtn.hidden = true;
-        break;
-      case 'discarding':
-        cls.add('busy');
-        label.textContent = 'Discarding…';
-        landBtn.hidden = true;
-        discardBtn.hidden = false;
-        discardBtn.disabled = true;
-        discardBtn.textContent = 'Discarding…';
-        break;
-      case 'discarded':
-        cls.add('discarded');
-        label.textContent = 'Discarded';
-        landBtn.hidden = true;
-        discardBtn.hidden = true;
-        break;
-      case 'conflict':
-        cls.add('conflict');
-        label.textContent = 'Merge conflict — resolve in editor, then retry';
-        landBtn.hidden = false;
-        discardBtn.hidden = false;
-        landBtn.disabled = !canAct;
-        discardBtn.disabled = !canAct;
-        landBtn.textContent = 'Retry land';
-        discardBtn.textContent = 'Discard';
-        break;
-      case 'ttl_warning':
-        label.textContent = `Old worktree · ${branchSummary()} — review or discard`;
-        landBtn.hidden = false;
-        discardBtn.hidden = false;
-        landBtn.disabled = !canAct;
-        discardBtn.disabled = !canAct;
-        landBtn.textContent = 'Land';
-        discardBtn.textContent = 'Discard';
-        break;
-    }
+    renderLifecycleRow(
+      lifecycle,
+      { feedbackId, worktreeState, worktreeChanges, canAct: !turnRunning && !pendingAskId },
+      extra,
+    );
   }
 
   lifecycle.landBtn.addEventListener('click', () => {
@@ -900,6 +839,7 @@ export function attachStreamHandler(
       retirePendingAsk = null;
       composer.needsInput = false;
       composer.bubble.classList.remove('needs-input');
+      statusLine.clearAwaiting();
       // The attached-element pill lived in the (now-wiped) follow row.
       clearAttachment();
       // The rendered "queued" bubbles were just wiped with the log. Drop

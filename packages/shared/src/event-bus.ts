@@ -70,6 +70,7 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
       context: z.string().optional(),
       options: z.array(z.string()).optional(),
       kind: z.literal('permission').optional(),
+      expiresAt: z.string().optional(),
     })
     .loose(),
   z
@@ -153,6 +154,12 @@ export type AgentEvent =
        * rendering hint — it's answered the same way, via `ask_response`.
        */
       kind?: 'permission';
+      /**
+       * ISO time the ask closes unanswered (its TTL elapses → `ask_expired`;
+       * a permission prompt is then denied). Lets the widget show a
+       * countdown. Optional: older transcripts don't carry it.
+       */
+      expiresAt?: string;
     }
   | {
       /**

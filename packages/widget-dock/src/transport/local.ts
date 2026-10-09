@@ -191,6 +191,20 @@ const FeedbackRecordSchema = z
     // Folds into the derived status as `working` so a live inline run
     // shows as active. Default false keeps older servers parsing cleanly.
     isRunning: z.boolean().default(false),
+    // The open ask_user / permission prompt the run is blocked on, if any.
+    // Folds into the derived status as `awaitingClarification` ("Needs
+    // reply") so a waiting agent doesn't read as merely working. Default
+    // null keeps older servers (no field) parsing cleanly.
+    awaitingInput: z
+      .object({
+        askId: z.string(),
+        kind: z.enum(['permission', 'question']).catch('question'),
+        since: z.string().nullable().default(null),
+        expiresAt: z.string().nullable().default(null),
+      })
+      .loose()
+      .nullable()
+      .default(null),
     createdAt: z.string(),
     updatedAt: z.string(),
   })
@@ -319,7 +333,12 @@ function toConversation(rec: FeedbackRecord): Conversation {
     shortId: shortId(rec.id),
     // User-supplied title wins over the comment-derived one.
     title: rec.title ?? commentToTitle(rec.comment),
-    status: deriveDockStatus(rec.status, rec.worktreeState, rec.isRunning),
+    status: deriveDockStatus(
+      rec.status,
+      rec.worktreeState,
+      rec.isRunning,
+      rec.awaitingInput !== null,
+    ),
     page: rec.url,
     anchor: {
       loc: locString(rec.file, rec.line, rec.col),

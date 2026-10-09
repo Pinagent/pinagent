@@ -43,6 +43,13 @@ describe('deriveDockStatus', () => {
     expect(deriveDockStatus('deferred', 'active', true)).toBe('working');
   });
 
+  it('shows a run blocked on an open ask as awaitingClarification, not working', () => {
+    expect(deriveDockStatus('pending', 'none', true, true)).toBe('awaitingClarification');
+    expect(deriveDockStatus('fixed', 'active', true, true)).toBe('awaitingClarification');
+    // No open ask → the running axis still wins as before.
+    expect(deriveDockStatus('pending', 'none', true, false)).toBe('working');
+  });
+
   it('defaults isRunning to false (unchanged two-axis behavior)', () => {
     expect(deriveDockStatus('pending', 'none')).toBe('pending');
     expect(deriveDockStatus('pending', 'none', false)).toBe('pending');

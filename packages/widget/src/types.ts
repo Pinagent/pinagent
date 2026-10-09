@@ -275,6 +275,12 @@ export interface Composer {
    * follow-up draft so the user can describe the change before sending.
    */
   addPickedElement?(content: string, node: QueuedNodeRef): void;
+  /**
+   * Scroll an open ask's answer form into view and focus it. Assigned by
+   * `attachStreamHandler`; `expand()` calls it so expanding a card that is
+   * waiting on the developer lands on the question, not the top of the log.
+   */
+  revealPendingAsk?(): void;
   close(): void;
   expand(): void;
   minimize(): void;

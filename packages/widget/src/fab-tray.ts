@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createAgentTray, type RawFeedback, shouldAutoExpand, type TrayAgent } from './agent-tray';
+import { trayAwaitingMeta, trayAwaitingTitle } from './awaiting';
 import { BRAND_CREAM } from './brand';
 import { ENDPOINT, ICON_GRIP, ICON_MINIMIZE, STATUS_LABEL, trayRowMeta } from './constants';
 import type { WidgetContext } from './context';
@@ -200,18 +201,25 @@ export function createFabTray(ctx: WidgetContext): {
     fab.appendChild(buildPinIcon(26, BRAND_CREAM));
 
     const working = hidden.filter((a) => a.status === 'working').length;
-    fab.classList.toggle('running', working > 0);
+    // Agents blocked on the developer outrank "running": the badge turns
+    // amber and pulses so a waiting prompt is visible behind a minimized pin.
+    const waiting = hidden.filter((a) => a.awaiting !== null).length;
+    fab.classList.toggle('running', working > 0 && waiting === 0);
+    fab.classList.toggle('needs-input', waiting > 0);
 
     if (hidden.length > 0) {
       const badge = document.createElement('span');
-      badge.className = 'fab-agent-badge';
+      badge.className = waiting > 0 ? 'fab-agent-badge needs-input' : 'fab-agent-badge';
       badge.textContent = String(hidden.length);
       badge.setAttribute('aria-hidden', 'true');
       fab.appendChild(badge);
+      const agents = `${hidden.length} agent${hidden.length === 1 ? '' : 's'}`;
       const label =
-        working > 0
-          ? `${hidden.length} agent${hidden.length === 1 ? '' : 's'} running — click to expand`
-          : `${hidden.length} agent${hidden.length === 1 ? '' : 's'} — click to expand`;
+        waiting > 0
+          ? `${agents} — ${waiting} waiting for your input — click to expand`
+          : working > 0
+            ? `${agents} running — click to expand`
+            : `${agents} — click to expand`;
       fab.title = withStorageHint(label);
       fab.setAttribute('aria-label', label);
       return;
@@ -282,6 +290,7 @@ export function createFabTray(ctx: WidgetContext): {
     dot.className = 'pa-status-dot';
     dot.setAttribute('data-status', agent.status);
     dot.title = STATUS_LABEL[agent.status] ?? agent.status;
+    if (agent.awaiting) row.classList.add('awaiting');
 
     // Title + meta stacked in a column so the row stays one logical line
     // while showing the glanceable "N msg · $cost" beneath the title.
@@ -292,12 +301,23 @@ export function createFabTray(ctx: WidgetContext): {
     title.textContent = agent.title;
     title.title = agent.selector ? `${agent.title}\n${agent.selector}` : agent.title;
     main.appendChild(title);
-    const metaText = trayRowMeta(agent.messageCount, agent.costUsd);
-    if (metaText) {
-      const meta = document.createElement('span');
-      meta.className = 'pa-tray-meta';
-      meta.textContent = metaText;
-      main.appendChild(meta);
+    // Blocked on the developer: the call to action ("Approve? · waiting 3m",
+    // refreshed by the waiting ticker below) gets its own full-width line
+    // under the row — squeezed beside the buttons it would be ellipsized.
+    let waitLine: HTMLElement | null = null;
+    if (agent.awaiting) {
+      waitLine = document.createElement('span');
+      waitLine.className = 'pa-tray-meta pa-tray-wait';
+      waitLine.dataset.agentId = agent.id;
+      paintWaiting(waitLine, dot, agent);
+    } else {
+      const metaText = trayRowMeta(agent.messageCount, agent.costUsd);
+      if (metaText) {
+        const meta = document.createElement('span');
+        meta.className = 'pa-tray-meta';
+        meta.textContent = metaText;
+        main.appendChild(meta);
+      }
     }
 
     const actions = document.createElement('span');
@@ -306,7 +326,7 @@ export function createFabTray(ctx: WidgetContext): {
     // free-floating chat. Always available — the tray is the only handle on
     // an agent whose anchored pin was removed when its element disappeared.
     actions.appendChild(
-      makeRowBtn('Open', false, (ev) => {
+      makeRowBtn(agent.awaiting ? 'Answer' : 'Open', false, (ev) => {
         ev.stopPropagation();
         openAgent(agent.id);
       }),
@@ -328,6 +348,7 @@ export function createFabTray(ctx: WidgetContext): {
     );
 
     row.append(dot, main, actions);
+    if (waitLine) row.appendChild(waitLine);
     return row;
   }
 
@@ -343,7 +364,9 @@ export function createFabTray(ctx: WidgetContext): {
     grip.setAttribute('aria-hidden', 'true');
     const heading = document.createElement('span');
     heading.className = 'pa-tray-title';
-    heading.textContent = `Agents · ${agents.length}`;
+    const waiting = agents.filter((a) => a.awaiting !== null).length;
+    heading.textContent =
+      waiting > 0 ? `Agents · ${agents.length} · ${waiting} waiting` : `Agents · ${agents.length}`;
     // Collapse the tray back to the pin while agents keep running. The pin
     // then carries a count badge + pulse (see renderPinContent); a new run
     // or a click re-expands.
@@ -375,8 +398,44 @@ export function createFabTray(ctx: WidgetContext): {
 
     const list = document.createElement('ul');
     list.className = 'pa-tray-list';
-    for (const agent of agents) list.appendChild(buildAgentRow(agent));
+    // Agents blocked on the developer sort first so the call to action is
+    // the first thing in the panel (stable within each group).
+    const ordered = [
+      ...agents.filter((a) => a.awaiting !== null),
+      ...agents.filter((a) => a.awaiting === null),
+    ];
+    for (const agent of ordered) list.appendChild(buildAgentRow(agent));
     fab.appendChild(list);
+  }
+
+  function paintWaiting(meta: HTMLElement, dot: HTMLElement | null, agent: TrayAgent) {
+    if (!agent.awaiting) return;
+    const now = Date.now();
+    meta.textContent = trayAwaitingMeta(agent.awaiting, now);
+    const title = trayAwaitingTitle(agent.awaiting, now);
+    meta.title = title;
+    if (dot) dot.title = title;
+  }
+
+  // Keep "waiting Xm" honest without rebuilding the tray (a rebuild would
+  // steal hover/focus from the row buttons): retext the waiting rows in
+  // place every few seconds, only while some agent is actually waiting.
+  const WAIT_TICK_MS = 5_000;
+  let waitTicker: ReturnType<typeof setInterval> | null = null;
+  function syncWaitTicker() {
+    const anyWaiting = trayAgents.some((a) => a.awaiting !== null);
+    if (anyWaiting && !waitTicker) {
+      waitTicker = setInterval(() => {
+        for (const meta of fab.querySelectorAll<HTMLElement>('.pa-tray-wait')) {
+          const agent = trayAgents.find((a) => a.id === meta.dataset.agentId);
+          const dot = meta.closest('.pa-tray-row')?.querySelector<HTMLElement>('.pa-status-dot');
+          if (agent) paintWaiting(meta, dot ?? null, agent);
+        }
+      }, WAIT_TICK_MS);
+    } else if (!anyWaiting && waitTicker) {
+      clearInterval(waitTicker);
+      waitTicker = null;
+    }
   }
 
   function applyFabPresentation() {
@@ -415,9 +474,11 @@ export function createFabTray(ctx: WidgetContext): {
       // were present when the user collapsed, so "auto-expand on a new
       // run" still holds.
       const prevIds = new Set(trayAgents.map((a) => a.id));
-      if (shouldAutoExpand(prevIds, agents)) minimized = false;
+      const prevAskIds = new Set(trayAgents.flatMap((a) => (a.awaiting ? [a.awaiting.askId] : [])));
+      if (shouldAutoExpand(prevIds, agents, prevAskIds)) minimized = false;
       trayAgents = agents;
       applyFabPresentation();
+      syncWaitTicker();
     },
   });
 
