@@ -19,7 +19,10 @@
  *   - `.pinagent` is gitignored,
  *   - `.mcp.json` registers the server and any `PINAGENT_PROJECT_ROOT` it
  *     pins points at a directory that exists — and, in a monorepo, that it
- *     lives at the repo root rather than buried inside one app,
+ *     lives at the repo root rather than buried inside one app, that a
+ *     multi-root server (`PINAGENT_PROJECT_ROOTS` / `PINAGENT_WORKSPACE_ROOT`)
+ *     covers this app, and that there aren't several per-app pinagent servers
+ *     where one would do,
  *   - no dangling `@pinagent/*` symlinks linger in node_modules from an
  *     earlier, abandoned install attempt.
  *
@@ -30,6 +33,7 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve, sep } from 'node:path';
+import { discoverProjectRoots, resolveProjectRoots } from '@pinagent/mcp';
 import { detectRuntime, findAppDir, pluginPackage, type Runtime } from './init';
 
 // Reference the plugin package through a constant rather than a contiguous
@@ -343,7 +347,10 @@ export function findWorkspaceRoot(root: string): string | null {
   return outermost;
 }
 
-/** `.mcp.json` registers a pinagent server; a pinned PINAGENT_PROJECT_ROOT exists. */
+/**
+ * `.mcp.json` registers a pinagent server; a pinned PINAGENT_PROJECT_ROOT
+ * exists; multi-root config covers this app; no redundant per-app servers.
+ */
 export function checkMcpJson(root: string): Check[] {
   const workspaceRoot = findWorkspaceRoot(root);
   let dir = resolve(root);
@@ -364,12 +371,12 @@ export function checkMcpJson(root: string): Check[] {
         status: 'warn',
         label: 'No .mcp.json found',
         detail: workspaceRoot
-          ? `Register at the monorepo root (${workspaceRoot}) so one agent session covers the whole workspace: cd ${workspaceRoot} && claude mcp add pinagent -s project -- pnpm dlx @pinagent/cli mcp (then pin PINAGENT_PROJECT_ROOT to this app).`
+          ? `Register at the monorepo root (${workspaceRoot}) so one agent session covers the whole workspace: cd ${workspaceRoot} && claude mcp add pinagent -s project -- pnpm dlx @pinagent/cli mcp (then pin PINAGENT_PROJECT_ROOT to this app, or list every wired app in PINAGENT_PROJECT_ROOTS).`
           : 'Register the server: claude mcp add pinagent -s project -- pnpm dlx @pinagent/cli mcp',
       },
     ];
   }
-  let parsed: { mcpServers?: Record<string, { env?: Record<string, string> }> };
+  let parsed: { mcpServers?: Record<string, McpServerEntry> };
   try {
     parsed = JSON.parse(found.content);
   } catch {
@@ -396,7 +403,7 @@ export function checkMcpJson(root: string): Check[] {
       checks.push({
         status: 'warn',
         label: '.mcp.json is inside an app, not the monorepo root',
-        detail: `Prefer registering at the monorepo root (${workspaceRoot}) so one agent session covers the whole workspace; keep PINAGENT_PROJECT_ROOT pointed at this app.`,
+        detail: `Prefer registering at the monorepo root (${workspaceRoot}) so one agent session covers the whole workspace; keep PINAGENT_PROJECT_ROOT pointed at this app (or list every wired app in PINAGENT_PROJECT_ROOTS).`,
       });
     }
   }
@@ -411,6 +418,97 @@ export function checkMcpJson(root: string): Check[] {
             detail: `${pinned} does not exist — it must match where your dev server runs from.`,
           },
     );
+  }
+  checks.push(...checkMultiRoot(root, server, dirname(found.path)));
+  // Several `pinagent*` servers is the pre-multi-root monorepo layout: N
+  // processes per session, N allow-list keys, and agents calling the wrong
+  // server's tools. One server now covers every app.
+  const extra = Object.entries(parsed.mcpServers ?? {})
+    .filter(([key, entry]) => key !== 'pinagent' && isPinagentMcpServer(entry))
+    .map(([key]) => key);
+  if (extra.length > 0) {
+    checks.push({
+      status: 'warn',
+      label: `${extra.length + 1} pinagent MCP servers registered (pinagent, ${extra.join(', ')})`,
+      detail:
+        'One server can serve every app: list their roots in PINAGENT_PROJECT_ROOTS on the "pinagent" server (or set PINAGENT_WORKSPACE_ROOT to auto-discover them), then remove the other entries and their mcp__<key>__* allow-list rules.',
+    });
+  }
+  return checks;
+}
+
+interface McpServerEntry {
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+function isPinagentMcpServer(entry: McpServerEntry | undefined): boolean {
+  if (!entry || typeof entry !== 'object') return false;
+  const cmd = [entry.command ?? '', ...(Array.isArray(entry.args) ? entry.args : [])].join(' ');
+  return /pinagent/.test(cmd) && /\bmcp\b/.test(cmd);
+}
+
+/**
+ * `PINAGENT_PROJECT_ROOTS` / `PINAGENT_WORKSPACE_ROOT` on the pinagent
+ * server: every listed root exists, and the app being checked is one of the
+ * projects the server will serve. Relative entries resolve against the
+ * `.mcp.json` directory — where `claude`, and so the server, is launched.
+ */
+export function checkMultiRoot(app: string, server: McpServerEntry, launchDir: string): Check[] {
+  const env = server.env ?? {};
+  if (!env.PINAGENT_PROJECT_ROOTS?.trim() && !env.PINAGENT_WORKSPACE_ROOT?.trim()) return [];
+  const cfg = resolveProjectRoots(env, launchDir);
+  const checks: Check[] = [];
+  const missing = cfg.roots.filter((r) => !existsSync(r));
+  if (missing.length > 0) {
+    checks.push({
+      status: 'fail',
+      label: 'PINAGENT_PROJECT_ROOTS lists missing directories',
+      detail: `${missing.join(', ')} — each entry must be a directory a dev server runs from.`,
+    });
+  } else if (cfg.roots.length > 0) {
+    checks.push({
+      status: 'ok',
+      label: `PINAGENT_PROJECT_ROOTS: ${cfg.roots.length} project root(s) exist`,
+    });
+  }
+  let discovered: string[] = [];
+  if (cfg.workspaceRoot) {
+    if (existsSync(cfg.workspaceRoot)) {
+      discovered = discoverProjectRoots(cfg.workspaceRoot);
+      checks.push({
+        status: 'ok',
+        label: `PINAGENT_WORKSPACE_ROOT exists (${cfg.workspaceRoot}; ${discovered.length} project(s) with .pinagent/ found)`,
+      });
+    } else {
+      checks.push({
+        status: 'fail',
+        label: 'PINAGENT_WORKSPACE_ROOT points at a missing directory',
+        detail: `${cfg.workspaceRoot} does not exist.`,
+      });
+    }
+  }
+  const appRoot = resolve(app);
+  if (cfg.roots.includes(appRoot) || discovered.includes(appRoot)) {
+    checks.push({ status: 'ok', label: `this app is served by the pinagent MCP server` });
+  } else if (
+    cfg.workspaceRoot &&
+    appRoot.startsWith(resolve(cfg.workspaceRoot) + sep) &&
+    !existsSync(join(appRoot, '.pinagent'))
+  ) {
+    checks.push({
+      status: 'warn',
+      label: 'this app has no .pinagent/ yet, so PINAGENT_WORKSPACE_ROOT has not discovered it',
+      detail:
+        'Start its dev server once; the MCP server picks the new project up without a restart.',
+    });
+  } else {
+    checks.push({
+      status: 'warn',
+      label: 'this app is not one of the roots the pinagent MCP server serves',
+      detail: `Add ${appRoot} to PINAGENT_PROJECT_ROOTS so its feedback is visible to the agent.`,
+    });
   }
   return checks;
 }

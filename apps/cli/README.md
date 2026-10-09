@@ -56,7 +56,7 @@ Verify that an already-wired project is set up correctly — the read-only inver
 - the runtime config (`vite.config.*` / `next.config.*` / `nuxt.config.*`) is wrapped with `pinagent(...)`;
 - `<Pinagent />` is mounted in the root layout, and the `app/pinagent/[[...slug]]/route.ts` handler exists with inline `dynamic`/`runtime` (Next);
 - `.pinagent` is gitignored (checking the app dir and every ancestor);
-- `.mcp.json` registers a `pinagent` server, and any `PINAGENT_PROJECT_ROOT` it pins points at a directory that exists;
+- `.mcp.json` registers a `pinagent` server, and any `PINAGENT_PROJECT_ROOT` it pins points at a directory that exists; with `PINAGENT_PROJECT_ROOTS` / `PINAGENT_WORKSPACE_ROOT`, every listed root exists and this app is one of the served projects; and several per-app `pinagent-*` servers are flagged as collapsible into one;
 - no dangling `@pinagent/*` symlinks linger in `node_modules` from an earlier or renamed install.
 
 ```bash
@@ -95,7 +95,9 @@ Project root resolution (in order):
 3. Fall back to the nearest `package.json` ancestor.
 4. Fall back to the current directory.
 
-The MCP server exposes five tools:
+To serve **several apps from one server** (a monorepo where each wired app has its own `.pinagent/`), set `PINAGENT_PROJECT_ROOTS` to the app roots (`:`-separated, `;` on Windows) and/or `PINAGENT_WORKSPACE_ROOT` to a directory to scan for `.pinagent/` dirs. Listings then merge every app and label each item with its project and absolute file path, and id-based tools route to whichever app's DB holds the id. See the [`@pinagent/mcp` README](../../packages/mcp/README.md#several-apps-one-server).
+
+The MCP server exposes six tools:
 
 | Tool                          | Purpose                                                                                 |
 | ----------------------------- | --------------------------------------------------------------------------------------- |
@@ -104,6 +106,7 @@ The MCP server exposes five tools:
 | `resolve_feedback`            | Mark fixed / wontfix / deferred (or re-open with `status: 'pending'`). Optional note + commit sha. |
 | `get_source_context`          | Read a window of source around a `file:line` pair.                                      |
 | `get_conversation_transcript` | Read the full persisted agent transcript for one conversation (text or JSON).           |
+| `create_pull_request`         | Push the dev server's current branch and open a GitHub PR against the configured base.  |
 
 Claude Code config example (`~/.claude/mcp_servers.json` or per-project `.mcp.json`):
 
@@ -153,6 +156,8 @@ Exit codes:
 | Variable                 | Effect                                                                |
 | ------------------------ | --------------------------------------------------------------------- |
 | `PINAGENT_PROJECT_ROOT`  | Override the project root the MCP server reads from.                  |
+| `PINAGENT_PROJECT_ROOTS` | Serve several project roots from one MCP server (`:`-separated, `;` on Windows). |
+| `PINAGENT_WORKSPACE_ROOT`| Serve every app with a `.pinagent/` found under this directory.        |
 | `PINAGENT_SERVER_URL`    | Default dev-server URL for `pinagent transcript`.                     |
 
 ## Build

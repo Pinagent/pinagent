@@ -154,6 +154,24 @@ That's it. In your next Claude Code session, ask it to "address pending Pinagent
 | `get_conversation_transcript` | Returns the full agent transcript for one feedback id (every captured event), as text or JSON. |
 | `create_pull_request` | Pushes the dev server's current branch and opens a GitHub PR against the configured base (committing uncommitted changes when a `commit_message` is given). Returns the PR URL — or a compare URL if no GitHub token is configured. |
 
+### Monorepos: one server for every app
+
+Each wired app keeps its own `.pinagent/db.sqlite`, but you only need **one** MCP server. Register it once at the repo root and list every app's root in `PINAGENT_PROJECT_ROOTS` (`:`-separated, `;` on Windows), or set `PINAGENT_WORKSPACE_ROOT` to auto-discover every app with a `.pinagent/` under it:
+
+```json
+{
+  "mcpServers": {
+    "pinagent": {
+      "command": "pnpm",
+      "args": ["dlx", "@pinagent/cli", "mcp"],
+      "env": { "PINAGENT_PROJECT_ROOTS": "/abs/repo/apps/web:/abs/repo/apps/mobile" }
+    }
+  }
+}
+```
+
+`list_pending_feedback` then merges every app's queue and labels each item with its `project`, `project_root` and absolute `abs_file`; the id-based tools find the id in whichever app's DB holds it; channel events carry `project`, `root` and `absFile`; and `create_pull_request` / `get_source_context` accept a `project` argument. One process per session, one `mcp__pinagent__*` allow-list rule, one `server:pinagent` channel flag — no per-app `pinagent-<app>` servers.
+
 ## What gets captured
 
 Each feedback item carries:
