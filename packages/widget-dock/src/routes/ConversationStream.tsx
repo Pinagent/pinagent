@@ -61,6 +61,16 @@ export function StreamView({
 }: StreamViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Asks the server closed unanswered (timeout / Stop / run end). Their
+  // reply controls are retired so a dead question can't be answered.
+  const expiredAskIds = useMemo<ReadonlySet<string>>(() => {
+    const ids = new Set<string>();
+    for (const it of stream.items) {
+      if (it.kind === 'event' && it.event.type === 'ask_expired') ids.add(it.event.askId);
+    }
+    return ids;
+  }, [stream.items]);
+
   // Merge live + optimistic items by timestamp so user-sent messages
   // appear in-flow as soon as they're sent, before any agent echo.
   const merged = useMemo<DisplayItem[]>(() => {
@@ -155,6 +165,7 @@ export function StreamView({
             key={b.key}
             item={b.item.item}
             answeredAskIds={answeredAskIds}
+            expiredAskIds={expiredAskIds}
             onAnswerAsk={onAnswerAsk}
             askDisabled={askDisabled}
             apiKeySource={apiKeySource}
@@ -245,6 +256,7 @@ function OptimisticRow({ item }: { item: OptimisticItem }) {
 interface StreamRowProps {
   item: StreamItem;
   answeredAskIds: ReadonlySet<string>;
+  expiredAskIds?: ReadonlySet<string>;
   onAnswerAsk: (askId: string, answer: string) => void;
   askDisabled: boolean;
   apiKeySource?: string | null;
@@ -253,6 +265,7 @@ interface StreamRowProps {
 function StreamRow({
   item,
   answeredAskIds,
+  expiredAskIds,
   onAnswerAsk,
   askDisabled,
   apiKeySource,
@@ -269,6 +282,7 @@ function StreamRow({
       event={item.event}
       at={item.receivedAt}
       answeredAskIds={answeredAskIds}
+      expiredAskIds={expiredAskIds}
       onAnswerAsk={onAnswerAsk}
       disabled={askDisabled}
       apiKeySource={apiKeySource}
@@ -280,6 +294,7 @@ interface EventRowProps {
   event: AgentEvent;
   at: string;
   answeredAskIds: ReadonlySet<string>;
+  expiredAskIds?: ReadonlySet<string>;
   onAnswerAsk: (askId: string, answer: string) => void;
   disabled: boolean;
   apiKeySource?: string | null;
@@ -289,6 +304,7 @@ function EventRow({
   event,
   at,
   answeredAskIds,
+  expiredAskIds,
   onAnswerAsk,
   disabled,
   apiKeySource,
@@ -333,8 +349,8 @@ function EventRow({
       );
     case 'ask_user':
       return (
-        <RowFrame speaker="Agent" at={at} tone="ask">
-          <p className="font-medium text-status-awaiting-fg whitespace-pre-wrap">
+        <RowFrame speaker={event.kind === 'permission' ? 'Permission' : 'Agent'} at={at} tone="ask">
+          <p className="font-medium text-status-awaiting-fg whitespace-pre-wrap break-words">
             {event.question}
           </p>
           {event.context && (
@@ -346,9 +362,16 @@ function EventRow({
             askId={event.askId}
             options={event.options}
             answered={answeredAskIds.has(event.askId)}
+            expired={expiredAskIds?.has(event.askId) ?? false}
             disabled={disabled}
             onAnswer={(answer) => onAnswerAsk(event.askId, answer)}
           />
+        </RowFrame>
+      );
+    case 'ask_expired':
+      return (
+        <RowFrame speaker="Agent" at={at} tone="meta">
+          <p className="text-foreground/70 text-[11px]">No answer — {event.reason}.</p>
         </RowFrame>
       );
     case 'error':
@@ -422,6 +445,8 @@ interface AskUserReplyProps {
   askId: string;
   options?: string[];
   answered: boolean;
+  /** Closed by the server without an answer — no reply is possible. */
+  expired: boolean;
   disabled: boolean;
   onAnswer: (answer: string) => void;
 }
@@ -432,8 +457,23 @@ interface AskUserReplyProps {
  * answered, the form collapses to a confirmation so the user can scroll
  * back and see what they replied without losing the question context.
  */
-function AskUserReply({ askId, options, answered, disabled, onAnswer }: AskUserReplyProps) {
+function AskUserReply({
+  askId,
+  options,
+  answered,
+  expired,
+  disabled,
+  onAnswer,
+}: AskUserReplyProps) {
   const [draft, setDraft] = useState('');
+
+  if (expired && !answered) {
+    return (
+      <p className="mt-2 text-[11px] text-muted-foreground italic">
+        Closed without an answer · the agent moved on.
+      </p>
+    );
+  }
 
   if (answered) {
     return (

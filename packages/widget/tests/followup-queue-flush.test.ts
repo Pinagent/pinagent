@@ -211,6 +211,64 @@ describe('ask-answer drains the queue', () => {
   });
 });
 
+describe('permission prompts + expired asks', () => {
+  it('renders a permission ask with its context and answers via an option button', () => {
+    const ws = makeFakeWs();
+    const composer = makeComposer();
+    const dom = attach(ws, composer);
+
+    ws.handler.onEvent({
+      type: 'ask_user',
+      kind: 'permission',
+      askId: 'p1',
+      question: 'Allow Read `/elsewhere/a.ts`?',
+      context: 'Path is outside the project',
+      options: ['Allow', 'Deny'],
+    } as AgentEvent);
+
+    const form = dom.log.querySelector('.ask-form.permission') as HTMLElement;
+    expect(form).not.toBeNull();
+    expect(form.querySelector('.ask-context')?.textContent).toBe('Path is outside the project');
+    expect(dom.followInput.disabled).toBe(true);
+
+    const allow = [...form.querySelectorAll('.ask-option')].find(
+      (b) => b.textContent === 'Allow',
+    ) as HTMLButtonElement;
+    allow.click();
+    expect(ws.sentAskResponses).toEqual([{ askId: 'p1', answer: 'Allow' }]);
+    expect(dom.log.querySelector('.ask-form')).toBeNull();
+  });
+
+  it('ask_expired retires the open form, unblocks input, and drains the queue', () => {
+    const ws = makeFakeWs();
+    const composer = makeComposer();
+    const dom = attach(ws, composer);
+
+    ws.handler.onEvent({ type: 'ask_user', askId: 'a1', question: 'Which one?' } as AgentEvent);
+    composer.enqueueFollowUp?.('queued-behind-ask');
+    endTurn(ws);
+    expect(ws.sentUserMessages).toEqual([]);
+
+    // An expiry for some other (older) ask leaves the open form alone.
+    ws.handler.onEvent({ type: 'ask_expired', askId: 'old', reason: 'x' } as AgentEvent);
+    expect(dom.log.querySelector('.ask-form')).not.toBeNull();
+
+    ws.handler.onEvent({
+      type: 'ask_expired',
+      askId: 'a1',
+      reason: 'agent run ended',
+    } as AgentEvent);
+    expect(dom.log.querySelector('.ask-form')).toBeNull();
+    expect(dom.log.querySelector('.ask-resolved .ask-answer')?.textContent).toBe(
+      'No answer — agent run ended.',
+    );
+    expect(dom.followInput.disabled).toBe(false);
+    // Nothing was answered — the expiry isn't relayed back to the server.
+    expect(ws.sentAskResponses).toEqual([]);
+    expect(ws.sentUserMessages).toEqual(['queued-behind-ask']);
+  });
+});
+
 describe('in-flight re-queue race (no drop, no duplicate)', () => {
   it('re-queues a follow-up the server bounced with "turn already in progress"', () => {
     const ws = makeFakeWs();

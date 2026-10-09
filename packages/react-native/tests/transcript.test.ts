@@ -121,6 +121,18 @@ describe('pendingAsk', () => {
     expect(ask).toEqual({ askId: 'q2', question: 'Second?', options: ['x'] });
   });
 
+  it('is cleared when the server closes that ask unanswered', () => {
+    const asked: AgentEvent = { type: 'ask_user', askId: 'q1', question: 'Allow Bash?' };
+    expect(pendingAsk([asked, { type: 'ask_expired', askId: 'q1', reason: 'timeout' }])).toBeNull();
+    // An expiry for an older ask leaves the current one pending.
+    expect(
+      pendingAsk([asked, { type: 'ask_expired', askId: 'q0', reason: 'timeout' }])?.askId,
+    ).toBe('q1');
+    expect(renderTranscript([{ type: 'ask_expired', askId: 'q1', reason: 'timeout' }])).toEqual([
+      { id: 'e0', kind: 'status', text: 'No answer — timeout' },
+    ]);
+  });
+
   it('is cleared by a terminal result', () => {
     expect(
       pendingAsk([

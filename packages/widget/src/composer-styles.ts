@@ -627,6 +627,13 @@ export const COMPOSER_STYLES = `
     font-size: 12px;
     white-space: pre-wrap;
   }
+  .ask-context {
+    color: ${THEME.textMuted};
+    font-size: 11px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .ask-form.permission .ask-question { overflow-wrap: anywhere; }
   .ask-options { display: flex; flex-wrap: wrap; gap: 4px; }
   .ask-option {
     background: ${THEME.surface};

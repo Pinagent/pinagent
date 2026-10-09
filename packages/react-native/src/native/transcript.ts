@@ -24,7 +24,15 @@ export type AgentEvent =
   | { type: 'tool_use'; name: string; summary: string }
   | { type: 'tool_result'; ok: boolean }
   | { type: 'progress'; turn: number }
-  | { type: 'ask_user'; askId: string; question: string; context?: string; options?: string[] }
+  | {
+      type: 'ask_user';
+      askId: string;
+      question: string;
+      context?: string;
+      options?: string[];
+      kind?: 'permission';
+    }
+  | { type: 'ask_expired'; askId: string; reason: string }
   | { type: 'error'; message: string }
   | { type: 'result'; subtype: string; numTurns: number; totalCostUsd: number; durationMs: number }
   | {
@@ -106,6 +114,9 @@ export function renderTranscript(events: AgentEvent[]): TranscriptRow[] {
           ...(event.options?.length ? { detail: event.options.join(' · ') } : {}),
         });
         break;
+      case 'ask_expired':
+        rows.push({ id: `e${i}`, kind: 'status', text: `No answer — ${event.reason}` });
+        break;
       case 'error':
         rows.push({ id: `e${i}`, kind: 'error', text: event.message });
         break;
@@ -145,8 +156,10 @@ export function pendingAsk(
     if (event.type === 'ask_user') {
       ask = { askId: event.askId, question: event.question, options: event.options ?? [] };
     }
-    // A terminal result/error clears any pending question.
+    // A terminal result/error clears any pending question, as does the
+    // server closing that ask unanswered (timeout / Stop).
     if (event.type === 'result' || event.type === 'error') ask = null;
+    if (event.type === 'ask_expired' && ask?.askId === event.askId) ask = null;
   }
   return ask;
 }

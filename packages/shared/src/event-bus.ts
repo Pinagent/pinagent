@@ -69,6 +69,14 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
       question: z.string(),
       context: z.string().optional(),
       options: z.array(z.string()).optional(),
+      kind: z.literal('permission').optional(),
+    })
+    .loose(),
+  z
+    .object({
+      type: z.literal('ask_expired'),
+      askId: z.string(),
+      reason: z.string(),
     })
     .loose(),
   z
@@ -138,6 +146,24 @@ export type AgentEvent =
       question: string;
       context?: string;
       options?: string[];
+      /**
+       * `'permission'` when the runner raised this ask itself to gate a tool
+       * call the SDK would otherwise prompt for (see `permission-gate.ts` in
+       * agent-runner) rather than the model calling `ask_user`. Purely a
+       * rendering hint — it's answered the same way, via `ask_response`.
+       */
+      kind?: 'permission';
+    }
+  | {
+      /**
+       * A pending `ask_user` was closed without an answer — it timed out,
+       * the run was stopped, or the run ended — so the UI should retire its
+       * form instead of leaving an un-answerable question blocking input.
+       * `reason` is human-readable.
+       */
+      type: 'ask_expired';
+      askId: string;
+      reason: string;
     }
   | { type: 'error'; message: string }
   | {

@@ -78,6 +78,8 @@ export function deriveEffectiveStatus(
     if (ev.type === 'ask_user') {
       return answeredAskIds.has(ev.askId) ? 'working' : 'awaitingClarification';
     }
+    // Closed unanswered (timeout / Stop) — the agent carried on without it.
+    if (ev.type === 'ask_expired') return 'working';
   }
   if (base === 'pending' && items.length > 0) return 'working';
   return base;
