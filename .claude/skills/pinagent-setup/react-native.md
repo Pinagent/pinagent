@@ -212,18 +212,17 @@ storage lives** and **Metro resolution**.
   `PINAGENT_PROJECT_ROOT` to the **app dir** so it reads the same DB. This
   is the same root-vs-app split as web — see [mcp.md](./mcp.md) §2.
 
-- **If the RN app sits alongside *other* wired apps, it gets its own server
-  key — and its own permission entry.** A repo with both a web dashboard and
-  this RN app needs two MCP servers (`pinagent` and e.g. `pinagent-mobile`),
-  each pointed at its app's `.pinagent/` (see [mcp.md](./mcp.md) §2 "More than
-  one UI app"). The mobile app's feedback tools are then
-  `mcp__pinagent-mobile__*`, so `mcp__pinagent-mobile__*` **must** be in the
-  permission allow-list — a rule's server segment is glob-free, so allow-listing
-  only `mcp__pinagent__*` leaves every mobile tap denied. This is the usual cause
+- **If the RN app sits alongside *other* wired apps, add it to the same
+  server.** A repo with both a web dashboard and this RN app needs one MCP
+  server whose `PINAGENT_PROJECT_ROOTS` lists both app dirs (or a
+  `PINAGENT_WORKSPACE_ROOT` that discovers them) — see [mcp.md](./mcp.md) §2
+  "More than one UI app". Tools stay `mcp__pinagent__*`, so the one allow-list
+  rule covers mobile taps too. On the legacy layout (a separate
+  `pinagent-mobile` server key), `mcp__pinagent-mobile__*` must be allow-listed
+  separately — a rule's server segment is glob-free — which is the usual cause
   of a tapped-and-submitted RN comment where the spawned agent stalls on *"the
-  mobile channel needs an interactive permission grant I can't self-approve"*:
-  the run is fine, the **per-key allow-list** is missing. See
-  [mcp.md](./mcp.md) §4.
+  mobile channel needs an interactive permission grant I can't self-approve"*.
+  See [mcp.md](./mcp.md) §4.
 
 - **Metro must watch the workspace and find hoisted deps.** Point Metro at
   the repo root and both `node_modules` so it can resolve
@@ -268,8 +267,9 @@ storage lives** and **Metro resolution**.
 
 Continue with [mcp.md](./mcp.md) for the MCP server and the `.gitignore`
 entry — identical to web (in a monorepo, gitignore `.pinagent/` at the repo
-root). The MCP server's `PINAGENT_PROJECT_ROOT` must match the
-`projectRoot` you passed the middleware.
+root). The MCP server's `PINAGENT_PROJECT_ROOT` (or one of its
+`PINAGENT_PROJECT_ROOTS`) must match the `projectRoot` you passed the
+middleware.
 
 ## Verify
 

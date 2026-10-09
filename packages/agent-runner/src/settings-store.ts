@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Per-project configuration: base branch, worktree retention,
- * cost caps, permission mode. Stored separately from `secrets.json`
+ * cost caps, permission mode, agent model. Stored separately from `secrets.json`
  * so the file can be inspected / hand-edited without exposing
  * tokens.
  *
@@ -30,12 +30,27 @@ export { type PermissionMode, PermissionModeSchema, PROJECT_PERMISSION_MODES };
 
 const BRANCH_RE = /^[A-Za-z0-9][A-Za-z0-9/_.-]*$/;
 
+/**
+ * Claude model for inline (Claude Agent SDK) runs: an alias (`opus`,
+ * `sonnet`, `opus[1m]`) or a full id (`claude-opus-5-5`), handed to the SDK
+ * verbatim as `options.model`. Only the shape is checked — the SDK's bundled
+ * CLI owns the list of valid models, which moves faster than Pinagent ships.
+ * `null` = don't pass one (the SDK's default model).
+ */
+export const AgentModelSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^\S+$/, 'model must not contain whitespace');
+
 export const ProjectSettingsSchema = z.object({
   baseBranch: z.string().min(1).max(128).regex(BRANCH_RE, 'invalid branch name'),
   worktreeRetentionDays: z.number().int().min(1).max(60),
   perConversationCapUsd: z.number().min(0.1).max(1000),
   monthlyBudgetUsd: z.number().min(0).max(100_000).nullable(),
   permissionMode: PermissionModeSchema,
+  model: AgentModelSchema.nullable(),
   // Branch-routing policy (the dev-side mirror of the cloud's
   // `allowedBranchPatterns`). `*`-glob patterns of branches a worktree may
   // land on; empty = any branch allowed. Enforced in `worktree.ts`.
@@ -52,6 +67,7 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   perConversationCapUsd: 5,
   monthlyBudgetUsd: null,
   permissionMode: 'auto',
+  model: null,
   allowedBranchPatterns: [],
 };
 

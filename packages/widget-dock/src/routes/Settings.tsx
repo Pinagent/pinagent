@@ -81,7 +81,8 @@ function SettingsForm({ initial }: { initial: DockProjectSettings }) {
     Number.isFinite(draft.perConversationCapUsd) &&
     draft.perConversationCapUsd > 0 &&
     (draft.monthlyBudgetUsd === null ||
-      (Number.isFinite(draft.monthlyBudgetUsd) && draft.monthlyBudgetUsd >= 0));
+      (Number.isFinite(draft.monthlyBudgetUsd) && draft.monthlyBudgetUsd >= 0)) &&
+    (draft.model === null || isValidModel(draft.model));
 
   const onSave = (): void => {
     updateMutation.mutate(draft);
@@ -216,6 +217,25 @@ function SettingsForm({ initial }: { initial: DockProjectSettings }) {
           </div>
         </SettingsGroup>
 
+        <SettingsGroup title="Agent model">
+          {initial.modelOverride && <ModelOverrideBanner model={initial.modelOverride} />}
+          <Field
+            label="Model"
+            description="Claude model for inline agent runs: an alias (opus, sonnet) or a full model id. Blank uses the Claude Agent SDK's default."
+          >
+            <Input
+              value={draft.model ?? ''}
+              onChange={(e) =>
+                setDraft({ ...draft, model: e.target.value.length === 0 ? null : e.target.value })
+              }
+              placeholder="SDK default"
+              spellCheck={false}
+              aria-invalid={draft.model !== null && !isValidModel(draft.model)}
+              className="h-8 max-w-[260px] font-mono text-xs"
+            />
+          </Field>
+        </SettingsGroup>
+
         {updateMutation.isError && (
           <div className="flex items-start gap-2 rounded-md border border-status-error-border bg-status-error-bg px-3 py-2 text-[12px] text-status-error-fg">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -274,6 +294,34 @@ function PermissionModeOverrideBanner({ mode }: { mode: string }) {
           Spawned agents run in <span className="font-semibold">{display.label}</span> mode (
           <code className="font-mono">{mode}</code>) regardless of your saved selection below. Unset
           the env var to use the saved setting.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Mirrors the server's `AgentModelSchema`: one non-blank token, ≤200 chars. */
+function isValidModel(model: string): boolean {
+  const trimmed = model.trim();
+  return trimmed.length > 0 && trimmed.length <= 200 && !/\s/.test(trimmed);
+}
+
+/**
+ * Shown inside the Agent model group when `PINAGENT_AGENT_MODEL` is set
+ * on the dev server: every spawn uses that model until it's unset, and
+ * the field below only edits the saved fallback.
+ */
+function ModelOverrideBanner({ model }: { model: string }) {
+  return (
+    <div className="m-2 flex items-start gap-2 rounded-md border border-status-awaiting-border bg-status-awaiting-bg px-3 py-2 text-[12px] text-status-awaiting-fg">
+      <AlertTriangle aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <div className="leading-snug">
+        <p className="font-medium">
+          <code className="font-mono">PINAGENT_AGENT_MODEL</code> is set in this dev shell.
+        </p>
+        <p className="mt-0.5">
+          Spawned agents use <code className="font-mono">{model}</code> regardless of the saved
+          model below. Unset the env var to use the saved setting.
         </p>
       </div>
     </div>

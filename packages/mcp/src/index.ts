@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -11,9 +12,21 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { openHostBranchPr, selectUnshippedScreenshots } from '@pinagent/agent-runner/pr';
 import { renderTranscript } from '@pinagent/shared';
 import { z } from 'zod';
-import { CHANNEL_INSTRUCTIONS, startFeedbackWatcher } from './channel';
-import { resolveRoot } from './root';
-import { isInsideRoot, StatusSchema, Storage } from './storage';
+import { CHANNEL_INSTRUCTIONS, MULTI_CHANNEL_INSTRUCTIONS, startFeedbackWatcher } from './channel';
+import { type Project, ProjectSet } from './projects';
+import { resolveProjectRoots } from './root';
+import { isInsideRoot, StatusSchema, type Storage } from './storage';
+
+// Root-resolution + project-set helpers, for `pinagent doctor` and other
+// callers that need to see what a multi-root server would serve.
+export { type Project, ProjectSet } from './projects';
+export {
+  type DiscoverOptions,
+  discoverProjectRoots,
+  type ProjectRootsConfig,
+  resolveProjectRoots,
+  resolveRoot,
+} from './root';
 
 const TOOL_LIST = [
   {
@@ -126,15 +139,70 @@ const TOOL_LIST = [
   },
 ] as const;
 
+/**
+ * Per-tool `project` parameter for a multi-root server. Id-addressed tools
+ * find the id in whichever project's DB holds it, so `project` is only a
+ * disambiguator there; `get_source_context` and `create_pull_request` have
+ * no id and use it to pick the root.
+ */
+const PROJECT_PARAM: Record<(typeof TOOL_LIST)[number]['name'], string> = {
+  list_pending_feedback:
+    'Optional: only list items from this project (a `project` name from a previous listing, or its absolute root).',
+  get_feedback:
+    'Optional: the project holding the id. Ids are looked up across every project, so this is only needed to disambiguate.',
+  resolve_feedback:
+    'Optional: the project holding the id. Ids are looked up across every project, so this is only needed to disambiguate.',
+  get_source_context:
+    'Optional: the project `file` is relative to. Not needed when `file` is absolute or exists in only one project.',
+  get_conversation_transcript:
+    'Optional: the project holding the id. Ids are looked up across every project, so this is only needed to disambiguate.',
+  create_pull_request:
+    'The project whose dev-server branch to open the PR for (a `project` name or absolute root). Required when more than one project is served.',
+};
+
+const MULTI_DESCRIPTION_SUFFIX: Partial<Record<(typeof TOOL_LIST)[number]['name'], string>> = {
+  list_pending_feedback:
+    ' This server covers several Pinagent projects (one per app): items from every project are merged oldest-first, each labelled with its `project`, `project_root` and `abs_file` (`file` is relative to `project_root`).',
+  get_feedback:
+    ' The id is looked up across every project; the result names the project and the absolute path of the target file.',
+  get_source_context:
+    ' `file` may be absolute (e.g. an `abs_file` from list_pending_feedback) or relative to a project root.',
+};
+
+/**
+ * The tools/list payload. A single-root server returns `TOOL_LIST`
+ * unchanged; a multi-root server adds the `project` parameter and notes how
+ * items are labelled.
+ */
+export function toolList(multi: boolean) {
+  if (!multi) return TOOL_LIST;
+  return TOOL_LIST.map((t) => ({
+    ...t,
+    description: `${t.description}${MULTI_DESCRIPTION_SUFFIX[t.name] ?? ''}`,
+    inputSchema: {
+      ...t.inputSchema,
+      properties: {
+        ...t.inputSchema.properties,
+        project: { type: 'string', description: PROJECT_PARAM[t.name] },
+      },
+    },
+  }));
+}
+
+// `project` is only honoured by a multi-root server (see `toolList`).
+const ProjectArg = z.string().min(1).optional();
+
 const ListInput = z.object({
   since: z.string().optional(),
   file: z.string().optional(),
+  project: ProjectArg,
 });
 
-const GetInput = z.object({ id: z.string() });
+const GetInput = z.object({ id: z.string(), project: ProjectArg });
 
 const ResolveInput = z.object({
   id: z.string(),
+  project: ProjectArg,
   status: StatusSchema,
   note: z.string().optional(),
   commit_sha: z.string().optional(),
@@ -144,17 +212,20 @@ const SourceInput = z.object({
   file: z.string(),
   line: z.number().int().min(1),
   radius: z.number().int().min(0).max(2000).optional(),
+  project: ProjectArg,
 });
 
 const TranscriptInput = z.object({
   id: z.string(),
   format: z.enum(['text', 'json']).optional(),
+  project: ProjectArg,
 });
 
 const CreatePrInput = z.object({
   title: z.string().min(1),
   body: z.string(),
   commit_message: z.string().optional(),
+  project: ProjectArg,
 });
 
 /**
@@ -171,10 +242,24 @@ export async function startMcpServer(): Promise<void> {
 }
 
 async function main() {
-  const root = resolveRoot(process.env, process.cwd());
-  // eslint-disable-next-line no-console
-  console.error(`[pinagent-mcp] project root: ${root}`);
-  const storage = new Storage(root);
+  const cfg = resolveProjectRoots(process.env, process.cwd());
+  const projects = ProjectSet.fromConfig(cfg);
+  if (projects.multi) {
+    const served = projects.list();
+    // eslint-disable-next-line no-console
+    console.error(
+      `[pinagent-mcp] serving ${served.length} project(s)${
+        cfg.workspaceRoot ? ` (scanning workspace ${cfg.workspaceRoot})` : ''
+      }:`,
+    );
+    for (const p of served) {
+      // eslint-disable-next-line no-console
+      console.error(`[pinagent-mcp]   ${p.name} → ${p.root}`);
+    }
+  } else {
+    // eslint-disable-next-line no-console
+    console.error(`[pinagent-mcp] project root: ${cfg.roots[0]}`);
+  }
 
   const server = new Server(
     { name: 'pinagent', version: '0.0.1' },
@@ -187,16 +272,16 @@ async function main() {
         // tools below still work in pull mode.
         experimental: { 'claude/channel': {} },
       },
-      instructions: CHANNEL_INSTRUCTIONS,
+      instructions: projects.multi ? MULTI_CHANNEL_INSTRUCTIONS : CHANNEL_INSTRUCTIONS,
     },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_LIST }));
+  const tools = toolList(projects.multi);
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req) =>
-    callTool(
-      storage,
-      root,
+    dispatchTool(
+      projects,
       req.params.name,
       (req.params.arguments ?? {}) as Record<string, unknown>,
     ),
@@ -209,7 +294,7 @@ async function main() {
 
   // Start the channel watcher after the server is connected so notifications
   // have a transport to write to.
-  await startFeedbackWatcher(storage, server, (msg) => {
+  await startFeedbackWatcher(projects, server, (msg) => {
     // eslint-disable-next-line no-console
     console.error(`[pinagent-mcp:channel] ${msg}`);
   });
@@ -222,6 +307,9 @@ async function main() {
  * standing up a stdio transport. Returns the same content/`isError` shape
  * the MCP SDK expects; never throws (all errors funnel through
  * `errorResult`).
+ *
+ * Single-root form, kept for existing callers; `dispatchTool` is the
+ * project-set form a multi-root server uses.
  */
 export async function callTool(
   storage: Storage,
@@ -229,29 +317,78 @@ export async function callTool(
   name: string,
   args: Record<string, unknown>,
 ) {
+  return dispatchTool(ProjectSet.single(root, storage), name, args);
+}
+
+/**
+ * Dispatch a tool call against a set of projects. With a single-root set
+ * this behaves exactly like the classic server (same output, same errors);
+ * with a multi-root set, listings aggregate every project and id-addressed
+ * calls route to the DB that holds the id.
+ */
+export async function dispatchTool(
+  projects: ProjectSet,
+  name: string,
+  args: Record<string, unknown>,
+) {
+  const multi = projects.multi;
   try {
     switch (name) {
       case 'list_pending_feedback': {
         const input = ListInput.parse(args);
-        const items = (await storage.list()).filter((r) => r.status === 'pending');
-        const filtered = items.filter((r) => {
+        let scope: Project[];
+        if (multi && input.project) {
+          const sel = projects.select(input.project);
+          if (!sel.ok) return errorResult(sel.error);
+          scope = [sel.project];
+        } else {
+          scope = projects.list();
+        }
+        const rows = (
+          await Promise.all(scope.map(async (p) => (await p.storage.list()).map((r) => ({ p, r }))))
+        ).flat();
+        const filtered = rows.filter(({ p, r }) => {
+          if (r.status !== 'pending') return false;
           if (input.since && r.createdAt < input.since) return false;
-          if (input.file && !(r.file ?? '').includes(input.file)) return false;
+          if (input.file) {
+            const rel = r.file ?? '';
+            const abs = multi && r.file ? resolve(p.root, r.file) : '';
+            if (!rel.includes(input.file) && !abs.includes(input.file)) return false;
+          }
           return true;
         });
-        const shaped = filtered.map((r) => ({
-          id: r.id,
-          comment_preview: r.comment.slice(0, 120),
-          file: r.file,
-          line: r.line,
-          url: r.url,
-          created_at: r.createdAt,
-        }));
+        // Each store is already oldest-first; merge across stores the same way.
+        if (multi) filtered.sort((a, b) => a.r.createdAt.localeCompare(b.r.createdAt));
+        const shaped = filtered.map(({ p, r }) =>
+          multi
+            ? {
+                id: r.id,
+                project: p.name,
+                project_root: p.root,
+                comment_preview: r.comment.slice(0, 120),
+                file: r.file,
+                abs_file: r.file ? resolve(p.root, r.file) : null,
+                line: r.line,
+                url: r.url,
+                created_at: r.createdAt,
+              }
+            : {
+                id: r.id,
+                comment_preview: r.comment.slice(0, 120),
+                file: r.file,
+                line: r.line,
+                url: r.url,
+                created_at: r.createdAt,
+              },
+        );
+        const payload = multi
+          ? { projects: scope.map((p) => ({ name: p.name, root: p.root })), items: shaped }
+          : { items: shaped };
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify({ items: shaped }, null, 2),
+              text: JSON.stringify(payload, null, 2),
             },
           ],
         };
@@ -259,10 +396,11 @@ export async function callTool(
 
       case 'get_feedback': {
         const input = GetInput.parse(args);
-        const rec = await storage.read(input.id);
-        if (!rec) return errorResult(`feedback ${input.id} not found`);
-        const pretty = formatFeedback(rec);
-        const png = await storage.readScreenshot(rec);
+        const found = await projects.locate(input.id, input.project);
+        if (!found.ok) return errorResult(found.error);
+        const { project, rec } = found;
+        const pretty = formatFeedback(rec, multi ? project : null);
+        const png = await project.storage.readScreenshot(rec);
         const content: Array<
           { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
         > = [{ type: 'text', text: pretty }];
@@ -278,8 +416,10 @@ export async function callTool(
 
       case 'resolve_feedback': {
         const input = ResolveInput.parse(args);
-        const rec = await storage.read(input.id);
-        if (!rec) return errorResult(`feedback ${input.id} not found`);
+        const found = await projects.locate(input.id, input.project);
+        if (!found.ok) return errorResult(found.error);
+        const { project, rec } = found;
+        const { storage } = project;
 
         const next = { ...rec };
         next.status = input.status;
@@ -321,7 +461,16 @@ export async function callTool(
           content: [
             {
               type: 'text',
-              text: JSON.stringify({ ok: true, id: next.id, status: next.status }, null, 2),
+              text: JSON.stringify(
+                {
+                  ok: true,
+                  id: next.id,
+                  status: next.status,
+                  ...(multi ? { project: project.name } : {}),
+                },
+                null,
+                2,
+              ),
             },
           ],
         };
@@ -330,8 +479,9 @@ export async function callTool(
       case 'get_source_context': {
         const input = SourceInput.parse(args);
         if (input.file.includes('..')) return errorResult('path traversal not allowed');
-        const abs = isAbsolute(input.file) ? input.file : resolve(root, input.file);
-        if (!isInsideRoot(root, abs)) return errorResult('path outside project root');
+        const target = locateSource(projects, input.file, input.project);
+        if (!target.ok) return errorResult(target.error);
+        const { abs } = target;
         let text: string;
         try {
           text = await readFile(abs, 'utf8');
@@ -350,11 +500,14 @@ export async function callTool(
           const lineText = lines[i - 1] ?? '';
           window.push(`${marker} ${String(i).padStart(pad, ' ')} | ${lineText}`);
         }
+        // Multi-root: name the file absolutely so the caller can open it
+        // regardless of which app it came from.
+        const label = multi ? abs : input.file;
         return {
           content: [
             {
               type: 'text',
-              text: `${input.file} (lines ${start}-${end}, target ${input.line}):\n\n${window.join('\n')}`,
+              text: `${label} (lines ${start}-${end}, target ${input.line}):\n\n${window.join('\n')}`,
             },
           ],
         };
@@ -362,9 +515,9 @@ export async function callTool(
 
       case 'get_conversation_transcript': {
         const input = TranscriptInput.parse(args);
-        const rec = await storage.read(input.id);
-        if (!rec) return errorResult(`conversation ${input.id} not found`);
-        const events = await storage.listMessages(input.id);
+        const found = await projects.locate(input.id, input.project, 'conversation');
+        if (!found.ok) return errorResult(found.error);
+        const events = await found.project.storage.listMessages(input.id);
         const format = input.format ?? 'text';
         const text = format === 'json' ? JSON.stringify(events, null, 2) : renderTranscript(events);
         return { content: [{ type: 'text', text }] };
@@ -372,6 +525,9 @@ export async function callTool(
 
       case 'create_pull_request': {
         const input = CreatePrInput.parse(args);
+        const target = pickPrProject(projects, input.project);
+        if (!target.ok) return errorResult(target.error);
+        const { root, storage } = target.project;
         // Attach the working copy's unshipped feedback screenshots, then stamp
         // the shipped commit onto them so a later PR won't re-attach them.
         const records = await storage.list();
@@ -404,6 +560,69 @@ export async function callTool(
   }
 }
 
+/**
+ * Resolve `get_source_context`'s `file` to an absolute path inside a served
+ * project root. Single-root: relative to that root, as always. Multi-root:
+ * an explicit `project` wins; an absolute path picks the root containing
+ * it; a relative path must exist in exactly one project.
+ */
+function locateSource(
+  projects: ProjectSet,
+  file: string,
+  selector: string | undefined,
+): { ok: true; abs: string } | { ok: false; error: string } {
+  if (!projects.multi || selector) {
+    let root: string;
+    if (projects.multi && selector) {
+      const sel = projects.select(selector);
+      if (!sel.ok) return sel;
+      root = sel.project.root;
+    } else {
+      root = projects.list()[0]!.root;
+    }
+    const abs = isAbsolute(file) ? file : resolve(root, file);
+    if (!isInsideRoot(root, abs)) return { ok: false, error: 'path outside project root' };
+    return { ok: true, abs };
+  }
+  if (isAbsolute(file)) {
+    if (!projects.rootFor(file)) {
+      return { ok: false, error: 'path outside every pinagent project root' };
+    }
+    return { ok: true, abs: resolve(file) };
+  }
+  const hits = projects.list().filter((p) => existsSync(resolve(p.root, file)));
+  if (hits.length === 1) return { ok: true, abs: resolve(hits[0]!.root, file) };
+  if (hits.length > 1) {
+    return {
+      ok: false,
+      error: `${file} exists in more than one project (${hits
+        .map((p) => p.name)
+        .join(', ')}) — pass \`project\` or an absolute path`,
+    };
+  }
+  return {
+    ok: false,
+    error: `cannot read ${file}: not found in any pinagent project (${projects.describe()}) — pass \`project\` or an absolute path`,
+  };
+}
+
+/** `create_pull_request` has no id to route by, so the project must be unambiguous. */
+function pickPrProject(
+  projects: ProjectSet,
+  selector: string | undefined,
+): { ok: true; project: Project } | { ok: false; error: string } {
+  if (projects.multi && selector) return projects.select(selector);
+  const all = projects.list();
+  if (all.length === 1) return { ok: true, project: all[0]! };
+  if (all.length === 0) {
+    return { ok: false, error: `no pinagent projects to open a PR for (${projects.describe()})` };
+  }
+  return {
+    ok: false,
+    error: `create_pull_request needs \`project\` when several projects are served — one of: ${projects.describe()}`,
+  };
+}
+
 function errorResult(message: string) {
   return {
     isError: true,
@@ -411,32 +630,40 @@ function errorResult(message: string) {
   };
 }
 
-function formatFeedback(r: {
-  id: string;
-  comment: string;
-  file: string | null;
-  line: number | null;
-  col: number | null;
-  selector: string;
-  url: string;
-  viewport: { w: number; h: number };
-  status: string;
-  createdAt: string;
-  component?: string | null;
-  componentPath?: string[] | null;
-  instanceIndex?: number | null;
-  instanceTotal?: number | null;
-  instanceFingerprint?: string | null;
-}): string {
-  const loc = r.file ? `${r.file}:${r.line ?? '?'}${r.col != null ? `:${r.col}` : ''}` : r.selector;
-  const lines = [
-    `id: ${r.id}`,
+function formatFeedback(
+  r: {
+    id: string;
+    comment: string;
+    file: string | null;
+    line: number | null;
+    col: number | null;
+    selector: string;
+    url: string;
+    viewport: { w: number; h: number };
+    status: string;
+    createdAt: string;
+    component?: string | null;
+    componentPath?: string[] | null;
+    instanceIndex?: number | null;
+    instanceTotal?: number | null;
+    instanceFingerprint?: string | null;
+  },
+  project: Pick<Project, 'name' | 'root'> | null = null,
+): string {
+  const pos = `${r.line ?? '?'}${r.col != null ? `:${r.col}` : ''}`;
+  const loc = r.file ? `${r.file}:${pos}` : r.selector;
+  const lines = [`id: ${r.id}`];
+  // Multi-root: `file` is relative to the project's root, which is rarely the
+  // agent's cwd — name the project and give the absolute path too.
+  if (project) lines.push(`project: ${project.name}`, `project root: ${project.root}`);
+  lines.push(
     `status: ${r.status}`,
     `created: ${r.createdAt}`,
     `url: ${r.url}`,
     `viewport: ${r.viewport.w}×${r.viewport.h}`,
     `target: ${loc}`,
-  ];
+  );
+  if (project && r.file) lines.push(`target (absolute): ${resolve(project.root, r.file)}:${pos}`);
   if (r.component) lines.push(`component: <${r.component}>`);
   if (r.componentPath && r.componentPath.length > 1) {
     lines.push(`component path: ${r.componentPath.join(' › ')}`);

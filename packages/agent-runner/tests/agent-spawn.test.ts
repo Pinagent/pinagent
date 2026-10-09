@@ -480,12 +480,19 @@ describe('spawnAgent', () => {
         const res = await canUseTool!(tool, {}, ctx);
         expect(res.behavior, `${tool} should be denied in dry-run`).toBe('deny');
       }
-      // Read-only tools still run so the agent can research its proposal.
-      const read = await canUseTool!('Read', { file_path: 'src/Foo.tsx' }, ctx);
-      expect(read.behavior).toBe('allow');
+      // Anything else the SDK would prompt for (a read outside cwd, a
+      // non-allowlisted MCP tool) goes to the developer rather than being
+      // auto-allowed — dry-run only ever gets stricter.
+      const asked = collectUntil(id, (e) => e.type === 'ask_user');
+      const read = canUseTool!('Read', { file_path: '/elsewhere/Foo.tsx' }, ctx);
+      const ask = (await asked).find((e) => e.type === 'ask_user');
+      expect(ask).toMatchObject({ kind: 'permission' });
+      const { resolveAsk } = await import('../src/ask-user');
+      resolveAsk((ask as { askId: string }).askId, 'Allow');
+      expect((await read).behavior).toBe('allow');
     });
 
-    it('non-dry-run modes leave canUseTool unset (no behavior change)', async () => {
+    it('auto mode installs the permission gate instead of silently denying', async () => {
       await store.patch({ permissionMode: 'auto' });
       restoreSettings = () => store.patch({ permissionMode: 'auto' }).then(() => undefined);
 
@@ -507,7 +514,20 @@ describe('spawnAgent', () => {
       await done;
       await waitForRunIdle(id);
 
-      expect(captured.capturedParams?.options?.canUseTool).toBeUndefined();
+      const canUseTool = captured.capturedParams?.options?.canUseTool;
+      expect(canUseTool).toBeTypeOf('function');
+      // A stopped run denies straight away instead of raising a prompt.
+      const stopped = new AbortController();
+      stopped.abort();
+      const res = await canUseTool!(
+        'Bash',
+        { command: 'ls ..' },
+        {
+          signal: stopped.signal,
+          toolUseID: 't',
+        },
+      );
+      expect(res.behavior).toBe('deny');
     });
   });
 });

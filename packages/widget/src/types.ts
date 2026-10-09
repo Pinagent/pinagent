@@ -63,6 +63,7 @@ export interface AgentEvent {
     | 'tool_result'
     | 'progress'
     | 'ask_user'
+    | 'ask_expired'
     | 'error'
     | 'result'
     | 'status_changed';

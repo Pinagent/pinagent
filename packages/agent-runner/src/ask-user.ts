@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
+import type { AgentEvent } from '@pinagent/shared';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { getOrCreateBus } from './bus';
@@ -26,19 +27,47 @@ import { getOrCreateBus } from './bus';
 
 const ASK_TTL_MS = 10 * 60 * 1000;
 
-interface PendingAsk {
-  feedbackId: string;
-  resolve: (answer: string) => void;
-  reject: (reason: string) => void;
-  timeout: NodeJS.Timeout;
+/** The prompt half of an `ask_user` event — everything but the correlation id. */
+export type AskPrompt = Omit<Extract<AgentEvent, { type: 'ask_user' }>, 'type' | 'askId'>;
+
+export interface AwaitAnswerOptions {
+  /** How long the ask stays open once shown before it closes unanswered. */
+  ttlMs: number;
+  /** Closes the ask (queued or shown) as soon as it fires. */
+  signal?: AbortSignal;
 }
 
 /**
- * Pending asks LOCAL TO THIS CONTEXT. The resolve/reject closures are
- * tied to the agent's Promise — process-bound, not serialisable. The
- * WS server can land in a different context than the one running the
- * agent (Next 16 Turbopack, Vite 8), so we route cross-context responses
- * via `process.emit(ASK_RESPONSE_EVENT, ...)` — see `resolveAsk`.
+ * Rejection reason when an ask closes without an answer. `message` is
+ * the human-readable reason (also published on the `ask_expired` event).
+ */
+export class AskClosedError extends Error {
+  override name = 'AskClosedError';
+}
+
+interface PendingAsk {
+  feedbackId: string;
+  event: Extract<AgentEvent, { type: 'ask_user' }>;
+  ttlMs: number;
+  /** True once the ask is published; queued asks aren't visible yet. */
+  shown: boolean;
+  timeout?: NodeJS.Timeout;
+  /** Idempotent: tears down timer + listeners and settles the Promise. */
+  settle: (outcome: { answer: string } | { closed: string }) => void;
+}
+
+/**
+ * Pending asks LOCAL TO THIS CONTEXT, in arrival order. The settle
+ * closures are tied to the waiting Promise — process-bound, not
+ * serialisable. The WS server can land in a different context than the
+ * one running the agent (Next 16 Turbopack, Vite 8), so we route
+ * cross-context responses via `process.emit(ASK_RESPONSE_EVENT, ...)` —
+ * see `resolveAsk`.
+ *
+ * At most one ask per feedback id is shown at a time: the widget renders
+ * a single answer form, and the SDK can raise several asks at once
+ * (parallel tool calls each hitting the permission gate). Later asks
+ * queue behind the shown one and are published when it settles.
  */
 const pending = new Map<string, PendingAsk>();
 
@@ -47,6 +76,93 @@ const ASK_RESPONSE_EVENT = 'pinagent:ask-response';
 interface AskResponsePayload {
   askId: string;
   answer: string;
+}
+
+/**
+ * Show `prompt` to the developer as an `ask_user` event on the
+ * feedback's bus and wait for their `ask_response`. Resolves with the
+ * answer text. Rejects with `AskClosedError` — after publishing an
+ * `ask_expired` event so the UI retires the form — when `ttlMs` elapses,
+ * `signal` aborts, or `rejectAsk` closes the run's asks.
+ *
+ * Shared by the model-facing `ask_user` tool and the runner's own
+ * tool-permission gate (`permission-gate.ts`), so both reuse one
+ * transport, one widget form and one cross-context answer route.
+ */
+export function awaitAnswer(
+  feedbackId: string,
+  prompt: AskPrompt,
+  opts: AwaitAnswerOptions,
+): Promise<string> {
+  const askId = nanoid(10);
+  return new Promise<string>((resolve, reject) => {
+    const { signal } = opts;
+    if (signal?.aborted) {
+      reject(new AskClosedError('the run was stopped'));
+      return;
+    }
+
+    // Listener for cross-context ask responses. `resolveAsk` in another
+    // context emits this event when the WS server receives an
+    // ask_response frame; we filter on askId so each pending promise
+    // only fires for its own response.
+    const onResponse = (payload: AskResponsePayload) => {
+      if (payload.askId !== askId) return;
+      const entry = pending.get(askId);
+      if (entry?.shown) entry.settle({ answer: payload.answer });
+    };
+    const onAbort = () => pending.get(askId)?.settle({ closed: 'the run was stopped' });
+
+    const entry: PendingAsk = {
+      feedbackId,
+      event: { type: 'ask_user', askId, ...prompt },
+      ttlMs: opts.ttlMs,
+      shown: false,
+      settle: (outcome) => {
+        if (!pending.has(askId)) return;
+        clearTimeout(entry.timeout);
+        pending.delete(askId);
+        process.off(ASK_RESPONSE_EVENT, onResponse);
+        signal?.removeEventListener('abort', onAbort);
+        if ('answer' in outcome) {
+          resolve(outcome.answer);
+        } else {
+          // Only a shown ask has a form to retire; a queued one was never
+          // published, so there's nothing on the bus to close.
+          if (entry.shown) {
+            void getOrCreateBus(feedbackId).publish({
+              type: 'ask_expired',
+              askId,
+              reason: outcome.closed,
+            });
+          }
+          reject(new AskClosedError(outcome.closed));
+        }
+        showNext(feedbackId);
+      },
+    };
+
+    pending.set(askId, entry);
+    process.on(ASK_RESPONSE_EVENT, onResponse);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    showNext(feedbackId);
+  });
+}
+
+/** Publish the oldest pending ask for `feedbackId` unless one is already shown. */
+function showNext(feedbackId: string): void {
+  for (const entry of pending.values()) {
+    if (entry.feedbackId !== feedbackId) continue;
+    if (entry.shown) return;
+    entry.shown = true;
+    const seconds = Math.round(entry.ttlMs / 1000);
+    entry.timeout = setTimeout(
+      () => entry.settle({ closed: `no answer within ${seconds}s` }),
+      entry.ttlMs,
+    );
+    void getOrCreateBus(feedbackId).publish(entry.event);
+    return;
+  }
 }
 
 const inputSchema = {
@@ -87,56 +203,19 @@ export function createAskUserMcpServer(feedbackId: string) {
     ].join(' '),
     inputSchema,
     async (args) => {
-      const askId = nanoid(10);
-      const bus = getOrCreateBus(feedbackId);
-
-      const answer = await new Promise<string>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          pending.delete(askId);
-          process.off(ASK_RESPONSE_EVENT, onResponse);
-          reject(new Error(`ask_user timed out after ${ASK_TTL_MS / 1000}s with no response`));
-        }, ASK_TTL_MS);
-
-        // Listener for cross-context ask responses. `resolveAsk` in
-        // another context emits this event when the WS server receives
-        // an ask_response frame; we filter on askId so each pending
-        // promise only fires for its own response.
-        const onResponse = (payload: AskResponsePayload) => {
-          if (payload.askId !== askId) return;
-          const entry = pending.get(askId);
-          if (entry) entry.resolve(payload.answer);
-        };
-        process.on(ASK_RESPONSE_EVENT, onResponse);
-
-        pending.set(askId, {
+      try {
+        const answer = await awaitAnswer(
           feedbackId,
-          resolve: (a: string) => {
-            clearTimeout(timeout);
-            pending.delete(askId);
-            process.off(ASK_RESPONSE_EVENT, onResponse);
-            resolve(a);
-          },
-          reject: (reason: string) => {
-            clearTimeout(timeout);
-            pending.delete(askId);
-            process.off(ASK_RESPONSE_EVENT, onResponse);
-            reject(new Error(reason));
-          },
-          timeout,
-        });
-
-        void bus.publish({
-          type: 'ask_user',
-          askId,
-          question: args.question,
-          context: args.context,
-          options: args.options,
-        });
-      });
-
-      return {
-        content: [{ type: 'text', text: answer }],
-      };
+          { question: args.question, context: args.context, options: args.options },
+          { ttlMs: ASK_TTL_MS },
+        );
+        return { content: [{ type: 'text', text: answer }] };
+      } catch (err) {
+        if (err instanceof AskClosedError) {
+          throw new Error(`ask_user closed with no response: ${err.message}`);
+        }
+        throw err;
+      }
     },
   );
 
@@ -158,8 +237,8 @@ export function createAskUserMcpServer(feedbackId: string) {
  */
 export function resolveAsk(askId: string, answer: string): boolean {
   const entry = pending.get(askId);
-  if (entry) {
-    entry.resolve(answer);
+  if (entry?.shown) {
+    entry.settle({ answer });
     return true;
   }
   const payload: AskResponsePayload = { askId, answer };
@@ -168,17 +247,15 @@ export function resolveAsk(askId: string, answer: string): boolean {
 }
 
 /**
- * Reject every pending ask tied to this feedback id. Called when the
- * agent stream ends so the SDK Promise unblocks rather than hanging
- * until TTL.
+ * Close every pending ask tied to this feedback id — shown and queued.
+ * Called when the agent stream ends so the waiting Promise unblocks
+ * rather than hanging until TTL.
  */
 export function rejectAsk(feedbackId: string, reason: string): void {
-  for (const [askId, entry] of pending.entries()) {
-    if (entry.feedbackId === feedbackId) {
-      entry.reject(reason);
-      pending.delete(askId);
-    }
-  }
+  // Close queued asks before the shown one: settling the shown ask
+  // publishes the next queued ask, which must already be gone.
+  const entries = [...pending.values()].filter((e) => e.feedbackId === feedbackId);
+  for (const entry of entries.reverse()) entry.settle({ closed: reason });
 }
 
 /**

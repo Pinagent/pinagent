@@ -8,6 +8,7 @@ import {
 import type { AgentEvent } from '@pinagent/shared';
 import { buildSdkAuthEnv } from '../agent-auth';
 import { findNearestAgentGuide, renderAgentGuide } from '../agent-guide';
+import { resolveRunModel } from '../agent-model';
 import {
   renderInitFooter,
   renderMessage,
@@ -15,6 +16,7 @@ import {
   summariseToolInput,
 } from '../agent-render';
 import { ASK_USER_TOOL_NAME, createAskUserMcpServer } from '../ask-user';
+import { createPermissionGate } from '../permission-gate';
 import { resolveWorkspaceAdditionalDirectories } from '../workspace-root';
 import type { AgentProvider, AgentRunRequest, ProviderRunItem } from './types';
 
@@ -38,21 +40,6 @@ const PINAGENT_MCP_TOOLS = [
   'mcp__pinagent__get_source_context',
   'mcp__pinagent__list_pending_feedback',
 ];
-
-/**
- * Tools a dry-run must never be allowed to call: anything that writes to
- * the workspace, runs a command, or transitions the agent out of plan
- * mode. See `buildSdkOptions` for why denying `ExitPlanMode` is the load-
- * bearing entry — without it a headless `plan`-mode run silently writes.
- */
-const DRY_RUN_DENIED_TOOLS = new Set([
-  'ExitPlanMode',
-  'Edit',
-  'MultiEdit',
-  'Write',
-  'NotebookEdit',
-  'Bash',
-]);
 
 /**
  * The default, most capable provider: the Claude Agent SDK. Runs the full
@@ -218,34 +205,27 @@ async function buildSdkOptions(req: AgentRunRequest): Promise<Options> {
   };
 
   // In a monorepo `cwd` is the app subdirectory; grant the enclosing repo
-  // root so reads of sibling workspace packages don't hit a permission
-  // prompt that a headless run silently denies. Empty for a worktree run
-  // (its root is `cwd`). The dry-run `canUseTool` gate below still applies.
+  // root so reads of sibling workspace packages don't stall the run on a
+  // permission prompt. Empty for a worktree run
+  // (its root is `cwd`). The permission gate below still applies.
   const additionalDirectories = await resolveWorkspaceAdditionalDirectories(req.cwd);
   if (additionalDirectories.length > 0) options.additionalDirectories = additionalDirectories;
 
-  // Dry-run ('plan') has to be a hard guarantee, not a hope the model
-  // stays compliant. Plan mode keeps the agent read-only only until it
-  // calls `ExitPlanMode` to ask permission to proceed — and headless
-  // `query()` has no human to gate that request, so the SDK auto-approves
-  // it, drops into an edit-capable mode, and the "dry run" writes files.
-  // (The spawn prompt actively pushes there: it tells the agent to edit
-  // and resolve.) We install a permission gate that denies every mutating
-  // / mode-exiting tool, so a dry run can only ever describe the change.
-  // The pinagent MCP tools + `ask_user` stay allowed via `allowedTools`,
-  // which auto-approve ahead of `canUseTool` and never touch the tree.
-  if (req.permissionMode === 'plan') {
-    options.canUseTool = async (toolName) =>
-      DRY_RUN_DENIED_TOOLS.has(toolName)
-        ? {
-            behavior: 'deny',
-            message:
-              `Dry-run mode: \`${toolName}\` is blocked. Pinagent is in dry-run ` +
-              '(plan) mode — describe the change you would make, but do not edit ' +
-              'files, run commands, or exit plan mode.',
-          }
-        : { behavior: 'allow' };
-  }
+  // Tool calls nothing pre-approved would otherwise be silently denied in
+  // a headless run; ask the developer in the widget instead. In dry-run
+  // the gate hard-denies every mutating / plan-exiting tool first. See
+  // permission-gate.ts.
+  const canUseTool = createPermissionGate({
+    feedbackId: req.feedbackId,
+    permissionMode: req.permissionMode,
+  });
+  if (canUseTool) options.canUseTool = canUseTool;
+
+  // Pass `model` only when the developer chose one (env or project setting);
+  // otherwise the SDK's bundled CLI default applies. Resolved per turn, so a
+  // follow-up picks up a changed setting.
+  const model = await resolveRunModel(req.projectRoot);
+  if (model) options.model = model;
 
   if (req.resume) options.resume = req.resume;
   return options;

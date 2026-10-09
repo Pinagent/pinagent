@@ -8,9 +8,9 @@
 import { realpathSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { resolveRoot } from '../src/root';
+import { discoverProjectRoots, resolveProjectRoots, resolveRoot } from '../src/root';
 
 let base: string;
 
@@ -67,5 +67,96 @@ describe('resolveRoot', () => {
   it('ignores an empty-string env var (treated as unset)', async () => {
     await mkdir(join(base, '.pinagent'), { recursive: true });
     expect(resolveRoot({ PINAGENT_PROJECT_ROOT: '' }, base)).toBe(base);
+  });
+});
+
+describe('resolveProjectRoots', () => {
+  it('is the legacy single-root resolution when no multi-root var is set', async () => {
+    await mkdir(join(base, '.pinagent'), { recursive: true });
+    expect(resolveProjectRoots({}, base)).toEqual({
+      multi: false,
+      roots: [base],
+      workspaceRoot: null,
+    });
+    const explicit = join(base, 'explicit');
+    expect(resolveProjectRoots({ PINAGENT_PROJECT_ROOT: explicit }, base)).toEqual({
+      multi: false,
+      roots: [explicit],
+      workspaceRoot: null,
+    });
+  });
+
+  it('splits PINAGENT_PROJECT_ROOTS on the path delimiter, trimming, resolving and deduping', () => {
+    const a = join(base, 'apps', 'a');
+    const raw = [` ${a} `, 'apps/b', '', a].join(delimiter);
+    expect(resolveProjectRoots({ PINAGENT_PROJECT_ROOTS: raw }, base)).toEqual({
+      multi: true,
+      roots: [a, join(base, 'apps', 'b')],
+      workspaceRoot: null,
+    });
+  });
+
+  it('folds an inherited PINAGENT_PROJECT_ROOT into the multi-root set', () => {
+    const a = join(base, 'a');
+    const b = join(base, 'b');
+    expect(
+      resolveProjectRoots({ PINAGENT_PROJECT_ROOTS: a, PINAGENT_PROJECT_ROOT: b }, base).roots,
+    ).toEqual([a, b]);
+    expect(
+      resolveProjectRoots({ PINAGENT_PROJECT_ROOTS: a, PINAGENT_PROJECT_ROOT: a }, base).roots,
+    ).toEqual([a]);
+  });
+
+  it('turns on multi-root mode for PINAGENT_WORKSPACE_ROOT alone', () => {
+    expect(resolveProjectRoots({ PINAGENT_WORKSPACE_ROOT: '.' }, base)).toEqual({
+      multi: true,
+      roots: [],
+      workspaceRoot: base,
+    });
+  });
+
+  it('treats empty / whitespace values as unset', async () => {
+    await mkdir(join(base, '.pinagent'), { recursive: true });
+    expect(
+      resolveProjectRoots({ PINAGENT_PROJECT_ROOTS: ' ', PINAGENT_WORKSPACE_ROOT: '' }, base).multi,
+    ).toBe(false);
+  });
+});
+
+describe('discoverProjectRoots', () => {
+  const mk = (...parts: string[]) => mkdir(join(base, ...parts, '.pinagent'), { recursive: true });
+
+  it('finds every app with a .pinagent dir, including the workspace root itself', async () => {
+    await mk();
+    await mk('apps', 'web');
+    await mk('apps', 'mobile');
+    await mk('packages', 'rn', 'example');
+    expect(discoverProjectRoots(base)).toEqual([
+      base,
+      join(base, 'apps', 'mobile'),
+      join(base, 'apps', 'web'),
+      join(base, 'packages', 'rn', 'example'),
+    ]);
+  });
+
+  it('skips node_modules, dot-dirs (worktrees under .claude) and build output', async () => {
+    await mk('apps', 'web');
+    await mk('node_modules', 'pkg');
+    await mk('.claude', 'worktrees', 'wt1', 'apps', 'web');
+    await mk('worktrees', 'wt2');
+    await mk('apps', 'web', 'dist', 'x');
+    expect(discoverProjectRoots(base)).toEqual([join(base, 'apps', 'web')]);
+  });
+
+  it('is bounded by depth', async () => {
+    await mk('a', 'b', 'c', 'd', 'e');
+    expect(discoverProjectRoots(base)).toEqual([]);
+    expect(discoverProjectRoots(base, { maxDepth: 5 })).toEqual([
+      join(base, 'a', 'b', 'c', 'd', 'e'),
+    ]);
+  });
+
+  it('returns [] for a missing workspace root instead of throwing', () => {
+    expect(discoverProjectRoots(join(base, 'missing'))).toEqual([]);
   });
 });
