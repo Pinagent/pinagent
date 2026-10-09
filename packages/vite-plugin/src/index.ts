@@ -34,8 +34,8 @@ export interface PinagentOptions {
    *
    * Communicated to the middleware via the `PINAGENT_SPAWN_AGENT` env var so
    * `agent-runner`'s `resolveAgentMode` can stay framework-agnostic.
-   * Override the default `acceptEdits` permission with
-   * `PINAGENT_AGENT_PERMISSION_MODE`.
+   * Override the default `auto` (SDK classifier) permission mode with
+   * `PINAGENT_AGENT_PERMISSION_MODE` (`acceptEdits` = the old default).
    */
   spawnAgent?: 'worktree' | 'inline' | 'off' | false;
   /**

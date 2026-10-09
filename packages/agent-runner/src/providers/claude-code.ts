@@ -16,6 +16,7 @@ import {
   summariseToolInput,
 } from '../agent-render';
 import { ASK_USER_TOOL_NAME, createAskUserMcpServer } from '../ask-user';
+import { createAutoModeFallback } from '../auto-mode-fallback';
 import { createPermissionGate } from '../permission-gate';
 import { resolveWorkspaceAdditionalDirectories } from '../workspace-root';
 import type { AgentProvider, AgentRunRequest, ProviderRunItem } from './types';
@@ -68,24 +69,32 @@ export class ClaudeCodeProvider implements AgentProvider {
     let sawResult = false;
 
     try {
-      for await (const message of query({
-        prompt: req.prompt,
-        options: sdkOptions,
-      }) as AsyncIterable<SDKMessage>) {
+      const run = query({ prompt: req.prompt, options: sdkOptions });
+      // A requested `auto` the CLI can't honour comes back as `default`;
+      // drop to `acceptEdits` with a log note instead. See auto-mode-fallback.ts.
+      const autoFallback = createAutoModeFallback(req.permissionMode, run);
+      for await (const message of run as AsyncIterable<SDKMessage>) {
         const sessionId =
           'session_id' in message && typeof message.session_id === 'string'
             ? message.session_id
             : undefined;
+        const fallback = await autoFallback.check(message);
 
         if (message.type === 'system' && message.subtype === 'init') {
           apiKeySource = message.apiKeySource ?? null;
+          const events = toAgentEvents(message);
+          // The header chip shows the mode the run is actually in.
+          for (const event of events) {
+            if (fallback && event.type === 'init') event.permissionMode = fallback.mode;
+          }
           yield {
-            events: toAgentEvents(message),
-            log: renderInitFooter(message),
+            events,
+            log: renderInitFooter(message) + (fallback?.note ?? ''),
             sessionId,
           };
           continue;
         }
+        if (fallback) yield { events: [], log: fallback.note, sessionId };
 
         if (message.type === 'result') {
           sawResult = true;

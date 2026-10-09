@@ -4,13 +4,13 @@
  * they appear on `AgentEvent { type: 'init' }`. Used to render the
  * permission-mode badge in the conversation detail header.
  *
- * The three "canonical" modes (the ones the dock's Settings picker
- * surfaces) read their labels straight out of `PROJECT_PERMISSION_MODES`
- * in `@pinagent/shared`, so the chip text in the header always matches
- * the picker text. SDK-only modes (`bypassPermissions`, `dontAsk`,
- * SDK's own `auto`) carry their own labels here — they're reachable via
- * the env override, never via the picker, so they don't need to live in
- * the shared table.
+ * The "canonical" modes (the ones the dock's Settings picker surfaces,
+ * including the SDK's `auto` classifier mode) read their labels straight
+ * out of `PROJECT_PERMISSION_MODES` in `@pinagent/shared`, so the chip
+ * text in the header always matches the picker text. SDK-only modes
+ * (`bypassPermissions`, `dontAsk`) carry their own labels here — they're
+ * reachable via the env override, never via the picker, so they don't
+ * need to live in the shared table.
  */
 import { PROJECT_PERMISSION_MODES } from '@pinagent/shared';
 
@@ -26,11 +26,10 @@ const SDK_ONLY_DISPLAY: Record<string, PermissionModeDisplay> = {
     title: 'Bypass permissions — all permission prompts skipped.',
   },
   dontAsk: { label: "Don't ask", title: "Don't ask — permission prompts suppressed." },
-  auto: { label: 'Auto', title: 'Auto — SDK decides per tool call.' },
 };
 
 export function permissionModeDisplay(mode: string): PermissionModeDisplay {
-  // First try the canonical 3 — keeps chip labels in sync with the
+  // First try the canonical modes — keeps chip labels in sync with the
   // Settings picker without restating them.
   const canonical = PROJECT_PERMISSION_MODES.find((m) => m.sdkMode === mode);
   if (canonical) {

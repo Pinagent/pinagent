@@ -28,6 +28,11 @@ import { AskClosedError, awaitAnswer } from './ask-user';
  * `allowedTools` entries (the pinagent MCP tools + `ask_user`) still
  * auto-approve ahead of this gate and never reach it.
  *
+ * In the SDK's `auto` mode (Pinagent's default) the classifier decides
+ * first: calls it approves or denies never reach this gate, and only the
+ * ones it can't decide arrive here as a prompt — `describeRequest` carries
+ * its reason onto the prompt's secondary line.
+ *
  * Dry-run (`plan`) keeps its hard deny of `DRY_RUN_DENIED_TOOLS` ahead of
  * the prompt, and its "allow for this run" never carries a mode switch or
  * a rule for a denied tool — so nothing the developer clicks can turn a
@@ -78,7 +83,8 @@ export interface PermissionGateOptions {
 /**
  * Build the run's `canUseTool`, or `undefined` for modes that never
  * prompt: `bypassPermissions` approves everything and `dontAsk` asked for
- * silent denial explicitly.
+ * silent denial explicitly. Every other mode — `auto`, `acceptEdits`,
+ * `default`, `plan` — gets the gate.
  */
 export function createPermissionGate(opts: PermissionGateOptions): CanUseTool | undefined {
   const { feedbackId, permissionMode } = opts;

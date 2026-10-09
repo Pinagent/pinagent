@@ -187,11 +187,19 @@ export type PresentableConnections = z.infer<typeof PresentableConnectionsSchema
 // ---------- Settings ----------
 
 /**
- * The three permission-mode options the dock's Settings picker exposes,
- * pinned alongside their SDK-mode equivalents and all human-facing
- * label text. Single source of truth — adding a fourth mode = one
- * append to this list, no scattered edits across the dock UI, the
- * detail-header chip, and the server-side translator.
+ * The permission-mode options the dock's Settings picker exposes, pinned
+ * alongside their SDK-mode equivalents and all human-facing label text.
+ * Single source of truth — adding a mode = one append to this list, no
+ * scattered edits across the dock UI, the detail-header chip, and the
+ * server-side translator.
+ *
+ * `auto` (the default) is the Claude Agent SDK's own auto mode: a model
+ * classifier approves or denies each tool call and only the calls it can't
+ * decide reach Pinagent's permission gate (a prompt in the widget). Where the
+ * account, model or settings make auto mode unavailable, the run falls back
+ * to `acceptEdits` and says so in the run log (see `auto-mode-fallback.ts`
+ * in agent-runner). `accept-edits` is the pre-classifier default, kept for
+ * anyone who wants every non-edit tool call to prompt.
  *
  * Consumers:
  *   - `PermissionModeSchema` below (zod enum derived from `projectMode`)
@@ -207,11 +215,21 @@ export type PresentableConnections = z.infer<typeof PresentableConnectionsSchema
 export const PROJECT_PERMISSION_MODES = [
   {
     projectMode: 'auto',
+    sdkMode: 'auto',
+    label: 'Auto (classifier)',
+    shortLabel: 'Auto',
+    description:
+      'A safety classifier approves or blocks each tool call; only calls it cannot decide ask you.',
+    tooltip: 'Auto — a classifier decides each tool call and prompts only when unsure.',
+  },
+  {
+    projectMode: 'accept-edits',
     sdkMode: 'acceptEdits',
     label: 'Auto-accept edits',
     shortLabel: 'Auto-accept',
-    description: 'Agent edits land in the worktree without confirmation.',
-    tooltip: 'Auto-accept edits — tool calls run without prompting.',
+    description:
+      'File edits land without confirmation; commands and other tool calls ask for approval.',
+    tooltip: 'Auto-accept edits — edits run without prompting; other tool calls prompt.',
   },
   {
     projectMode: 'approve',

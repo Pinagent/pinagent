@@ -165,5 +165,5 @@ export interface ProjectSettings {
   perConversationCapUsd: number;
   /** Soft project-wide ceiling per month, in USD. Optional. */
   monthlyBudgetUsd: number | null;
-  permissionMode: 'auto' | 'approve' | 'dry-run';
+  permissionMode: 'auto' | 'accept-edits' | 'approve' | 'dry-run';
 }
