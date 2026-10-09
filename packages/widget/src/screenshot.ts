@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-import { toBlob } from 'html-to-image';
+import { toSvg } from 'html-to-image';
 
 const MAX_WIDTH = 1280;
 const TARGET_MAX_BYTES = 1_000_000; // ~1MB
+// Past this the comment goes out without an image rather than leaving the
+// composer on "Sending…". Real pages capture in 1–5s.
+const CAPTURE_TIMEOUT_MS = 10_000;
+// Browsers refuse larger canvases; same cap html-to-image applies.
+const CANVAS_DIMENSION_LIMIT = 16_384;
 
 // Per-image placeholder when html-to-image can't fetch an image
 // (cross-origin, CSP, 404). The whole-capture fallback also uses this.
@@ -28,6 +33,51 @@ function canvasToBlob(canvas: HTMLCanvasElement, type = 'image/png'): Promise<Bl
       else reject(new Error('canvas.toBlob returned null'));
     }, type);
   });
+}
+
+/**
+ * Rasterize html-to-image's SVG ourselves instead of calling its toBlob.
+ * Its toCanvas waits for a requestAnimationFrame after decoding, and Chrome
+ * runs no frames in a hidden tab — so a comment sent just before switching
+ * tabs (or from a background automation tab) sat on "Sending…" until the tab
+ * was shown again. Image load and decode both complete while hidden.
+ */
+async function rasterizeSvg(svgDataUrl: string): Promise<Blob> {
+  const img = new Image();
+  img.decoding = 'async';
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error('svg render failed to load'));
+    img.src = svgDataUrl;
+  });
+  // onload already fired, so drawing works without it; decode just keeps the
+  // raster off the main thread where supported.
+  await img.decode?.().catch(() => {});
+
+  const scale = Math.min(1, CANVAS_DIMENSION_LIMIT / Math.max(img.naturalWidth, img.naturalHeight));
+  const width = Math.max(1, Math.floor(img.naturalWidth * scale));
+  const height = Math.max(1, Math.floor(img.naturalHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('no 2d context');
+  ctx.drawImage(img, 0, 0, width, height);
+  return canvasToBlob(canvas, 'image/png');
+}
+
+async function withTimeout<T>(work: Promise<T>, ms: number): Promise<T | 'timeout'> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<'timeout'>((resolve) => {
+        timer = setTimeout(() => resolve('timeout'), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {
@@ -94,23 +144,31 @@ export async function capturePageScreenshot(
     return true;
   };
 
-  let blob: Blob | null;
+  let blob: Blob;
   try {
-    // toBlob (not toPng) returns a Blob directly — no data: URL, no fetch
-    // through CSP connect-src.
-    blob = await toBlob(document.body, {
+    // The SVG is a data: URL loaded as an <img>, not fetched, so CSP
+    // connect-src doesn't apply.
+    const capture = toSvg(document.body, {
       pixelRatio: 1,
       cacheBust: false,
       filter: composedFilter,
       imagePlaceholder: TRANSPARENT_PNG_DATA_URL,
       skipFonts: true,
-    });
+    }).then(rasterizeSvg);
+    // html-to-image has no timeout of its own (a hung image fetch waits
+    // forever), so bound it here. An abandoned capture finishes or fails in
+    // the background and its result is ignored.
+    capture.catch(() => {});
+    const result = await withTimeout(capture, CAPTURE_TIMEOUT_MS);
+    if (result === 'timeout') {
+      console.warn(
+        `[pinagent] screenshot capture took over ${CAPTURE_TIMEOUT_MS / 1000}s, submitting without image`,
+      );
+      return TRANSPARENT_PNG_BASE64;
+    }
+    blob = result;
   } catch (err) {
     console.warn('[pinagent] screenshot capture failed, submitting without image:', err);
-    return TRANSPARENT_PNG_BASE64;
-  }
-  if (!blob) {
-    console.warn('[pinagent] screenshot capture returned no blob, submitting without image');
     return TRANSPARENT_PNG_BASE64;
   }
 
@@ -121,9 +179,9 @@ export async function capturePageScreenshot(
 
     // Crop first (at native resolution) so the downscale step gets a
     // tighter source and the agent sees a denser image of the picked
-    // region. toBlob was called on document.body with pixelRatio:1, so
-    // bitmap dims match document.body's CSS dims and the document-coord
-    // rect lines up 1:1.
+    // region. document.body was captured with pixelRatio:1, so bitmap dims
+    // match document.body's CSS dims and the document-coord rect lines up
+    // 1:1.
     if (cropRect) {
       const next = await cropBlob(bitmap, cropRect);
       bitmap.close?.();
