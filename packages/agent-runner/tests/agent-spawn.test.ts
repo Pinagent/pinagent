@@ -584,7 +584,9 @@ describe('spawnAgent', () => {
       await waitForRunIdle(id);
 
       expect(setPermissionMode).toHaveBeenCalledWith('acceptEdits');
-      expect(events.find((e) => e.type === 'init')).toMatchObject({ permissionMode: 'acceptEdits' });
+      expect(events.find((e) => e.type === 'init')).toMatchObject({
+        permissionMode: 'acceptEdits',
+      });
       const log = await readFile(join(PROJECT_ROOT, '.pinagent', 'logs', `${id}.md`), 'utf8');
       expect(log).toContain("Auto mode isn't available");
       expect(log).toContain('Switched to `acceptEdits`');

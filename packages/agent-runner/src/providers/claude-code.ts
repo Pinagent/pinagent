@@ -57,13 +57,15 @@ const TOOL_GUIDANCE = [
   `${PINAGENT_MCP_TOOLS.map((t) => `\`${t}\``).join(', ')}.`,
   'Use those, not tools from similarly named MCP servers (those are not pre-approved).',
   '',
-  'Any other tool call that is not pre-approved waits for the developer to approve',
-  'it in the widget, and the run is stuck until they do. To keep it moving:',
+  'Any other tool call that is not pre-approved may need approval: in auto mode a',
+  'safety classifier decides it, and a call the classifier cannot approve (or, in',
+  'the stricter modes, any such call) waits for the developer to approve it in the',
+  'widget, and the run is stuck until they do. To keep it moving:',
   '- Find and read code with the Read, Grep and Glob tools, not shell pipelines.',
   '- When you need Bash, run one simple command with literal paths from the',
   '  current working directory: no command substitution (`$(…)`), shell variables',
-  '  or `cd … &&` chains. Those can never be checked automatically, so each one',
-  '  blocks on the developer.',
+  '  or `cd … &&` chains. Those can never be pre-approved by permission rules, so',
+  '  each one risks blocking on the developer.',
 ];
 
 /**
