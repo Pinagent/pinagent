@@ -313,6 +313,18 @@ describe('spawnAgent', () => {
     expect(opts?.mcpServers).toHaveProperty('pinagent-ask-user');
     expect(opts?.allowedTools).toContain('mcp__pinagent-ask-user__ask_user');
     expect(opts?.systemPrompt).toMatchObject({ type: 'preset', preset: 'claude_code' });
+    const append = (opts?.systemPrompt as { append?: string }).append ?? '';
+    expect(append).toContain('mcp__pinagent-ask-user__ask_user');
+    // Names the exact pre-approved pinagent tools, so a run with several
+    // pinagent-ish servers registered doesn't pick an un-allowlisted one.
+    for (const tool of ['mcp__pinagent__get_feedback', 'mcp__pinagent__resolve_feedback']) {
+      expect(append).toContain(`\`${tool}\``);
+      expect(opts?.allowedTools).toContain(tool);
+    }
+    // Steers off shell shapes that always need a human permission answer.
+    expect(append).toContain('Read, Grep and Glob');
+    expect(append).toContain('command substitution');
+    expect(append).toContain('`cd … &&`');
     // PINAGENT_PROJECT_ROOT is pinned in the SDK env so the MCP server
     // running in the worktree resolves storage back to the real root.
     expect(opts?.env?.PINAGENT_PROJECT_ROOT).toBe(PROJECT_ROOT);

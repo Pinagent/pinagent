@@ -43,6 +43,30 @@ const PINAGENT_MCP_TOOLS = [
 ];
 
 /**
+ * Appended-prompt lines that keep a headless run off the permission gate.
+ *
+ * - Exact tool names: with several pinagent-ish MCP servers registered
+ *   (one per app in a monorepo), the agent picked `mcp__pinagent-app__*`,
+ *   which nothing pre-approves, and ended without resolving.
+ * - Shell shape: a command with `$(…)` / `${…}` or a `cd … &&` chain can't
+ *   be statically checked, so it always needs a human answer and the run
+ *   stalls on the widget prompt (up to its 5-minute timeout).
+ */
+const TOOL_GUIDANCE = [
+  "Pinagent's own tools are pre-approved under these exact names:",
+  `${PINAGENT_MCP_TOOLS.map((t) => `\`${t}\``).join(', ')}.`,
+  'Use those, not tools from similarly named MCP servers (those are not pre-approved).',
+  '',
+  'Any other tool call that is not pre-approved waits for the developer to approve',
+  'it in the widget, and the run is stuck until they do. To keep it moving:',
+  '- Find and read code with the Read, Grep and Glob tools, not shell pipelines.',
+  '- When you need Bash, run one simple command with literal paths from the',
+  '  current working directory: no command substitution (`$(…)`), shell variables',
+  '  or `cd … &&` chains. Those can never be checked automatically, so each one',
+  '  blocks on the developer.',
+];
+
+/**
  * The default, most capable provider: the Claude Agent SDK. Runs the full
  * agentic loop (tool calls, edits, permission gating, session resume) and
  * streams its `SDKMessage`s, which we normalize into Pinagent's
@@ -208,6 +232,8 @@ async function buildSdkOptions(req: AgentRunRequest): Promise<Options> {
         `If you need clarification mid-task, call the \`${ASK_USER_TOOL_NAME}\``,
         'tool with a clear question (and optional `options` for closed-ended',
         'answers). Prefer asking over guessing on ambiguous requirements.',
+        '',
+        ...TOOL_GUIDANCE,
         ...(guide ? [renderAgentGuide(guide)] : []),
       ].join('\n'),
     },
